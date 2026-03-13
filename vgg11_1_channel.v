@@ -1,0 +1,9093 @@
+module vgg11 (
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire [7:0] data_in,
+    output wire [7:0] data_out,
+    output wire ready,
+    output wire valid_n
+);
+
+    // Internal signals
+	wire [7:0] data_out_conv1, data_out_act1, data_out_pool1, global_sram_data_in;
+	wire [7:0] data_out_conv2, data_out_act2, data_out_pool2;
+	wire [7:0] data_out_conv2_1, data_out_conv2_2, data_out_conv2_3, data_out_act3, data_out_conv4, data_out_act4, data_out_conv5;
+	wire [7:0] data_out_accum2_1, data_out_accum2_2;
+	wire [7:0] data_out_conv3_1, data_out_conv3_2, data_out_accum3_1, data_out_accum3_2, data_out_accum3_3, data_out_conv3_3;
+	wire [7:0] data_out_conv3_4, data_out_conv3_5, data_out_accum3_4, data_out_conv4_1, data_out_conv4_2, data_out_accum4_1;
+	wire [7:0] data_out_conv4_3, data_out_accum4_2, data_out_conv4_4, data_out_accum4_3; 
+    wire ready_conv1, valid_conv1, ready_conv2, valid_conv2;
+    wire ready_act1, valid_act1, ready_act2, valid_act2;
+    wire ready_pool1, valid_pool1, ready_pool2, valid_pool2, ready_pool3, valid_pool3, ready_pool4, valid_pool4;
+    wire ready_pool5, valid_pool5;
+	wire ready_accum2_1, valid_accum2_1, ready_accum2_2, valid_accum2_2, ready_accum2_3, valid_accum2_3;
+    wire valid_conv3_1, ready_conv3_1, ready_accum3_1, valid_accum3_1;
+    wire valid_conv3_2, ready_conv3_2, ready_accum3_2, valid_accum3_2, ready_conv4_4, valid_conv4_4;
+    wire valid_conv3_3, ready_conv3_3, ready_accum3_3, valid_accum3_3, valid_conv4_3, ready_accum4_2, valid_accum4_2;
+    wire valid_conv3_4, ready_conv3_4, valid_conv3_5, ready_conv3_5, valid_conv4_2, ready_accum4_1, valid_accum4_1, ready_conv4_3;
+	wire ready_accum4_3, valid_accum4_3, ready_conv4_5;
+    wire ready_accum3_4, valid_accum3_4, ready_conv4_1, valid_conv4_1, ready_conv4_2, valid_conv4_2;
+    wire ready_conv2_1, valid_conv2_1, ready_conv2_2, valid_conv2_2, ready_conv2_3, valid_conv2_3;
+    wire valid_n_accum, ready_act3, ready_conv4, valid_act3;
+    wire ready_act4, valid_n_conv4;
+    wire ready_conv5, valid_conv5;
+    wire valid_g_in,valid_g_out,ready_g_in,ready_g_out;
+	
+	wire [7:0] data_out_conv4_5 ;
+	wire [7:0] data_out_accum4_4 ;
+	wire [7:0] data_out_conv4_6 ;
+	wire [7:0] data_out_accum4_5 ;
+	wire [7:0] data_out_conv4_7 ;
+	wire [7:0] data_out_accum4_6 ;
+	wire [7:0] data_out_conv4_8 ;
+	wire [7:0] data_out_accum4_7 ;
+	wire [7:0] data_out_conv4_9 ;
+	wire [7:0] data_out_accum4_8 ;
+	wire [7:0] data_out_pool3 ;
+	wire [7:0] data_out_conv5_1 ;
+	wire [7:0] data_out_conv5_2 ;
+	wire [7:0] data_out_accum5_1 ;
+	wire [7:0] data_out_conv5_3 ;
+	wire [7:0] data_out_accum5_2 ;
+	wire [7:0] data_out_conv5_4 ;
+	wire [7:0] data_out_accum5_3 ;
+	wire [7:0] data_out_conv5_5 ;
+	wire [7:0] data_out_accum5_4 ;
+	wire [7:0] data_out_conv5_6 ;
+	wire [7:0] data_out_accum5_5 ;
+	wire [7:0] data_out_conv5_7 ;
+	wire [7:0] data_out_accum5_6 ;
+	wire [7:0] data_out_conv5_8 ;
+	wire [7:0] data_out_accum5_7 ;
+	wire [7:0] data_out_conv5_9 ;
+	wire [7:0] data_out_accum5_8 ;
+	wire [7:0] data_out_conv5_10 ;
+	wire [7:0] data_out_accum5_9 ;
+	wire [7:0] data_out_conv5_11 ;
+	wire [7:0] data_out_accum5_10 ;
+	wire [7:0] data_out_conv5_12 ;
+	wire [7:0] data_out_accum5_11 ;
+	wire [7:0] data_out_conv5_13 ;
+	wire [7:0] data_out_accum5_12 ;
+	wire [7:0] data_out_conv5_14 ;
+	wire [7:0] data_out_accum5_13 ;
+	wire [7:0] data_out_conv5_15 ;
+	wire [7:0] data_out_accum5_14 ;
+	wire [7:0] data_out_conv5_16 ;
+	wire [7:0] data_out_accum5_15 ;
+	wire [7:0] data_out_conv5_17 ;
+	wire [7:0] data_out_accum5_16 ;
+	wire [7:0] data_out_conv5_18 ;
+	wire [7:0] data_out_accum5_17 ;
+	wire [7:0] data_out_act5 ;
+	wire [7:0] data_out_conv6_1 ;
+	wire [7:0] data_out_conv6_2 ;
+	wire [7:0] data_out_accum6_1 ;
+	wire [7:0] data_out_conv6_3 ;
+	wire [7:0] data_out_accum6_2 ;
+	wire [7:0] data_out_conv6_4 ;
+	wire [7:0] data_out_accum6_3 ;
+	wire [7:0] data_out_conv6_5 ;
+	wire [7:0] data_out_accum6_4 ;
+	wire [7:0] data_out_conv6_6 ;
+	wire [7:0] data_out_accum6_5 ;
+	wire [7:0] data_out_conv6_7 ;
+	wire [7:0] data_out_accum6_6 ;
+	wire [7:0] data_out_conv6_8 ;
+	wire [7:0] data_out_accum6_7 ;
+	wire [7:0] data_out_conv6_9 ;
+	wire [7:0] data_out_accum6_8 ;
+	wire [7:0] data_out_conv6_10 ;
+	wire [7:0] data_out_accum6_9 ;
+	wire [7:0] data_out_conv6_11 ;
+	wire [7:0] data_out_accum6_10 ;
+	wire [7:0] data_out_conv6_12 ;
+	wire [7:0] data_out_accum6_11 ;
+	wire [7:0] data_out_conv6_13 ;
+	wire [7:0] data_out_accum6_12 ;
+	wire [7:0] data_out_conv6_14 ;
+	wire [7:0] data_out_accum6_13 ;
+	wire [7:0] data_out_conv6_15 ;
+	wire [7:0] data_out_accum6_14 ;
+	wire [7:0] data_out_conv6_16 ;
+	wire [7:0] data_out_accum6_15 ;
+	wire [7:0] data_out_conv6_17 ;
+	wire [7:0] data_out_accum6_16 ;
+	wire [7:0] data_out_conv6_18 ;
+	wire [7:0] data_out_accum6_17 ;
+	wire [7:0] data_out_act6 ;
+	wire [7:0] data_out_pool4 ;
+	wire [7:0] data_out_conv7_1 ;
+	wire [7:0] data_out_conv7_2 ;
+	wire [7:0] data_out_accum7_1 ;
+	wire [7:0] data_out_conv7_3 ;
+	wire [7:0] data_out_accum7_2 ;
+	wire [7:0] data_out_conv7_4 ;
+	wire [7:0] data_out_accum7_3 ;
+	wire [7:0] data_out_conv7_5 ;
+	wire [7:0] data_out_accum7_4 ;
+	wire [7:0] data_out_conv7_6 ;
+	wire [7:0] data_out_accum7_5 ;
+	wire [7:0] data_out_conv7_7 ;
+	wire [7:0] data_out_accum7_6 ;
+	wire [7:0] data_out_conv7_8 ;
+	wire [7:0] data_out_accum7_7 ;
+	wire [7:0] data_out_conv6_2 ;
+	wire [7:0] data_out_accum6_1 ;
+	wire [7:0] data_out_conv6_3 ;
+	wire [7:0] data_out_accum6_2 ;
+	wire [7:0] data_out_conv6_4 ;
+	wire [7:0] data_out_accum6_3 ;
+	wire [7:0] data_out_conv6_5 ;
+	wire [7:0] data_out_accum6_4 ;
+	wire [7:0] data_out_conv6_6 ;
+	wire [7:0] data_out_accum6_5 ;
+	wire [7:0] data_out_conv6_7 ;
+	wire [7:0] data_out_accum6_6 ;
+	wire [7:0] data_out_conv6_8 ;
+	wire [7:0] data_out_accum6_7 ;
+	wire [7:0] data_out_conv6_9 ;
+	wire [7:0] data_out_accum6_8 ;
+	wire [7:0] data_out_conv6_10 ;
+	wire [7:0] data_out_accum6_9 ;
+	wire [7:0] data_out_conv6_11 ;
+	wire [7:0] data_out_accum6_10 ;
+	wire [7:0] data_out_conv6_12 ;
+	wire [7:0] data_out_accum6_11 ;
+	wire [7:0] data_out_conv6_13 ;
+	wire [7:0] data_out_accum6_12 ;
+	wire [7:0] data_out_conv6_14 ;
+	wire [7:0] data_out_accum6_13 ;
+	wire [7:0] data_out_conv6_15 ;
+	wire [7:0] data_out_accum6_14 ;
+	wire [7:0] data_out_conv6_16 ;
+	wire [7:0] data_out_accum6_15 ;
+	wire [7:0] data_out_conv6_17 ;
+	wire [7:0] data_out_accum6_16 ;
+	wire [7:0] data_out_conv6_18 ;
+	wire [7:0] data_out_accum6_17 ;
+	wire [7:0] data_out_act6 ;
+	wire [7:0] data_out_pool4 ;
+	wire [7:0] data_out_conv7_1 ;
+	wire [7:0] data_out_conv7_2 ;
+	wire [7:0] data_out_accum7_1 ;
+	wire [7:0] data_out_conv7_3 ;
+	wire [7:0] data_out_accum7_2 ;
+	wire [7:0] data_out_conv7_4 ;
+	wire [7:0] data_out_accum7_3 ;
+	wire [7:0] data_out_conv7_5 ;
+	wire [7:0] data_out_accum7_4 ;
+	wire [7:0] data_out_conv7_6 ;
+	wire [7:0] data_out_accum7_5 ;
+	wire [7:0] data_out_conv7_7 ;
+	wire [7:0] data_out_accum7_6 ;
+	wire [7:0] data_out_conv7_8 ;
+	wire [7:0] data_out_accum7_7 ;
+	wire [7:0] data_out_conv7_9 ;
+	wire [7:0] data_out_accum7_8 ;
+	wire [7:0] data_out_conv7_10 ;
+	wire [7:0] data_out_accum7_9 ;
+	wire [7:0] data_out_conv7_11 ;
+	wire [7:0] data_out_accum7_10 ;
+	wire [7:0] data_out_conv7_12 ;
+	wire [7:0] data_out_accum7_11 ;
+	wire [7:0] data_out_conv7_13 ;
+	wire [7:0] data_out_accum7_12 ;
+	wire [7:0] data_out_conv7_14 ;
+	wire [7:0] data_out_accum7_13 ;
+	wire [7:0] data_out_conv7_15 ;
+	wire [7:0] data_out_accum7_14 ;
+	wire [7:0] data_out_conv7_16 ;
+	wire [7:0] data_out_accum7_15 ;
+	wire [7:0] data_out_conv7_17 ;
+	wire [7:0] data_out_accum7_16 ;
+	wire [7:0] data_out_conv7_18 ;
+	wire [7:0] data_out_accum7_17 ;
+	wire [7:0] data_out_conv7_19 ;
+	wire [7:0] data_out_accum7_18 ;
+	wire [7:0] data_out_conv7_20 ;
+	wire [7:0] data_out_accum7_19 ;
+	wire [7:0] data_out_conv7_21 ;
+	wire [7:0] data_out_accum7_20 ;
+	wire [7:0] data_out_conv7_22 ;
+	wire [7:0] data_out_accum7_21 ;
+	wire [7:0] data_out_conv7_23 ;
+	wire [7:0] data_out_accum7_22 ;
+	wire [7:0] data_out_conv7_24 ;
+	wire [7:0] data_out_accum7_23 ;
+	wire [7:0] data_out_conv7_25 ;
+	wire [7:0] data_out_accum7_24 ;
+	wire [7:0] data_out_conv7_26 ;
+	wire [7:0] data_out_accum7_25 ;
+	wire [7:0] data_out_conv7_27 ;
+	wire [7:0] data_out_accum7_26 ;
+	wire [7:0] data_out_conv7_28 ;
+	wire [7:0] data_out_accum7_27 ;
+	wire [7:0] data_out_conv7_29 ;
+	wire [7:0] data_out_accum7_28 ;
+	wire [7:0] data_out_conv7_30 ;
+	wire [7:0] data_out_accum7_29 ;
+	wire [7:0] data_out_conv7_31 ;
+	wire [7:0] data_out_accum7_30 ;
+	wire [7:0] data_out_conv7_32 ;
+	wire [7:0] data_out_accum7_31 ;
+	wire [7:0] data_out_conv7_33 ;
+	wire [7:0] data_out_accum7_32 ;
+	wire [7:0] data_out_conv7_34 ;
+	wire [7:0] data_out_accum7_33 ;
+	wire [7:0] data_out_conv7_35 ;
+	wire [7:0] data_out_accum7_34 ;
+	wire [7:0] data_out_conv7_36 ;
+	wire [7:0] data_out_accum7_35 ;
+	wire [7:0] data_out_act7 ;
+	wire [7:0] data_out_pool5 ;
+	wire [7:0] data_out_conv8_1 ;
+	wire [7:0] data_out_conv8_2 ;
+	wire [7:0] data_out_accum8_1 ;
+	wire [7:0] data_out_conv8_3 ;
+	wire [7:0] data_out_accum8_2 ;
+	wire [7:0] data_out_conv8_4 ;
+	wire [7:0] data_out_accum8_3 ;
+	wire [7:0] data_out_conv8_5 ;
+	wire [7:0] data_out_accum8_4 ;
+	wire [7:0] data_out_conv8_6 ;
+	wire [7:0] data_out_accum8_5 ;
+	wire [7:0] data_out_conv8_7 ;
+	wire [7:0] data_out_accum8_6 ;
+	wire [7:0] data_out_conv8_8 ;
+	wire [7:0] data_out_accum8_7 ;
+	wire [7:0] data_out_conv8_9 ;
+	wire [7:0] data_out_accum8_8 ;
+	wire [7:0] data_out_conv8_10 ;
+	wire [7:0] data_out_accum8_9 ;
+	wire [7:0] data_out_conv8_11 ;
+	wire [7:0] data_out_accum8_10 ;
+	wire [7:0] data_out_conv8_12 ;
+	wire [7:0] data_out_accum8_11 ;
+	wire [7:0] data_out_conv8_13 ;
+	wire [7:0] data_out_accum8_12 ;
+	wire [7:0] data_out_conv8_14 ;
+	wire [7:0] data_out_accum8_13 ;
+	wire [7:0] data_out_conv8_15 ;
+	wire [7:0] data_out_accum8_14 ;
+	wire [7:0] data_out_conv8_16 ;
+	wire [7:0] data_out_accum8_15 ;
+	wire [7:0] data_out_conv8_17 ;
+	wire [7:0] data_out_accum8_16 ;
+	wire [7:0] data_out_conv8_18 ;
+	wire [7:0] data_out_accum8_17 ;
+	wire [7:0] data_out_conv8_19 ;
+	wire [7:0] data_out_accum8_18 ;
+	wire [7:0] data_out_conv8_20 ;
+	wire [7:0] data_out_accum8_19 ;
+	wire [7:0] data_out_conv8_21 ;
+	wire [7:0] data_out_accum8_20 ;
+	wire [7:0] data_out_conv8_22 ;
+	wire [7:0] data_out_accum8_21 ;
+	wire [7:0] data_out_conv8_23 ;
+	wire [7:0] data_out_accum8_22 ;
+	wire [7:0] data_out_conv8_24 ;
+	wire [7:0] data_out_accum8_23 ;
+	wire [7:0] data_out_conv8_25 ;
+	wire [7:0] data_out_accum8_24 ;
+	wire [7:0] data_out_conv8_26 ;
+	wire [7:0] data_out_accum8_25 ;
+	wire [7:0] data_out_conv8_27 ;
+	wire [7:0] data_out_accum8_26 ;
+	wire [7:0] data_out_conv8_28 ;
+	wire [7:0] data_out_accum8_27 ;
+	wire [7:0] data_out_conv8_29 ;
+	wire [7:0] data_out_accum8_28 ;
+	wire [7:0] data_out_conv8_30 ;
+	wire [7:0] data_out_accum8_29 ;
+	wire [7:0] data_out_conv8_31 ;
+	wire [7:0] data_out_accum8_30 ;
+	wire [7:0] data_out_conv8_32 ;
+	wire [7:0] data_out_accum8_31 ;
+	wire [7:0] data_out_conv8_33 ;
+	wire [7:0] data_out_accum8_32 ;
+	wire [7:0] data_out_conv8_34 ;
+	wire [7:0] data_out_accum8_33 ;
+	wire [7:0] data_out_conv8_35 ;
+	wire [7:0] data_out_accum8_34 ;
+	wire [7:0] data_out_conv8_36 ;
+	wire [7:0] data_out_accum8_35 ;
+	wire [7:0] data_out_act8 ;
+	
+	wire valid_conv4_5;
+	wire ready_accum4_4;
+	wire valid_accum4_4;
+	wire ready_conv4_6;
+	wire valid_conv4_6;
+	wire ready_accum4_5;
+	wire valid_accum4_5;
+	wire ready_conv4_7;
+	wire valid_conv4_7;
+	wire ready_accum4_6;
+	wire valid_accum4_6;
+	wire ready_conv4_8;
+	wire valid_conv4_8;
+	wire ready_accum4_7;
+	wire valid_accum4_7;
+	wire ready_conv4_9;
+	wire valid_conv4_9;
+	wire ready_accum4_8;
+	wire valid_accum4_8;
+	wire valid_act4;
+	wire ready_conv5_1;
+	wire valid_conv5_1;
+	wire ready_conv5_2;
+	wire valid_conv5_2;
+	wire ready_accum5_1;
+	wire valid_accum5_1;
+	wire ready_conv5_3;
+	wire valid_conv5_3;
+	wire ready_accum5_2;
+	wire valid_accum5_2;
+	wire ready_conv5_4;
+	wire valid_conv5_4;
+	wire ready_accum5_3;
+	wire valid_accum5_3;
+	wire ready_conv5_5;
+	wire valid_conv5_5;
+	wire ready_accum5_4;
+	wire valid_accum5_4;
+	wire ready_conv5_6;
+	wire valid_conv5_6;
+	wire ready_accum5_5;
+	wire valid_accum5_5;
+	wire ready_conv5_7;
+	wire valid_conv5_7;
+	wire ready_accum5_6;
+	wire valid_accum5_6;
+	wire ready_conv5_8;
+	wire valid_conv5_8;
+	wire ready_accum5_7;
+	wire valid_accum5_7;
+	wire ready_conv5_9;
+	wire valid_conv5_9;
+	wire ready_accum5_8;
+	wire valid_accum5_8;
+	wire ready_conv5_10;
+	wire valid_conv5_10;
+	wire ready_accum5_9;
+	wire valid_accum5_9;
+	wire ready_conv5_11;
+	wire valid_conv5_11;
+	wire ready_accum5_10;
+	wire valid_accum5_10;
+	wire ready_conv5_12;
+	wire valid_conv5_12;
+	wire ready_accum5_11;
+	wire valid_accum5_11;
+	wire ready_conv5_13;
+	wire valid_conv5_13;
+	wire ready_accum5_12;
+	wire valid_accum5_12;
+	wire ready_conv5_14;
+	wire valid_conv5_14;
+	wire ready_accum5_13;
+	wire valid_accum5_13;
+	wire ready_conv5_15;
+	wire valid_conv5_15;
+	wire ready_accum5_14;
+	wire valid_accum5_14;
+	wire ready_conv5_16;
+	wire valid_conv5_16;
+	wire ready_accum5_15;
+	wire valid_accum5_15;
+	wire ready_conv5_17;
+	wire valid_conv5_17;
+	wire ready_accum5_16;
+	wire valid_accum5_16;
+	wire ready_conv5_18;
+	wire valid_conv5_18;
+	wire ready_accum5_17;
+	wire valid_accum5_17;
+	wire ready_act5;
+	wire valid_act5;
+	wire ready_conv6_1;
+	wire valid_conv6_1;
+	wire valid_conv6_2;
+	wire ready_accum6_1;
+	wire ready_conv6_2;
+	wire valid_accum6_1;
+	wire ready_conv6_3;
+	wire valid_conv6_3;
+	wire ready_accum6_2;
+	wire valid_accum6_2;
+	wire ready_conv6_4;
+	wire valid_conv6_4;
+	wire ready_accum6_3;
+	wire valid_accum6_3;
+	wire ready_conv6_5;
+	wire valid_conv6_5;
+	wire ready_accum6_4;
+	wire valid_accum6_4;
+	wire ready_conv6_6;
+	wire valid_conv6_6;
+	wire ready_accum6_5;
+	wire valid_accum6_5;
+	wire ready_conv6_7;
+	wire valid_conv6_7;
+	wire ready_accum6_6;
+	wire valid_accum6_6;
+	wire ready_conv6_8;
+	wire valid_conv6_8;
+	wire ready_accum6_7;
+	wire valid_accum6_7;
+	wire ready_conv6_9;
+	wire valid_conv6_9;
+	wire ready_accum6_8;
+	wire valid_accum6_8;
+	wire ready_conv6_10;
+	wire valid_conv6_10;
+	wire ready_accum6_9;
+	wire valid_accum6_9;
+	wire ready_conv6_11;
+	wire valid_conv6_11;
+	wire ready_accum6_10;
+	wire valid_accum6_10;
+	wire ready_conv6_12;
+	wire valid_conv6_12;
+	wire ready_accum6_11;
+	wire valid_accum6_11;
+	wire ready_conv6_13;
+	wire valid_conv6_13;
+	wire ready_accum6_12;
+	wire valid_accum6_12;
+	wire ready_conv6_14;
+	wire valid_conv6_14;
+	wire ready_accum6_13;
+	wire valid_accum6_13;
+	wire ready_conv6_15;
+	wire valid_conv6_15;
+	wire ready_accum6_14;
+	wire valid_accum6_14;
+	wire ready_conv6_16;
+	wire valid_conv6_16;
+	wire ready_accum6_15;
+	wire valid_accum6_15;
+	wire ready_conv6_17;
+	wire valid_conv6_17;
+	wire ready_accum6_16;
+	wire valid_accum6_16;
+	wire ready_conv6_18;
+	wire valid_conv6_18;
+	wire ready_accum6_17;
+	wire valid_accum6_17;
+	wire ready_conv6_19;
+	wire [7:0] data_out_conv6_19;
+	wire valid_conv6_19;
+	wire ready_accum6_18;
+	wire [7:0] data_out_accum6_18;
+	wire valid_accum6_18;
+	wire ready_conv6_20;
+	wire [7:0] data_out_conv6_20;
+	wire valid_conv6_20;
+	wire ready_accum6_19;
+	wire [7:0] data_out_accum6_19;
+	wire valid_accum6_19;
+	wire ready_conv6_21;
+	wire [7:0] data_out_conv6_21;
+	wire valid_conv6_21;
+	wire ready_accum6_20;
+	wire [7:0] data_out_accum6_20;
+	wire valid_accum6_20;
+	wire ready_conv6_22;
+	wire [7:0] data_out_conv6_22;
+	wire valid_conv6_22;
+	wire ready_accum6_21;
+	wire [7:0] data_out_accum6_21;
+	wire valid_accum6_21;
+	wire ready_conv6_23;
+	wire [7:0] data_out_conv6_23;
+	wire valid_conv6_23;
+	wire ready_accum6_22;
+	wire [7:0] data_out_accum6_22;
+	wire valid_accum6_22;
+	wire ready_conv6_24;
+	wire [7:0] data_out_conv6_24;
+	wire valid_conv6_24;
+	wire ready_accum6_23;
+	wire [7:0] data_out_accum6_23;
+	wire valid_accum6_23;
+	wire ready_conv6_25;
+	wire [7:0] data_out_conv6_25;
+	wire valid_conv6_25;
+	wire ready_accum6_24;
+	wire [7:0] data_out_accum6_24;
+	wire valid_accum6_24;
+	wire ready_conv6_26;
+	wire [7:0] data_out_conv6_26;
+	wire valid_conv6_26;
+	wire ready_accum6_25;
+	wire [7:0] data_out_accum6_25;
+	wire valid_accum6_25;
+	wire ready_conv6_27;
+	wire [7:0] data_out_conv6_27;
+	wire valid_conv6_27;
+	wire ready_accum6_26;
+	wire [7:0] data_out_accum6_26;
+	wire valid_accum6_26;
+	wire ready_conv6_28;
+	wire [7:0] data_out_conv6_28;
+	wire valid_conv6_28;
+	wire ready_accum6_27;
+	wire [7:0] data_out_accum6_27;
+	wire valid_accum6_27;
+	wire ready_conv6_29;
+	wire [7:0] data_out_conv6_29;
+	wire valid_conv6_29;
+	wire ready_accum6_28;
+	wire [7:0] data_out_accum6_28;
+	wire valid_accum6_28;
+	wire ready_conv6_30;
+	wire [7:0] data_out_conv6_30;
+	wire valid_conv6_30;
+	wire ready_accum6_29;
+	wire [7:0] data_out_accum6_29;
+	wire valid_accum6_29;
+	wire ready_conv6_31;
+	wire [7:0] data_out_conv6_31;
+	wire valid_conv6_31;
+	wire ready_accum6_30;
+	wire [7:0] data_out_accum6_30;
+	wire valid_accum6_30;
+	wire ready_conv6_32;
+	wire [7:0] data_out_conv6_32;
+	wire valid_conv6_32;
+	wire ready_accum6_31;
+	wire [7:0] data_out_accum6_31;
+	wire valid_accum6_31;
+	wire ready_conv6_33;
+	wire [7:0] data_out_conv6_33;
+	wire valid_conv6_33;
+	wire ready_accum6_32;
+	wire [7:0] data_out_accum6_32;
+	wire valid_accum6_32;
+	wire ready_conv6_34;
+	wire [7:0] data_out_conv6_34;
+	wire valid_conv6_34;
+	wire ready_accum6_33;
+	wire [7:0] data_out_accum6_33;
+	wire valid_accum6_33;
+	wire ready_conv6_35;
+	wire [7:0] data_out_conv6_35;
+	wire valid_conv6_35;
+	wire ready_accum6_34;
+	wire [7:0] data_out_accum6_34;
+	wire valid_accum6_34;
+	wire ready_conv6_36;
+	wire [7:0] data_out_conv6_36;
+	wire valid_conv6_36;
+	wire ready_accum6_35;
+	wire [7:0] data_out_accum6_35;
+	wire valid_accum6_35;
+	wire ready_act6;
+	wire valid_act6;
+	wire ready_conv7_1;
+	wire valid_conv7_1;
+	wire ready_conv7_2;
+	wire valid_conv7_2;
+	wire ready_accum7_1;
+	wire valid_accum7_1;
+	wire ready_conv7_3;
+	wire valid_conv7_3;
+	wire ready_accum7_2;
+	wire valid_accum7_2;
+	wire ready_conv7_4;
+	wire valid_conv7_4;
+	wire ready_accum7_3;
+	wire valid_accum7_3;
+	wire ready_conv7_5;
+	wire valid_conv7_5;
+	wire ready_accum7_4;
+	wire valid_accum7_4;
+	wire ready_conv7_6;
+	wire valid_conv7_6;
+	wire ready_accum7_5;
+	wire valid_accum7_5;
+	wire ready_conv7_7;
+	wire valid_conv7_7;
+	wire ready_accum7_6;
+	wire valid_accum7_6;
+	wire ready_conv7_8;
+	wire valid_conv7_8;
+	wire ready_accum7_7;
+	wire valid_accum7_7;
+	wire ready_conv7_9;
+	wire valid_conv7_9;
+	wire ready_accum7_8;
+	wire valid_accum7_8;
+	wire ready_conv7_10;
+	wire valid_conv7_10;
+	wire ready_accum7_9;
+	wire valid_accum7_9;
+	wire ready_conv7_11;
+	wire valid_conv7_11;
+	wire ready_accum7_10;
+	wire valid_accum7_10;
+	wire ready_conv7_12;
+	wire valid_conv7_12;
+	wire ready_accum7_11;
+	wire valid_accum7_11;
+	wire ready_conv7_13;
+	wire valid_conv7_13;
+	wire ready_accum7_12;
+	wire valid_accum7_12;
+	wire ready_conv7_14;
+	wire valid_conv7_14;
+	wire ready_accum7_13;
+	wire valid_accum7_13;
+	wire ready_conv7_15;
+	wire valid_conv7_15;
+	wire ready_accum7_14;
+	wire valid_accum7_14;
+	wire ready_conv7_16;
+	wire valid_conv7_16;
+	wire ready_accum7_15;
+	wire valid_accum7_15;
+	wire ready_conv7_17;
+	wire valid_conv7_17;
+	wire ready_accum7_16;
+	wire valid_accum7_16;
+	wire ready_conv7_18;
+	wire valid_conv7_18;
+	wire ready_accum7_17;
+	wire valid_accum7_17;
+	wire ready_conv7_19;
+	wire valid_conv7_19;
+	wire ready_accum7_18;
+	wire valid_accum7_18;
+	wire ready_conv7_20;
+	wire valid_conv7_20;
+	wire ready_accum7_19;
+	wire valid_accum7_19;
+	wire ready_conv7_21;
+	wire valid_conv7_21;
+	wire ready_accum7_20;
+	wire valid_accum7_20;
+	wire ready_conv7_22;
+	wire valid_conv7_22;
+	wire ready_accum7_21;
+	wire valid_accum7_21;
+	wire ready_conv7_23;
+	wire valid_conv7_23;
+	wire ready_accum7_22;
+	wire valid_accum7_22;
+	wire ready_conv7_24;
+	wire valid_conv7_24;
+	wire ready_accum7_23;
+	wire valid_accum7_23;
+	wire ready_conv7_25;
+	wire valid_conv7_25;
+	wire ready_accum7_24;
+	wire valid_accum7_24;
+	wire ready_conv7_26;
+	wire valid_conv7_26;
+	wire ready_accum7_25;
+	wire valid_accum7_25;
+	wire ready_conv7_27;
+	wire valid_conv7_27;
+	wire ready_accum7_26;
+	wire valid_accum7_26;
+	wire ready_conv7_28;
+	wire valid_conv7_28;
+	wire ready_accum7_27;
+	wire valid_accum7_27;
+	wire ready_conv7_29;
+	wire valid_conv7_29;
+	wire ready_accum7_28;
+	wire valid_accum7_28;
+	wire ready_conv7_30;
+	wire valid_conv7_30;
+	wire ready_accum7_29;
+	wire valid_accum7_29;
+	wire ready_conv7_31;
+	wire valid_conv7_31;
+	wire ready_accum7_30;
+	wire valid_accum7_30;
+	wire ready_conv7_32;
+	wire valid_conv7_32;
+	wire ready_accum7_31;
+	wire valid_accum7_31;
+	wire ready_conv7_33;
+	wire valid_conv7_33;
+	wire ready_accum7_32;
+	wire valid_accum7_32;
+	wire ready_conv7_34;
+	wire valid_conv7_34;
+	wire ready_accum7_33;
+	wire valid_accum7_33;
+	wire ready_conv7_35;
+	wire valid_conv7_35;
+	wire ready_accum7_34;
+	wire valid_accum7_34;
+	wire ready_conv7_36;
+	wire valid_conv7_36;
+	wire ready_accum7_35;
+	wire valid_accum7_35;
+	wire ready_act7;
+	wire valid_act7;
+	wire ready_conv8_1;
+	wire valid_conv8_1;
+	wire ready_conv8_2;
+	wire valid_conv8_2;
+	wire ready_accum8_1;
+	wire valid_accum8_1;
+	wire ready_conv8_3;
+	wire valid_conv8_3;
+	wire ready_accum8_2;
+	wire valid_accum8_2;
+	wire ready_conv8_4;
+	wire valid_conv8_4;
+	wire ready_accum8_3;
+	wire valid_accum8_3;
+	wire ready_conv8_5;
+	wire valid_conv8_5;
+	wire ready_accum8_4;
+	wire valid_accum8_4;
+	wire ready_conv8_6;
+	wire valid_conv8_6;
+	wire ready_accum8_5;
+	wire valid_accum8_5;
+	wire ready_conv8_7;
+	wire valid_conv8_7;
+	wire ready_accum8_6;
+	wire valid_accum8_6;
+	wire ready_conv8_8;
+	wire valid_conv8_8;
+	wire ready_accum8_7;
+	wire valid_accum8_7;
+	wire ready_conv8_9;
+	wire valid_conv8_9;
+	wire ready_accum8_8;
+	wire valid_accum8_8;
+	wire ready_conv8_10;
+	wire valid_conv8_10;
+	wire ready_accum8_9;
+	wire valid_accum8_9;
+	wire ready_conv8_11;
+	wire valid_conv8_11;
+	wire ready_accum8_10;
+	wire valid_accum8_10;
+	wire ready_conv8_12;
+	wire valid_conv8_12;
+	wire ready_accum8_11;
+	wire valid_accum8_11;
+	wire ready_conv8_13;
+	wire valid_conv8_13;
+	wire ready_accum8_12;
+	wire valid_accum8_12;
+	wire ready_conv8_14;
+	wire valid_conv8_14;
+	wire ready_accum8_13;
+	wire valid_accum8_13;
+	wire ready_conv8_15;
+	wire valid_conv8_15;
+	wire ready_accum8_14;
+	wire valid_accum8_14;
+	wire ready_conv8_16;
+	wire valid_conv8_16;
+	wire ready_accum8_15;
+	wire valid_accum8_15;
+	wire ready_conv8_17;
+	wire valid_conv8_17;
+	wire ready_accum8_16;
+	wire valid_accum8_16;
+	wire ready_conv8_18;
+	wire valid_conv8_18;
+	wire ready_accum8_17;
+	wire valid_accum8_17;
+	wire ready_conv8_19;
+	wire valid_conv8_19;
+	wire ready_accum8_18;
+	wire valid_accum8_18;
+	wire ready_conv8_20;
+	wire valid_conv8_20;
+	wire ready_accum8_19;
+	wire valid_accum8_19;
+	wire ready_conv8_21;
+	wire valid_conv8_21;
+	wire ready_accum8_20;
+	wire valid_accum8_20;
+	wire ready_conv8_22;
+	wire valid_conv8_22;
+	wire ready_accum8_21;
+	wire valid_accum8_21;
+	wire ready_conv8_23;
+	wire valid_conv8_23;
+	wire ready_accum8_22;
+	wire valid_accum8_22;
+	wire ready_conv8_24;
+	wire valid_conv8_24;
+	wire ready_accum8_23;
+	wire valid_accum8_23;
+	wire ready_conv8_25;
+	wire valid_conv8_25;
+	wire ready_accum8_24;
+	wire valid_accum8_24;
+	wire ready_conv8_26;
+	wire valid_conv8_26;
+	wire ready_accum8_25;
+	wire valid_accum8_25;
+	wire ready_conv8_27;
+	wire valid_conv8_27;
+	wire ready_accum8_26;
+	wire valid_accum8_26;
+	wire ready_conv8_28;
+	wire valid_conv8_28;
+	wire ready_accum8_27;
+	wire valid_accum8_27;
+	wire ready_conv8_29;
+	wire valid_conv8_29;
+	wire ready_accum8_28;
+	wire valid_accum8_28;
+	wire ready_conv8_30;
+	wire valid_conv8_30;
+	wire ready_accum8_29;
+	wire valid_accum8_29;
+	wire ready_conv8_31;
+	wire valid_conv8_31;
+	wire ready_accum8_30;
+	wire valid_accum8_30;
+	wire ready_conv8_32;
+	wire valid_conv8_32;
+	wire ready_accum8_31;
+	wire valid_accum8_31;
+	wire ready_conv8_33;
+	wire valid_conv8_33;
+	wire ready_accum8_32;
+	wire valid_accum8_32;
+	wire ready_conv8_34;
+	wire valid_conv8_34;
+	wire ready_accum8_33;
+	wire valid_accum8_33;
+	wire ready_conv8_35;
+	wire valid_conv8_35;
+	wire ready_accum8_34;
+	wire valid_accum8_34;
+	wire ready_conv8_36;
+	wire valid_conv8_36;
+	wire ready_accum8_35;
+	wire valid_accum8_35;
+	wire ready_act8;
+	wire valid_act8;
+	wire ready_conv9_1;
+	wire [7:0] data_out_conv9_1;
+	wire valid_n_conv9_1;
+	wire ready_conv9_2;
+	wire [7:0] data_out_conv9_2;
+	wire valid_n_conv9_2;
+	wire [7:0] data_out_accum9;
+
+    reg [7:0] read_address, write_address;
+    
+    // Instantiate the first conv_layer
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(10),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(33),
+        .H(33),
+        .S(1),
+        .DEPTH(1024),
+        .DATA_WIDTH(8)
+    ) conv1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_g_out),
+        .ready_n(ready_conv1), // udpated with ready_Ln
+        .data_in(data_in),
+        .data_out(data_out_conv1), // this wasn't correct
+        .ready(ready_g_in), // or ready_conv1
+        .valid_n(valid_conv1)
+    );
+	
+	// Instantiate the first activation_layer
+    activation_layer1 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(10),
+        .DATA_WIDTH(8),
+        .DEPTH(1024)
+    ) act1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv1),
+        .ready_n(ready_act1),
+        .data_in(data_out_conv1),
+        .data_out(data_out_act1),
+        .ready(ready_conv1),
+        .valid_n(valid_act1)
+    );
+	
+	// Instantiate the first pool_layer
+    pool_layer1 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(10),
+        .DATA_WIDTH(8),
+        .DEPTH(1024)
+    ) pool1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act1),
+        .ready_n(ready_pool1),
+        .layer_done(1'b0),
+        .data_in(data_out_act2),
+        .data_out(data_out_pool1),
+        .ready(ready_act1),
+        .valid_n(valid_pool1)
+    );
+	
+	// Instantiate the second conv_layer (need 3 DPEs and two accum layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(17),
+        .H(17),
+        .S(1),
+        .DEPTH(256)
+    ) conv2_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool1),
+        .ready_n(ready_conv2_1),
+        .data_in(data_out_pool1),
+        .data_out(data_out_conv2_1),
+        .ready(ready_pool1),
+        .valid_n(valid_conv2_1)
+    );
+
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(17),
+        .H(17),
+        .S(1),
+        .DEPTH(256)
+    ) conv2_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv2_1),
+        .ready_n(ready_conv2_2),
+        .data_in(data_out_pool1),
+        .data_out(data_out_conv2_2),
+        .ready(ready_conv2_1),
+        .valid_n(valid_conv2_2)
+    );
+	
+	// Instantiate the accumulation_layer
+    accumulation_layer2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .DEPTH(256)
+        ) accum2_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv2_2),
+        .ready_n(ready_accum2_1),
+        .data_in(data_out_conv2_1),
+        .data_in2(data_out_conv2_2),
+        .data_out(data_out_accum2_1),
+        .ready(ready_conv2_2),
+        .valid_n(valid_accum2_1)
+    );
+	
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(17),
+        .H(17),
+        .S(1),
+        .DEPTH(256)
+    ) conv2_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum2_1),
+        .ready_n(ready_conv2_3),
+        .data_in(data_out_pool1),
+        .data_out(data_out_conv2_3),
+        .ready(ready_accum2_1),
+        .valid_n(valid_conv2_3)
+    );
+	
+    // Instantiate the accumulation_layer
+    accumulation_layer2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .DEPTH(256)
+        ) accum2_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv2_3),
+        .ready_n(ready_accum2_2),
+        .data_in(data_out_conv2_3),
+        .data_in2(data_out_accum2_1),
+        .data_out(data_out_accum2_2),
+        .ready(ready_conv2_3),
+        .valid_n(valid_accum2_2)
+    );
+	
+	// Instantiate the second activation_layer
+    activation_layer2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .DATA_WIDTH(8),
+        .DEPTH(256)
+    ) act2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum2_2),
+        .ready_n(ready_act2),
+        .data_in(data_out_accum2_2),
+        .data_out(data_out_act2),
+        .ready(ready_accum2_2),
+        .valid_n(valid_act2)
+    );
+	
+	// Instantiate the second pool_layer
+    pool_layer2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .DATA_WIDTH(8),
+        .DEPTH(256)
+    ) pool2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act2),
+        .ready_n(ready_pool2),
+        .layer_done(1'b0),
+        .data_in(data_out_act2),
+        .data_out(data_out_pool2),
+        .ready(ready_act2),
+        .valid_n(valid_pool2)
+    );
+	
+	// Instantiate the third conv_layer (need 5 DPEs and 4 accu layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv3_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool2),
+        .ready_n(ready_conv3_1),
+        .data_in(data_out_pool2),
+        .data_out(data_out_conv3_1),
+        .ready(ready_pool2),
+        .valid_n(valid_conv3_1)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv3_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv3_1),
+        .ready_n(ready_conv3_2),
+        .data_in(data_out_pool2),
+        .data_out(data_out_conv3_2),
+        .ready(ready_conv3_1),
+        .valid_n(valid_conv3_2)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum3_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv3_2),
+        .ready_n(ready_accum3_1),
+        .data_in(data_out_conv3_1),
+        .data_in2(data_out_conv3_2),
+        .data_out(data_out_accum3_1),
+        .ready(ready_conv3_2),
+        .valid_n(valid_accum3_1)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv3_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum3_1),
+        .ready_n(ready_conv3_3),
+        .data_in(data_out_pool2),
+        .data_out(data_out_conv3_3),
+        .ready(ready_accum3_1),
+        .valid_n(valid_conv3_3)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum3_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv3_3),
+        .ready_n(ready_accum3_2),
+        .data_in(data_out_conv3_3),
+        .data_in2(data_out_accum3_1),
+        .data_out(data_out_accum3_2),
+        .ready(ready_conv3_3),
+        .valid_n(valid_accum3_2)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv3_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum3_2),
+        .ready_n(ready_conv3_4),
+        .data_in(data_out_pool2),
+        .data_out(data_out_conv3_4),
+        .ready(ready_accum3_2),
+        .valid_n(valid_conv3_4)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum3_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(ready_conv3_4),
+        .ready_n(ready_accum3_3),
+        .data_in(data_out_conv3_4),
+        .data_in2(data_out_accum3_2),
+        .data_out(data_out_accum3_3),
+        .ready(ready_conv3_4),
+        .valid_n(valid_accum3_3)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv3_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum3_3),
+        .ready_n(ready_conv3_5),
+        .data_in(data_out_pool2),
+        .data_out(data_out_conv3_5),
+        .ready(ready_accum3_3),
+        .valid_n(valid_conv3_5)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum3_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv3_5),
+        .ready_n(ready_accum3_4),
+        .data_in(data_out_conv3_5),
+        .data_in2(data_out_accum3_3),
+        .data_out(data_out_accum3_4),
+        .ready(ready_conv3_5),
+        .valid_n(valid_accum3_4)
+    );	
+	
+	// Instantiate the third activation_layer
+    activation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DATA_WIDTH(8),
+        .DEPTH(64)
+    )act3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum3_4),
+        .ready_n(ready_act3),
+        .data_in(data_out_accum3_4),
+        .data_out(data_out_act3),
+        .ready(ready_accum3_4),
+        .valid_n(valid_act3)
+    );
+	
+	// Instantiate the fourth conv_layer (need 9 DPEs and 8 accu layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act3),
+        .ready_n(ready_conv4_1),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_1),
+        .ready(ready_act3),
+        .valid_n(valid_conv4_1)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_1),
+        .ready_n(ready_conv4_2),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_2),
+        .ready(ready_conv4_1),
+        .valid_n(valid_conv4_2)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_2),
+        .ready_n(ready_accum4_1),
+        .data_in(data_out_conv4_1),
+        .data_in2(data_out_conv4_2),
+        .data_out(data_out_accum4_1),
+        .ready(ready_conv4_2),
+        .valid_n(valid_accum4_1)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_1),
+        .ready_n(ready_conv4_3),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_3),
+        .ready(ready_accum4_1),
+        .valid_n(valid_conv4_3)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_3),
+        .ready_n(ready_accum4_2),
+        .data_in(data_out_conv4_3),
+        .data_in2(data_out_accum4_1),
+        .data_out(data_out_accum4_2),
+        .ready(ready_conv4_3),
+        .valid_n(valid_accum4_2)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_2),
+        .ready_n(ready_conv4_4),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_4),
+        .ready(ready_accum4_2),
+        .valid_n(valid_conv4_4)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_4),
+        .ready_n(ready_accum4_3),
+        .data_in(data_out_conv4_4),
+        .data_in2(data_out_accum4_2),
+        .data_out(data_out_accum4_3),
+        .ready(ready_conv4_4),
+        .valid_n(valid_accum4_3)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_3),
+        .ready_n(ready_conv4_5),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_5),
+        .ready(ready_accum4_3),
+        .valid_n(valid_conv4_5)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_5),
+        .ready_n(ready_accum4_4),
+        .data_in(data_out_conv4_5),
+        .data_in2(data_out_accum4_3),
+        .data_out(data_out_accum4_4),
+        .ready(ready_conv4_5),
+        .valid_n(valid_accum4_4)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_4),
+        .ready_n(ready_conv4_6),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_6),
+        .ready(ready_accum4_4),
+        .valid_n(valid_conv4_6)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_6),
+        .ready_n(ready_accum4_5),
+        .data_in(data_out_conv4_6),
+        .data_in2(data_out_accum4_4),
+        .data_out(data_out_accum4_5),
+        .ready(ready_conv4_6),
+        .valid_n(valid_accum4_5)
+    );
+
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_5),
+        .ready_n(ready_conv4_7),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_7),
+        .ready(ready_accum4_5),
+        .valid_n(valid_conv4_7)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_7),
+        .ready_n(ready_accum4_6),
+        .data_in(data_out_conv4_7),
+        .data_in2(data_out_accum4_5),
+        .data_out(data_out_accum4_6),
+        .ready(ready_conv4_7),
+        .valid_n(valid_accum4_6)
+    );
+	
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_6),
+        .ready_n(ready_conv4_8),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_8),
+        .ready(ready_accum4_6),
+        .valid_n(valid_conv4_8)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_8),
+        .ready_n(ready_accum4_7),
+        .data_in(data_out_conv4_8),
+        .data_in2(data_out_accum4_6),
+        .data_out(data_out_accum4_7),
+        .ready(ready_conv4_8),
+        .valid_n(valid_accum4_7)
+    );
+
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+        .DEPTH(64)
+    ) conv4_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_7),
+        .ready_n(ready_conv4_9),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4_9),
+        .ready(ready_accum4_7),
+        .valid_n(valid_conv4_9)
+    );
+	
+	accumulation_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DEPTH(64)
+        ) accum4_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4_9),
+        .ready_n(ready_accum4_8),
+        .data_in(data_out_conv4_9),
+        .data_in2(data_out_accum4_7),
+        .data_out(data_out_accum4_8),
+        .ready(ready_conv4_9),
+        .valid_n(valid_accum4_8)
+    );
+
+	// Instantiate the fourth activation_layer
+    activation_layer4 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DATA_WIDTH(8),
+        .DEPTH(64)
+    )act4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum4_8),
+        .ready_n(ready_act4),
+        .data_in(data_out_accum4_8),
+        .data_out(data_out_act4),
+        .ready(ready_accum4_8),
+        .valid_n(valid_act4)
+    );
+	
+	// Instantiate the third pool_layer
+    pool_layer3 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DATA_WIDTH(8),
+        .DEPTH(64)
+    ) pool3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act4),
+        .ready_n(ready_pool3),
+        .layer_done(1'b0),
+        .data_in(data_out_act4),
+        .data_out(data_out_pool3),
+        .ready(ready_act4),
+        .valid_n(valid_pool3)
+    );
+	
+	// Instantiate the fifth conv_layer (need 18 DPEs and 17 accu layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool3),
+        .ready_n(ready_conv5_1),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_1),
+        .ready(ready_pool3),
+        .valid_n(valid_conv5_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_1),
+        .ready_n(ready_conv5_2),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_2),
+        .ready(ready_conv5_1),
+        .valid_n(valid_conv5_2)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_2),
+        .ready_n(ready_accum5_1),
+        .data_in(data_out_conv5_1),
+        .data_in2(data_out_conv5_2),
+        .data_out(data_out_accum5_1),
+        .ready(ready_conv5_2),
+        .valid_n(valid_accum5_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_1),
+        .ready_n(ready_conv5_3),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_3),
+        .ready(ready_accum5_1),
+        .valid_n(valid_conv5_3)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_3),
+        .ready_n(ready_accum5_2),
+        .data_in(data_out_conv5_3),
+        .data_in2(data_out_accum5_1),
+        .data_out(data_out_accum5_2),
+        .ready(ready_conv5_3),
+        .valid_n(valid_accum5_2)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_2),
+        .ready_n(ready_conv5_4),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_4),
+        .ready(ready_accum5_2),
+        .valid_n(valid_conv5_4)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_4),
+        .ready_n(ready_accum5_3),
+        .data_in(data_out_conv5_4),
+        .data_in2(data_out_accum5_2),
+        .data_out(data_out_accum5_3),
+        .ready(ready_conv5_4),
+        .valid_n(valid_accum5_3)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_3),
+        .ready_n(ready_conv5_5),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_5),
+        .ready(ready_accum5_3),
+        .valid_n(valid_conv5_5)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_5),
+        .ready_n(ready_accum5_4),
+        .data_in(data_out_conv5_5),
+        .data_in2(data_out_accum5_3),
+        .data_out(data_out_accum5_4),
+        .ready(ready_conv5_5),
+        .valid_n(valid_accum5_4)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_4),
+        .ready_n(ready_conv5_6),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_6),
+        .ready(ready_accum5_4),
+        .valid_n(valid_conv5_6)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_6),
+        .ready_n(ready_accum5_5),
+        .data_in(data_out_conv5_6),
+        .data_in2(data_out_accum5_4),
+        .data_out(data_out_accum5_5),
+        .ready(ready_conv5_6),
+        .valid_n(valid_accum5_5)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_5),
+        .ready_n(ready_conv5_7),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_7),
+        .ready(ready_accum5_5),
+        .valid_n(valid_conv5_7)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_7),
+        .ready_n(ready_accum5_6),
+        .data_in(data_out_conv5_7),
+        .data_in2(data_out_accum5_5),
+        .data_out(data_out_accum5_6),
+        .ready(ready_conv5_7),
+        .valid_n(valid_accum5_6)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_6),
+        .ready_n(ready_conv5_8),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_8),
+        .ready(ready_accum5_6),
+        .valid_n(valid_conv5_8)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_8),
+        .ready_n(ready_accum5_7),
+        .data_in(data_out_conv5_8),
+        .data_in2(data_out_accum5_6),
+        .data_out(data_out_accum5_7),
+        .ready(ready_conv5_8),
+        .valid_n(valid_accum5_7)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_7),
+        .ready_n(ready_conv5_9),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_9),
+        .ready(ready_accum5_7),
+        .valid_n(valid_conv5_9)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_9),
+        .ready_n(ready_accum5_8),
+        .data_in(data_out_conv5_9),
+        .data_in2(data_out_accum5_7),
+        .data_out(data_out_accum5_8),
+        .ready(ready_conv5_9),
+        .valid_n(valid_accum5_8)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_8),
+        .ready_n(ready_conv5_10),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_10),
+        .ready(ready_accum5_8),
+        .valid_n(valid_conv5_10)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_10),
+        .ready_n(ready_accum5_9),
+        .data_in(data_out_conv5_10),
+        .data_in2(data_out_accum5_8),
+        .data_out(data_out_accum5_9),
+        .ready(ready_conv5_10),
+        .valid_n(valid_accum5_9)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_9),
+        .ready_n(ready_conv5_11),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_11),
+        .ready(ready_accum5_9),
+        .valid_n(valid_conv5_11)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_11),
+        .ready_n(ready_accum5_10),
+        .data_in(data_out_conv5_11),
+        .data_in2(data_out_accum5_9),
+        .data_out(data_out_accum5_10),
+        .ready(ready_conv5_11),
+        .valid_n(valid_accum5_10)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_10),
+        .ready_n(ready_conv5_12),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_12),
+        .ready(ready_accum5_10),
+        .valid_n(valid_conv5_12)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_12),
+        .ready_n(ready_accum5_11),
+        .data_in(data_out_conv5_12),
+        .data_in2(data_out_accum5_10),
+        .data_out(data_out_accum5_11),
+        .ready(ready_conv5_12),
+        .valid_n(valid_accum5_11)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_11),
+        .ready_n(ready_conv5_13),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_13),
+        .ready(ready_accum5_11),
+        .valid_n(valid_conv5_13)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_13),
+        .ready_n(ready_accum5_12),
+        .data_in(data_out_conv5_13),
+        .data_in2(data_out_accum5_11),
+        .data_out(data_out_accum5_12),
+        .ready(ready_conv5_13),
+        .valid_n(valid_accum5_12)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_12),
+        .ready_n(ready_conv5_14),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_14),
+        .ready(ready_accum5_12),
+        .valid_n(valid_conv5_14)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_14),
+        .ready_n(ready_accum5_13),
+        .data_in(data_out_conv5_14),
+        .data_in2(data_out_accum5_12),
+        .data_out(data_out_accum5_13),
+        .ready(ready_conv5_14),
+        .valid_n(valid_accum5_13)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_13),
+        .ready_n(ready_conv5_15),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_15),
+        .ready(ready_accum5_13),
+        .valid_n(valid_conv5_15)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_15),
+        .ready_n(ready_accum5_14),
+        .data_in(data_out_conv5_15),
+        .data_in2(data_out_accum5_13),
+        .data_out(data_out_accum5_14),
+        .ready(ready_conv5_15),
+        .valid_n(valid_accum5_14)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_14),
+        .ready_n(ready_conv5_16),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_16),
+        .ready(ready_accum5_14),
+        .valid_n(valid_conv5_16)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_16),
+        .ready_n(ready_accum5_15),
+        .data_in(data_out_conv5_16),
+        .data_in2(data_out_accum5_14),
+        .data_out(data_out_accum5_15),
+        .ready(ready_conv5_16),
+        .valid_n(valid_accum5_15)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_15),
+        .ready_n(ready_conv5_17),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_17),
+        .ready(ready_accum5_15),
+        .valid_n(valid_conv5_17)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_17),
+        .ready_n(ready_accum5_16),
+        .data_in(data_out_conv5_17),
+        .data_in2(data_out_accum5_15),
+        .data_out(data_out_accum5_16),
+        .ready(ready_conv5_17),
+        .valid_n(valid_accum5_16)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv5_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_16),
+        .ready_n(ready_conv5_18),
+        .data_in(data_out_pool3),
+        .data_out(data_out_conv5_18),
+        .ready(ready_accum5_16),
+        .valid_n(valid_conv5_18)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum5_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5_18),
+        .ready_n(ready_accum5_17),
+        .data_in(data_out_conv5_18),
+        .data_in2(data_out_accum5_16),
+        .data_out(data_out_accum5_17),
+        .ready(ready_conv5_18),
+        .valid_n(valid_accum5_17)
+    );
+
+	// Instantiate the fifth activation_layer
+    activation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DATA_WIDTH(8),
+        .DEPTH(16)
+    )act5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum5_17),
+        .ready_n(ready_act5),
+        .data_in(data_out_accum5_17),
+        .data_out(data_out_act5),
+        .ready(ready_accum5_17),
+        .valid_n(valid_act5)
+    );	
+
+	// Instantiate the sixth conv_layer (need 36 DPEs and 35 accu layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act5),
+        .ready_n(ready_conv6_1),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_1),
+        .ready(ready_act5),
+        .valid_n(valid_conv6_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_2),
+        .ready_n(ready_conv6_1),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_2),
+        .ready(ready_conv6_1),
+        .valid_n(valid_conv6_2)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_2),
+        .ready_n(ready_accum6_1),
+        .data_in(data_out_conv6_1),
+        .data_in2(data_out_conv6_2),
+        .data_out(data_out_accum6_1),
+        .ready(ready_conv6_2),
+        .valid_n(valid_accum6_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_1),
+        .ready_n(ready_conv6_3),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_3),
+        .ready(ready_accum6_1),
+        .valid_n(valid_conv6_3)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_3),
+        .ready_n(ready_accum6_2),
+        .data_in(data_out_conv6_3),
+        .data_in2(data_out_accum6_1),
+        .data_out(data_out_accum6_2),
+        .ready(ready_conv6_3),
+        .valid_n(valid_accum6_2)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_2),
+        .ready_n(ready_conv6_4),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_4),
+        .ready(ready_accum6_2),
+        .valid_n(valid_conv6_4)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_4),
+        .ready_n(ready_accum6_3),
+        .data_in(data_out_conv6_4),
+        .data_in2(data_out_accum6_2),
+        .data_out(data_out_accum6_3),
+        .ready(ready_conv6_4),
+        .valid_n(valid_accum6_3)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_3),
+        .ready_n(ready_conv6_5),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_5),
+        .ready(ready_accum6_3),
+        .valid_n(valid_conv6_5)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_5),
+        .ready_n(ready_accum6_4),
+        .data_in(data_out_conv6_5),
+        .data_in2(data_out_accum6_3),
+        .data_out(data_out_accum6_4),
+        .ready(ready_conv6_5),
+        .valid_n(valid_accum6_4)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_4),
+        .ready_n(ready_conv6_6),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_6),
+        .ready(ready_accum6_4),
+        .valid_n(valid_conv6_6)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_6),
+        .ready_n(ready_accum6_5),
+        .data_in(data_out_conv6_6),
+        .data_in2(data_out_accum6_4),
+        .data_out(data_out_accum6_5),
+        .ready(ready_conv6_6),
+        .valid_n(valid_accum6_5)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_5),
+        .ready_n(ready_conv6_7),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_7),
+        .ready(ready_accum6_5),
+        .valid_n(valid_conv6_7)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_7),
+        .ready_n(ready_accum6_6),
+        .data_in(data_out_conv6_7),
+        .data_in2(data_out_accum6_5),
+        .data_out(data_out_accum6_6),
+        .ready(ready_conv6_7),
+        .valid_n(valid_accum6_6)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_6),
+        .ready_n(ready_conv6_8),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_8),
+        .ready(ready_accum6_6),
+        .valid_n(valid_conv6_8)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_8),
+        .ready_n(ready_accum6_7),
+        .data_in(data_out_conv6_8),
+        .data_in2(data_out_accum6_6),
+        .data_out(data_out_accum6_7),
+        .ready(ready_conv6_8),
+        .valid_n(valid_accum6_7)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_7),
+        .ready_n(ready_conv6_9),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_9),
+        .ready(ready_accum6_7),
+        .valid_n(valid_conv6_9)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_9),
+        .ready_n(ready_accum6_8),
+        .data_in(data_out_conv6_9),
+        .data_in2(data_out_accum6_7),
+        .data_out(data_out_accum6_8),
+        .ready(ready_conv6_9),
+        .valid_n(valid_accum6_8)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_8),
+        .ready_n(ready_conv6_10),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_10),
+        .ready(ready_accum6_8),
+        .valid_n(valid_conv6_10)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_10),
+        .ready_n(ready_accum6_9),
+        .data_in(data_out_conv6_10),
+        .data_in2(data_out_accum6_8),
+        .data_out(data_out_accum6_9),
+        .ready(ready_conv6_10),
+        .valid_n(valid_accum6_9)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_9),
+        .ready_n(ready_conv6_11),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_11),
+        .ready(ready_accum6_9),
+        .valid_n(valid_conv6_11)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_11),
+        .ready_n(ready_accum6_10),
+        .data_in(data_out_conv6_11),
+        .data_in2(data_out_accum6_9),
+        .data_out(data_out_accum6_10),
+        .ready(ready_conv6_11),
+        .valid_n(valid_accum6_10)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_10),
+        .ready_n(ready_conv6_12),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_12),
+        .ready(ready_accum6_10),
+        .valid_n(valid_conv6_12)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_12),
+        .ready_n(ready_accum6_11),
+        .data_in(data_out_conv6_12),
+        .data_in2(data_out_accum6_10),
+        .data_out(data_out_accum6_11),
+        .ready(ready_conv6_12),
+        .valid_n(valid_accum6_11)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_11),
+        .ready_n(ready_conv6_13),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_13),
+        .ready(ready_accum6_11),
+        .valid_n(valid_conv6_13)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_13),
+        .ready_n(ready_accum6_12),
+        .data_in(data_out_conv6_13),
+        .data_in2(data_out_accum6_11),
+        .data_out(data_out_accum6_12),
+        .ready(ready_conv6_13),
+        .valid_n(valid_accum6_12)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_12),
+        .ready_n(ready_conv6_14),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_14),
+        .ready(ready_accum6_12),
+        .valid_n(valid_conv6_14)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_14),
+        .ready_n(ready_accum6_13),
+        .data_in(data_out_conv6_14),
+        .data_in2(data_out_accum6_12),
+        .data_out(data_out_accum6_13),
+        .ready(ready_conv6_14),
+        .valid_n(valid_accum6_13)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_13),
+        .ready_n(ready_conv6_15),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_15),
+        .ready(ready_accum6_13),
+        .valid_n(valid_conv6_15)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_15),
+        .ready_n(ready_accum6_14),
+        .data_in(data_out_conv6_15),
+        .data_in2(data_out_accum6_13),
+        .data_out(data_out_accum6_14),
+        .ready(ready_conv6_15),
+        .valid_n(valid_accum6_14)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_14),
+        .ready_n(ready_conv6_16),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_16),
+        .ready(ready_accum6_14),
+        .valid_n(valid_conv6_16)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_16),
+        .ready_n(ready_accum6_15),
+        .data_in(data_out_conv6_16),
+        .data_in2(data_out_accum6_14),
+        .data_out(data_out_accum6_15),
+        .ready(ready_conv6_16),
+        .valid_n(valid_accum6_15)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_15),
+        .ready_n(ready_conv6_17),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_17),
+        .ready(ready_accum6_15),
+        .valid_n(valid_conv6_17)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_17),
+        .ready_n(ready_accum6_16),
+        .data_in(data_out_conv6_17),
+        .data_in2(data_out_accum6_15),
+        .data_out(data_out_accum6_16),
+        .ready(ready_conv6_17),
+        .valid_n(valid_accum6_16)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_16),
+        .ready_n(ready_conv6_18),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_18),
+        .ready(ready_accum6_16),
+        .valid_n(valid_conv6_18)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_18),
+        .ready_n(ready_accum6_17),
+        .data_in(data_out_conv6_18),
+        .data_in2(data_out_accum6_16),
+        .data_out(data_out_accum6_17),
+        .ready(ready_conv6_18),
+        .valid_n(valid_accum6_17)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_19 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_17),
+        .ready_n(ready_conv6_19),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_19),
+        .ready(ready_accum6_17),
+        .valid_n(valid_conv6_19)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_19),
+        .ready_n(ready_accum6_18),
+        .data_in(data_out_conv6_19),
+        .data_in2(data_out_accum6_17),
+        .data_out(data_out_accum6_18),
+        .ready(ready_conv6_19),
+        .valid_n(valid_accum6_18)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_20 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_18),
+        .ready_n(ready_conv6_20),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_20),
+        .ready(ready_accum6_18),
+        .valid_n(valid_conv6_20)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_19 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_20),
+        .ready_n(ready_accum6_19),
+        .data_in(data_out_conv6_20),
+        .data_in2(data_out_accum6_18),
+        .data_out(data_out_accum6_19),
+        .ready(ready_conv6_20),
+        .valid_n(valid_accum6_19)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_21 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_19),
+        .ready_n(ready_conv6_21),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_21),
+        .ready(ready_accum6_19),
+        .valid_n(valid_conv6_21)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_20 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_21),
+        .ready_n(ready_accum6_20),
+        .data_in(data_out_conv6_21),
+        .data_in2(data_out_accum6_19),
+        .data_out(data_out_accum6_20),
+        .ready(ready_conv6_21),
+        .valid_n(valid_accum6_20)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_22 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_20),
+        .ready_n(ready_conv6_22),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_22),
+        .ready(ready_accum6_20),
+        .valid_n(valid_conv6_22)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_21 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_22),
+        .ready_n(ready_accum6_21),
+        .data_in(data_out_conv6_22),
+        .data_in2(data_out_accum6_20),
+        .data_out(data_out_accum6_21),
+        .ready(ready_conv6_22),
+        .valid_n(valid_accum6_21)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_23 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_21),
+        .ready_n(ready_conv6_23),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_23),
+        .ready(ready_accum6_21),
+        .valid_n(valid_conv6_23)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_22 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_23),
+        .ready_n(ready_accum6_22),
+        .data_in(data_out_conv6_23),
+        .data_in2(data_out_accum6_21),
+        .data_out(data_out_accum6_22),
+        .ready(ready_conv6_23),
+        .valid_n(valid_accum6_22)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_24 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_22),
+        .ready_n(ready_conv6_24),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_24),
+        .ready(ready_accum6_22),
+        .valid_n(valid_conv6_24)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_23 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_24),
+        .ready_n(ready_accum6_23),
+        .data_in(data_out_conv6_24),
+        .data_in2(data_out_accum6_22),
+        .data_out(data_out_accum6_23),
+        .ready(ready_conv6_24),
+        .valid_n(valid_accum6_23)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_25 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_23),
+        .ready_n(ready_conv6_25),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_25),
+        .ready(ready_accum6_23),
+        .valid_n(valid_conv6_25)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_24 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_25),
+        .ready_n(ready_accum6_24),
+        .data_in(data_out_conv6_25),
+        .data_in2(data_out_accum6_23),
+        .data_out(data_out_accum6_24),
+        .ready(ready_conv6_25),
+        .valid_n(valid_accum6_24)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_26 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_24),
+        .ready_n(ready_conv6_26),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_26),
+        .ready(ready_accum6_24),
+        .valid_n(valid_conv6_26)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_25 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_26),
+        .ready_n(ready_accum6_25),
+        .data_in(data_out_conv6_26),
+        .data_in2(data_out_accum6_24),
+        .data_out(data_out_accum6_25),
+        .ready(ready_conv6_26),
+        .valid_n(valid_accum6_25)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_27 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_25),
+        .ready_n(ready_conv6_27),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_27),
+        .ready(ready_accum6_25),
+        .valid_n(valid_conv6_27)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_26 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_27),
+        .ready_n(ready_accum6_26),
+        .data_in(data_out_conv6_27),
+        .data_in2(data_out_accum6_25),
+        .data_out(data_out_accum6_26),
+        .ready(ready_conv6_27),
+        .valid_n(valid_accum6_26)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_28 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_26),
+        .ready_n(ready_conv6_28),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_28),
+        .ready(ready_accum6_26),
+        .valid_n(valid_conv6_28)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_27 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_28),
+        .ready_n(ready_accum6_27),
+        .data_in(data_out_conv6_28),
+        .data_in2(data_out_accum6_26),
+        .data_out(data_out_accum6_27),
+        .ready(ready_conv6_28),
+        .valid_n(valid_accum6_27)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_29 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_27),
+        .ready_n(ready_conv6_29),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_29),
+        .ready(ready_accum6_27),
+        .valid_n(valid_conv6_29)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_28 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_29),
+        .ready_n(ready_accum6_28),
+        .data_in(data_out_conv6_29),
+        .data_in2(data_out_accum6_27),
+        .data_out(data_out_accum6_28),
+        .ready(ready_conv6_29),
+        .valid_n(valid_accum6_28)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_30 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_28),
+        .ready_n(ready_conv6_30),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_30),
+        .ready(ready_accum6_28),
+        .valid_n(valid_conv6_30)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_29 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_30),
+        .ready_n(ready_accum6_29),
+        .data_in(data_out_conv6_30),
+        .data_in2(data_out_accum6_28),
+        .data_out(data_out_accum6_29),
+        .ready(ready_conv6_30),
+        .valid_n(valid_accum6_29)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_31 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_29),
+        .ready_n(ready_conv6_31),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_31),
+        .ready(ready_accum6_29),
+        .valid_n(valid_conv6_31)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_30 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_31),
+        .ready_n(ready_accum6_30),
+        .data_in(data_out_conv6_31),
+        .data_in2(data_out_accum6_29),
+        .data_out(data_out_accum6_30),
+        .ready(ready_conv6_31),
+        .valid_n(valid_accum6_30)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_32 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_30),
+        .ready_n(ready_conv6_32),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_32),
+        .ready(ready_accum6_30),
+        .valid_n(valid_conv6_32)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_31 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_32),
+        .ready_n(ready_accum6_31),
+        .data_in(data_out_conv6_32),
+        .data_in2(data_out_accum6_30),
+        .data_out(data_out_accum6_31),
+        .ready(ready_conv6_32),
+        .valid_n(valid_accum6_31)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_33 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_31),
+        .ready_n(ready_conv6_33),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_33),
+        .ready(ready_accum6_31),
+        .valid_n(valid_conv6_33)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_32 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_33),
+        .ready_n(ready_accum6_32),
+        .data_in(data_out_conv6_33),
+        .data_in2(data_out_accum6_31),
+        .data_out(data_out_accum6_32),
+        .ready(ready_conv6_33),
+        .valid_n(valid_accum6_32)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_34 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_32),
+        .ready_n(ready_conv6_34),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_34),
+        .ready(ready_accum6_32),
+        .valid_n(valid_conv6_34)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_33 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_34),
+        .ready_n(ready_accum6_33),
+        .data_in(data_out_conv6_34),
+        .data_in2(data_out_accum6_32),
+        .data_out(data_out_accum6_33),
+        .ready(ready_conv6_34),
+        .valid_n(valid_accum6_33)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_35 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_33),
+        .ready_n(ready_conv6_35),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_35),
+        .ready(ready_accum6_33),
+        .valid_n(valid_conv6_35)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_34 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_35),
+        .ready_n(ready_accum6_34),
+        .data_in(data_out_conv6_35),
+        .data_in2(data_out_accum6_33),
+        .data_out(data_out_accum6_34),
+        .ready(ready_conv6_35),
+        .valid_n(valid_accum6_34)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+        .DEPTH(16)
+    ) conv6_36 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_34),
+        .ready_n(ready_conv6_36),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6_36),
+        .ready(ready_accum6_34),
+        .valid_n(valid_conv6_36)
+    );
+	
+	accumulation_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DEPTH(16)
+        ) accum6_35 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6_36),
+        .ready_n(ready_accum6_35),
+        .data_in(data_out_conv6_36),
+        .data_in2(data_out_accum6_34),
+        .data_out(data_out_accum6_35),
+        .ready(ready_conv6_36),
+        .valid_n(valid_accum6_35)
+    );
+
+	// Instantiate the sixth activation_layer
+    activation_layer6 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DATA_WIDTH(8),
+        .DEPTH(16)
+    )act6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum6_35),
+        .ready_n(ready_act6),
+        .data_in(data_out_accum6_35),
+        .data_out(data_out_act6),
+        .ready(ready_accum6_35),
+        .valid_n(valid_act6)
+    );
+	
+	// Instantiate the fourth pool_layer
+    pool_layer4 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DATA_WIDTH(8),
+        .DEPTH(16)
+    ) pool4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act6),
+        .ready_n(ready_pool4),
+        .layer_done(1'b0),
+        .data_in(data_out_act6),
+        .data_out(data_out_pool4),
+        .ready(ready_act6),
+        .valid_n(valid_pool4)
+    );
+	
+	// Instantiate the seventh conv_layer (need 36 DPEs and 35 accu layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool4),
+        .ready_n(ready_conv7_1),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_1),
+        .ready(ready_pool4),
+        .valid_n(valid_conv7_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_1),
+        .ready_n(ready_conv7_2),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_2),
+        .ready(ready_conv7_1),
+        .valid_n(valid_conv7_2)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_2),
+        .ready_n(ready_accum7_1),
+        .data_in(data_out_conv7_1),
+        .data_in2(data_out_conv7_2),
+        .data_out(data_out_accum7_1),
+        .ready(ready_conv7_2),
+        .valid_n(valid_accum7_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_1),
+        .ready_n(ready_conv7_3),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_3),
+        .ready(ready_accum7_1),
+        .valid_n(valid_conv7_3)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_3),
+        .ready_n(ready_accum7_2),
+        .data_in(data_out_conv7_3),
+        .data_in2(data_out_accum7_1),
+        .data_out(data_out_accum7_2),
+        .ready(ready_conv7_3),
+        .valid_n(valid_accum7_2)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_2),
+        .ready_n(ready_conv7_4),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_4),
+        .ready(ready_accum7_2),
+        .valid_n(valid_conv7_4)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_4),
+        .ready_n(ready_accum7_3),
+        .data_in(data_out_conv7_4),
+        .data_in2(data_out_accum7_2),
+        .data_out(data_out_accum7_3),
+        .ready(ready_conv7_4),
+        .valid_n(valid_accum7_3)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_3),
+        .ready_n(ready_conv7_5),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_5),
+        .ready(ready_accum7_3),
+        .valid_n(valid_conv7_5)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_5),
+        .ready_n(ready_accum7_4),
+        .data_in(data_out_conv7_5),
+        .data_in2(data_out_accum7_3),
+        .data_out(data_out_accum7_4),
+        .ready(ready_conv7_5),
+        .valid_n(valid_accum7_4)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_4),
+        .ready_n(ready_conv7_6),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_6),
+        .ready(ready_accum7_4),
+        .valid_n(valid_conv7_6)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_6),
+        .ready_n(ready_accum7_5),
+        .data_in(data_out_conv7_6),
+        .data_in2(data_out_accum7_4),
+        .data_out(data_out_accum7_5),
+        .ready(ready_conv7_6),
+        .valid_n(valid_accum7_5)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_5),
+        .ready_n(ready_conv7_7),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_7),
+        .ready(ready_accum7_5),
+        .valid_n(valid_conv7_7)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_7),
+        .ready_n(ready_accum7_6),
+        .data_in(data_out_conv7_7),
+        .data_in2(data_out_accum7_5),
+        .data_out(data_out_accum7_6),
+        .ready(ready_conv7_7),
+        .valid_n(valid_accum7_6)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_6),
+        .ready_n(ready_conv7_8),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_8),
+        .ready(ready_accum7_6),
+        .valid_n(valid_conv7_8)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_8),
+        .ready_n(ready_accum7_7),
+        .data_in(data_out_conv7_8),
+        .data_in2(data_out_accum7_6),
+        .data_out(data_out_accum7_7),
+        .ready(ready_conv7_8),
+        .valid_n(valid_accum7_7)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_7),
+        .ready_n(ready_conv7_9),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_9),
+        .ready(ready_accum7_7),
+        .valid_n(valid_conv7_9)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_9),
+        .ready_n(ready_accum7_8),
+        .data_in(data_out_conv7_9),
+        .data_in2(data_out_accum7_7),
+        .data_out(data_out_accum7_8),
+        .ready(ready_conv7_9),
+        .valid_n(valid_accum7_8)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_8),
+        .ready_n(ready_conv7_10),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_10),
+        .ready(ready_accum7_8),
+        .valid_n(valid_conv7_10)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_10),
+        .ready_n(ready_accum7_9),
+        .data_in(data_out_conv7_10),
+        .data_in2(data_out_accum7_8),
+        .data_out(data_out_accum7_9),
+        .ready(ready_conv7_10),
+        .valid_n(valid_accum7_9)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_9),
+        .ready_n(ready_conv7_11),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_11),
+        .ready(ready_accum7_9),
+        .valid_n(valid_conv7_11)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_11),
+        .ready_n(ready_accum7_10),
+        .data_in(data_out_conv7_11),
+        .data_in2(data_out_accum7_9),
+        .data_out(data_out_accum7_10),
+        .ready(ready_conv7_11),
+        .valid_n(valid_accum7_10)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_10),
+        .ready_n(ready_conv7_12),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_12),
+        .ready(ready_accum7_10),
+        .valid_n(valid_conv7_12)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_12),
+        .ready_n(ready_accum7_11),
+        .data_in(data_out_conv7_12),
+        .data_in2(data_out_accum7_10),
+        .data_out(data_out_accum7_11),
+        .ready(ready_conv7_12),
+        .valid_n(valid_accum7_11)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_11),
+        .ready_n(ready_conv7_13),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_13),
+        .ready(ready_accum7_11),
+        .valid_n(valid_conv7_13)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_13),
+        .ready_n(ready_accum7_12),
+        .data_in(data_out_conv7_13),
+        .data_in2(data_out_accum7_11),
+        .data_out(data_out_accum7_12),
+        .ready(ready_conv7_13),
+        .valid_n(valid_accum7_12)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_12),
+        .ready_n(ready_conv7_14),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_14),
+        .ready(ready_accum7_12),
+        .valid_n(valid_conv7_14)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_14),
+        .ready_n(ready_accum7_13),
+        .data_in(data_out_conv7_14),
+        .data_in2(data_out_accum7_12),
+        .data_out(data_out_accum7_13),
+        .ready(ready_conv7_14),
+        .valid_n(valid_accum7_13)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_13),
+        .ready_n(ready_conv7_15),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_15),
+        .ready(ready_accum7_13),
+        .valid_n(valid_conv7_15)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_15),
+        .ready_n(ready_accum7_14),
+        .data_in(data_out_conv7_15),
+        .data_in2(data_out_accum7_13),
+        .data_out(data_out_accum7_14),
+        .ready(ready_conv7_15),
+        .valid_n(valid_accum7_14)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_14),
+        .ready_n(ready_conv7_16),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_16),
+        .ready(ready_accum7_14),
+        .valid_n(valid_conv7_16)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_16),
+        .ready_n(ready_accum7_15),
+        .data_in(data_out_conv7_16),
+        .data_in2(data_out_accum7_14),
+        .data_out(data_out_accum7_15),
+        .ready(ready_conv7_16),
+        .valid_n(valid_accum7_15)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_15),
+        .ready_n(ready_conv7_17),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_17),
+        .ready(ready_accum7_15),
+        .valid_n(valid_conv7_17)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_17),
+        .ready_n(ready_accum7_16),
+        .data_in(data_out_conv7_17),
+        .data_in2(data_out_accum7_15),
+        .data_out(data_out_accum7_16),
+        .ready(ready_conv7_17),
+        .valid_n(valid_accum7_16)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_16),
+        .ready_n(ready_conv7_18),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_18),
+        .ready(ready_accum7_16),
+        .valid_n(valid_conv7_18)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_18),
+        .ready_n(ready_accum7_17),
+        .data_in(data_out_conv7_18),
+        .data_in2(data_out_accum7_16),
+        .data_out(data_out_accum7_17),
+        .ready(ready_conv7_18),
+        .valid_n(valid_accum7_17)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_19 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_17),
+        .ready_n(ready_conv7_19),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_19),
+        .ready(ready_accum7_17),
+        .valid_n(valid_conv7_19)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_19),
+        .ready_n(ready_accum7_18),
+        .data_in(data_out_conv7_19),
+        .data_in2(data_out_accum7_17),
+        .data_out(data_out_accum7_18),
+        .ready(ready_conv7_19),
+        .valid_n(valid_accum7_18)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_20 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_18),
+        .ready_n(ready_conv7_20),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_20),
+        .ready(ready_accum7_18),
+        .valid_n(valid_conv7_20)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_19 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_20),
+        .ready_n(ready_accum7_19),
+        .data_in(data_out_conv7_20),
+        .data_in2(data_out_accum7_18),
+        .data_out(data_out_accum7_19),
+        .ready(ready_conv7_20),
+        .valid_n(valid_accum7_19)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_21 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_19),
+        .ready_n(ready_conv7_21),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_21),
+        .ready(ready_accum7_19),
+        .valid_n(valid_conv7_21)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_20 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_21),
+        .ready_n(ready_accum7_20),
+        .data_in(data_out_conv7_21),
+        .data_in2(data_out_accum7_19),
+        .data_out(data_out_accum7_20),
+        .ready(ready_conv7_21),
+        .valid_n(valid_accum7_20)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_22 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_20),
+        .ready_n(ready_conv7_22),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_22),
+        .ready(ready_accum7_20),
+        .valid_n(valid_conv7_22)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_21 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_22),
+        .ready_n(ready_accum7_21),
+        .data_in(data_out_conv7_22),
+        .data_in2(data_out_accum7_20),
+        .data_out(data_out_accum7_21),
+        .ready(ready_conv7_22),
+        .valid_n(valid_accum7_21)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_23 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_21),
+        .ready_n(ready_conv7_23),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_23),
+        .ready(ready_accum7_21),
+        .valid_n(valid_conv7_23)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_22 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_23),
+        .ready_n(ready_accum7_22),
+        .data_in(data_out_conv7_23),
+        .data_in2(data_out_accum7_21),
+        .data_out(data_out_accum7_22),
+        .ready(ready_conv7_23),
+        .valid_n(valid_accum7_22)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_24 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_22),
+        .ready_n(ready_conv7_24),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_24),
+        .ready(ready_accum7_22),
+        .valid_n(valid_conv7_24)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_23 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_24),
+        .ready_n(ready_accum7_23),
+        .data_in(data_out_conv7_24),
+        .data_in2(data_out_accum7_22),
+        .data_out(data_out_accum7_23),
+        .ready(ready_conv7_24),
+        .valid_n(valid_accum7_23)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_25 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_23),
+        .ready_n(ready_conv7_25),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_25),
+        .ready(ready_accum7_23),
+        .valid_n(valid_conv7_25)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_24 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_25),
+        .ready_n(ready_accum7_24),
+        .data_in(data_out_conv7_25),
+        .data_in2(data_out_accum7_23),
+        .data_out(data_out_accum7_24),
+        .ready(ready_conv7_25),
+        .valid_n(valid_accum7_24)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_26 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_24),
+        .ready_n(ready_conv7_26),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_26),
+        .ready(ready_accum7_24),
+        .valid_n(valid_conv7_26)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_25 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_26),
+        .ready_n(ready_accum7_25),
+        .data_in(data_out_conv7_26),
+        .data_in2(data_out_accum7_24),
+        .data_out(data_out_accum7_25),
+        .ready(ready_conv7_26),
+        .valid_n(valid_accum7_25)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_27 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_25),
+        .ready_n(ready_conv7_27),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_27),
+        .ready(ready_accum7_25),
+        .valid_n(valid_conv7_27)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_26 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_27),
+        .ready_n(ready_accum7_26),
+        .data_in(data_out_conv7_27),
+        .data_in2(data_out_accum7_25),
+        .data_out(data_out_accum7_26),
+        .ready(ready_conv7_27),
+        .valid_n(valid_accum7_26)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_28 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_26),
+        .ready_n(ready_conv7_28),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_28),
+        .ready(ready_accum7_26),
+        .valid_n(valid_conv7_28)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_27 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_28),
+        .ready_n(ready_accum7_27),
+        .data_in(data_out_conv7_28),
+        .data_in2(data_out_accum7_26),
+        .data_out(data_out_accum7_27),
+        .ready(ready_conv7_28),
+        .valid_n(valid_accum7_27)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_29 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_27),
+        .ready_n(ready_conv7_29),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_29),
+        .ready(ready_accum7_27),
+        .valid_n(valid_conv7_29)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_28 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_29),
+        .ready_n(ready_accum7_28),
+        .data_in(data_out_conv7_29),
+        .data_in2(data_out_accum7_27),
+        .data_out(data_out_accum7_28),
+        .ready(ready_conv7_29),
+        .valid_n(valid_accum7_28)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_30 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_28),
+        .ready_n(ready_conv7_30),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_30),
+        .ready(ready_accum7_28),
+        .valid_n(valid_conv7_30)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_29 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_30),
+        .ready_n(ready_accum7_29),
+        .data_in(data_out_conv7_30),
+        .data_in2(data_out_accum7_28),
+        .data_out(data_out_accum7_29),
+        .ready(ready_conv7_30),
+        .valid_n(valid_accum7_29)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_31 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_29),
+        .ready_n(ready_conv7_31),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_31),
+        .ready(ready_accum7_29),
+        .valid_n(valid_conv7_31)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_30 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_31),
+        .ready_n(ready_accum7_30),
+        .data_in(data_out_conv7_31),
+        .data_in2(data_out_accum7_29),
+        .data_out(data_out_accum7_30),
+        .ready(ready_conv7_31),
+        .valid_n(valid_accum7_30)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_32 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_30),
+        .ready_n(ready_conv7_32),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_32),
+        .ready(ready_accum7_30),
+        .valid_n(valid_conv7_32)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_31 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_32),
+        .ready_n(ready_accum7_31),
+        .data_in(data_out_conv7_32),
+        .data_in2(data_out_accum7_30),
+        .data_out(data_out_accum7_31),
+        .ready(ready_conv7_32),
+        .valid_n(valid_accum7_31)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_33 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_31),
+        .ready_n(ready_conv7_33),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_33),
+        .ready(ready_accum7_31),
+        .valid_n(valid_conv7_33)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_32 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_33),
+        .ready_n(ready_accum7_32),
+        .data_in(data_out_conv7_33),
+        .data_in2(data_out_accum7_31),
+        .data_out(data_out_accum7_32),
+        .ready(ready_conv7_33),
+        .valid_n(valid_accum7_32)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_34 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_32),
+        .ready_n(ready_conv7_34),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_34),
+        .ready(ready_accum7_32),
+        .valid_n(valid_conv7_34)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_33 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_34),
+        .ready_n(ready_accum7_33),
+        .data_in(data_out_conv7_34),
+        .data_in2(data_out_accum7_32),
+        .data_out(data_out_accum7_33),
+        .ready(ready_conv7_34),
+        .valid_n(valid_accum7_33)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_35 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_33),
+        .ready_n(ready_conv7_35),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_35),
+        .ready(ready_accum7_33),
+        .valid_n(valid_conv7_35)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_34 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_35),
+        .ready_n(ready_accum7_34),
+        .data_in(data_out_conv7_35),
+        .data_in2(data_out_accum7_33),
+        .data_out(data_out_accum7_34),
+        .ready(ready_conv7_35),
+        .valid_n(valid_accum7_34)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv7_36 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_34),
+        .ready_n(ready_conv7_36),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7_36),
+        .ready(ready_accum7_34),
+        .valid_n(valid_conv7_36)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum7_35 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv7_36),
+        .ready_n(ready_accum7_35),
+        .data_in(data_out_conv7_36),
+        .data_in2(data_out_accum7_34),
+        .data_out(data_out_accum7_35),
+        .ready(ready_conv7_36),
+        .valid_n(valid_accum7_35)
+    );	
+	
+	// Instantiate the seventh activation_layer
+    activation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DATA_WIDTH(8),
+        .DEPTH(4)
+    )act7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum7_35),
+        .ready_n(ready_act7),
+        .data_in(data_out_accum7_35),
+        .data_out(data_out_act7),
+        .ready(ready_accum7_35),
+        .valid_n(valid_act7)
+    );
+	
+	// Instantiate the eighth conv_layer (need 36 DPEs and 35 accu layers)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act7),
+        .ready_n(ready_conv8_1),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_1),
+        .ready(ready_act7),
+        .valid_n(valid_conv8_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_1),
+        .ready_n(ready_conv8_2),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_2),
+        .ready(ready_conv8_1),
+        .valid_n(valid_conv8_2)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_2),
+        .ready_n(ready_accum8_1),
+        .data_in(data_out_conv8_1),
+        .data_in2(data_out_conv8_2),
+        .data_out(data_out_accum8_1),
+        .ready(ready_conv8_2),
+        .valid_n(valid_accum8_1)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_1),
+        .ready_n(ready_conv8_3),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_3),
+        .ready(ready_accum8_1),
+        .valid_n(valid_conv8_3)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_3),
+        .ready_n(ready_accum8_2),
+        .data_in(data_out_conv8_3),
+        .data_in2(data_out_accum8_1),
+        .data_out(data_out_accum8_2),
+        .ready(ready_conv8_3),
+        .valid_n(valid_accum8_2)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_2),
+        .ready_n(ready_conv8_4),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_4),
+        .ready(ready_accum8_2),
+        .valid_n(valid_conv8_4)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_3 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_4),
+        .ready_n(ready_accum8_3),
+        .data_in(data_out_conv8_4),
+        .data_in2(data_out_accum8_2),
+        .data_out(data_out_accum8_3),
+        .ready(ready_conv8_4),
+        .valid_n(valid_accum8_3)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_3),
+        .ready_n(ready_conv8_5),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_5),
+        .ready(ready_accum8_3),
+        .valid_n(valid_conv8_5)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_5),
+        .ready_n(ready_accum8_4),
+        .data_in(data_out_conv8_5),
+        .data_in2(data_out_accum8_3),
+        .data_out(data_out_accum8_4),
+        .ready(ready_conv8_5),
+        .valid_n(valid_accum8_4)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_4),
+        .ready_n(ready_conv8_6),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_6),
+        .ready(ready_accum8_4),
+        .valid_n(valid_conv8_6)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_6),
+        .ready_n(ready_accum8_5),
+        .data_in(data_out_conv8_6),
+        .data_in2(data_out_accum8_4),
+        .data_out(data_out_accum8_5),
+        .ready(ready_conv8_6),
+        .valid_n(valid_accum8_5)
+    );	
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_5),
+        .ready_n(ready_conv8_7),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_7),
+        .ready(ready_accum8_5),
+        .valid_n(valid_conv8_7)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_7),
+        .ready_n(ready_accum8_6),
+        .data_in(data_out_conv8_7),
+        .data_in2(data_out_accum8_5),
+        .data_out(data_out_accum8_6),
+        .ready(ready_conv8_7),
+        .valid_n(valid_accum8_6)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_6),
+        .ready_n(ready_conv8_8),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_8),
+        .ready(ready_accum8_6),
+        .valid_n(valid_conv8_8)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_8),
+        .ready_n(ready_accum8_7),
+        .data_in(data_out_conv8_8),
+        .data_in2(data_out_accum8_6),
+        .data_out(data_out_accum8_7),
+        .ready(ready_conv8_8),
+        .valid_n(valid_accum8_7)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_7),
+        .ready_n(ready_conv8_9),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_9),
+        .ready(ready_accum8_7),
+        .valid_n(valid_conv8_9)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_9),
+        .ready_n(ready_accum8_8),
+        .data_in(data_out_conv8_9),
+        .data_in2(data_out_accum8_7),
+        .data_out(data_out_accum8_8),
+        .ready(ready_conv8_9),
+        .valid_n(valid_accum8_8)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_8),
+        .ready_n(ready_conv8_10),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_10),
+        .ready(ready_accum8_8),
+        .valid_n(valid_conv8_10)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_10),
+        .ready_n(ready_accum8_9),
+        .data_in(data_out_conv8_10),
+        .data_in2(data_out_accum8_8),
+        .data_out(data_out_accum8_9),
+        .ready(ready_conv8_10),
+        .valid_n(valid_accum8_9)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_9),
+        .ready_n(ready_conv8_11),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_11),
+        .ready(ready_accum8_9),
+        .valid_n(valid_conv8_11)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_10 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_11),
+        .ready_n(ready_accum8_10),
+        .data_in(data_out_conv8_11),
+        .data_in2(data_out_accum8_9),
+        .data_out(data_out_accum8_10),
+        .ready(ready_conv8_11),
+        .valid_n(valid_accum8_10)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_10),
+        .ready_n(ready_conv8_12),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_12),
+        .ready(ready_accum8_10),
+        .valid_n(valid_conv8_12)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_11 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_12),
+        .ready_n(ready_accum8_11),
+        .data_in(data_out_conv8_12),
+        .data_in2(data_out_accum8_10),
+        .data_out(data_out_accum8_11),
+        .ready(ready_conv8_12),
+        .valid_n(valid_accum8_11)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_11),
+        .ready_n(ready_conv8_13),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_13),
+        .ready(ready_accum8_11),
+        .valid_n(valid_conv8_13)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_12 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_13),
+        .ready_n(ready_accum8_12),
+        .data_in(data_out_conv8_13),
+        .data_in2(data_out_accum8_11),
+        .data_out(data_out_accum8_12),
+        .ready(ready_conv8_13),
+        .valid_n(valid_accum8_12)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_12),
+        .ready_n(ready_conv8_14),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_14),
+        .ready(ready_accum8_12),
+        .valid_n(valid_conv8_14)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_13 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_14),
+        .ready_n(ready_accum8_13),
+        .data_in(data_out_conv8_14),
+        .data_in2(data_out_accum8_12),
+        .data_out(data_out_accum8_13),
+        .ready(ready_conv8_14),
+        .valid_n(valid_accum8_13)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_13),
+        .ready_n(ready_conv8_15),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_15),
+        .ready(ready_accum8_13),
+        .valid_n(valid_conv8_15)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_14 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_15),
+        .ready_n(ready_accum8_14),
+        .data_in(data_out_conv8_15),
+        .data_in2(data_out_accum8_13),
+        .data_out(data_out_accum8_14),
+        .ready(ready_conv8_15),
+        .valid_n(valid_accum8_14)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_14),
+        .ready_n(ready_conv8_16),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_16),
+        .ready(ready_accum8_14),
+        .valid_n(valid_conv8_16)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_15 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_16),
+        .ready_n(ready_accum8_15),
+        .data_in(data_out_conv8_16),
+        .data_in2(data_out_accum8_14),
+        .data_out(data_out_accum8_15),
+        .ready(ready_conv8_16),
+        .valid_n(valid_accum8_15)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_15),
+        .ready_n(ready_conv8_17),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_17),
+        .ready(ready_accum8_15),
+        .valid_n(valid_conv8_17)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_16 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_17),
+        .ready_n(ready_accum8_16),
+        .data_in(data_out_conv8_17),
+        .data_in2(data_out_accum8_15),
+        .data_out(data_out_accum8_16),
+        .ready(ready_conv8_17),
+        .valid_n(valid_accum8_16)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_16),
+        .ready_n(ready_conv8_18),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_18),
+        .ready(ready_accum8_16),
+        .valid_n(valid_conv8_18)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_17 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_18),
+        .ready_n(ready_accum8_17),
+        .data_in(data_out_conv8_18),
+        .data_in2(data_out_accum8_16),
+        .data_out(data_out_accum8_17),
+        .ready(ready_conv8_18),
+        .valid_n(valid_accum8_17)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_19 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_17),
+        .ready_n(ready_conv8_19),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_19),
+        .ready(ready_accum8_17),
+        .valid_n(valid_conv8_19)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_18 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_19),
+        .ready_n(ready_accum8_18),
+        .data_in(data_out_conv8_19),
+        .data_in2(data_out_accum8_17),
+        .data_out(data_out_accum8_18),
+        .ready(ready_conv8_19),
+        .valid_n(valid_accum8_18)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_20 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_18),
+        .ready_n(ready_conv8_20),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_20),
+        .ready(ready_accum8_18),
+        .valid_n(valid_conv8_20)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_19 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_20),
+        .ready_n(ready_accum8_19),
+        .data_in(data_out_conv8_20),
+        .data_in2(data_out_accum8_18),
+        .data_out(data_out_accum8_19),
+        .ready(ready_conv8_20),
+        .valid_n(valid_accum8_19)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_21 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_19),
+        .ready_n(ready_conv8_21),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_21),
+        .ready(ready_accum8_19),
+        .valid_n(valid_conv8_21)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_20 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_21),
+        .ready_n(ready_accum8_20),
+        .data_in(data_out_conv8_21),
+        .data_in2(data_out_accum8_19),
+        .data_out(data_out_accum8_20),
+        .ready(ready_conv8_21),
+        .valid_n(valid_accum8_20)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_22 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_20),
+        .ready_n(ready_conv8_22),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_22),
+        .ready(ready_accum8_20),
+        .valid_n(valid_conv8_22)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_21 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_22),
+        .ready_n(ready_accum8_21),
+        .data_in(data_out_conv8_22),
+        .data_in2(data_out_accum8_20),
+        .data_out(data_out_accum8_21),
+        .ready(ready_conv8_22),
+        .valid_n(valid_accum8_21)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_23 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_21),
+        .ready_n(ready_conv8_23),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_23),
+        .ready(ready_accum8_21),
+        .valid_n(valid_conv8_23)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_22 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_23),
+        .ready_n(ready_accum8_22),
+        .data_in(data_out_conv8_23),
+        .data_in2(data_out_accum8_21),
+        .data_out(data_out_accum8_22),
+        .ready(ready_conv8_23),
+        .valid_n(valid_accum8_22)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_24 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_22),
+        .ready_n(ready_conv8_24),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_24),
+        .ready(ready_accum8_22),
+        .valid_n(valid_conv8_24)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_23 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_24),
+        .ready_n(ready_accum8_23),
+        .data_in(data_out_conv8_24),
+        .data_in2(data_out_accum8_22),
+        .data_out(data_out_accum8_23),
+        .ready(ready_conv8_24),
+        .valid_n(valid_accum8_23)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_25 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_23),
+        .ready_n(ready_conv8_25),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_25),
+        .ready(ready_accum8_23),
+        .valid_n(valid_conv8_25)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_24 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_25),
+        .ready_n(ready_accum8_24),
+        .data_in(data_out_conv8_25),
+        .data_in2(data_out_accum8_23),
+        .data_out(data_out_accum8_24),
+        .ready(ready_conv8_25),
+        .valid_n(valid_accum8_24)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_26 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_24),
+        .ready_n(ready_conv8_26),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_26),
+        .ready(ready_accum8_24),
+        .valid_n(valid_conv8_26)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_25 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_26),
+        .ready_n(ready_accum8_25),
+        .data_in(data_out_conv8_26),
+        .data_in2(data_out_accum8_24),
+        .data_out(data_out_accum8_25),
+        .ready(ready_conv8_26),
+        .valid_n(valid_accum8_25)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_27 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_25),
+        .ready_n(ready_conv8_27),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_27),
+        .ready(ready_accum8_25),
+        .valid_n(valid_conv8_27)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_26 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_27),
+        .ready_n(ready_accum8_26),
+        .data_in(data_out_conv8_27),
+        .data_in2(data_out_accum8_25),
+        .data_out(data_out_accum8_26),
+        .ready(ready_conv8_27),
+        .valid_n(valid_accum8_26)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_28 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_26),
+        .ready_n(ready_conv8_28),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_28),
+        .ready(ready_accum8_26),
+        .valid_n(valid_conv8_28)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_27 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_28),
+        .ready_n(ready_accum8_27),
+        .data_in(data_out_conv8_28),
+        .data_in2(data_out_accum8_26),
+        .data_out(data_out_accum8_27),
+        .ready(ready_conv8_28),
+        .valid_n(valid_accum8_27)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_29 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_27),
+        .ready_n(ready_conv8_29),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_29),
+        .ready(ready_accum8_27),
+        .valid_n(valid_conv8_29)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_28 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_29),
+        .ready_n(ready_accum8_28),
+        .data_in(data_out_conv8_29),
+        .data_in2(data_out_accum8_27),
+        .data_out(data_out_accum8_28),
+        .ready(ready_conv8_29),
+        .valid_n(valid_accum8_28)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_30 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_28),
+        .ready_n(ready_conv8_30),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_30),
+        .ready(ready_accum8_28),
+        .valid_n(valid_conv8_30)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_29 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_30),
+        .ready_n(ready_accum8_29),
+        .data_in(data_out_conv8_30),
+        .data_in2(data_out_accum8_28),
+        .data_out(data_out_accum8_29),
+        .ready(ready_conv8_30),
+        .valid_n(valid_accum8_29)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_31 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_29),
+        .ready_n(ready_conv8_31),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_31),
+        .ready(ready_accum8_29),
+        .valid_n(valid_conv8_31)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_30 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_31),
+        .ready_n(ready_accum8_30),
+        .data_in(data_out_conv8_31),
+        .data_in2(data_out_accum8_29),
+        .data_out(data_out_accum8_30),
+        .ready(ready_conv8_31),
+        .valid_n(valid_accum8_30)
+    );
+	
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_32 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_30),
+        .ready_n(ready_conv8_32),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_32),
+        .ready(ready_accum8_30),
+        .valid_n(valid_conv8_32)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_31 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_32),
+        .ready_n(ready_accum8_31),
+        .data_in(data_out_conv8_32),
+        .data_in2(data_out_accum8_30),
+        .data_out(data_out_accum8_31),
+        .ready(ready_conv8_32),
+        .valid_n(valid_accum8_31)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_33 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_31),
+        .ready_n(ready_conv8_33),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_33),
+        .ready(ready_accum8_31),
+        .valid_n(valid_conv8_33)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_32 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_33),
+        .ready_n(ready_accum8_32),
+        .data_in(data_out_conv8_33),
+        .data_in2(data_out_accum8_31),
+        .data_out(data_out_accum8_32),
+        .ready(ready_conv8_33),
+        .valid_n(valid_accum8_32)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_34 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_32),
+        .ready_n(ready_conv8_34),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_34),
+        .ready(ready_accum8_32),
+        .valid_n(valid_conv8_34)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_33 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_34),
+        .ready_n(ready_accum8_33),
+        .data_in(data_out_conv8_34),
+        .data_in2(data_out_accum8_32),
+        .data_out(data_out_accum8_33),
+        .ready(ready_conv8_34),
+        .valid_n(valid_accum8_33)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_35 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_33),
+        .ready_n(ready_conv8_35),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_35),
+        .ready(ready_accum8_33),
+        .valid_n(valid_conv8_35)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_34 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_35),
+        .ready_n(ready_accum8_34),
+        .data_in(data_out_conv8_35),
+        .data_in2(data_out_accum8_33),
+        .data_out(data_out_accum8_34),
+        .ready(ready_conv8_35),
+        .valid_n(valid_accum8_34)
+    );
+
+   conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(3),
+        .H(3),
+        .S(1),
+        .DEPTH(4)
+    ) conv8_36 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_34),
+        .ready_n(ready_conv8_36),
+        .data_in(data_out_act7),
+        .data_out(data_out_conv8_36),
+        .ready(ready_accum8_34),
+        .valid_n(valid_conv8_36)
+    );
+	
+	accumulation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DEPTH(4)
+        ) accum8_35 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv8_36),
+        .ready_n(ready_accum8_35),
+        .data_in(data_out_conv8_36),
+        .data_in2(data_out_accum8_34),
+        .data_out(data_out_accum8_35),
+        .ready(ready_conv8_36),
+        .valid_n(valid_accum8_35)
+    );	
+   	
+	
+	// Instantiate the eighth activation_layer
+    activation_layer8 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DATA_WIDTH(8),
+        .DEPTH(4)
+    )act8 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_accum8_35),
+        .ready_n(ready_act8),
+        .data_in(data_out_accum8_35),
+        .data_out(data_out_act8),
+        .ready(ready_accum8_35),
+        .valid_n(valid_act8)
+    );
+	
+	// Instantiate the fifth pool_layer
+    pool_layer5 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DATA_WIDTH(8),
+        .DEPTH(4)
+    ) pool5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act8),
+        .ready_n(ready_pool5),
+        .layer_done(1'b0),
+        .data_in(data_out_act8),
+        .data_out(data_out_pool5),
+        .ready(ready_act8),
+        .valid_n(valid_pool5)
+    );
+	
+	
+	// Instantiate the ninth conv_layer (linear) (need 2 DPEs and 1 adder)
+    conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(1),
+        .KERNEL_HEIGHT(1),
+        .W(1),
+        .H(1),
+        .S(1),
+        .DEPTH(256)
+    ) conv9_1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool5),
+        .ready_n(ready_conv9_1),
+        .data_in(data_out_pool5),
+        .data_out(data_out_conv9_1),
+        .ready(ready_pool5),
+        .valid_n(valid_n_conv9_1)
+    );
+
+	conv_layer #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(1),
+        .KERNEL_HEIGHT(1),
+        .W(1),
+        .H(1),
+        .S(1),
+        .DEPTH(256)
+    ) conv9_2 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_n_conv9_1),
+        .ready_n(ready_conv9_2),
+        .data_in(data_out_pool5),
+        .data_out(data_out_conv9_2),
+        .ready(ready_conv9_1),
+        .valid_n(valid_n_conv9_2)
+    );
+    // Instantiate the accumulation_layer
+    accumulation_layer9 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
+        .DEPTH(256)
+        ) accum9 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_n_conv9_2),
+        .ready_n(valid_g_out),
+        .data_in(data_out_conv9_1),
+        .data_in2(data_out_conv9_2),
+        .data_out(data_out_accum9),
+        .ready(ready_conv9_2),
+        .valid_n(valid_g_in)
+    );
+	
+    global_controller #(
+    .N_Layers(5)        
+    ) g_ctrl_inst(
+    .clk(clk),              
+    .rst(rst),             
+    .ready_L1(ready_g_in),     // trigger/signal from nl_dpe indicating new data can be read
+    .valid_Ln(valid_g_in),            // Valid signal to enable new operation
+    .valid(valid),                   //corrected
+    .ready(ready),                 //corrected
+    .valid_L1(valid_g_out),     //corrected
+    .ready_Ln (ready_g_out)    //corrected
+);
+
+// Global SRAM
+sram #(
+    .N_CHANNELS(1),
+    .DATA_WIDTH(8), //redundant
+    .DEPTH(16)
+) global_sram_inst (
+    .clk(clk),
+	.rst(rst),
+    .w_en(valid_g_in),
+    .r_addr(read_address),
+    .w_addr(write_address),
+    .sram_data_in(data_out_accum9),
+    .sram_data_out(global_sram_data_in)
+);
+
+
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        read_address <= 0;
+        write_address <= 16;
+    end else begin
+        if(ready_g_out) begin
+            read_address <= read_address + 1;
+        end
+        else begin
+            read_address <= read_address;
+        end
+        if(valid_g_out) begin
+            write_address <= write_address + 1;
+        end
+        else begin
+            write_address <= write_address;
+        end
+    end
+end
+
+    // Final output connections
+    assign data_out = global_sram_data_in;
+    assign ready = ready_g_in;
+    assign valid_n = valid_g_in;
+
+endmodule
+
+// Top Module
+module conv_layer #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 9,
+    parameter N_KERNELS = 1,
+    parameter KERNEL_WIDTH = 5,
+    parameter KERNEL_HEIGHT = 5,
+    parameter W = 32,
+    parameter H = 32,
+    parameter S = 1,
+    parameter DEPTH = 512,
+    parameter DATA_WIDTH = 8
+    
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire [(N_CHANNELS*DATA_WIDTH)-1:0] data_in,
+    output wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out,
+    output wire ready,
+    output wire valid_n
+);
+
+    // Internal signals
+    wire MSB_SA_Ready;
+    wire dpe_done;
+    wire reg_full;
+    wire shift_add_done;
+    wire shift_add_bypass_ctrl;
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] nl_dpe_control;
+    wire shift_add_control;
+    wire shift_add_bypass;
+    wire load_output_reg;
+    wire w_en;
+    wire load_input_reg;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_out;
+
+    // Instantiate the SRAM module
+    sram #(
+        .N_CHANNELS(N_CHANNELS),        
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_out)
+    );
+
+    // Instantiate the DPE module
+    dpe dpe_inst (
+        .clk(clk),
+        .reset(rst),
+        .data_in(sram_data_out),
+        .nl_dpe_control(nl_dpe_control),
+        .shift_add_control(shift_add_control),
+        .w_buf_en(w_buf_en),
+        .shift_add_bypass(shift_add_bypass),
+        .load_output_reg(load_output_reg),
+        .load_input_reg(load_input_reg),
+        .MSB_SA_Ready(MSB_SA_Ready),
+        .data_out(data_out),
+        .dpe_done(dpe_done),
+        .reg_full(reg_full),
+        .shift_add_done(shift_add_done),
+        .shift_add_bypass_ctrl(shift_add_bypass_ctrl)
+    );
+
+    // Instantiate the Controller module
+    conv_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(N_KERNELS),
+        .KERNEL_WIDTH(KERNEL_WIDTH),
+        .KERNEL_HEIGHT(KERNEL_HEIGHT),
+        .W(W),
+        .H(H),
+        .S(S)
+    ) controller_inst (
+        .clk(clk),
+        .rst(rst),
+        .MSB_SA_Ready(MSB_SA_Ready),
+        .valid(valid),
+        .ready_n(ready_n),
+        .dpe_done(dpe_done),
+        .reg_full(reg_full),
+        .shift_add_done(shift_add_done),
+        .shift_add_bypass_ctrl(shift_add_bypass_ctrl),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .nl_dpe_control(nl_dpe_control),
+        .shift_add_control(shift_add_control),
+        .shift_add_bypass(shift_add_bypass),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .load_input_reg(load_input_reg),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+endmodule
+
+
+module conv_controller #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 9,
+    parameter N_KERNELS = 1,
+    parameter KERNEL_WIDTH = 5,
+    parameter KERNEL_HEIGHT = 5,
+    parameter W = 32,
+    parameter H = 32,
+    parameter S = 1,
+    parameter B_ADDR_WIDTH = $clog2(KERNEL_WIDTH * KERNEL_HEIGHT),
+    parameter S_BITWIDTH = S,
+    parameter KW_BITWIDTH = $clog2(KERNEL_WIDTH),
+    parameter KH_BITWIDTH = $clog2(KERNEL_HEIGHT)
+)(
+    input wire clk,              
+    input wire rst,             
+    input wire MSB_SA_Ready,     
+    input wire valid,            
+    input wire ready_n,
+    input wire dpe_done,
+    input wire reg_full,
+    input wire shift_add_done,
+    input wire shift_add_bypass_ctrl,
+    output reg [ADDR_WIDTH-1:0] read_address,
+    output reg [ADDR_WIDTH-1:0] write_address,
+    output reg w_buf_en,
+    output reg [1:0] nl_dpe_control,
+    output reg shift_add_control,
+    output reg shift_add_bypass,
+    output reg load_output_reg,
+    output reg w_en,
+    output wire load_input_reg,
+    output reg ready,
+    output reg valid_n
+);
+
+    reg [ADDR_WIDTH-1:0] write_address_reg, read_address_reg;
+    wire buf_load, busy;
+    reg memory_flag;
+    reg stall;
+    reg memory_stall;
+    reg dpe_exec_signal;
+    reg [ADDR_WIDTH-1:0] next_address;
+
+    reg [S_BITWIDTH-1:0] s, sv;
+    reg [KW_BITWIDTH-1:0] n;
+    reg [KH_BITWIDTH-1:0] m;
+    reg [ADDR_WIDTH-1:0] pointer_offset;
+
+    // always block for sram control
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            write_address_reg <= {ADDR_WIDTH{1'b0}};
+            w_en <= 1'b0;
+            w_buf_en <= 0;
+            next_address <= {ADDR_WIDTH{1'b0}};
+            pointer_offset <= 0;
+            sv <= 0;
+            s <= 0;
+            n <= 0;
+            m <= 0;
+        end else begin
+            if (valid && ~memory_stall) begin
+                write_address_reg <= write_address_reg + 1;
+                w_en <= 1'b1;
+            end else begin
+                w_en <= 1'b0;
+            end
+
+            if (~reg_full && ready_n && memory_flag) begin
+                pointer_offset <= n + W * (m + sv) + s * S;
+                if (n < KERNEL_WIDTH-1) begin
+                    n <= n + 1;
+                end else begin
+                    n <= 0;
+                    if (m < KERNEL_HEIGHT-1) begin
+                        m <= m + 1;
+                    end else begin
+                        m <= 0;
+                        if (s < W - KERNEL_WIDTH + S - 1) begin
+                            s <= s + 1;
+                        end else begin
+                            s <= 0;
+                            if (sv < H - KERNEL_HEIGHT + S - 1) begin
+                                sv <= sv + 1;
+                            end else begin
+                                sv <= 0;
+                            end
+                        end
+                    end
+                end
+                w_buf_en <= 1;
+            end else begin
+                w_buf_en <= 0;
+            end
+        end
+    end
+
+    always @* begin
+        read_address_reg <= pointer_offset;
+    end
+
+    always @* begin
+        if ((write_address_reg > read_address_reg) || 
+            ((write_address_reg == {ADDR_WIDTH{1'b0}}) && (read_address_reg == {ADDR_WIDTH{1'b1}}))) begin
+            memory_flag <= 1;
+        end else begin
+            memory_flag <= 0;
+        end
+    end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            dpe_exec_signal <= 1'b0;
+        end else begin
+            if (reg_full) begin
+                dpe_exec_signal <= 1'b1;
+            end else begin
+                dpe_exec_signal <= 1'b0;
+            end
+        end
+    end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            nl_dpe_control <= 2'b0;
+        end else begin
+            if (dpe_exec_signal) begin
+                nl_dpe_control <= 2'b11;
+            end else begin
+                nl_dpe_control <= 2'b00;
+            end
+        end
+    end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            valid_n <= 1'b0;
+            ready <= 1'b0;
+            stall <= 0;
+            memory_stall <= 0;
+        end else begin
+            if ((read_address_reg < write_address_reg - 2) && (write_address_reg == {ADDR_WIDTH{1'b1}})) begin
+                memory_stall <= 1;
+            end else begin
+                memory_stall <= 0;
+            end
+
+            if (memory_stall) begin
+                ready <= 1'b0;
+            end else begin
+                ready <= 1'b1;
+            end
+
+            if (dpe_done) begin
+                valid_n <= 1;
+            end else begin
+                valid_n <= 0;
+            end
+
+            if (ready_n) begin
+                stall <= 0;
+            end else begin
+                stall <= 1;
+            end
+        end
+    end
+
+    always @* begin
+        read_address <= read_address_reg;
+        write_address <= write_address_reg;
+        shift_add_bypass <= shift_add_bypass_ctrl;
+        shift_add_control <= MSB_SA_Ready;
+        load_output_reg <= shift_add_done;
+    end
+
+    assign load_input_reg = reg_full;
+    assign busy = ~MSB_SA_Ready;
+
+endmodule
+
+module global_controller #(
+    parameter N_Layers = 1        
+)(
+    input wire clk,              
+    input wire rst,             
+    input wire ready_L1,     // trigger/signal from nl_dpe indicating new data can be read
+    input wire valid_Ln,            // Valid signal to enable new operation
+    input wire valid,
+    output reg ready,                 // Ready signal indicating operation is done
+    output reg valid_L1,
+    output reg ready_Ln
+);
+    
+    wire busy;
+    reg stall;    
+
+
+    
+
+    // valid and ready control
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            //valid_L1 <= 1'b0;
+            //ready <= 1'b0;
+            stall <= 0;
+        end else begin
+
+            if (stall) begin
+                ready_Ln <= 1'b0;
+            end else begin
+                ready_Ln <= 1'b1;
+            end
+
+            if(~valid) begin
+                stall <= 0;
+            end else begin
+                stall <= 1;
+            end            
+        end
+    end
+
+    always @* begin
+        ready <= ready_L1;
+        valid_L1 <= valid;
+    end
+
+
+endmodule
+
+module sram #(
+    parameter N_CHANNELS = 1,
+    parameter DATA_WIDTH = 8*N_CHANNELS,  // Data width (default: 8 bits) 8 x number of channels
+    parameter DEPTH = 512       // Memory depth (default: 512)
+    
+)(
+    input wire clk,           
+    input wire w_en,
+	input wire rst,
+    input wire [$clog2(DEPTH)-1:0] r_addr,  // Address input (width based on depth)
+    input wire [$clog2(DEPTH)-1:0] w_addr,
+    input wire [DATA_WIDTH-1:0] sram_data_in,  // Data input for writing
+    output reg [DATA_WIDTH-1:0] sram_data_out  // Data output for reading
+);
+
+    // Memory array with parameterized depth and width
+    //reg [DATA_WIDTH-1:0] mem [0:DEPTH-1];
+    reg [DATA_WIDTH-1:0] mem [DEPTH-1:0];
+
+    // Read/Write operations
+    //always @(posedge clk or posedge rst) begin
+    always @(posedge clk) begin
+        if (rst) begin
+            sram_data_out <= {DATA_WIDTH{1'b0}};
+        end else begin
+            sram_data_out <= mem[r_addr];
+        end
+    end
+    always @(posedge clk) begin
+            if (w_en) begin
+                mem[w_addr] <= sram_data_in;
+            end        
+    end
+
+endmodule
+
+module activation_layer1 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 10,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 1024,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module relu_activation_parallel_N_CHANNELS_1 #(
+    parameter N_CHANNELS = 1  // Number of channels
+)(
+    input wire clk,
+    input wire reset,
+    input wire en,
+    input wire load_input_reg,  // Signal to start filling data into registers
+    output reg reg_full,        // Signal indicating all registers are full
+    input wire load_output_reg, // Signal to load the output registers
+    output reg activation_done, // Internal signal indicating ReLU activation is complete
+    input wire [8*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
+    output reg [8*N_CHANNELS-1:0] sram_data_out  // ReLU activation output for all channels
+);
+
+    reg [7:0] input_data_0;  // Input storage for channel 0
+    reg [7:0] relu_output_0; // ReLU output for channel 0
+
+    // Block 1: Reading and Storing Data
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            input_data_0 <= 8'd0;
+            reg_full <= 1'b0;
+        end else if (en && load_input_reg) begin
+            input_data_0 <= sram_data_in[7:0];
+            reg_full <= 1'b1; // Indicate that all registers are full
+        end else begin
+            reg_full <= 1'b0;
+        end
+    end
+
+    // Block 2: Optimized ReLU Activation Logic using MSB Check
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            relu_output_0 <= 8'd0;
+            activation_done <= 1'b0;
+        end else if (reg_full) begin
+            relu_output_0 <= (input_data_0[7] == 1'b0) ? input_data_0 : 8'd0;
+            activation_done <= 1'b1; // Set activation done flag
+        end else begin
+            activation_done <= 1'b0;
+        end
+    end
+
+    // Block 3: Storing ReLU Output into Output Registers
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sram_data_out[7:0] <= 8'd0;
+        end else if (load_output_reg) begin
+            sram_data_out[7:0] <= relu_output_0;
+        end
+    end
+endmodule
+
+
+
+module pooling_controller #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 9,  // Parameter for address width (default: 7 bits)
+    parameter N_KERNELS = 1,
+    parameter KERNEL_SIZE = 3,
+    parameter B_ADDR_WIDTH = $clog2(KERNEL_SIZE * KERNEL_SIZE)
+)(
+    input wire clk,              
+    input wire rst,             
+    input wire pooling_done,     // trigger/signal from nl_dpe indicating new data can be read
+    input wire valid,            // Valid signal to enable new operation
+    input wire ready_n,
+    input wire layer_done,
+    input wire reg_full,
+    output reg [ADDR_WIDTH-1:0] read_address, // Read address for SRAM (parameterized width)
+    output reg [ADDR_WIDTH-1:0] write_address, // Write address for SRAM (parameterized width)
+    output reg w_buf_en,           // load input register
+    output reg p_en,
+    output reg [1:0] pooling_control, // Op mode signal for nl_dpe (2 bits)
+    output reg load_output_reg,      // Signal indicating shift-and-add logic is done
+    output reg w_en,                 // Write enable signal
+    output reg ready,                 // Ready signal indicating operation is done
+    output reg valid_n
+);
+
+    reg [ADDR_WIDTH-1:0] write_address_reg, read_address_reg;
+    wire buf_load, busy;
+    reg memory_flag;
+    reg stall;
+    reg memory_stall;
+    reg pooling_exec_signal;
+
+    // always block for sram control
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            write_address_reg <= {ADDR_WIDTH{1'b0}};
+            read_address_reg <= {ADDR_WIDTH{1'b0}};
+            w_en <= 1'b0;
+            w_buf_en <= 0;
+            p_en <= 0;
+        end else begin
+            // enable write
+            if (valid && ~memory_stall) begin
+                write_address_reg <= write_address_reg + 1;
+                w_en <= 1'b1;
+            end else begin
+                write_address_reg <= write_address_reg;
+                w_en <= 1'b0;
+            end
+            if (~reg_full && ready_n && memory_flag) begin
+                read_address_reg <= read_address_reg + 1;
+                w_buf_en <= 1;
+            end else begin
+                read_address_reg <= read_address_reg;
+                w_buf_en <= 0;
+            end       
+            if (~stall) begin
+                p_en <= 1;
+            end else begin
+                p_en <= 0;
+            end
+        end
+    end
+
+    always @* begin
+        if ((write_address_reg > read_address_reg) || 
+            ((write_address_reg == {ADDR_WIDTH{1'b0}}) && (read_address_reg == {ADDR_WIDTH{1'b1}}))) begin
+            memory_flag <= 1;
+        end else begin
+            memory_flag <= 0;
+        end
+    end
+
+    
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            pooling_exec_signal <= 1'b0;
+        end else begin
+            if (reg_full) begin
+                pooling_exec_signal <= 1'b1;
+            end else begin
+                pooling_exec_signal <= 1'b0;
+            end
+        end
+    end
+
+    // dpe control
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            pooling_control <= 2'b0;
+        end else begin
+            if (pooling_exec_signal) begin
+                pooling_control <= 2'b11;
+            end else begin
+                pooling_control <= 2'b00;            
+            end
+        end
+    end
+
+    // valid and ready control
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            valid_n <= 1'b0;
+            ready <= 1'b0;
+            stall <= 0;
+            memory_stall <= 0;
+        end else begin
+            if((read_address_reg < write_address_reg - 2) && (write_address_reg == {ADDR_WIDTH{1'b1}})) begin
+                memory_stall <= 1;
+            end else begin
+                memory_stall <= 0;
+            end
+
+            if (memory_stall) begin
+                ready <= 1'b0;
+            end else begin
+                ready <= 1'b1;
+            end
+
+            if(layer_done) begin
+                valid_n <= 1;
+            end else begin
+                valid_n <= 0;
+            end
+
+            if(ready_n) begin
+                stall <= 0;
+            end else begin
+                stall <= 1;
+            end
+        end
+    end
+
+    always @* begin
+        read_address <= read_address_reg;
+        write_address <= write_address_reg;        
+        load_output_reg <= pooling_done; // Replacing shift_add_done with pooling_done
+    end
+
+    assign busy = ~pooling_done;
+
+endmodule
+
+module pool_layer1 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 10,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 1024,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module max_pooling_N_CHANNELS_1 #(
+    parameter N_CHANNELS = 1  // Number of channels, each channel has 4 inputs
+)(
+    input wire clk,
+    input wire reset,
+    input wire en,
+    input wire load_input_reg,  // Signal to start filling data into registers
+    output reg reg_full,        // Signal indicating all registers are full
+    input wire load_output_reg, // Signal to load the output registers
+    output reg pooling_done,    // Internal signal indicating pooling is complete
+    input wire [8*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
+    output reg [8*N_CHANNELS-1:0] sram_data_out    // Max-pooling output for all channels
+);
+
+    reg [7:0] input_0_0, input_1_0, input_2_0, input_3_0; // Channel 0
+
+    reg [7:0] max_0_1_0, max_2_3_0, max_pool_value_0; // Max values for channel 0
+
+    reg [1:0] read_count;  // Counter to track the number of read operations
+
+    // Block 1: Reading and Storing Data
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            input_0_0 <= 8'd0; input_1_0 <= 8'd0; input_2_0 <= 8'd0; input_3_0 <= 8'd0;
+            read_count <= 2'd0;
+            reg_full <= 1'b0;
+        end else if (en && load_input_reg) begin
+            // Increment read count and load inputs based on read count
+            read_count <= read_count + 1;
+            case (read_count)
+                2'd0: begin
+                    input_0_0 <= sram_data_in[7:0];
+                end
+                2'd1: begin
+                    input_1_0 <= sram_data_in[7:0];
+                end
+                2'd2: begin
+                    input_2_0 <= sram_data_in[7:0];
+                end
+                2'd3: begin
+                    input_3_0 <= sram_data_in[7:0];
+                    reg_full <= 1'b1; // Indicate that all inputs are filled
+                end
+            endcase
+        end else begin
+            reg_full <= 1'b0;
+        end
+    end
+
+    // Block 2: Max-Pooling Logic
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            max_0_1_0 <= 8'd0; max_2_3_0 <= 8'd0; max_pool_value_0 <= 8'd0;
+            pooling_done <= 1'b0;
+        end else if (reg_full) begin
+            max_0_1_0 <= (input_0_0 > input_1_0) ? input_0_0 : input_1_0;
+            max_2_3_0 <= (input_2_0 > input_3_0) ? input_2_0 : input_3_0;
+            max_pool_value_0 <= (max_0_1_0 > max_2_3_0) ? max_0_1_0 : max_2_3_0;
+            pooling_done <= 1'b1; // Signal that pooling is done
+        end else begin
+            pooling_done <= 1'b0;
+        end
+    end
+
+    // Block 3: Storing Max-Pooled Data into Output Registers
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sram_data_out[7:0] <= 8'd0;
+        end else if (load_output_reg) begin
+            sram_data_out[7:0] <= max_pool_value_0;
+        end
+    end
+endmodule
+
+module activation_layer2 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module pool_layer2 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module accumulation_layer2 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer3 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 6,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer5 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer7 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer9 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module adder_dpe_N_CHANNELS_1 #(
+    parameter N_CHANNELS = 1  // Number of channels
+)(
+    input wire clk,
+    input wire reset,
+    input wire en,
+    input wire load_input_reg,  // Signal to start filling data into registers
+    output reg reg_full,        // Signal indicating all registers are full
+    input wire load_output_reg, // Signal to load the output registers
+    output reg add_done,        // Internal signal indicating the addition is complete
+    input wire [8*N_CHANNELS-1:0] input1,  // First set of 8-bit inputs for all channels
+    input wire [8*N_CHANNELS-1:0] input2,  // Second set of 8-bit inputs for all channels
+    output reg [8*N_CHANNELS-1:0] output_data  // 8-bit addition output for all channels
+);
+
+    reg [7:0] in_data1_0;  // Input storage for first set of inputs for channel 0
+    reg [7:0] in_data2_0;  // Input storage for second set of inputs for channel 0
+    reg [8:0] sum_0;       // 9-bit sum storage for channel 0 (includes LSB to drop)
+    reg [7:0] result_0;    // 8-bit result after dropping LSB for channel 0
+
+    reg [7:0] channel_index;  // Index to track current channel being processed
+    reg processing;           // Flag to indicate if processing is ongoing
+
+    // Block 1: Reading and Storing Data
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            in_data1_0 <= 8'd0;
+            in_data2_0 <= 8'd0;
+            reg_full <= 1'b0;
+        end else if (en && load_input_reg) begin
+            in_data1_0 <= input1[7:0];
+            in_data2_0 <= input2[7:0];
+            reg_full <= 1'b1; // Indicate that all registers are full
+        end else begin
+            reg_full <= 1'b0;
+        end
+    end
+
+    // Block 2: Addition Logic with LSB Dropped
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            result_0 <= 8'd0;
+            channel_index <= 8'd0;
+            processing <= 1'b0;
+            add_done <= 1'b0;
+        end else if (reg_full && !processing) begin
+            sum_0 <= in_data1_0 + in_data2_0;
+            result_0 <= sum_0[8:1];  // Right shift to drop LSB
+            processing <= 1'b1;
+        end else if (processing) begin
+            channel_index <= channel_index + 1;
+            if (channel_index == (N_CHANNELS - 1)) begin
+                add_done <= 1'b1;
+                processing <= 1'b0;
+                channel_index <= 8'd0;
+            end else begin
+                processing <= 1'b0;
+            end
+        end else begin
+            add_done <= 1'b0;
+        end
+    end
+
+    // Block 3: Storing Output Data into Output Registers
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            output_data[7:0] <= 8'd0;
+        end else if (load_output_reg) begin
+            output_data[7:0] <= result_0;
+        end
+    end
+endmodule
+
+module activation_layer3 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 6,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module activation_layer4 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 6,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+
+module activation_layer5 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module activation_layer6 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module activation_layer7 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module activation_layer8 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+
+module pool_layer3 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 6,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module pool_layer4 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module pool_layer5 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module residual_layer1 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+	
+	// Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module residual_layer2 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+	
+	// Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module dummy_adder_residual_N_CHANNELS_1 #(
+    parameter N_CHANNELS = 1  // Number of channels
+)(
+    input wire clk,
+    input wire reset,
+    input wire en,
+    input wire load_input_reg,  // Signal to start filling data into registers
+    output reg reg_full,        // Signal indicating all registers are full
+    input wire load_output_reg, // Signal to load the output registers
+    output reg add_done,        // Internal signal indicating the addition is complete
+    input wire [8*N_CHANNELS-1:0] input1,  // First set of 8-bit inputs for all channels
+    output reg [8*N_CHANNELS-1:0] output_data  // 8-bit addition output for all channels
+);
+
+    reg [7:0] in_data1_0;  // Input storage for first set of inputs for channel 0
+    reg [8:0] sum_0;       // 9-bit sum storage for channel 0 (includes LSB to drop)
+    reg [7:0] result_0;    // 8-bit result after dropping LSB for channel 0
+
+    reg [7:0] channel_index;  // Index to track current channel being processed
+    reg processing;           // Flag to indicate if processing is ongoing
+
+    // Block 1: Reading and Storing Data
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            in_data1_0 <= 8'd0;
+            reg_full <= 1'b0;
+        end else if (en && load_input_reg) begin
+            in_data1_0 <= input1[7:0];
+            reg_full <= 1'b1; // Indicate that all registers are full
+        end else begin
+            reg_full <= 1'b0;
+        end
+    end
+
+    // Block 2: Addition Logic with LSB Dropped
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            result_0 <= 8'd0;
+            channel_index <= 8'd0;
+            processing <= 1'b0;
+            add_done <= 1'b0;
+        end else if (reg_full && !processing) begin
+            sum_0 <= in_data1_0 + 8'd1;
+            result_0 <= sum_0[8:1];  // Right shift to drop LSB
+            processing <= 1'b1;
+        end else if (processing) begin
+            channel_index <= channel_index + 1;
+            if (channel_index == (N_CHANNELS - 1)) begin
+                add_done <= 1'b1;
+                processing <= 1'b0;
+                channel_index <= 8'd0;
+            end else begin
+                processing <= 1'b0;
+            end
+        end else begin
+            add_done <= 1'b0;
+        end
+    end
+
+    // Block 3: Storing Output Data into Output Registers
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            output_data[7:0] <= 8'd0;
+        end else if (load_output_reg) begin
+            output_data[7:0] <= result_0;
+        end
+    end
+endmodule

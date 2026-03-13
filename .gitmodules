@@ -1,0 +1,3 @@
+[submodule "azurelily"]
+	path = azurelily
+	url = git@github.com:leizhaocs/azurelily.git
