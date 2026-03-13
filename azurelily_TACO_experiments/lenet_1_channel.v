@@ -12,11 +12,11 @@ module LeNet3_0 (
     // Internal signals
 	wire [7:0] data_out_conv1, data_out_act1, data_out_pool1, global_sram_data_in;
 	wire [7:0] data_out_conv2, data_out_act2, data_out_pool2;
-	wire [7:0] data_out_conv3a, data_out_conv3b, data_out_act3, data_out_conv4, data_out_act4, data_out_conv5, data_out_accum;
+	wire [7:0] data_out_conv3, data_out_act3, data_out_conv4, data_out_act4, data_out_conv5, data_out_accum;
     wire ready_conv1, valid_conv1, ready_conv2, valid_conv2;
     wire ready_act1, valid_act1, ready_act2, valid_act2;
     wire ready_pool2, valid_pool2;
-    wire ready_conv3a, valid_n_pool2, valid_n_conv3b, ready_accum, valid_n_conv3a, ready_conv3b;
+    wire ready_conv3, valid_n_pool2, valid_n_conv3, ready_accum, valid_n_conv3, ready_conv3;
     wire valid_n_accum, ready_act3, ready_conv4, valid_n_act3;
     wire ready_act4, valid_n_conv4;
     wire ready_conv5, valid_conv5;
@@ -132,7 +132,7 @@ module LeNet3_0 (
         .clk(clk),
         .rst(rst),
         .valid(valid_pool2),
-        .ready_n(ready_conv3a),
+        .ready_n(ready_conv3),
         .layer_done(1'b0),
         .data_in(data_out_act2),
         .data_out(data_out_pool2),
@@ -141,27 +141,6 @@ module LeNet3_0 (
     );
 	
 	// Instantiate the third conv_layer
-    conv_layer #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(9),
-        .N_KERNELS(1),
-        .KERNEL_WIDTH(1),
-        .KERNEL_HEIGHT(1),
-        .W(1),
-        .H(1),
-        .S(1),
-        .DEPTH(512)
-    ) conv3a (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_n_pool2),
-        .ready_n(ready_conv3b),
-        .data_in(data_out_pool2),
-        .data_out(data_out_conv3a),
-        .ready(ready_conv3a),
-        .valid_n(valid_n_conv3a)
-    );
-
 	conv_layer #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
@@ -172,31 +151,15 @@ module LeNet3_0 (
         .H(1),
         .S(1),
         .DEPTH(512)
-    ) conv3b (
+    ) conv3 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_n_conv3a),
-        .ready_n(ready_accum),
-        .data_in(data_out_pool2),
-        .data_out(data_out_conv3b),
-        .ready(ready_conv3b),
-        .valid_n(valid_n_conv3b)
-    );
-    // Instantiate the accumulation_layer
-    accumulation_layer #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(7),
-        .DEPTH(128)
-        ) accum (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_n_conv3b),
+        .valid(valid_n_pool2),
         .ready_n(ready_act3),
-        .data_in(data_out_conv3a),
-        .data_in2(data_out_conv3b),
-        .data_out(data_out_accum),
-        .ready(ready_accum),
-        .valid_n(valid_n_accum)
+        .data_in(data_out_pool2),
+        .data_out(data_out_conv3),
+        .ready(ready_conv3),
+        .valid_n(valid_n_conv3)
     );
 	
 	// Instantiate the third activation_layer
@@ -208,9 +171,9 @@ module LeNet3_0 (
     ) act3 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_n_accum),
+        .valid(valid_n_conv3),
         .ready_n(ready_conv4),
-        .data_in(data_out_accum),
+        .data_in(data_out_conv3),
         .data_out(data_out_act3),
         .ready(ready_act3),
         .valid_n(valid_n_act3)
@@ -1592,109 +1555,6 @@ module pool_layer2 #(
 
 endmodule
 
-module accumulation_layer #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
-    parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
-    parameter KERNEL_SIZE = 2
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire layer_done,
-    input wire [DATA_WIDTH-1:0] data_in,
-    input wire [DATA_WIDTH-1:0] data_in2,
-    output wire ready,
-    output wire valid_n,
-    output wire [DATA_WIDTH-1:0] data_out
-);
-
-    // Wires for interconnections
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] pooling_control;
-    wire load_output_reg;
-    wire w_en;
-    wire en;
-    wire reg_full;
-    wire pooling_done;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    wire [DATA_WIDTH-1:0] sram_data_in2;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
-
-    // Instantiate pooling_controller
-    pooling_controller #(
-        .N_CHANNELS(N_CHANNELS),
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
-    ) pooling_ctrl_inst (
-        .clk(clk),
-        .rst(rst),
-        .pooling_done(pooling_done),
-        .valid(valid),
-        .ready_n(ready_n),
-        .layer_done(layer_done),
-        .reg_full(reg_full),
-        .read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .p_en(en),
-        .pooling_control(pooling_control),
-        .load_output_reg(load_output_reg),
-        .w_en(w_en),
-        .ready(ready),
-        .valid_n(valid_n)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data_in)
-    );
-
-    // Instantiate max_pooling_28x28_pipelined
-    adder_dpe_N_CHANNELS_1 #(
-        .N_CHANNELS(1)
-    ) adder_inst (
-        .clk(clk),
-        .reset(rst),
-        .en(en),
-        .load_input_reg(w_buf_en),
-        .reg_full(reg_full),
-        .load_output_reg(load_output_reg),
-        .add_done(pooling_done),
-        .input1(sram_data_in),
-        .input2(sram_data_in2),
-        .output_data(data_out)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram2_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in2),
-        .sram_data_out(sram_data_in2)
-    );
-
-endmodule
 
 module adder_dpe_N_CHANNELS_1 #(
     parameter N_CHANNELS = 1  // Number of channels
