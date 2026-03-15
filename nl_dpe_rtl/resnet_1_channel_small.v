@@ -635,7 +635,7 @@ module conv_layer_single_dpe #(
 
     // Instantiate the SRAM module
     sram #(
-        .N_CHANNELS(1),        
+        .N_CHANNELS(1),
         .DEPTH(512)
     ) sram_inst (
         .clk(clk),
@@ -942,7 +942,6 @@ module conv_layer_stacked_dpes_V2_H1 #(
 	wire shift_add_done1, shift_add_done2;
 	wire shift_add_bypass_ctrl1, shift_add_bypass_ctrl2;
 	wire MSB_SA_Ready1, MSB_SA_Ready2;	
-	wire [7:0] dpe_data_out_hi1, dpe_data_out_hi2;
 	
     // Instantiate the SRAM module
     sram #(
@@ -976,7 +975,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
     dpe dpe_R1_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -984,7 +983,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready1),
-        .data_out({dpe_data_out_hi1, data_out1}),
+        .data_out(data_out1),
         .dpe_done(dpe_done1),
         .reg_full(reg_full_sig[0]),
         .shift_add_done(shift_add_done1),
@@ -994,7 +993,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
  	dpe dpe_R2_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1002,7 +1001,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready2),
-        .data_out({dpe_data_out_hi2, data_out2}),
+        .data_out(data_out2),
         .dpe_done(dpe_done2),
         .reg_full(reg_full_sig[1]),
         .shift_add_done(shift_add_done2),
@@ -1135,7 +1134,6 @@ module conv_layer_stacked_dpes_V2_H2 #(
 	wire shift_add_done1, shift_add_done2, shift_add_done3, shift_add_done4;
 	wire shift_add_bypass_ctrl1, shift_add_bypass_ctrl2, shift_add_bypass_ctrl3, shift_add_bypass_ctrl4;
 	wire MSB_SA_Ready1, MSB_SA_Ready2, MSB_SA_Ready3, MSB_SA_Ready4;	
-	wire [7:0] dpe_data_out_hi1, dpe_data_out_hi2, dpe_data_out_hi3, dpe_data_out_hi4;
 	
     // Instantiate the SRAM module
     sram #(
@@ -1171,7 +1169,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
     dpe dpe_R1_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1179,7 +1177,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready1),
-        .data_out({dpe_data_out_hi1, data_out1}),
+        .data_out(data_out1),
         .dpe_done(dpe_done1),
         .reg_full(reg_full_sig1[0]),
         .shift_add_done(shift_add_done1),
@@ -1189,7 +1187,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
 	dpe dpe_R1_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1197,7 +1195,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready2),
-        .data_out({dpe_data_out_hi2, data_out2}),
+        .data_out(data_out2),
         .dpe_done(dpe_done2),
         .reg_full(reg_full_sig1[1]),
         .shift_add_done(shift_add_done2),
@@ -1207,7 +1205,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
 	dpe dpe_R2_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1215,7 +1213,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready3),
-        .data_out({dpe_data_out_hi3, data_out3}),
+        .data_out(data_out3),
         .dpe_done(dpe_done3),
         .reg_full(reg_full_sig2[0]),
         .shift_add_done(shift_add_done3),
@@ -1225,7 +1223,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
 	dpe dpe_R2_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1233,7 +1231,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready4),
-        .data_out({dpe_data_out_hi4, data_out4}),
+        .data_out(data_out4),
         .dpe_done(dpe_done4),
         .reg_full(reg_full_sig2[1]),
         .shift_add_done(shift_add_done4),
@@ -1390,8 +1388,6 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	wire shift_add_bypass_ctrl5, shift_add_bypass_ctrl6, shift_add_bypass_ctrl7, shift_add_bypass_ctrl8;
 	wire MSB_SA_Ready1, MSB_SA_Ready2, MSB_SA_Ready3, MSB_SA_Ready4;	
 	wire MSB_SA_Ready5, MSB_SA_Ready6, MSB_SA_Ready7, MSB_SA_Ready8;	
-	wire [7:0] dpe_data_out_hi1, dpe_data_out_hi2, dpe_data_out_hi3, dpe_data_out_hi4;
-	wire [7:0] dpe_data_out_hi5, dpe_data_out_hi6, dpe_data_out_hi7, dpe_data_out_hi8;
 	
     // Instantiate the SRAM module
     sram #(
@@ -1427,7 +1423,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
     dpe dpe_R1_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1435,7 +1431,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready1),
-        .data_out({dpe_data_out_hi1, data_out1}),
+        .data_out(data_out1),
         .dpe_done(dpe_done1),
         .reg_full(reg_full_sig1[0]),
         .shift_add_done(shift_add_done1),
@@ -1445,7 +1441,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R1_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1453,7 +1449,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready2),
-        .data_out({dpe_data_out_hi2, data_out2}),
+        .data_out(data_out2),
         .dpe_done(dpe_done2),
         .reg_full(reg_full_sig1[1]),
         .shift_add_done(shift_add_done2),
@@ -1463,7 +1459,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R2_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1471,7 +1467,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready3),
-        .data_out({dpe_data_out_hi3, data_out3}),
+        .data_out(data_out3),
         .dpe_done(dpe_done3),
         .reg_full(reg_full_sig2[0]),
         .shift_add_done(shift_add_done3),
@@ -1481,7 +1477,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R2_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1489,7 +1485,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready4),
-        .data_out({dpe_data_out_hi4, data_out4}),
+        .data_out(data_out4),
         .dpe_done(dpe_done4),
         .reg_full(reg_full_sig2[1]),
         .shift_add_done(shift_add_done4),
@@ -1499,7 +1495,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R3_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1507,7 +1503,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready5),
-        .data_out({dpe_data_out_hi5, data_out5}),
+        .data_out(data_out5),
         .dpe_done(dpe_done5),
         .reg_full(reg_full_sig3[0]),
         .shift_add_done(shift_add_done5),
@@ -1517,7 +1513,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R3_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1525,7 +1521,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready6),
-        .data_out({dpe_data_out_hi6, data_out6}),
+        .data_out(data_out6),
         .dpe_done(dpe_done6),
         .reg_full(reg_full_sig3[1]),
         .shift_add_done(shift_add_done6),
@@ -1535,7 +1531,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R4_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1543,7 +1539,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready7),
-        .data_out({dpe_data_out_hi7, data_out7}),
+        .data_out(data_out7),
         .dpe_done(dpe_done7),
         .reg_full(reg_full_sig4[0]),
         .shift_add_done(shift_add_done7),
@@ -1553,7 +1549,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R4_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1561,7 +1557,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready8),
-        .data_out({dpe_data_out_hi8, data_out8}),
+        .data_out(data_out8),
         .dpe_done(dpe_done8),
         .reg_full(reg_full_sig4[1]),
         .shift_add_done(shift_add_done8),

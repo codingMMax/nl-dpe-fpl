@@ -3,16 +3,16 @@ module LeNet3_0 (
     input wire rst,
     input wire valid,
     input wire ready_n,
-    input wire [7:0] data_in,
-    output wire [7:0] data_out,
+    input wire [15:0] data_in,
+    output wire [15:0] data_out,
     output wire ready,
     output wire valid_n
 );
 
     // Internal signals
-	wire [7:0] data_out_conv1, data_out_act1, data_out_pool1, global_sram_data_in;
-	wire [7:0] data_out_conv2, data_out_act2, data_out_pool2;
-	wire [7:0] data_out_conv3, data_out_act3, data_out_conv4, data_out_act4, data_out_conv5, data_out_accum;
+	wire [15:0] data_out_conv1, data_out_act1, data_out_pool1, global_sram_data_in;
+	wire [15:0] data_out_conv2, data_out_act2, data_out_pool2;
+	wire [15:0] data_out_conv3, data_out_act3, data_out_conv4, data_out_act4, data_out_conv5, data_out_accum;
     wire ready_conv1, valid_conv1, ready_conv2, valid_conv2;
     wire ready_act1, valid_act1, ready_act2, valid_act2;
     wire ready_pool2, valid_pool2;
@@ -24,7 +24,7 @@ module LeNet3_0 (
 
 
     reg [7:0] read_address, write_address;
-    
+
     // Instantiate the first conv_layer
     conv_layer #(
         .N_CHANNELS(1),
@@ -36,7 +36,7 @@ module LeNet3_0 (
         .H(32),
         .S(1),
         .DEPTH(512),
-        .DATA_WIDTH(8)
+        .DATA_WIDTH(16)
     ) conv1 (
         .clk(clk),
         .rst(rst),
@@ -47,12 +47,12 @@ module LeNet3_0 (
         .ready(ready_g_in), // or ready_conv1
         .valid_n(valid_conv1)
     );
-	
+
 	// Instantiate the first activation_layer
     activation_layer1 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
-        .DATA_WIDTH(8),
+        .DATA_WIDTH(16),
         .DEPTH(512)
     ) act1 (
         .clk(clk),
@@ -64,12 +64,12 @@ module LeNet3_0 (
         .ready(ready_conv1),
         .valid_n(valid_act1)
     );
-	
+
 	// Instantiate the first pool_layer
     pool_layer1 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(10),
-        .DATA_WIDTH(8),
+        .DATA_WIDTH(16),
         .DEPTH(1024)
     ) pool1 (
         .clk(clk),
@@ -82,7 +82,7 @@ module LeNet3_0 (
         .ready(ready_act1),
         .valid_n(valid_conv2)
     );
-	
+
 	// Instantiate the second conv_layer
     conv_layer #(
         .N_CHANNELS(1),
@@ -104,12 +104,12 @@ module LeNet3_0 (
         .ready(ready_conv2),
         .valid_n(valid_act2)
     );
-	
+
 	// Instantiate the second activation_layer
     activation_layer2 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(7),
-        .DATA_WIDTH(128),
+        .DATA_WIDTH(16),
         .DEPTH(128)
     )act2 (
         .clk(clk),
@@ -121,12 +121,12 @@ module LeNet3_0 (
         .ready(ready_act2),
         .valid_n(valid_pool2)
     );
-	
+
 	// Instantiate the second pool_layer
     pool_layer2 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(7),
-        .DATA_WIDTH(128),
+        .DATA_WIDTH(16),
         .DEPTH(128)
     ) pool2 (
         .clk(clk),
@@ -139,7 +139,7 @@ module LeNet3_0 (
         .ready(ready_pool2),
         .valid_n(valid_n_pool2)
     );
-	
+
 	// Instantiate the third conv_layer
 	conv_layer #(
         .N_CHANNELS(1),
@@ -161,12 +161,12 @@ module LeNet3_0 (
         .ready(ready_conv3),
         .valid_n(valid_n_conv3)
     );
-	
+
 	// Instantiate the third activation_layer
     activation_layer3 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(7),
-        .DATA_WIDTH(8),
+        .DATA_WIDTH(16),
         .DEPTH(128)
     ) act3 (
         .clk(clk),
@@ -178,7 +178,7 @@ module LeNet3_0 (
         .ready(ready_act3),
         .valid_n(valid_n_act3)
     );
-	
+
 	// Instantiate the fourth conv_layer
     conv_layer #(
         .N_CHANNELS(1),
@@ -200,12 +200,12 @@ module LeNet3_0 (
         .ready(ready_conv4),
         .valid_n(valid_n_conv4)
     );
-	
+
 	// Instantiate the fourth activation_layer
     activation_layer4 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(7),
-        .DATA_WIDTH(8),
+        .DATA_WIDTH(16),
         .DEPTH(128)
     ) act4 (
         .clk(clk),
@@ -217,7 +217,7 @@ module LeNet3_0 (
         .ready(ready_act4),
         .valid_n(valid_conv5)
     );
-	
+
 	    // Instantiate the fifth conv_layer
     conv_layer #(
         .N_CHANNELS(1),
@@ -239,13 +239,13 @@ module LeNet3_0 (
         .ready(ready_conv5),
         .valid_n(valid_g_in)
     );
-	
-	
+
+
     global_controller #(
-    .N_Layers(5)        
+    .N_Layers(5)
     ) g_ctrl_inst(
-    .clk(clk),              
-    .rst(rst),             
+    .clk(clk),
+    .rst(rst),
     .ready_L1(ready_g_in),     // trigger/signal from nl_dpe indicating new data can be read
     .valid_Ln(valid_g_in),            // Valid signal to enable new operation
     .valid(valid),                   //corrected
@@ -257,7 +257,7 @@ module LeNet3_0 (
 // Global SRAM
 sram #(
     .N_CHANNELS(1),
-    .DATA_WIDTH(8), //redundant
+    .DATA_WIDTH(16), //redundant
     .DEPTH(128)
 ) global_sram_inst (
     .clk(clk),
@@ -308,8 +308,8 @@ module conv_layer #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter DATA_WIDTH = 8
-    
+    parameter DATA_WIDTH = 16
+
 )(
     input wire clk,
     input wire rst,
@@ -341,7 +341,7 @@ module conv_layer #(
 
     // Instantiate the SRAM module
     sram #(
-        .N_CHANNELS(N_CHANNELS),        
+        .N_CHANNELS(N_CHANNELS),
         .DEPTH(DEPTH)
     ) sram_inst (
         .clk(clk),
@@ -422,10 +422,10 @@ module conv_controller #(
     parameter KW_BITWIDTH = $clog2(KERNEL_WIDTH),
     parameter KH_BITWIDTH = $clog2(KERNEL_HEIGHT)
 )(
-    input wire clk,              
-    input wire rst,             
-    input wire MSB_SA_Ready,     
-    input wire valid,            
+    input wire clk,
+    input wire rst,
+    input wire MSB_SA_Ready,
+    input wire valid,
     input wire ready_n,
     input wire dpe_done,
     input wire reg_full,
@@ -511,7 +511,7 @@ module conv_controller #(
     end
 
     always @* begin
-        if ((write_address_reg > read_address_reg) || 
+        if ((write_address_reg > read_address_reg) ||
             ((write_address_reg == {ADDR_WIDTH{1'b0}}) && (read_address_reg == {ADDR_WIDTH{1'b1}}))) begin
             memory_flag <= 1;
         end else begin
@@ -590,10 +590,10 @@ module conv_controller #(
 endmodule
 
 module global_controller #(
-    parameter N_Layers = 1        
+    parameter N_Layers = 1
 )(
-    input wire clk,              
-    input wire rst,             
+    input wire clk,
+    input wire rst,
     input wire ready_L1,     // trigger/signal from nl_dpe indicating new data can be read
     input wire valid_Ln,            // Valid signal to enable new operation
     input wire valid,
@@ -601,12 +601,12 @@ module global_controller #(
     output reg valid_L1,
     output reg ready_Ln
 );
-    
+
     wire busy;
-    reg stall;    
+    reg stall;
 
 
-    
+
 
     // valid and ready control
     always @(posedge clk or posedge rst) begin
@@ -626,7 +626,7 @@ module global_controller #(
                 stall <= 0;
             end else begin
                 stall <= 1;
-            end            
+            end
         end
     end
 
@@ -640,11 +640,11 @@ endmodule
 
 module sram #(
     parameter N_CHANNELS = 1,
-    parameter DATA_WIDTH = 8*N_CHANNELS,  // Data width (default: 8 bits) 8 x number of channels
+    parameter DATA_WIDTH = 16*N_CHANNELS,  // Data width (default: 16 bits) 16 x number of channels
     parameter DEPTH = 512       // Memory depth (default: 512)
-    
+
 )(
-    input wire clk,           
+    input wire clk,
     input wire w_en,
 	input wire rst,
     input wire [$clog2(DEPTH)-1:0] r_addr,  // Address input (width based on depth)
@@ -669,7 +669,7 @@ module sram #(
     always @(posedge clk) begin
             if (w_en) begin
                 mem[w_addr] <= sram_data_in;
-            end        
+            end
     end
 
 endmodule
@@ -677,7 +677,7 @@ endmodule
 module activation_layer1 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 9,
-    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DATA_WIDTH = N_CHANNELS*16,
     parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
@@ -703,14 +703,13 @@ module activation_layer1 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
     pooling_controller #(
         .N_CHANNELS(N_CHANNELS),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
+        .KERNEL_SIZE(2)
     ) pooling_ctrl_inst (
         .clk(clk),
         .rst(rst),
@@ -771,27 +770,27 @@ module tanh_activation_parallel_N_CHANNELS_1 #(
     output reg reg_full,        // Signal indicating all registers are full
     input wire load_output_reg, // Signal to load the output registers
     output reg activation_done, // Internal signal indicating tanh activation is complete
-    input wire [8*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
-    output reg [8*N_CHANNELS-1:0] sram_data_out  // Tanh activation output for all channels
+    input wire [16*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
+    output reg [16*N_CHANNELS-1:0] sram_data_out  // Tanh activation output for all channels
 );
 
-    reg [7:0] input_data_0;  // Input storage for channel 0
-    reg [7:0] tanh_output_0; // Tanh output for channel 0
+    reg [15:0] input_data_0;  // Input storage for channel 0 (16-bit)
+    reg [7:0] tanh_output_0;  // Tanh output for channel 0 (8-bit LUT output)
 
     // Block 1: Reading and Storing Data
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            input_data_0 <= 8'd0;
+            input_data_0 <= 16'd0;
             reg_full <= 1'b0;
         end else if (en && load_input_reg) begin
-            input_data_0 <= sram_data_in[7:0];
+            input_data_0 <= sram_data_in[15:0];
             reg_full <= 1'b1; // Indicate that all registers are full
         end else begin
             reg_full <= 1'b0;
         end
     end
 
-    // Block 2: Tanh Activation Logic using Lookup Table
+    // Block 2: Tanh Activation Logic using Lookup Table (8-bit internally)
     reg [7:0] tanh_lut [255:0];  // Tanh lookup table with 256 values
     initial begin
         // Example values - Populate this with actual tanh LUT
@@ -1053,24 +1052,25 @@ module tanh_activation_parallel_N_CHANNELS_1 #(
         tanh_lut[255] = 8'd255;
     end
 
+    // Truncate 16-bit input to 8-bit for LUT lookup
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             tanh_output_0 <= 8'd0;
             activation_done <= 1'b0;
         end else if (reg_full) begin
-            tanh_output_0 <= tanh_lut[input_data_0];
+            tanh_output_0 <= tanh_lut[input_data_0[7:0]];
             activation_done <= 1'b1; // Set activation done flag
         end else begin
             activation_done <= 1'b0;
         end
     end
 
-    // Block 3: Storing Tanh Output into Output Registers
+    // Block 3: Storing Tanh Output into Output Registers (zero-extend 8-bit LUT output to 16-bit)
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            sram_data_out[7:0] <= 8'd0;
+            sram_data_out[15:0] <= 16'd0;
         end else if (load_output_reg) begin
-            sram_data_out[7:0] <= tanh_output_0;
+            sram_data_out[15:0] <= {8'b0, tanh_output_0};
         end
     end
 endmodule
@@ -1084,8 +1084,8 @@ module pooling_controller #(
     parameter KERNEL_SIZE = 3,
     parameter B_ADDR_WIDTH = $clog2(KERNEL_SIZE * KERNEL_SIZE)
 )(
-    input wire clk,              
-    input wire rst,             
+    input wire clk,
+    input wire rst,
     input wire pooling_done,     // trigger/signal from nl_dpe indicating new data can be read
     input wire valid,            // Valid signal to enable new operation
     input wire ready_n,
@@ -1132,7 +1132,7 @@ module pooling_controller #(
             end else begin
                 read_address_reg <= read_address_reg;
                 w_buf_en <= 0;
-            end       
+            end
             if (~stall) begin
                 p_en <= 1;
             end else begin
@@ -1142,7 +1142,7 @@ module pooling_controller #(
     end
 
     always @* begin
-        if ((write_address_reg > read_address_reg) || 
+        if ((write_address_reg > read_address_reg) ||
             ((write_address_reg == {ADDR_WIDTH{1'b0}}) && (read_address_reg == {ADDR_WIDTH{1'b1}}))) begin
             memory_flag <= 1;
         end else begin
@@ -1150,7 +1150,7 @@ module pooling_controller #(
         end
     end
 
-    
+
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             pooling_exec_signal <= 1'b0;
@@ -1171,7 +1171,7 @@ module pooling_controller #(
             if (pooling_exec_signal) begin
                 pooling_control <= 2'b11;
             end else begin
-                pooling_control <= 2'b00;            
+                pooling_control <= 2'b00;
             end
         end
     end
@@ -1212,7 +1212,7 @@ module pooling_controller #(
 
     always @* begin
         read_address <= read_address_reg;
-        write_address <= write_address_reg;        
+        write_address <= write_address_reg;
         load_output_reg <= pooling_done; // Replacing shift_add_done with pooling_done
     end
 
@@ -1223,7 +1223,7 @@ endmodule
 module pool_layer1 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 9,
-    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DATA_WIDTH = N_CHANNELS*16,
     parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
@@ -1249,14 +1249,13 @@ module pool_layer1 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
     pooling_controller #(
         .N_CHANNELS(N_CHANNELS),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
+        .KERNEL_SIZE(2)
     ) pooling_ctrl_inst (
         .clk(clk),
         .rst(rst),
@@ -1317,20 +1316,20 @@ module max_pooling_N_CHANNELS_1 #(
     output reg reg_full,        // Signal indicating all registers are full
     input wire load_output_reg, // Signal to load the output registers
     output reg pooling_done,    // Internal signal indicating pooling is complete
-    input wire [8*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
-    output reg [8*N_CHANNELS-1:0] sram_data_out    // Max-pooling output for all channels
+    input wire [16*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
+    output reg [16*N_CHANNELS-1:0] sram_data_out    // Max-pooling output for all channels
 );
 
-    reg [7:0] input_0_0, input_1_0, input_2_0, input_3_0; // Channel 0
+    reg [15:0] input_0_0, input_1_0, input_2_0, input_3_0; // Channel 0
 
-    reg [7:0] max_0_1_0, max_2_3_0, max_pool_value_0; // Max values for channel 0
+    reg [15:0] max_0_1_0, max_2_3_0, max_pool_value_0; // Max values for channel 0
 
     reg [1:0] read_count;  // Counter to track the number of read operations
 
     // Block 1: Reading and Storing Data
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            input_0_0 <= 8'd0; input_1_0 <= 8'd0; input_2_0 <= 8'd0; input_3_0 <= 8'd0;
+            input_0_0 <= 16'd0; input_1_0 <= 16'd0; input_2_0 <= 16'd0; input_3_0 <= 16'd0;
             read_count <= 2'd0;
             reg_full <= 1'b0;
         end else if (en && load_input_reg) begin
@@ -1338,16 +1337,16 @@ module max_pooling_N_CHANNELS_1 #(
             read_count <= read_count + 1;
             case (read_count)
                 2'd0: begin
-                    input_0_0 <= sram_data_in[7:0];
+                    input_0_0 <= sram_data_in[15:0];
                 end
                 2'd1: begin
-                    input_1_0 <= sram_data_in[7:0];
+                    input_1_0 <= sram_data_in[15:0];
                 end
                 2'd2: begin
-                    input_2_0 <= sram_data_in[7:0];
+                    input_2_0 <= sram_data_in[15:0];
                 end
                 2'd3: begin
-                    input_3_0 <= sram_data_in[7:0];
+                    input_3_0 <= sram_data_in[15:0];
                     reg_full <= 1'b1; // Indicate that all inputs are filled
                 end
             endcase
@@ -1359,7 +1358,7 @@ module max_pooling_N_CHANNELS_1 #(
     // Block 2: Max-Pooling Logic
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            max_0_1_0 <= 8'd0; max_2_3_0 <= 8'd0; max_pool_value_0 <= 8'd0;
+            max_0_1_0 <= 16'd0; max_2_3_0 <= 16'd0; max_pool_value_0 <= 16'd0;
             pooling_done <= 1'b0;
         end else if (reg_full) begin
             max_0_1_0 <= (input_0_0 > input_1_0) ? input_0_0 : input_1_0;
@@ -1374,9 +1373,9 @@ module max_pooling_N_CHANNELS_1 #(
     // Block 3: Storing Max-Pooled Data into Output Registers
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            sram_data_out[7:0] <= 8'd0;
+            sram_data_out[15:0] <= 16'd0;
         end else if (load_output_reg) begin
-            sram_data_out[7:0] <= max_pool_value_0;
+            sram_data_out[15:0] <= max_pool_value_0;
         end
     end
 endmodule
@@ -1384,7 +1383,7 @@ endmodule
 module activation_layer2 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 9,
-    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DATA_WIDTH = N_CHANNELS*16,
     parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
@@ -1410,14 +1409,13 @@ module activation_layer2 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
     pooling_controller #(
         .N_CHANNELS(N_CHANNELS),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
+        .KERNEL_SIZE(2)
     ) pooling_ctrl_inst (
         .clk(clk),
         .rst(rst),
@@ -1471,7 +1469,7 @@ endmodule
 module pool_layer2 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 9,
-    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DATA_WIDTH = N_CHANNELS*16,
     parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
@@ -1497,14 +1495,13 @@ module pool_layer2 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
     pooling_controller #(
         .N_CHANNELS(N_CHANNELS),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
+        .KERNEL_SIZE(2)
     ) pooling_ctrl_inst (
         .clk(clk),
         .rst(rst),
@@ -1566,15 +1563,15 @@ module adder_dpe_N_CHANNELS_1 #(
     output reg reg_full,        // Signal indicating all registers are full
     input wire load_output_reg, // Signal to load the output registers
     output reg add_done,        // Internal signal indicating the addition is complete
-    input wire [8*N_CHANNELS-1:0] input1,  // First set of 8-bit inputs for all channels
-    input wire [8*N_CHANNELS-1:0] input2,  // Second set of 8-bit inputs for all channels
-    output reg [8*N_CHANNELS-1:0] output_data  // 8-bit addition output for all channels
+    input wire [16*N_CHANNELS-1:0] input1,  // First set of 16-bit inputs for all channels
+    input wire [16*N_CHANNELS-1:0] input2,  // Second set of 16-bit inputs for all channels
+    output reg [16*N_CHANNELS-1:0] output_data  // 16-bit addition output for all channels
 );
 
-    reg [7:0] in_data1_0;  // Input storage for first set of inputs for channel 0
-    reg [7:0] in_data2_0;  // Input storage for second set of inputs for channel 0
-    reg [8:0] sum_0;       // 9-bit sum storage for channel 0 (includes LSB to drop)
-    reg [7:0] result_0;    // 8-bit result after dropping LSB for channel 0
+    reg [15:0] in_data1_0;  // Input storage for first set of inputs for channel 0
+    reg [15:0] in_data2_0;  // Input storage for second set of inputs for channel 0
+    reg [16:0] sum_0;       // 17-bit sum storage for channel 0 (includes LSB to drop)
+    reg [15:0] result_0;    // 16-bit result after dropping LSB for channel 0
 
     reg [7:0] channel_index;  // Index to track current channel being processed
     reg processing;           // Flag to indicate if processing is ongoing
@@ -1582,12 +1579,12 @@ module adder_dpe_N_CHANNELS_1 #(
     // Block 1: Reading and Storing Data
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            in_data1_0 <= 8'd0;
-            in_data2_0 <= 8'd0;
+            in_data1_0 <= 16'd0;
+            in_data2_0 <= 16'd0;
             reg_full <= 1'b0;
         end else if (en && load_input_reg) begin
-            in_data1_0 <= input1[7:0];
-            in_data2_0 <= input2[7:0];
+            in_data1_0 <= input1[15:0];
+            in_data2_0 <= input2[15:0];
             reg_full <= 1'b1; // Indicate that all registers are full
         end else begin
             reg_full <= 1'b0;
@@ -1597,13 +1594,13 @@ module adder_dpe_N_CHANNELS_1 #(
     // Block 2: Addition Logic with LSB Dropped
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            result_0 <= 8'd0;
+            result_0 <= 16'd0;
             channel_index <= 8'd0;
             processing <= 1'b0;
             add_done <= 1'b0;
         end else if (reg_full && !processing) begin
             sum_0 <= in_data1_0 + in_data2_0;
-            result_0 <= sum_0[8:1];  // Right shift to drop LSB
+            result_0 <= sum_0[16:1];  // Right shift to drop LSB
             processing <= 1'b1;
         end else if (processing) begin
             channel_index <= channel_index + 1;
@@ -1622,9 +1619,9 @@ module adder_dpe_N_CHANNELS_1 #(
     // Block 3: Storing Output Data into Output Registers
     always @(posedge clk or posedge reset) begin
         if (reset) begin
-            output_data[7:0] <= 8'd0;
+            output_data[15:0] <= 16'd0;
         end else if (load_output_reg) begin
-            output_data[7:0] <= result_0;
+            output_data[15:0] <= result_0;
         end
     end
 endmodule
@@ -1632,7 +1629,7 @@ endmodule
 module activation_layer3 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 7,
-    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DATA_WIDTH = N_CHANNELS*16,
     parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
@@ -1658,14 +1655,13 @@ module activation_layer3 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
     pooling_controller #(
         .N_CHANNELS(N_CHANNELS),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
+        .KERNEL_SIZE(2)
     ) pooling_ctrl_inst (
         .clk(clk),
         .rst(rst),
@@ -1719,7 +1715,7 @@ endmodule
 module activation_layer4 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 7,
-    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DATA_WIDTH = N_CHANNELS*16,
     parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
@@ -1745,14 +1741,13 @@ module activation_layer4 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
     pooling_controller #(
         .N_CHANNELS(N_CHANNELS),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
+        .KERNEL_SIZE(2)
     ) pooling_ctrl_inst (
         .clk(clk),
         .rst(rst),

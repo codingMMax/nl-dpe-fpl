@@ -39,6 +39,7 @@ module conv_layer_single_dpe #(
     wire load_input_reg;
     wire [DATA_WIDTH-1:0] sram_data_in;
     wire [DATA_WIDTH-1:0] sram_data_out;
+    wire [7:0] dpe_data_out_hi;
 
     // Instantiate the SRAM module
     sram #(
@@ -58,7 +59,7 @@ module conv_layer_single_dpe #(
     dpe dpe_inst (
         .clk(clk),
         .reset(rst),
-        .data_in(sram_data_out),
+        .data_in({8'b0, sram_data_out}),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -66,7 +67,7 @@ module conv_layer_single_dpe #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready),
-        .data_out(data_out),
+        .data_out({dpe_data_out_hi, data_out}),
         .dpe_done(dpe_done),
         .reg_full(reg_full),
         .shift_add_done(shift_add_done),

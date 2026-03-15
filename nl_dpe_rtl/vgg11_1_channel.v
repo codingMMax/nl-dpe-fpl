@@ -1,4 +1,4 @@
-module resnet (
+module vgg11 (
     input wire clk,
     input wire rst,
     input wire valid,
@@ -12,19 +12,26 @@ module resnet (
     // Internal signals
 	wire [7:0] data_out_conv1, data_out_act1, data_out_pool1, global_sram_data_in;
 	wire [7:0] data_out_conv2, data_out_act2, data_out_pool2;
-	wire [7:0] data_out_act3, data_out_conv4, data_out_act4, data_out_conv5;
-	wire [7:0] data_out_dummy_res1, data_out_dummy_res2, data_out_conv3;
-	wire [7:0] data_out_act5, data_out_conv6, data_out_act6, data_out_pool3, data_out_conv7;
-	wire [7:0] data_out_act7, data_out_conv8, data_out_act8, data_out_pool4, data_out_conv9;
-    wire ready_conv1, valid_conv1, ready_conv2, valid_conv2, ready_conv3, valid_conv3;
-    wire ready_act1, valid_act1, ready_act2, valid_act2, valid_act3;
+	wire [7:0] data_out_conv2_1, data_out_conv2_2, data_out_conv2_3, data_out_act3, data_out_conv4, data_out_act4, data_out_conv5;
+	wire [7:0] data_out_accum2_1, data_out_accum2_2;
+	wire [7:0] data_out_conv3_1, data_out_conv3_2, data_out_accum3_1, data_out_accum3_2, data_out_accum3_3, data_out_conv3_3;
+	wire [7:0] data_out_conv3_4, data_out_conv3_5, data_out_accum3_4, data_out_conv4_1, data_out_conv4_2, data_out_accum4_1;
+	wire [7:0] data_out_conv4_3, data_out_accum4_2, data_out_conv4_4, data_out_accum4_3; 
+    wire ready_conv1, valid_conv1, ready_conv2, valid_conv2;
+    wire ready_act1, valid_act1, ready_act2, valid_act2;
     wire ready_pool1, valid_pool1, ready_pool2, valid_pool2, ready_pool3, valid_pool3, ready_pool4, valid_pool4;
-    wire ready_res1, valid_res1, ready_res2, valid_res2;
-    wire ready_conv3a, valid_n_pool2, valid_n_conv3b, ready_accum, valid_n_conv3a, ready_conv3b;
-    wire valid_n_accum, ready_act3, ready_conv4, valid_conv4, valid_n_act3;
-    wire ready_act4, valid_act4, ready_act5, valid_act5, valid_n_conv4;
-    wire ready_act6, valid_act6, ready_act7, valid_act7, ready_act8, valid_act8;
-    wire ready_conv5, valid_conv5, ready_conv6, valid_conv6, ready_conv7, valid_conv7, ready_conv8, valid_conv8;
+    wire ready_pool5, valid_pool5;
+	wire ready_accum2_1, valid_accum2_1, ready_accum2_2, valid_accum2_2, ready_accum2_3, valid_accum2_3;
+    wire valid_conv3_1, ready_conv3_1, ready_accum3_1, valid_accum3_1;
+    wire valid_conv3_2, ready_conv3_2, ready_accum3_2, valid_accum3_2, ready_conv4_4, valid_conv4_4;
+    wire valid_conv3_3, ready_conv3_3, ready_accum3_3, valid_accum3_3, valid_conv4_3, ready_accum4_2, valid_accum4_2;
+    wire valid_conv3_4, ready_conv3_4, valid_conv3_5, ready_conv3_5, valid_conv4_2, ready_accum4_1, valid_accum4_1, ready_conv4_3;
+	wire ready_accum4_3, valid_accum4_3, ready_conv4_5;
+    wire ready_accum3_4, valid_accum3_4, ready_conv4_1, valid_conv4_1, ready_conv4_2, valid_conv4_2;
+    wire ready_conv2_1, valid_conv2_1, ready_conv2_2, valid_conv2_2, ready_conv2_3, valid_conv2_3;
+    wire valid_n_accum, ready_act3, ready_conv4, valid_act3;
+    wire ready_act4, valid_n_conv4;
+    wire ready_conv5, valid_conv5;
     wire valid_g_in,valid_g_out,ready_g_in,ready_g_out;
 
     reg [7:0] read_address, write_address;
@@ -36,8 +43,8 @@ module resnet (
         .N_KERNELS(1),
         .KERNEL_WIDTH(3),
         .KERNEL_HEIGHT(3),
-        .W(32),
-        .H(32),
+        .W(33),
+        .H(33),
         .S(1),
         .DEPTH(1024),
         .DATA_WIDTH(8)
@@ -69,53 +76,6 @@ module resnet (
         .valid_n(valid_act1)
     );
 	
-	// Instantiate the second conv_layer
-    conv_layer_single_dpe #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(10),
-        .N_KERNELS(1),
-        .KERNEL_WIDTH(3),
-        .KERNEL_HEIGHT(3),
-        .W(32),
-        .H(32),
-        .S(1),
-        .DEPTH(1024),
-        .DATA_WIDTH(8)
-    ) conv2 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_act1),
-        //.valid(valid_g_out),
-        .ready_n(ready_conv2), // udpated with ready_Ln
-        .data_in(data_out_act1),
-        //.data_in(data_in),
-        .data_out(data_out_conv2), // this wasn't correct
-        .ready(ready_act1), // or ready_conv1
-		//.ready(ready_g_in),
-        .valid_n(valid_conv2)
-    );
-	
-	// Instantiate the second activation_layer
-    activation_layer2 #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(10),
-        .DATA_WIDTH(8),
-        .DEPTH(1024)
-    ) act2 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_conv2),
-        //.valid(valid_g_out),
-        .ready_n(ready_act2),
-        .data_in(data_out_conv2),
-        //.data_in(data_in),
-        .data_out(data_out_act2),
-        .ready(ready_conv2),
-        //.ready(ready_g_in),
-        .valid_n(valid_act2)
-    ); 
-	
-	
 	// Instantiate the first pool_layer
     pool_layer1 #(
         .N_CHANNELS(1),
@@ -125,19 +85,17 @@ module resnet (
     ) pool1 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_act2),
+        .valid(valid_act1),
         .ready_n(ready_pool1),
-		//.ready_n(ready_g_out),
         .layer_done(1'b0),
-        .data_in(data_out_act2),
+        .data_in(data_out_act1),
         .data_out(data_out_pool1),
-        .ready(ready_act2),
-		.valid_n(valid_pool1)
-		//.valid_n(valid_g_in)
-    ); 
+        .ready(ready_act1),
+        .valid_n(valid_pool1)
+    );
 	
-	// Instantiate the third conv_layer
- 	conv_layer_stacked_dpes_V2_H1 #(
+	// Instantiate the second conv_layer (need 3 DPEs and two accum layers)
+    conv_layer_stacked_dpes_V2_H1 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
         .N_KERNELS(1),
@@ -152,150 +110,32 @@ module resnet (
 		.N_BRAM_W(1),
 		.DATA_WIDTH (8),
         .DEPTH(512)
-    ) conv3 (
+    ) conv2 (
         .clk(clk),
         .rst(rst),
-        //.valid(valid_g_out),
         .valid(valid_pool1),
-        .ready_n(ready_conv3),
-        //.ready_n(ready_g_out),
-        //.data_in(data_in),
+        .ready_n(ready_conv2),
         .data_in(data_out_pool1),
-        .data_out(data_out_conv3),
-        //.ready(ready_g_in),
+        .data_out(data_out_conv2),
         .ready(ready_pool1),
-        .valid_n(valid_conv3)
-        //.valid_n(valid_g_in)
+        .valid_n(valid_conv2)
     );
-
-	// Instantiate the third activation_layer
-    activation_layer3 #(
+	
+	// Instantiate the second activation_layer
+    activation_layer2 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(8),
         .DATA_WIDTH(8),
         .DEPTH(256)
-    )act3 (
+    ) act2 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_conv3),
-        .ready_n(ready_act3),
-		//.ready_n(ready_g_out),
-        .data_in(data_out_conv3),
-        .data_out(data_out_act3),
-        .ready(ready_conv3),
-        .valid_n(valid_act3)
-        //.valid_n(valid_g_in)
-    );
-	
-	// Instantiate the fourth conv_layer
- 	conv_layer_stacked_dpes_V2_H1 #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(9),
-        .N_KERNELS(1),
-        .KERNEL_WIDTH(3),
-        .KERNEL_HEIGHT(3),
-        .W(16),
-        .H(16),
-        .S(1),
-		.N_DPE_V(2),
-		.N_DPE_H(1),
-		.N_BRAM_R(1),
-		.N_BRAM_W(1),
-		.DATA_WIDTH (8),
-        .DEPTH(512)
-    ) conv4 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_act3),
-        .ready_n(ready_conv4),
-        //.ready_n(ready_g_out),
-        .data_in(data_out_act3),
-        .data_out(data_out_conv4),
-        .ready(ready_act3),
-        .valid_n(valid_conv4)
-		//.valid_n(valid_g_in)
-    );
-	
-	// Instantiate the fourth activation_layer
-      activation_layer4 #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(8),
-        .DATA_WIDTH(8),
-        .DEPTH(256)
-    )act4 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_conv4),
-        .ready_n(ready_act4),
-        .data_in(data_out_conv4),
-        .data_out(data_out_act4),
-        .ready(ready_conv4),
-        .valid_n(valid_act4)
-    ); 
-	
-	// Instantiate the first (dummy) residual layer
-    residual_layer1 #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(8),
-        .DEPTH(256)
-        ) residual1 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_act4),
-        .ready_n(ready_res1),
-        //.ready_n(ready_g_out),
-        .data_in(data_out_act4),
-        .data_in2(data_out_pool1),
-        .data_out(data_out_dummy_res1),
-        .ready(ready_act4),
-        .valid_n(valid_res1)
-        //.valid_n(valid_g_in)
-    );	
-	
-	// Instantiate the fifth conv_layer
-	conv_layer_stacked_dpes_V2_H2 #(
-		.N_CHANNELS(1),
-        .ADDR_WIDTH(9),
-        .N_KERNELS(1),
-        .KERNEL_WIDTH(3),
-        .KERNEL_HEIGHT(3),
-        .W(16),
-        .H(16),
-        .S(1),
-		.N_DPE_V(2),
-		.N_DPE_H(2),
-		.N_BRAM_R(1),
-		.N_BRAM_W(1),
-		.DATA_WIDTH (8),
-        .DEPTH(512)
-    ) conv5 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_res1),
-        .ready_n(ready_conv5),
-        //.ready_n(ready_g_out),
-        .data_in(data_out_dummy_res1),
-        .data_out(data_out_conv5),
-        .ready(ready_res1),
-        .valid_n(valid_conv5)
-		//.valid_n(valid_g_in)
-    );
-	
-	// Instantiate the fifth activation_layer
-    activation_layer5 #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(8),
-        .DATA_WIDTH(8),
-        .DEPTH(256)
-    )act5 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_conv5),
-        .ready_n(ready_act5),
-        .data_in(data_out_conv5),
-        .data_out(data_out_act5),
-        .ready(ready_conv5),
-        .valid_n(valid_act5)
+        .valid(valid_conv2),
+        .ready_n(ready_act2),
+        .data_in(data_out_conv2),
+        .data_out(data_out_act2),
+        .ready(ready_conv2),
+        .valid_n(valid_act2)
     );
 	
 	// Instantiate the second pool_layer
@@ -307,20 +147,20 @@ module resnet (
     ) pool2 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_act5),
+        .valid(valid_act2),
         .ready_n(ready_pool2),
-		//.ready_n(ready_g_out),
+        .ready_n(ready_g_out),
         .layer_done(1'b0),
-        .data_in(data_out_act5),
+        .data_in(data_out_act2),
         .data_out(data_out_pool2),
-        .ready(ready_act5),
+        .ready(ready_act2),
         .valid_n(valid_pool2)
-		//.valid_n(valid_g_in)
+        
     );
 	
-	// Instantiate the sixth conv_layer
-    conv_layer_stacked_dpes_V4_H2 #(
-		.N_CHANNELS(1),
+	// Instantiate the third conv_layer
+    conv_layer_stacked_dpes_V3_H2 #(
+        .N_CHANNELS(1),
         .ADDR_WIDTH(9),
         .N_KERNELS(1),
         .KERNEL_WIDTH(3),
@@ -328,97 +168,243 @@ module resnet (
         .W(8),
         .H(8),
         .S(1),
-		.N_DPE_V(4),
+		.N_DPE_V(3),
 		.N_DPE_H(2),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
 		.DATA_WIDTH (8),
         .DEPTH(512)
-    ) conv6 (
+    ) conv3 (
         .clk(clk),
         .rst(rst),
         .valid(valid_pool2),
-        .ready_n(ready_conv6),
-		//.ready_n(ready_g_out),
+        .ready_n(ready_conv3),
         .data_in(data_out_pool2),
-        .data_out(data_out_conv6),
+        .data_out(data_out_conv3),
         .ready(ready_pool2),
-        .valid_n(valid_conv6)
-		//.valid_n(valid_g_in)
+        .valid_n(valid_conv3)	
     );
 	
-	// Instantiate the sixth activation_layer
-    activation_layer6 #(
+	// Instantiate the third activation_layer
+    activation_layer3 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(6),
         .DATA_WIDTH(8),
         .DEPTH(64)
-    )act6 (
+    )act3 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_conv6),
-        .ready_n(ready_act6),
-        //.ready_n(ready_g_out),
-        .data_in(data_out_conv6),
-        .data_out(data_out_act6),
-        .ready(ready_conv6),
-        .valid_n(valid_act6)
-		//.valid_n(valid_g_in)
+        .valid(valid_conv3),
+        .ready_n(ready_act3),
+        .data_in(data_out_conv3),
+        .data_out(data_out_act3),
+        .ready(ready_conv3),
+        .valid_n(valid_act3)
+    );
+	
+	// Instantiate the fourth conv_layer
+	conv_layer_stacked_dpes_V5_H2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(9),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(9),
+        .H(9),
+        .S(1),
+		.N_DPE_V(5),
+		.N_DPE_H(2),
+		.N_BRAM_R(1),
+		.N_BRAM_W(1),
+		.DATA_WIDTH(8),
+        .DEPTH(512)
+    ) conv4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act3),
+        .ready_n(ready_conv4),
+        .data_in(data_out_act3),
+        .data_out(data_out_conv4),
+        .ready(ready_act3),
+        .valid_n(valid_conv4)		
+    );  
+
+
+	// Instantiate the fourth activation_layer
+    activation_layer4 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(6),
+        .DATA_WIDTH(8),
+        .DEPTH(64)
+    )act4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv4),
+        .ready_n(ready_act4),
+        .data_in(data_out_conv4),
+        .data_out(data_out_act4),
+        .ready(ready_conv4),
+        .valid_n(valid_act4)
     );
 	
 	// Instantiate the third pool_layer
     pool_layer3 #(
         .N_CHANNELS(1),
-        .ADDR_WIDTH(64),
+        .ADDR_WIDTH(6),
         .DATA_WIDTH(8),
         .DEPTH(64)
     ) pool3 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_act6),
+        .valid(valid_act4),
         .ready_n(ready_pool3),
         .layer_done(1'b0),
-        .data_in(data_out_act6),
+        .data_in(data_out_act4),
         .data_out(data_out_pool3),
-        .ready(ready_act6),
+        .ready(ready_act4),
         .valid_n(valid_pool3)
     );
 	
-	// Instantiate the seventh conv_layer
-    conv_layer_stacked_dpes_V4_H2 #(
-		.N_CHANNELS(1),
+	// Instantiate the fifth conv_layer  
+	conv_layer_stacked_dpes_V10_H2 #(
+        .N_CHANNELS(1),
         .ADDR_WIDTH(9),
         .N_KERNELS(1),
         .KERNEL_WIDTH(3),
         .KERNEL_HEIGHT(3),
-        .W(4),
-        .H(4),
+        .W(5),
+        .H(5),
         .S(1),
-		.N_DPE_V(4),
+		.N_DPE_V(10),
 		.N_DPE_H(2),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH (8),
+		.DATA_WIDTH(8),
         .DEPTH(512)
-    ) conv7 (
+    ) conv5 (
         .clk(clk),
         .rst(rst),
         .valid(valid_pool3),
-        .ready_n(ready_conv7),
-        //.ready_n(ready_g_out),
+        .ready_n(ready_conv5),
         .data_in(data_out_pool3),
-        .data_out(data_out_conv7),
+        .data_out(data_out_conv5),
         .ready(ready_pool3),
-        .valid_n(valid_conv7)
-        //.valid_n(valid_g_in)
+        .valid_n(valid_conv5)
     );
-	
-	// Instantiate the seventh activation_layer
-    activation_layer7 #(
+
+	// Instantiate the fifth activation_layer
+    activation_layer5 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(4),
         .DATA_WIDTH(8),
         .DEPTH(16)
+    )act5 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv5),
+        .ready_n(ready_act5),
+        .data_in(data_out_conv5),
+        .data_out(data_out_act5),
+        .ready(ready_conv5),
+        .valid_n(valid_act5)
+    );	
+
+	// Instantiate the sixth conv_layer
+	conv_layer_stacked_dpes_V18_H2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(9),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+		.N_DPE_V(18),
+		.N_DPE_H(2),
+		.N_BRAM_R(1),
+		.N_BRAM_W(1),
+		.DATA_WIDTH(8),
+        .DEPTH(512)
+    ) conv6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act5),
+        .ready_n(ready_conv6),
+        .data_in(data_out_act5),
+        .data_out(data_out_conv6),
+        .ready(ready_act5),
+        .valid_n(valid_conv6)
+    );
+	
+	// Instantiate the sixth activation_layer
+    activation_layer6 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DATA_WIDTH(8),
+        .DEPTH(16)
+    )act6 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_conv6),
+        .ready_n(ready_act6),
+        .data_in(data_out_conv6),
+        .data_out(data_out_act6),
+        .ready(ready_conv6),
+        .valid_n(valid_act6)
+    );
+	
+	// Instantiate the fourth pool_layer
+    pool_layer4 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(4),
+        .DATA_WIDTH(8),
+        .DEPTH(16)
+    ) pool4 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_act6),
+        .ready_n(ready_pool4),
+        .layer_done(1'b0),
+        .data_in(data_out_act6),
+        .data_out(data_out_pool4),
+        .ready(ready_act6),
+        .valid_n(valid_pool4)
+    );
+	
+	// Instantiate the seventh conv_layer
+	
+	conv_layer_stacked_dpes_V18_H2 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(9),
+        .N_KERNELS(1),
+        .KERNEL_WIDTH(3),
+        .KERNEL_HEIGHT(3),
+        .W(5),
+        .H(5),
+        .S(1),
+		.N_DPE_V(18),
+		.N_DPE_H(2),
+		.N_BRAM_R(1),
+		.N_BRAM_W(1),
+		.DATA_WIDTH(8),
+        .DEPTH(512)
+    ) conv7 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool4),
+        .ready_n(ready_conv7),
+        .data_in(data_out_pool4),
+        .data_out(data_out_conv7),
+        .ready(ready_pool4),
+        .valid_n(valid_conv7)
+    );
+	
+  // Instantiate the seventh activation_layer
+    activation_layer7 #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(2),
+        .DATA_WIDTH(8),
+        .DEPTH(4)
     )act7 (
         .clk(clk),
         .rst(rst),
@@ -431,40 +417,38 @@ module resnet (
     );
 	
 	// Instantiate the eighth conv_layer
-    conv_layer_stacked_dpes_V4_H2 #(
+	conv_layer_stacked_dpes_V18_H2 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
         .N_KERNELS(1),
         .KERNEL_WIDTH(3),
         .KERNEL_HEIGHT(3),
-        .W(4),
-        .H(4),
+        .W(3),
+        .H(3),
         .S(1),
-		.N_DPE_V(4),
+		.N_DPE_V(18),
 		.N_DPE_H(2),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH (8),
+		.DATA_WIDTH(8),
         .DEPTH(512)
     ) conv8 (
         .clk(clk),
         .rst(rst),
         .valid(valid_act7),
         .ready_n(ready_conv8),
-        //.ready_n(ready_g_out),
         .data_in(data_out_act7),
         .data_out(data_out_conv8),
         .ready(ready_act7),
         .valid_n(valid_conv8)
-        //.valid_n(valid_g_in)
-    ); 
+    );
 	
-	// Instantiate the eighth activation_layer
+ 	// Instantiate the eighth activation_layer
     activation_layer8 #(
         .N_CHANNELS(1),
-        .ADDR_WIDTH(4),
+        .ADDR_WIDTH(2),
         .DATA_WIDTH(8),
-        .DEPTH(16)
+        .DEPTH(4)
     )act8 (
         .clk(clk),
         .rst(rst),
@@ -476,63 +460,67 @@ module resnet (
         .valid_n(valid_act8)
     );
 	
-	// Instantiate the second (dummy) residual layer
-    residual_layer2 #(
+	// Instantiate the fifth pool_layer
+    pool_layer5 #(
         .N_CHANNELS(1),
-        .ADDR_WIDTH(4),
-        .DEPTH(16)
-        ) residual2 (
+        .ADDR_WIDTH(2),
+        .DATA_WIDTH(8),
+        .DEPTH(4)
+    ) pool5 (
         .clk(clk),
         .rst(rst),
         .valid(valid_act8),
-        .ready_n(ready_res2),
-        .data_in(data_out_act8),
-        .data_in2(data_out_pool2),
-        .data_out(data_out_dummy_res2),
-        .ready(ready_act8),
-        .valid_n(valid_res2)
-    );
-
-	// Instantiate the fourth pool_layer
-    pool_layer4 #(
-        .N_CHANNELS(1),
-        .ADDR_WIDTH(4),
-        .DATA_WIDTH(8),
-        .DEPTH(16)
-    ) pool4 (
-        .clk(clk),
-        .rst(rst),
-        .valid(valid_res2),
-        .ready_n(ready_pool4),
+        .ready_n(ready_pool5),
         .layer_done(1'b0),
-        .data_in(data_out_dummy_res2),
-        .data_out(data_out_pool4),
-        .ready(ready_res2),
-        .valid_n(valid_pool4)
+        .data_in(data_out_act8),
+        .data_out(data_out_pool5),
+        .ready(ready_act8),
+        .valid_n(valid_pool5)
     );
 	
-	// Instantiate the ninth conv_layer
-    conv_layer_single_dpe #(
+	// Instantiate the first avg_pool_layer
+ 	avg_pool_layer1 #(
         .N_CHANNELS(1),
-        .ADDR_WIDTH(7),
+        .ADDR_WIDTH(2),
+        .DATA_WIDTH(8),
+        .DEPTH(2)
+    ) avg_pool1 (
+        .clk(clk),
+        .rst(rst),
+        .valid(valid_pool5),
+        .ready_n(ready_avg_pool1),
+        .layer_done(1'b0),
+        .data_in(data_out_pool5),
+        .data_out(data_out_avg_pool1),
+        .ready(ready_pool5),
+        .valid_n(valid_avg_pool1)
+    );
+	
+	
+	// Instantiate the ninth conv_layer (linear)
+	conv_layer_single_dpe #(
+        .N_CHANNELS(1),
+        .ADDR_WIDTH(8),
         .N_KERNELS(1),
         .KERNEL_WIDTH(1),
         .KERNEL_HEIGHT(1),
         .W(1),
         .H(1),
         .S(1),
-        .DEPTH(128)
+        .DEPTH(256),
+        .DATA_WIDTH(8)
     ) conv9 (
         .clk(clk),
         .rst(rst),
-        .valid(valid_pool4),
-        .ready_n(ready_g_out),
-        .data_in(data_out_pool4),
-        .data_out(data_out_conv9),
-        .ready(ready_pool4),
-        .valid_n(valid_g_in)
+        .valid(valid_avg_pool1),
+        //.ready_n(ready_conv9), // udpated with ready_Ln
+		.ready_n(valid_g_out),
+        .data_in(data_out_avg_pool1),
+        .data_out(data_out_conv9), // this wasn't correct
+        .ready(ready_avg_pool1), // or ready_conv1
+        //.valid_n(valid_conv9)
+		.valid_n(valid_g_in)
     );
-	
 	
     global_controller #(
     .N_Layers(5)        
@@ -590,6 +578,51 @@ end
 
 endmodule
 
+module global_controller #(
+    parameter N_Layers = 1        
+)(
+    input wire clk,              
+    input wire rst,             
+    input wire ready_L1,     // trigger/signal from nl_dpe indicating new data can be read
+    input wire valid_Ln,            // Valid signal to enable new operation
+    input wire valid,
+    output reg ready,                 // Ready signal indicating operation is done
+    output reg valid_L1,
+    output reg ready_Ln
+);
+    
+    wire busy;
+    reg stall;    
+
+    // valid and ready control
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            //valid_L1 <= 1'b0;
+            //ready <= 1'b0;
+            stall <= 0;
+        end else begin
+
+            if (stall) begin
+                ready_Ln <= 1'b0;
+            end else begin
+                ready_Ln <= 1'b1;
+            end
+
+            if(~valid) begin
+                stall <= 0;
+            end else begin
+                stall <= 1;
+            end            
+        end
+    end
+
+    always @* begin
+        ready <= ready_L1;
+        valid_L1 <= valid;
+    end
+
+endmodule
+
 module conv_layer_single_dpe #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 9,
@@ -635,7 +668,7 @@ module conv_layer_single_dpe #(
 
     // Instantiate the SRAM module
     sram #(
-        .N_CHANNELS(1),        
+        .N_CHANNELS(1),
         .DEPTH(512)
     ) sram_inst (
         .clk(clk),
@@ -942,7 +975,6 @@ module conv_layer_stacked_dpes_V2_H1 #(
 	wire shift_add_done1, shift_add_done2;
 	wire shift_add_bypass_ctrl1, shift_add_bypass_ctrl2;
 	wire MSB_SA_Ready1, MSB_SA_Ready2;	
-	wire [7:0] dpe_data_out_hi1, dpe_data_out_hi2;
 	
     // Instantiate the SRAM module
     sram #(
@@ -976,7 +1008,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
     dpe dpe_R1_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -984,7 +1016,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready1),
-        .data_out({dpe_data_out_hi1, data_out1}),
+        .data_out(data_out1),
         .dpe_done(dpe_done1),
         .reg_full(reg_full_sig[0]),
         .shift_add_done(shift_add_done1),
@@ -994,7 +1026,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
  	dpe dpe_R2_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1002,7 +1034,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready2),
-        .data_out({dpe_data_out_hi2, data_out2}),
+        .data_out(data_out2),
         .dpe_done(dpe_done2),
         .reg_full(reg_full_sig[1]),
         .shift_add_done(shift_add_done2),
@@ -1073,8 +1105,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
 
 endmodule
 
-
-module conv_layer_stacked_dpes_V2_H2 #(
+module conv_layer_stacked_dpes_V3_H2 #(
     parameter N_CHANNELS = 1,
     parameter ADDR_WIDTH = 9,
     parameter N_KERNELS = 1,
@@ -1084,256 +1115,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter N_DPE_V = 2,
-    parameter N_DPE_H = 2,
-	parameter N_BRAM_R = 1,
-    parameter N_BRAM_W = 1,
-    parameter DATA_WIDTH = 8
-    
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire [(N_CHANNELS*DATA_WIDTH)-1:0] data_in,
-    output wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out,
-    output wire ready,
-    output wire valid_n
-);
-
-    // Internal signals
-    wire MSB_SA_Ready;
-    wire dpe_done;
-    wire [N_DPE_V-1:0] reg_full_sig1;
-    wire [N_DPE_V-1:0] reg_full_sig2;
-    wire [N_DPE_H-1:0] reg_empty_sig;
-    wire shift_add_done;
-    wire shift_add_bypass_ctrl;
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] nl_dpe_control;
-    wire shift_add_control;
-    wire shift_add_bypass;
-    wire load_output_reg;
-    wire w_en;
-    wire load_input_reg;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    wire [DATA_WIDTH-1:0] sram_data_out;
-
-	wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out1;
-	wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out2;
-	wire [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data;
-	wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out_temp1;
-	wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out_temp2;
-	wire [N_BRAM_W-1:0] w_en_dec_signal;
-	wire [N_DPE_V-1:0] dpe_sel_signal;
-	wire [N_DPE_H-1:0] dpe_sel_h_signal;
-	wire [DATA_WIDTH-1:0] sram_data;
-	wire dpe_done1, dpe_done2, dpe_done3, dpe_done4;
-	wire accum_ready, accum_done;
-	wire shift_add_done1, shift_add_done2, shift_add_done3, shift_add_done4;
-	wire shift_add_bypass_ctrl1, shift_add_bypass_ctrl2, shift_add_bypass_ctrl3, shift_add_bypass_ctrl4;
-	wire MSB_SA_Ready1, MSB_SA_Ready2, MSB_SA_Ready3, MSB_SA_Ready4;	
-	wire [7:0] dpe_data_out_hi1, dpe_data_out_hi2, dpe_data_out_hi3, dpe_data_out_hi4;
-	
-    // Instantiate the SRAM module
-    sram #(
-        .N_CHANNELS(1),        
-        .DEPTH(512)
-    ) sram_inst_1 (
-        .clk(clk),
-		.rst(rst),
-        //.w_en(w_en),
-        .w_en(w_en_dec_signal),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data)
-    );
-
-	// Instantiate crossbar module for inputs
-	xbar_ip_module #(
-        .DATA_WIDTH(8),
-        .NUM_INPUTS(1),
-        .NUM_OUTPUTS(2)
-    ) u_xbar (
-        .in_data(sram_data),
-        .in_sel(N_BRAM_R),
-        .out_sel(dpe_sel_signal),
-        .out_data(dpe_data)
-    );
-
-    // Instantiate the DPE modules
-	// R1C1 R1C2 -- reg1
-	// R2C1 R2C2 -- reg2
-	// instance: dpe_R{number}_C{number} - to easily identify horizontal and vertical stacks
-    dpe dpe_R1_C1 (
-        .clk(clk),
-        .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .w_buf_en(w_buf_en),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-        .load_input_reg(load_input_reg),
-        .MSB_SA_Ready(MSB_SA_Ready1),
-        .data_out({dpe_data_out_hi1, data_out1}),
-        .dpe_done(dpe_done1),
-        .reg_full(reg_full_sig1[0]),
-        .shift_add_done(shift_add_done1),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl1)
-    );
-	
-	dpe dpe_R1_C2 (
-        .clk(clk),
-        .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .w_buf_en(w_buf_en),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-        .load_input_reg(load_input_reg),
-        .MSB_SA_Ready(MSB_SA_Ready2),
-        .data_out({dpe_data_out_hi2, data_out2}),
-        .dpe_done(dpe_done2),
-        .reg_full(reg_full_sig1[1]),
-        .shift_add_done(shift_add_done2),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl2)
-    );
-	
-	dpe dpe_R2_C1 (
-        .clk(clk),
-        .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .w_buf_en(w_buf_en),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-        .load_input_reg(load_input_reg),
-        .MSB_SA_Ready(MSB_SA_Ready3),
-        .data_out({dpe_data_out_hi3, data_out3}),
-        .dpe_done(dpe_done3),
-        .reg_full(reg_full_sig2[0]),
-        .shift_add_done(shift_add_done3),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl3)
-    );
-
-	dpe dpe_R2_C2 (
-        .clk(clk),
-        .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .w_buf_en(w_buf_en),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-        .load_input_reg(load_input_reg),
-        .MSB_SA_Ready(MSB_SA_Ready4),
-        .data_out({dpe_data_out_hi4, data_out4}),
-        .dpe_done(dpe_done4),
-        .reg_full(reg_full_sig2[1]),
-        .shift_add_done(shift_add_done4),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl4)
-    );
-	
-	assign shift_add_done = shift_add_done1 & shift_add_done2 & shift_add_done3 & shift_add_done4;
-	assign shift_add_bypass_ctrl = shift_add_bypass_ctrl1 & shift_add_bypass_ctrl2 & shift_add_bypass_ctrl3 & shift_add_bypass_ctrl4;
-	assign dpe_done = dpe_done1 & dpe_done2 & dpe_done3 & dpe_done4;
-	assign reg_full_sig = reg_full_sig1 & reg_full_sig2;
-	assign MSB_SA_Ready = MSB_SA_Ready1 & MSB_SA_Ready2 & MSB_SA_Ready3 & MSB_SA_Ready4;
-	
-  	adder_dpe_N_CHANNELS_1 #(
-        .N_CHANNELS(1)
-    ) adder_inst_R1C1_R2C1 (
-        .clk(clk),
-        .reset(rst),
-        .en(accum_ready),
-        //.load_input_reg(w_buf_en),
-        //.reg_full(reg_full_sig),
-        //.load_output_reg(load_output_reg),
-        .add_done(accum_done1),
-        .input1(data_out1),
-        .input2(data_out3),
-        .output_data(data_out_temp1)
-    );
-	
-	adder_dpe_N_CHANNELS_1 #(
-        .N_CHANNELS(1)
-    ) adder_inst_R1C2_R2C2 (
-        .clk(clk),
-        .reset(rst),
-        .en(accum_ready),
-        //.load_input_reg(w_buf_en),
-        //.reg_full(reg_full_sig),
-        //.load_output_reg(load_output_reg),
-        .add_done(accum_done2),
-        .input1(data_out2),
-        .input2(data_out4),
-        .output_data(data_out_temp2)
-    );
-	
-	assign accum_done = accum_done1 & accum_done2;
-	assign data_out = data_out_temp1 + data_out_temp2;
-	
-    // Instantiate the Controller module
- 	controller_scalable #(
-		.N_CHANNELS(N_CHANNELS),
-		.N_BRAM_R(N_BRAM_R),
-		.N_BRAM_W(N_BRAM_W),
-		.N_DPE_V(N_DPE_V),
-		.N_DPE_H(N_DPE_H),
-		.ADDR_WIDTH(ADDR_WIDTH),
-		.KERNEL_WIDTH(KERNEL_WIDTH),
-		.KERNEL_HEIGHT(KERNEL_HEIGHT),
-		.W(W),
-		.H(H),
-		.S(S)
-	) controller_scalable_inst (
-		.clk(clk),
-		.rst(rst),
-		.MSB_SA_Ready(MSB_SA_Ready),
-        .valid(valid),
-        .ready_n(ready_n),
-        .dpe_done(dpe_done),
-        .reg_full(reg_full_sig),
-		.reg_empty(reg_empty),
-		.shift_add_done(shift_add_done),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl),
-		.dpe_accum_done(accum_done),
-		.read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-		.w_en_dec(w_en_dec_signal),
-		//.r_en_dec(1),
-		.load_input_reg(load_input_reg),
-		.ready(ready),
-        .valid_n(valid_n),
-		.dpe_accum_ready(accum_ready),
-		.dpe_sel(dpe_sel_signal),
-		.dpe_sel_h(dpe_sel_h_signal)
-    );
-
-endmodule
-
-module conv_layer_stacked_dpes_V4_H2 #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
-    parameter N_KERNELS = 1,
-    parameter KERNEL_WIDTH = 5,
-    parameter KERNEL_HEIGHT = 5,
-    parameter W = 32,
-    parameter H = 32,
-    parameter S = 1,
-    parameter DEPTH = 512,
-    parameter N_DPE_V = 4,
+    parameter N_DPE_V = 3,
     parameter N_DPE_H = 2,
 	parameter N_BRAM_R = 1,
     parameter N_BRAM_W = 1,
@@ -1356,7 +1138,6 @@ module conv_layer_stacked_dpes_V4_H2 #(
     wire [N_DPE_V-1:0] reg_full_sig1;
     wire [N_DPE_V-1:0] reg_full_sig2;
     wire [N_DPE_V-1:0] reg_full_sig3;
-    wire [N_DPE_V-1:0] reg_full_sig4;
     wire [N_DPE_H-1:0] reg_empty_sig;
     wire shift_add_done;
     wire shift_add_bypass_ctrl;
@@ -1390,8 +1171,6 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	wire shift_add_bypass_ctrl5, shift_add_bypass_ctrl6, shift_add_bypass_ctrl7, shift_add_bypass_ctrl8;
 	wire MSB_SA_Ready1, MSB_SA_Ready2, MSB_SA_Ready3, MSB_SA_Ready4;	
 	wire MSB_SA_Ready5, MSB_SA_Ready6, MSB_SA_Ready7, MSB_SA_Ready8;	
-	wire [7:0] dpe_data_out_hi1, dpe_data_out_hi2, dpe_data_out_hi3, dpe_data_out_hi4;
-	wire [7:0] dpe_data_out_hi5, dpe_data_out_hi6, dpe_data_out_hi7, dpe_data_out_hi8;
 	
     // Instantiate the SRAM module
     sram #(
@@ -1412,7 +1191,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	xbar_ip_module #(
         .DATA_WIDTH(8),
         .NUM_INPUTS(1),
-        .NUM_OUTPUTS(4)
+        .NUM_OUTPUTS(3)
     ) u_xbar (
         .in_data(sram_data),
         .in_sel(N_BRAM_R),
@@ -1427,7 +1206,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
     dpe dpe_R1_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1435,7 +1214,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready1),
-        .data_out({dpe_data_out_hi1, data_out1}),
+        .data_out(data_out1),
         .dpe_done(dpe_done1),
         .reg_full(reg_full_sig1[0]),
         .shift_add_done(shift_add_done1),
@@ -1445,7 +1224,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R1_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1453,7 +1232,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready2),
-        .data_out({dpe_data_out_hi2, data_out2}),
+        .data_out(data_out2),
         .dpe_done(dpe_done2),
         .reg_full(reg_full_sig1[1]),
         .shift_add_done(shift_add_done2),
@@ -1463,7 +1242,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R2_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1471,7 +1250,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready3),
-        .data_out({dpe_data_out_hi3, data_out3}),
+        .data_out(data_out3),
         .dpe_done(dpe_done3),
         .reg_full(reg_full_sig2[0]),
         .shift_add_done(shift_add_done3),
@@ -1481,7 +1260,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R2_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1489,7 +1268,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready4),
-        .data_out({dpe_data_out_hi4, data_out4}),
+        .data_out(data_out4),
         .dpe_done(dpe_done4),
         .reg_full(reg_full_sig2[1]),
         .shift_add_done(shift_add_done4),
@@ -1499,7 +1278,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R3_C1 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1507,7 +1286,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready5),
-        .data_out({dpe_data_out_hi5, data_out5}),
+        .data_out(data_out5),
         .dpe_done(dpe_done5),
         .reg_full(reg_full_sig3[0]),
         .shift_add_done(shift_add_done5),
@@ -1517,7 +1296,7 @@ module conv_layer_stacked_dpes_V4_H2 #(
 	dpe dpe_R3_C2 (
         .clk(clk),
         .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
+        .data_in(dpe_data),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -1525,58 +1304,22 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .load_output_reg(load_output_reg),
         .load_input_reg(load_input_reg),
         .MSB_SA_Ready(MSB_SA_Ready6),
-        .data_out({dpe_data_out_hi6, data_out6}),
+        .data_out(data_out6),
         .dpe_done(dpe_done6),
         .reg_full(reg_full_sig3[1]),
         .shift_add_done(shift_add_done6),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl6)
     );
 	
-	dpe dpe_R4_C1 (
-        .clk(clk),
-        .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .w_buf_en(w_buf_en),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-        .load_input_reg(load_input_reg),
-        .MSB_SA_Ready(MSB_SA_Ready7),
-        .data_out({dpe_data_out_hi7, data_out7}),
-        .dpe_done(dpe_done7),
-        .reg_full(reg_full_sig4[0]),
-        .shift_add_done(shift_add_done7),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl7)
-    );
-
-	dpe dpe_R4_C2 (
-        .clk(clk),
-        .reset(rst),
-        .data_in({8'b0, dpe_data[DATA_WIDTH-1:0]}),
-        .nl_dpe_control(nl_dpe_control),
-        .shift_add_control(shift_add_control),
-        .w_buf_en(w_buf_en),
-        .shift_add_bypass(shift_add_bypass),
-        .load_output_reg(load_output_reg),
-        .load_input_reg(load_input_reg),
-        .MSB_SA_Ready(MSB_SA_Ready8),
-        .data_out({dpe_data_out_hi8, data_out8}),
-        .dpe_done(dpe_done8),
-        .reg_full(reg_full_sig4[1]),
-        .shift_add_done(shift_add_done8),
-        .shift_add_bypass_ctrl(shift_add_bypass_ctrl8)
-    );
-	
 	assign shift_add_done = shift_add_done1 & shift_add_done2 & shift_add_done3 & shift_add_done4 &
-							shift_add_done5 & shift_add_done6 & shift_add_done7 & shift_add_done8;
+							shift_add_done5 & shift_add_done6;
 	assign shift_add_bypass_ctrl = shift_add_bypass_ctrl1 & shift_add_bypass_ctrl2 & shift_add_bypass_ctrl3 & shift_add_bypass_ctrl4 &
-								   shift_add_bypass_ctrl5 & shift_add_bypass_ctrl6 & shift_add_bypass_ctrl7 & shift_add_bypass_ctrl8;
+								   shift_add_bypass_ctrl5 & shift_add_bypass_ctrl6;
 	assign dpe_done = dpe_done1 & dpe_done2 & dpe_done3 & dpe_done4 &
-					  dpe_done5 & dpe_done6 & dpe_done7 & dpe_done8;
-	assign reg_full_sig = reg_full_sig1 & reg_full_sig2 & reg_full_sig3 & reg_full_sig4;
+					  dpe_done5 & dpe_done6;
+	assign reg_full_sig = reg_full_sig1 & reg_full_sig2 & reg_full_sig3;
 	assign MSB_SA_Ready = MSB_SA_Ready1 & MSB_SA_Ready2 & MSB_SA_Ready3 & MSB_SA_Ready4 &
-						  MSB_SA_Ready5 & MSB_SA_Ready6 & MSB_SA_Ready7 & MSB_SA_Ready8;
+						  MSB_SA_Ready5 & MSB_SA_Ready6;
 	
   	adder_dpe_N_CHANNELS_1 #(
         .N_CHANNELS(1)
@@ -1584,9 +1327,6 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .clk(clk),
         .reset(rst),
         .en(accum_ready),
-        //.load_input_reg(w_buf_en),
-        //.reg_full(reg_full_sig),
-        //.load_output_reg(load_output_reg),
         .add_done(accum_done1),
         .input1(data_out1),
         .input2(data_out3),
@@ -1599,46 +1339,13 @@ module conv_layer_stacked_dpes_V4_H2 #(
         .clk(clk),
         .reset(rst),
         .en(accum_ready),
-        //.load_input_reg(w_buf_en),
-        //.reg_full(reg_full_sig),
-        //.load_output_reg(load_output_reg),
         .add_done(accum_done2),
         .input1(data_out2),
         .input2(data_out4),
         .output_data(data_out_temp2)
     );
 	
-	adder_dpe_N_CHANNELS_1 #(
-        .N_CHANNELS(1)
-    ) adder_inst_R3C1_R4C1 (
-        .clk(clk),
-        .reset(rst),
-        .en(accum_ready),
-        //.load_input_reg(w_buf_en),
-        //.reg_full(reg_full_sig),
-        //.load_output_reg(load_output_reg),
-        .add_done(accum_done1),
-        .input1(data_out5),
-        .input2(data_out7),
-        .output_data(data_out_temp3)
-    );
-	
-	adder_dpe_N_CHANNELS_1 #(
-        .N_CHANNELS(1)
-    ) adder_inst_R3C2_R4C2 (
-        .clk(clk),
-        .reset(rst),
-        .en(accum_ready),
-        //.load_input_reg(w_buf_en),
-        //.reg_full(reg_full_sig),
-        //.load_output_reg(load_output_reg),
-        .add_done(accum_done2),
-        .input1(data_out6),
-        .input2(data_out8),
-        .output_data(data_out_temp4)
-    );
-	
-	assign accum_done = accum_done1 & accum_done2 & accum_done3 & accum_done4;
+	assign accum_done = accum_done1 & accum_done2;
 	
 	always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -1646,8 +1353,8 @@ module conv_layer_stacked_dpes_V4_H2 #(
             data_out_part1 <= 0;
             data_out_part2 <= 0;
         end else begin
-			data_out_part1 <= data_out_temp1 + data_out_temp2;
-			data_out_part2 <= data_out_temp3 + data_out_temp4;
+			data_out_part1 <= data_out_temp1 + data_out5;
+			data_out_part2 <= data_out_temp3 + data_out6;
 			data_out <= data_out_part1 + data_out_part2;
         end
     end
@@ -1695,6 +1402,880 @@ module conv_layer_stacked_dpes_V4_H2 #(
     );
 
 endmodule
+
+module conv_layer_stacked_dpes_V5_H2 #( // V5 for 5 vertical stacks
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 9,
+    parameter N_KERNELS = 1,
+    parameter KERNEL_WIDTH = 5,
+    parameter KERNEL_HEIGHT = 5,
+    parameter W = 32,
+    parameter H = 32,
+    parameter S = 1,
+    parameter DEPTH = 512,
+    parameter N_DPE_V = 5,
+    parameter N_DPE_H = 2,
+	parameter N_BRAM_R = 1,
+    parameter N_BRAM_W = 1,
+    parameter DATA_WIDTH = 8
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire [(N_CHANNELS*DATA_WIDTH)-1:0] data_in,
+    output reg [(N_KERNELS*DATA_WIDTH)-1:0] data_out,
+    output wire ready,
+    output wire valid_n
+);
+
+	// Declare arrays for DPEs
+	wire [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data;
+	wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out_arr [0:9];
+	wire [7:0] dpe_data_out_hi_arr [0:9];
+	wire shift_add_done_arr [0:9];
+	wire shift_add_bypass_ctrl_arr [0:9];
+	wire MSB_SA_Ready_arr [0:9];
+	wire dpe_done_arr [0:9];
+	wire reg_full_arr [0:9];
+	wire [N_DPE_H-1:0] reg_empty_sig;
+	wire [ADDR_WIDTH-1:0] read_address, write_address;
+	wire w_buf_en;
+	wire [1:0] nl_dpe_control;
+	wire shift_add_control;
+	wire shift_add_bypass;
+	wire load_output_reg;
+	wire load_input_reg;
+	wire [(N_BRAM_W-1):0] w_en_dec_signal;
+	wire [N_DPE_V-1:0] dpe_sel_signal;
+	wire [N_DPE_H-1:0] dpe_sel_h_signal;
+	wire [DATA_WIDTH-1:0] sram_data;
+	wire accum_ready;
+	
+	// SRAM instance
+	sram #(
+		.N_CHANNELS(1),        
+		.DEPTH(512)
+	) sram_inst_1 (
+		.clk(clk),
+		.rst(rst),
+		.w_en(w_en_dec_signal),
+		.r_addr(read_address),
+		.w_addr(write_address),
+		.sram_data_in(data_in),
+		.sram_data_out(sram_data)
+	);
+	
+	xbar_ip_module #(
+		.DATA_WIDTH(8),
+		.NUM_INPUTS(1),
+		.NUM_OUTPUTS(10)
+	) u_xbar (
+		.in_data(sram_data),
+		.in_sel(N_BRAM_R),
+		.out_sel(dpe_sel_signal),
+		.out_data(dpe_data)
+	);
+	
+	/* genvar i;
+	generate
+		for (i = 0; i < 10; i = i + 1) begin: DPE_ARRAY
+			dpe dpe_inst (
+				.clk(clk),
+				.reset(rst),
+				.data_in(dpe_data),
+				.nl_dpe_control(nl_dpe_control),
+				.shift_add_control(shift_add_control),
+				.w_buf_en(w_buf_en),
+				.shift_add_bypass(shift_add_bypass),
+				.load_output_reg(load_output_reg),
+				.load_input_reg(load_input_reg),
+				.MSB_SA_Ready(MSB_SA_Ready_arr[i]),
+				.data_out({dpe_data_out_hi_arr[i], data_out_arr[i]}),
+				.dpe_done(dpe_done_arr[i]),
+				.reg_full(reg_full_arr[i]),
+				.shift_add_done(shift_add_done_arr[i]),
+				.shift_add_bypass_ctrl(shift_add_bypass_ctrl_arr[i])
+			);
+		end
+	endgenerate */
+	
+	genvar i;
+	generate
+		for (i = 0; i < 10; i = i + 1) begin: DPE_ARRAY
+			// Input pipeline registers
+			reg [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data_reg;
+			reg [1:0] nl_dpe_control_reg;
+			reg shift_add_control_reg;
+			reg w_buf_en_reg;
+			reg shift_add_bypass_reg;
+			reg load_output_reg_reg;
+			reg load_input_reg_reg;
+
+			always @(posedge clk) begin
+				if (rst) begin
+					dpe_data_reg         <= 0;
+					nl_dpe_control_reg   <= 0;
+					shift_add_control_reg<= 0;
+					w_buf_en_reg         <= 0;
+					shift_add_bypass_reg <= 0;
+					load_output_reg_reg  <= 0;
+					load_input_reg_reg   <= 0;
+				end else begin
+					dpe_data_reg         <= dpe_data;
+					nl_dpe_control_reg   <= nl_dpe_control;
+					shift_add_control_reg<= shift_add_control;
+					w_buf_en_reg         <= w_buf_en;
+					shift_add_bypass_reg <= shift_add_bypass;
+					load_output_reg_reg  <= load_output_reg;
+					load_input_reg_reg   <= load_input_reg;
+				end
+			end
+
+			dpe dpe_inst (
+				.clk(clk),
+				.reset(rst),
+				.data_in({8'b0, dpe_data_reg}),
+				.nl_dpe_control(nl_dpe_control_reg),
+				.shift_add_control(shift_add_control_reg),
+				.w_buf_en(w_buf_en_reg),
+				.shift_add_bypass(shift_add_bypass_reg),
+				.load_output_reg(load_output_reg_reg),
+				.load_input_reg(load_input_reg_reg),
+				.MSB_SA_Ready(MSB_SA_Ready_arr[i]),
+				.data_out({dpe_data_out_hi_arr[i], data_out_arr[i]}),
+				.dpe_done(dpe_done_arr[i]),
+				.reg_full(reg_full_arr[i]),
+				.shift_add_done(shift_add_done_arr[i]),
+				.shift_add_bypass_ctrl(shift_add_bypass_ctrl_arr[i])
+			);
+		end
+	endgenerate
+
+	
+	// Manual reductions for Verilog compatibility
+	wire MSB_SA_Ready = MSB_SA_Ready_arr[0] & MSB_SA_Ready_arr[1] & MSB_SA_Ready_arr[2] & MSB_SA_Ready_arr[3] & MSB_SA_Ready_arr[4] & MSB_SA_Ready_arr[5] & MSB_SA_Ready_arr[6] & MSB_SA_Ready_arr[7] & MSB_SA_Ready_arr[8] & MSB_SA_Ready_arr[9];
+	wire dpe_done = dpe_done_arr[0] & dpe_done_arr[1] & dpe_done_arr[2] & dpe_done_arr[3] & dpe_done_arr[4] & dpe_done_arr[5] & dpe_done_arr[6] & dpe_done_arr[7] & dpe_done_arr[8] & dpe_done_arr[9];
+	wire shift_add_done = shift_add_done_arr[0] & shift_add_done_arr[1] & shift_add_done_arr[2] & shift_add_done_arr[3] & shift_add_done_arr[4] & shift_add_done_arr[5] & shift_add_done_arr[6] & shift_add_done_arr[7] & shift_add_done_arr[8] & shift_add_done_arr[9];
+	wire shift_add_bypass_ctrl = shift_add_bypass_ctrl_arr[0] & shift_add_bypass_ctrl_arr[1] & shift_add_bypass_ctrl_arr[2] & shift_add_bypass_ctrl_arr[3] & shift_add_bypass_ctrl_arr[4] & shift_add_bypass_ctrl_arr[5] & shift_add_bypass_ctrl_arr[6] & shift_add_bypass_ctrl_arr[7] & shift_add_bypass_ctrl_arr[8] & shift_add_bypass_ctrl_arr[9];
+	wire reg_full_sig = reg_full_arr[0] & reg_full_arr[1] & reg_full_arr[2] & reg_full_arr[3] & reg_full_arr[4] & reg_full_arr[5] & reg_full_arr[6] & reg_full_arr[7] & reg_full_arr[8] & reg_full_arr[9];
+	
+	// Accumulator tree
+	wire [(N_KERNELS*DATA_WIDTH)-1:0] sum1, sum2, sum3, sum4, sum5;
+	wire done1, done2, done3, done4, done5;
+	
+	adder_dpe_N_CHANNELS_1 add1 (.clk(clk), .reset(rst), .en(accum_ready), .add_done(done1), .input1(data_out_arr[0]), .input2(data_out_arr[2]), .output_data(sum1));
+	adder_dpe_N_CHANNELS_1 add2 (.clk(clk), .reset(rst), .en(accum_ready), .add_done(done2), .input1(data_out_arr[1]), .input2(data_out_arr[3]), .output_data(sum2));
+	adder_dpe_N_CHANNELS_1 add3 (.clk(clk), .reset(rst), .en(accum_ready), .add_done(done3), .input1(data_out_arr[4]), .input2(data_out_arr[6]), .output_data(sum3));
+	adder_dpe_N_CHANNELS_1 add4 (.clk(clk), .reset(rst), .en(accum_ready), .add_done(done4), .input1(data_out_arr[5]), .input2(data_out_arr[7]), .output_data(sum4));
+	adder_dpe_N_CHANNELS_1 add5 (.clk(clk), .reset(rst), .en(accum_ready), .add_done(done5), .input1(data_out_arr[8]), .input2(data_out_arr[9]), .output_data(sum5));
+	
+	assign accum_done = done1 & done2 & done3 & done4 & done5;
+	
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] temp_sum1, temp_sum2;
+	
+	always @(posedge clk or posedge rst) begin
+		if (rst) begin
+			data_out <= 0;
+			temp_sum1 <= 0;
+			temp_sum2 <= 0;
+		end else begin
+			temp_sum1 <= sum1 + sum2;
+			temp_sum2 <= sum3 + sum4 + sum5;
+			data_out <= temp_sum1 + temp_sum2;
+		end
+	end
+	
+	controller_scalable #(
+		.N_CHANNELS(N_CHANNELS),
+		.N_BRAM_R(N_BRAM_R),
+		.N_BRAM_W(N_BRAM_W),
+		.N_DPE_V(N_DPE_V),
+		.N_DPE_H(N_DPE_H),
+		.ADDR_WIDTH(ADDR_WIDTH),
+		.KERNEL_WIDTH(KERNEL_WIDTH),
+		.KERNEL_HEIGHT(KERNEL_HEIGHT),
+		.W(W),
+		.H(H),
+		.S(S)
+	) controller_scalable_inst (
+		.clk(clk),
+		.rst(rst),
+		.MSB_SA_Ready(MSB_SA_Ready),
+		.valid(valid),
+		.ready_n(ready_n),
+		.dpe_done(dpe_done),
+		.reg_full(reg_full_sig),
+		.reg_empty(reg_empty_sig),
+		.shift_add_done(shift_add_done),
+		.shift_add_bypass_ctrl(shift_add_bypass_ctrl),
+		.dpe_accum_done(accum_done),
+		.read_address(read_address),
+		.write_address(write_address),
+		.w_buf_en(w_buf_en),
+		.nl_dpe_control(nl_dpe_control),
+		.shift_add_control(shift_add_control),
+		.shift_add_bypass(shift_add_bypass),
+		.load_output_reg(load_output_reg),
+		.w_en_dec(w_en_dec_signal),
+		.load_input_reg(load_input_reg),
+		.ready(ready),
+		.valid_n(valid_n),
+		.dpe_accum_ready(accum_ready),
+		.dpe_sel(dpe_sel_signal),
+		.dpe_sel_h(dpe_sel_h_signal)
+	);
+
+endmodule
+
+module conv_layer_stacked_dpes_V10_H2 #( 
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 9,
+    parameter N_KERNELS = 1,
+    parameter KERNEL_WIDTH = 5,
+    parameter KERNEL_HEIGHT = 5,
+    parameter W = 32,
+    parameter H = 32,
+    parameter S = 1,
+    parameter DEPTH = 512,
+    parameter N_DPE_V = 10,
+    parameter N_DPE_H = 2,
+    parameter N_BRAM_R = 1,
+    parameter N_BRAM_W = 1,
+    parameter DATA_WIDTH = 8
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire [(N_CHANNELS*DATA_WIDTH)-1:0] data_in,
+    output reg [(N_KERNELS*DATA_WIDTH)-1:0] data_out,
+    output wire ready,
+    output wire valid_n
+);
+
+    wire [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data;
+    wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out_arr [0:19];
+    wire [7:0] dpe_data_out_hi_arr [0:19];
+    wire shift_add_done_arr [0:19];
+    wire shift_add_bypass_ctrl_arr [0:19];
+    wire MSB_SA_Ready_arr [0:19];
+    wire dpe_done_arr [0:19];
+    wire reg_full_arr [0:19];
+    wire [N_DPE_H-1:0] reg_empty_sig;
+    wire [ADDR_WIDTH-1:0] read_address, write_address;
+    wire w_buf_en;
+    wire [1:0] nl_dpe_control;
+    wire shift_add_control;
+    wire shift_add_bypass;
+    wire load_output_reg;
+    wire load_input_reg;
+    wire [(N_BRAM_W-1):0] w_en_dec_signal;
+    wire [N_DPE_V-1:0] dpe_sel_signal;
+    wire [N_DPE_H-1:0] dpe_sel_h_signal;
+    wire [DATA_WIDTH-1:0] sram_data;
+    wire accum_ready;
+
+    sram #(
+        .N_CHANNELS(1),        
+        .DEPTH(512)
+    ) sram_inst_1 (
+        .clk(clk),
+        .rst(rst),
+        .w_en(w_en_dec_signal),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data)
+    );
+
+    xbar_ip_module #(
+        .DATA_WIDTH(8),
+        .NUM_INPUTS(1),
+        .NUM_OUTPUTS(20)
+    ) u_xbar (
+        .in_data(sram_data),
+        .in_sel(N_BRAM_R),
+        .out_sel(dpe_sel_signal),
+        .out_data(dpe_data)
+    );
+
+    /* genvar i;
+    generate
+        for (i = 0; i < 20; i = i + 1) begin: DPE_ARRAY
+            dpe dpe_inst (
+                .clk(clk),
+                .reset(rst),
+                .data_in(dpe_data),
+                .nl_dpe_control(nl_dpe_control),
+                .shift_add_control(shift_add_control),
+                .w_buf_en(w_buf_en),
+                .shift_add_bypass(shift_add_bypass),
+                .load_output_reg(load_output_reg),
+                .load_input_reg(load_input_reg),
+                .MSB_SA_Ready(MSB_SA_Ready_arr[i]),
+                .data_out({dpe_data_out_hi_arr[i], data_out_arr[i]}),
+                .dpe_done(dpe_done_arr[i]),
+                .reg_full(reg_full_arr[i]),
+                .shift_add_done(shift_add_done_arr[i]),
+                .shift_add_bypass_ctrl(shift_add_bypass_ctrl_arr[i])
+            );
+        end
+    endgenerate */
+	
+	genvar i;
+    generate
+        for (i = 0; i < 20; i = i + 1) begin: DPE_ARRAY
+            reg [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data_temp;
+            reg [1:0] nl_dpe_control_temp;
+            reg shift_add_control_temp;
+            reg w_buf_en_temp;
+            reg shift_add_bypass_temp;
+            reg load_output_reg_temp;
+            reg load_input_reg_temp;
+            always @(posedge clk) begin
+                if (rst) begin
+                    dpe_data_temp <= 0;
+                    nl_dpe_control_temp <= 0;
+                    shift_add_control_temp <= 0;
+                    w_buf_en_temp <= 0;
+                    shift_add_bypass_temp <= 0;
+                    load_output_reg_temp <= 0;
+                    load_input_reg_temp <= 0;
+                end else begin
+                    dpe_data_temp <= dpe_data;
+                    nl_dpe_control_temp <= nl_dpe_control;
+                    shift_add_control_temp <= shift_add_control;
+                    w_buf_en_temp <= w_buf_en;
+                    shift_add_bypass_temp <= shift_add_bypass;
+                    load_output_reg_temp <= load_output_reg;
+                    load_input_reg_temp <= load_input_reg;
+                end
+            end
+            dpe dpe_inst (
+                .clk(clk),
+                .reset(rst),
+                .data_in({8'b0, dpe_data_temp}),
+                .nl_dpe_control(nl_dpe_control_temp),
+                .shift_add_control(shift_add_control_temp),
+                .w_buf_en(w_buf_en_temp),
+                .shift_add_bypass(shift_add_bypass_temp),
+                .load_output_reg(load_output_reg_temp),
+                .load_input_reg(load_input_reg_temp),
+                .MSB_SA_Ready(MSB_SA_Ready_arr[i]),
+                .data_out({dpe_data_out_hi_arr[i], data_out_arr[i]}),
+                .dpe_done(dpe_done_arr[i]),
+                .reg_full(reg_full_arr[i]),
+                .shift_add_done(shift_add_done_arr[i]),
+                .shift_add_bypass_ctrl(shift_add_bypass_ctrl_arr[i])
+            );
+        end
+    endgenerate
+
+    // Manual AND reductions
+    wire MSB_SA_Ready = MSB_SA_Ready_arr[0] & MSB_SA_Ready_arr[1] & MSB_SA_Ready_arr[2] & MSB_SA_Ready_arr[3] & MSB_SA_Ready_arr[4] & MSB_SA_Ready_arr[5] & MSB_SA_Ready_arr[6] & MSB_SA_Ready_arr[7] & MSB_SA_Ready_arr[8] & MSB_SA_Ready_arr[9] & MSB_SA_Ready_arr[10] & MSB_SA_Ready_arr[11] & MSB_SA_Ready_arr[12] & MSB_SA_Ready_arr[13] & MSB_SA_Ready_arr[14] & MSB_SA_Ready_arr[15] & MSB_SA_Ready_arr[16] & MSB_SA_Ready_arr[17] & MSB_SA_Ready_arr[18] & MSB_SA_Ready_arr[19];
+    wire dpe_done = dpe_done_arr[0] & dpe_done_arr[1] & dpe_done_arr[2] & dpe_done_arr[3] & dpe_done_arr[4] & dpe_done_arr[5] & dpe_done_arr[6] & dpe_done_arr[7] & dpe_done_arr[8] & dpe_done_arr[9] & dpe_done_arr[10] & dpe_done_arr[11] & dpe_done_arr[12] & dpe_done_arr[13] & dpe_done_arr[14] & dpe_done_arr[15] & dpe_done_arr[16] & dpe_done_arr[17] & dpe_done_arr[18] & dpe_done_arr[19];
+    wire shift_add_done = shift_add_done_arr[0] & shift_add_done_arr[1] & shift_add_done_arr[2] & shift_add_done_arr[3] & shift_add_done_arr[4] & shift_add_done_arr[5] & shift_add_done_arr[6] & shift_add_done_arr[7] & shift_add_done_arr[8] & shift_add_done_arr[9] & shift_add_done_arr[10] & shift_add_done_arr[11] & shift_add_done_arr[12] & shift_add_done_arr[13] & shift_add_done_arr[14] & shift_add_done_arr[15] & shift_add_done_arr[16] & shift_add_done_arr[17] & shift_add_done_arr[18] & shift_add_done_arr[19];
+    wire shift_add_bypass_ctrl = shift_add_bypass_ctrl_arr[0] & shift_add_bypass_ctrl_arr[1] & shift_add_bypass_ctrl_arr[2] & shift_add_bypass_ctrl_arr[3] & shift_add_bypass_ctrl_arr[4] & shift_add_bypass_ctrl_arr[5] & shift_add_bypass_ctrl_arr[6] & shift_add_bypass_ctrl_arr[7] & shift_add_bypass_ctrl_arr[8] & shift_add_bypass_ctrl_arr[9] & shift_add_bypass_ctrl_arr[10] & shift_add_bypass_ctrl_arr[11] & shift_add_bypass_ctrl_arr[12] & shift_add_bypass_ctrl_arr[13] & shift_add_bypass_ctrl_arr[14] & shift_add_bypass_ctrl_arr[15] & shift_add_bypass_ctrl_arr[16] & shift_add_bypass_ctrl_arr[17] & shift_add_bypass_ctrl_arr[18] & shift_add_bypass_ctrl_arr[19];
+    wire reg_full_sig = reg_full_arr[0] & reg_full_arr[1] & reg_full_arr[2] & reg_full_arr[3] & reg_full_arr[4] & reg_full_arr[5] & reg_full_arr[6] & reg_full_arr[7] & reg_full_arr[8] & reg_full_arr[9] & reg_full_arr[10] & reg_full_arr[11] & reg_full_arr[12] & reg_full_arr[13] & reg_full_arr[14] & reg_full_arr[15] & reg_full_arr[16] & reg_full_arr[17] & reg_full_arr[18] & reg_full_arr[19];
+
+    wire [(N_KERNELS*DATA_WIDTH)-1:0] sum[0:9];
+    wire done[0:9];
+
+    /* generate
+        for (i = 0; i < 10; i = i + 1) begin: ADDER_LAYER_1
+            adder_dpe_N_CHANNELS_1 add_inst (
+                .clk(clk),
+                .reset(rst),
+                .en(accum_ready),
+                .add_done(done[i]),
+                .input1(data_out_arr[2*i]),
+                .input2(data_out_arr[2*i + 1]),
+                .output_data(sum[i])
+            );
+        end
+    endgenerate */
+	
+	genvar i;
+		generate
+			for (i = 0; i < 10; i = i + 1) begin: ADDER_LAYER_1
+				// Declare pipeline registers for each input
+				reg [(DATA_WIDTH-1):0] input1_reg, input2_reg;
+				reg accum_ready_reg;
+		
+				always @(posedge clk) begin
+					if (rst) begin
+						input1_reg <= 0;
+						input2_reg <= 0;
+						accum_ready_reg <= 0;
+					end else begin
+						input1_reg <= data_out_arr[2*i];
+						input2_reg <= data_out_arr[2*i + 1];
+						accum_ready_reg <= accum_ready;
+					end
+				end
+		
+				adder_dpe_N_CHANNELS_1 add_inst (
+					.clk(clk),
+					.reset(rst),
+					.en(accum_ready_reg),
+					.add_done(done[i]),
+					.input1(input1_reg),
+					.input2(input2_reg),
+					.output_data(sum[i])
+				);
+			end
+		endgenerate
+
+    assign accum_done = done[0] & done[1] & done[2] & done[3] & done[4] & done[5] & done[6] & done[7] & done[8] & done[9];
+
+    /* reg [(N_KERNELS*DATA_WIDTH)-1:0] level2_sum1, level2_sum2;
+    reg [(N_KERNELS*DATA_WIDTH)-1:0] final_sum;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            data_out <= 0;
+            level2_sum1 <= 0;
+            level2_sum2 <= 0;
+            final_sum <= 0;
+        end else begin
+            level2_sum1 <= sum[0] + sum[1] + sum[2] + sum[3] + sum[4];
+            level2_sum2 <= sum[5] + sum[6] + sum[7] + sum[8] + sum[9];
+            final_sum <= level2_sum1 + level2_sum2;
+            data_out <= final_sum;
+        end
+    end */
+	
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s0_0, s0_1, s0_2, s0_3, s0_4;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s1_0, s1_1, s1_2;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s2_0;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] final_sum;
+
+	always @(posedge clk or posedge rst) begin
+		if (rst) begin
+			data_out <= 0;
+			s0_0 <= 0; s0_1 <= 0; s0_2 <= 0; s0_3 <= 0; s0_4 <= 0;
+			s1_0 <= 0; s1_1 <= 0; s1_2 <= 0;
+			s2_0 <= 0;
+			final_sum <= 0;
+		end else if (accum_done) begin
+			// Stage 0
+			s0_0 <= sum[0] + sum[1];
+			s0_1 <= sum[2] + sum[3];
+			s0_2 <= sum[4] + sum[5];
+			s0_3 <= sum[6] + sum[7];
+			s0_4 <= sum[8] + sum[9];
+	
+			// Stage 1
+			s1_0 <= s0_0 + s0_1;
+			s1_1 <= s0_2 + s0_3;
+	
+			// Stage 2
+			s1_2 <= s1_0 + s1_1;
+	
+			// Stage 3
+			s2_0 <= s1_2 + s0_4;
+	
+			// Stage 4
+			final_sum <= s2_0;
+			data_out <= final_sum;
+		end
+	end
+
+    controller_scalable #(
+        .N_CHANNELS(N_CHANNELS),
+        .N_BRAM_R(N_BRAM_R),
+        .N_BRAM_W(N_BRAM_W),
+        .N_DPE_V(N_DPE_V),
+        .N_DPE_H(N_DPE_H),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .KERNEL_WIDTH(KERNEL_WIDTH),
+        .KERNEL_HEIGHT(KERNEL_HEIGHT),
+        .W(W),
+        .H(H),
+        .S(S)
+    ) controller_scalable_inst (
+        .clk(clk),
+        .rst(rst),
+        .MSB_SA_Ready(MSB_SA_Ready),
+        .valid(valid),
+        .ready_n(ready_n),
+        .dpe_done(dpe_done),
+        .reg_full(reg_full_sig),
+        .reg_empty(reg_empty_sig),
+        .shift_add_done(shift_add_done),
+        .shift_add_bypass_ctrl(shift_add_bypass_ctrl),
+        .dpe_accum_done(accum_done),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .nl_dpe_control(nl_dpe_control),
+        .shift_add_control(shift_add_control),
+        .shift_add_bypass(shift_add_bypass),
+        .load_output_reg(load_output_reg),
+        .w_en_dec(w_en_dec_signal),
+        .load_input_reg(load_input_reg),
+        .ready(ready),
+        .valid_n(valid_n),
+        .dpe_accum_ready(accum_ready),
+        .dpe_sel(dpe_sel_signal),
+        .dpe_sel_h(dpe_sel_h_signal)
+    );
+
+endmodule
+
+module conv_layer_stacked_dpes_V18_H2 #( 
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 9,
+    parameter N_KERNELS = 1,
+    parameter KERNEL_WIDTH = 5,
+    parameter KERNEL_HEIGHT = 5,
+    parameter W = 32,
+    parameter H = 32,
+    parameter S = 1,
+    parameter DEPTH = 512,
+    parameter N_DPE_V = 18,
+    parameter N_DPE_H = 2,
+    parameter N_BRAM_R = 1,
+    parameter N_BRAM_W = 1,
+    parameter DATA_WIDTH = 8
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire [(N_CHANNELS*DATA_WIDTH)-1:0] data_in,
+    output reg [(N_KERNELS*DATA_WIDTH)-1:0] data_out,
+    output wire ready,
+    output wire valid_n
+);
+
+    wire [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data;
+    wire [(N_KERNELS*DATA_WIDTH)-1:0] data_out_arr [0:35];
+    wire [7:0] dpe_data_out_hi_arr [0:35];
+    wire shift_add_done_arr [0:35];
+    wire shift_add_bypass_ctrl_arr [0:35];
+    wire MSB_SA_Ready_arr [0:35];
+    wire dpe_done_arr [0:35];
+    wire reg_full_arr [0:35];
+    wire [N_DPE_H-1:0] reg_empty_sig;
+    wire [ADDR_WIDTH-1:0] read_address, write_address;
+    wire w_buf_en;
+    wire [1:0] nl_dpe_control;
+    wire shift_add_control;
+    wire shift_add_bypass;
+    wire load_output_reg;
+    wire load_input_reg;
+    wire [(N_BRAM_W-1):0] w_en_dec_signal;
+    wire [N_DPE_V-1:0] dpe_sel_signal;
+    wire [N_DPE_H-1:0] dpe_sel_h_signal;
+    wire [DATA_WIDTH-1:0] sram_data;
+    wire accum_ready;
+
+    sram #(
+        .N_CHANNELS(1),        
+        .DEPTH(512)
+    ) sram_inst_1 (
+        .clk(clk),
+        .rst(rst),
+        .w_en(w_en_dec_signal),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data)
+    );
+
+    xbar_ip_module #(
+        .DATA_WIDTH(8),
+        .NUM_INPUTS(1),
+        .NUM_OUTPUTS(36)
+    ) u_xbar (
+        .in_data(sram_data),
+        .in_sel(N_BRAM_R),
+        .out_sel(dpe_sel_signal),
+        .out_data(dpe_data)
+    );
+
+    /* genvar i;
+    generate
+        for (i = 0; i < 36; i = i + 1) begin: DPE_ARRAY
+            dpe dpe_inst (
+                .clk(clk),
+                .reset(rst),
+                .data_in(dpe_data),
+                .nl_dpe_control(nl_dpe_control),
+                .shift_add_control(shift_add_control),
+                .w_buf_en(w_buf_en),
+                .shift_add_bypass(shift_add_bypass),
+                .load_output_reg(load_output_reg),
+                .load_input_reg(load_input_reg),
+                .MSB_SA_Ready(MSB_SA_Ready_arr[i]),
+                .data_out({dpe_data_out_hi_arr[i], data_out_arr[i]}),
+                .dpe_done(dpe_done_arr[i]),
+                .reg_full(reg_full_arr[i]),
+                .shift_add_done(shift_add_done_arr[i]),
+                .shift_add_bypass_ctrl(shift_add_bypass_ctrl_arr[i])
+            );
+        end
+    endgenerate */
+	
+	genvar i;
+	generate
+		for (i = 0; i < 36; i = i + 1) begin: DPE_ARRAY
+			// Declare pipeline registers inside each generate block
+			reg [(N_KERNELS*DATA_WIDTH)-1:0] dpe_data_reg;
+			reg [1:0] nl_dpe_control_reg;
+			reg shift_add_control_reg;
+			reg w_buf_en_reg;
+			reg shift_add_bypass_reg;
+			reg load_output_reg_reg;
+			reg load_input_reg_reg;
+	
+			always @(posedge clk) begin
+				if (rst) begin
+					dpe_data_reg         <= 0;
+					nl_dpe_control_reg   <= 0;
+					shift_add_control_reg <= 0;
+					w_buf_en_reg         <= 0;
+					shift_add_bypass_reg <= 0;
+					load_output_reg_reg  <= 0;
+					load_input_reg_reg   <= 0;
+				end else begin
+					dpe_data_reg         <= dpe_data;
+					nl_dpe_control_reg   <= nl_dpe_control;
+					shift_add_control_reg <= shift_add_control;
+					w_buf_en_reg         <= w_buf_en;
+					shift_add_bypass_reg <= shift_add_bypass;
+					load_output_reg_reg  <= load_output_reg;
+					load_input_reg_reg   <= load_input_reg;
+				end
+			end
+	
+			dpe dpe_inst (
+				.clk(clk),
+				.reset(rst),
+				.data_in({8'b0, dpe_data_reg}),
+				.nl_dpe_control(nl_dpe_control_reg),
+				.shift_add_control(shift_add_control_reg),
+				.w_buf_en(w_buf_en_reg),
+				.shift_add_bypass(shift_add_bypass_reg),
+				.load_output_reg(load_output_reg_reg),
+				.load_input_reg(load_input_reg_reg),
+				.MSB_SA_Ready(MSB_SA_Ready_arr[i]),
+				.data_out({dpe_data_out_hi_arr[i], data_out_arr[i]}),
+				.dpe_done(dpe_done_arr[i]),
+				.reg_full(reg_full_arr[i]),
+				.shift_add_done(shift_add_done_arr[i]),
+				.shift_add_bypass_ctrl(shift_add_bypass_ctrl_arr[i])
+			);
+		end
+	endgenerate
+
+
+    wire MSB_SA_Ready =
+        MSB_SA_Ready_arr[0] & MSB_SA_Ready_arr[1] & MSB_SA_Ready_arr[2] & MSB_SA_Ready_arr[3] & MSB_SA_Ready_arr[4] &
+        MSB_SA_Ready_arr[5] & MSB_SA_Ready_arr[6] & MSB_SA_Ready_arr[7] & MSB_SA_Ready_arr[8] & MSB_SA_Ready_arr[9] &
+        MSB_SA_Ready_arr[10] & MSB_SA_Ready_arr[11] & MSB_SA_Ready_arr[12] & MSB_SA_Ready_arr[13] & MSB_SA_Ready_arr[14] &
+        MSB_SA_Ready_arr[15] & MSB_SA_Ready_arr[16] & MSB_SA_Ready_arr[17] & MSB_SA_Ready_arr[18] & MSB_SA_Ready_arr[19] &
+        MSB_SA_Ready_arr[20] & MSB_SA_Ready_arr[21] & MSB_SA_Ready_arr[22] & MSB_SA_Ready_arr[23] & MSB_SA_Ready_arr[24] &
+        MSB_SA_Ready_arr[25] & MSB_SA_Ready_arr[26] & MSB_SA_Ready_arr[27] & MSB_SA_Ready_arr[28] & MSB_SA_Ready_arr[29] &
+        MSB_SA_Ready_arr[30] & MSB_SA_Ready_arr[31] & MSB_SA_Ready_arr[32] & MSB_SA_Ready_arr[33] & MSB_SA_Ready_arr[34] &
+        MSB_SA_Ready_arr[35];
+
+    wire dpe_done =
+        dpe_done_arr[0] & dpe_done_arr[1] & dpe_done_arr[2] & dpe_done_arr[3] & dpe_done_arr[4] & dpe_done_arr[5] &
+        dpe_done_arr[6] & dpe_done_arr[7] & dpe_done_arr[8] & dpe_done_arr[9] & dpe_done_arr[10] & dpe_done_arr[11] &
+        dpe_done_arr[12] & dpe_done_arr[13] & dpe_done_arr[14] & dpe_done_arr[15] & dpe_done_arr[16] & dpe_done_arr[17] &
+        dpe_done_arr[18] & dpe_done_arr[19] & dpe_done_arr[20] & dpe_done_arr[21] & dpe_done_arr[22] & dpe_done_arr[23] &
+        dpe_done_arr[24] & dpe_done_arr[25] & dpe_done_arr[26] & dpe_done_arr[27] & dpe_done_arr[28] & dpe_done_arr[29] &
+        dpe_done_arr[30] & dpe_done_arr[31] & dpe_done_arr[32] & dpe_done_arr[33] & dpe_done_arr[34] & dpe_done_arr[35];
+
+    wire shift_add_done =
+        shift_add_done_arr[0] & shift_add_done_arr[1] & shift_add_done_arr[2] & shift_add_done_arr[3] & shift_add_done_arr[4] &
+        shift_add_done_arr[5] & shift_add_done_arr[6] & shift_add_done_arr[7] & shift_add_done_arr[8] & shift_add_done_arr[9] &
+        shift_add_done_arr[10] & shift_add_done_arr[11] & shift_add_done_arr[12] & shift_add_done_arr[13] & shift_add_done_arr[14] &
+        shift_add_done_arr[15] & shift_add_done_arr[16] & shift_add_done_arr[17] & shift_add_done_arr[18] & shift_add_done_arr[19] &
+        shift_add_done_arr[20] & shift_add_done_arr[21] & shift_add_done_arr[22] & shift_add_done_arr[23] & shift_add_done_arr[24] &
+        shift_add_done_arr[25] & shift_add_done_arr[26] & shift_add_done_arr[27] & shift_add_done_arr[28] & shift_add_done_arr[29] &
+        shift_add_done_arr[30] & shift_add_done_arr[31] & shift_add_done_arr[32] & shift_add_done_arr[33] & shift_add_done_arr[34] &
+        shift_add_done_arr[35];
+
+    wire shift_add_bypass_ctrl =
+        shift_add_bypass_ctrl_arr[0] & shift_add_bypass_ctrl_arr[1] & shift_add_bypass_ctrl_arr[2] & shift_add_bypass_ctrl_arr[3] & shift_add_bypass_ctrl_arr[4] &
+        shift_add_bypass_ctrl_arr[5] & shift_add_bypass_ctrl_arr[6] & shift_add_bypass_ctrl_arr[7] & shift_add_bypass_ctrl_arr[8] & shift_add_bypass_ctrl_arr[9] &
+        shift_add_bypass_ctrl_arr[10] & shift_add_bypass_ctrl_arr[11] & shift_add_bypass_ctrl_arr[12] & shift_add_bypass_ctrl_arr[13] & shift_add_bypass_ctrl_arr[14] &
+        shift_add_bypass_ctrl_arr[15] & shift_add_bypass_ctrl_arr[16] & shift_add_bypass_ctrl_arr[17] & shift_add_bypass_ctrl_arr[18] & shift_add_bypass_ctrl_arr[19] &
+        shift_add_bypass_ctrl_arr[20] & shift_add_bypass_ctrl_arr[21] & shift_add_bypass_ctrl_arr[22] & shift_add_bypass_ctrl_arr[23] & shift_add_bypass_ctrl_arr[24] &
+        shift_add_bypass_ctrl_arr[25] & shift_add_bypass_ctrl_arr[26] & shift_add_bypass_ctrl_arr[27] & shift_add_bypass_ctrl_arr[28] & shift_add_bypass_ctrl_arr[29] &
+        shift_add_bypass_ctrl_arr[30] & shift_add_bypass_ctrl_arr[31] & shift_add_bypass_ctrl_arr[32] & shift_add_bypass_ctrl_arr[33] & shift_add_bypass_ctrl_arr[34] &
+        shift_add_bypass_ctrl_arr[35];
+
+    wire reg_full_sig =
+        reg_full_arr[0] & reg_full_arr[1] & reg_full_arr[2] & reg_full_arr[3] & reg_full_arr[4] & reg_full_arr[5] &
+        reg_full_arr[6] & reg_full_arr[7] & reg_full_arr[8] & reg_full_arr[9] & reg_full_arr[10] & reg_full_arr[11] &
+        reg_full_arr[12] & reg_full_arr[13] & reg_full_arr[14] & reg_full_arr[15] & reg_full_arr[16] & reg_full_arr[17] &
+        reg_full_arr[18] & reg_full_arr[19] & reg_full_arr[20] & reg_full_arr[21] & reg_full_arr[22] & reg_full_arr[23] &
+        reg_full_arr[24] & reg_full_arr[25] & reg_full_arr[26] & reg_full_arr[27] & reg_full_arr[28] & reg_full_arr[29] &
+        reg_full_arr[30] & reg_full_arr[31] & reg_full_arr[32] & reg_full_arr[33] & reg_full_arr[34] & reg_full_arr[35];
+
+    wire [(N_KERNELS*DATA_WIDTH)-1:0] sum[0:17];
+    wire done[0:17];
+
+    /* generate
+        for (i = 0; i < 18; i = i + 1) begin: ADDER_LAYER_1
+            adder_dpe_N_CHANNELS_1 add_inst (
+                .clk(clk),
+                .reset(rst),
+                .en(accum_ready),
+                .add_done(done[i]),
+                .input1(data_out_arr[2*i]),
+                .input2(data_out_arr[2*i + 1]),
+                .output_data(sum[i])
+            );
+        end
+    endgenerate */
+	
+	genvar i;
+	generate
+		for (i = 0; i < 18; i = i + 1) begin: ADDER_LAYER_1
+			// Declare pipeline registers
+			reg [DATA_WIDTH-1:0] input1_reg;
+			reg [DATA_WIDTH-1:0] input2_reg;
+			reg accum_ready_reg;
+	
+			always @(posedge clk) begin
+				if (rst) begin
+					input1_reg <= 0;
+					input2_reg <= 0;
+					accum_ready_reg <= 0;
+				end else begin
+					input1_reg <= data_out_arr[2*i];
+					input2_reg <= data_out_arr[2*i + 1];
+					accum_ready_reg <= accum_ready;
+				end
+			end
+	
+			adder_dpe_N_CHANNELS_1 add_inst (
+				.clk(clk),
+				.reset(rst),
+				.en(accum_ready_reg),
+				.add_done(done[i]),
+				.input1(input1_reg),
+				.input2(input2_reg),
+				.output_data(sum[i])
+			);
+		end
+	endgenerate
+
+
+    wire accum_done =
+        done[0] & done[1] & done[2] & done[3] & done[4] & done[5] & done[6] & done[7] & done[8] & done[9] &
+        done[10] & done[11] & done[12] & done[13] & done[14] & done[15] & done[16] & done[17];
+
+    /* reg [(N_KERNELS*DATA_WIDTH)-1:0] temp_sum;
+    integer k;
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            temp_sum <= 0;
+            data_out <= 0;
+        end else begin
+            temp_sum = 0;
+            for (k = 0; k < 18; k = k + 1)
+                temp_sum = temp_sum + sum[k];
+            data_out <= temp_sum;
+        end
+    end */
+	
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s0_0, s0_1, s0_2, s0_3, s0_4, s0_5, s0_6, s0_7, s0_8;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s1_0, s1_1, s1_2, s1_3;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s2_0, s2_1;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] s3_0;
+	reg [(N_KERNELS*DATA_WIDTH)-1:0] final_sum;
+	
+	always @(posedge clk or posedge rst) begin
+		if (rst) begin
+			s0_0 <= 0; s0_1 <= 0; s0_2 <= 0; s0_3 <= 0; s0_4 <= 0;
+			s0_5 <= 0; s0_6 <= 0; s0_7 <= 0; s0_8 <= 0;
+			s1_0 <= 0; s1_1 <= 0; s1_2 <= 0; s1_3 <= 0;
+			s2_0 <= 0; s2_1 <= 0;
+			s3_0 <= 0;
+			final_sum <= 0;
+			data_out <= 0;
+		end else if (accum_done) begin
+			// Stage 0 (9 adds)
+			s0_0 <= sum[0] + sum[1];
+			s0_1 <= sum[2] + sum[3];
+			s0_2 <= sum[4] + sum[5];
+			s0_3 <= sum[6] + sum[7];
+			s0_4 <= sum[8] + sum[9];
+			s0_5 <= sum[10] + sum[11];
+			s0_6 <= sum[12] + sum[13];
+			s0_7 <= sum[14] + sum[15];
+			s0_8 <= sum[16] + sum[17];
+	
+			// Stage 1 (4 adds)
+			s1_0 <= s0_0 + s0_1;
+			s1_1 <= s0_2 + s0_3;
+			s1_2 <= s0_4 + s0_5;
+			s1_3 <= s0_6 + s0_7;
+	
+			// Stage 2 (2 adds)
+			s2_0 <= s1_0 + s1_1;
+			s2_1 <= s1_2 + s1_3;
+	
+			// Stage 3 (1 add)
+			s3_0 <= s2_0 + s2_1;
+	
+			// Stage 4 (final + leftover s0_8)
+			final_sum <= s3_0 + s0_8;
+	
+			data_out <= final_sum;
+		end
+	end
+
+
+    controller_scalable #(
+        .N_CHANNELS(N_CHANNELS),
+        .N_BRAM_R(N_BRAM_R),
+        .N_BRAM_W(N_BRAM_W),
+        .N_DPE_V(N_DPE_V),
+        .N_DPE_H(N_DPE_H),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .KERNEL_WIDTH(KERNEL_WIDTH),
+        .KERNEL_HEIGHT(KERNEL_HEIGHT),
+        .W(W),
+        .H(H),
+        .S(S)
+    ) controller_scalable_inst (
+        .clk(clk),
+        .rst(rst),
+        .MSB_SA_Ready(MSB_SA_Ready),
+        .valid(valid),
+        .ready_n(ready_n),
+        .dpe_done(dpe_done),
+        .reg_full(reg_full_sig),
+        .reg_empty(reg_empty_sig),
+        .shift_add_done(shift_add_done),
+        .shift_add_bypass_ctrl(shift_add_bypass_ctrl),
+        .dpe_accum_done(accum_done),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .nl_dpe_control(nl_dpe_control),
+        .shift_add_control(shift_add_control),
+        .shift_add_bypass(shift_add_bypass),
+        .load_output_reg(load_output_reg),
+        .w_en_dec(w_en_dec_signal),
+        .load_input_reg(load_input_reg),
+        .ready(ready),
+        .valid_n(valid_n),
+        .dpe_accum_ready(accum_ready),
+        .dpe_sel(dpe_sel_signal),
+        .dpe_sel_h(dpe_sel_h_signal)
+    );
+
+endmodule
+
 
 module controller_scalable #(
     parameter N_CHANNELS = 1,
@@ -1984,52 +2565,6 @@ module controller_scalable #(
 
 endmodule
 
-module global_controller #(
-    parameter N_Layers = 1        
-)(
-    input wire clk,              
-    input wire rst,             
-    input wire ready_L1,     // trigger/signal from nl_dpe indicating new data can be read
-    input wire valid_Ln,            // Valid signal to enable new operation
-    input wire valid,
-    output reg ready,                 // Ready signal indicating operation is done
-    output reg valid_L1,
-    output reg ready_Ln
-);
-    
-    wire busy;
-    reg stall;     
-
-    // valid and ready control
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            //valid_L1 <= 1'b0;
-            //ready <= 1'b0;
-            stall <= 0;
-        end else begin
-
-            if (stall) begin
-                ready_Ln <= 1'b0;
-            end else begin
-                ready_Ln <= 1'b1;
-            end
-
-            if(~valid) begin
-                stall <= 0;
-            end else begin
-                stall <= 1;
-            end            
-        end
-    end
-
-    always @* begin
-        ready <= ready_L1;
-        valid_L1 <= valid;
-    end
-
-
-endmodule
-
 module sram #(
     parameter N_CHANNELS = 1,
     parameter DATA_WIDTH = 8*N_CHANNELS,  // Data width (default: 8 bits) 8 x number of channels
@@ -2068,9 +2603,9 @@ endmodule
 
 module activation_layer1 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
+    parameter ADDR_WIDTH = 10,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 1024,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -2205,6 +2740,7 @@ module relu_activation_parallel_N_CHANNELS_1 #(
         end
     end
 endmodule
+
 
 
 module pooling_controller #(
@@ -2352,9 +2888,9 @@ endmodule
 
 module pool_layer1 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
+    parameter ADDR_WIDTH = 10,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 1024,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -2511,100 +3047,11 @@ module max_pooling_N_CHANNELS_1 #(
     end
 endmodule
 
-
-
 module activation_layer2 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
+    parameter ADDR_WIDTH = 8,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
-    parameter KERNEL_SIZE = 2
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire layer_done,
-    input wire [DATA_WIDTH-1:0] data_in,
-    output wire ready,
-    output wire valid_n,
-    output wire [DATA_WIDTH-1:0] data_out
-);
-
-    // Wires for interconnections
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] pooling_control;
-    wire load_output_reg;
-    wire w_en;
-    wire en;
-    wire reg_full;
-    wire pooling_done;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
-
-    // Instantiate pooling_controller
-    pooling_controller #(
-        .N_CHANNELS(N_CHANNELS),
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
-    ) pooling_ctrl_inst (
-        .clk(clk),
-        .rst(rst),
-        .pooling_done(pooling_done),
-        .valid(valid),
-        .ready_n(ready_n),
-        .layer_done(layer_done),
-        .reg_full(reg_full),
-        .read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .p_en(en),
-        .pooling_control(pooling_control),
-        .load_output_reg(load_output_reg),
-        .w_en(w_en),
-        .ready(ready),
-        .valid_n(valid_n)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(1),
-        .DEPTH(512)
-    ) sram_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data_in)
-    );
-
-    // Instantiate ReLu_PE
-    relu_activation_parallel_N_CHANNELS_1 #(
-        .N_CHANNELS(N_CHANNELS)
-    ) relu_inst (
-        .clk(clk),
-        .reset(rst),
-        .en(en),
-        .load_input_reg(w_buf_en),
-        .reg_full(reg_full),
-        .load_output_reg(load_output_reg),
-        .activation_done(pooling_done),
-        .sram_data_in(sram_data_in),
-        .sram_data_out(data_out)
-    );
-
-endmodule
-
-module activation_layer4 #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
-    parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -2687,11 +3134,11 @@ module activation_layer4 #(
 
 endmodule
 
-module residual_layer2 #(
+module pool_layer2 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 4,
+    parameter ADDR_WIDTH = 8,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -2700,7 +3147,6 @@ module residual_layer2 #(
     input wire ready_n,
     input wire layer_done,
     input wire [DATA_WIDTH-1:0] data_in,
-    input wire [DATA_WIDTH-1:0] data_in2,
     output wire ready,
     output wire valid_n,
     output wire [DATA_WIDTH-1:0] data_out
@@ -2717,7 +3163,6 @@ module residual_layer2 #(
     wire reg_full;
     wire pooling_done;
     wire [DATA_WIDTH-1:0] sram_data_in;
-    wire [DATA_WIDTH-1:0] sram_data_in2;
     //wire [8*N_CHANNELS-1:0] sram_data_out;
 
     // Instantiate pooling_controller
@@ -2760,42 +3205,27 @@ module residual_layer2 #(
     );
 
     // Instantiate max_pooling_28x28_pipelined
-    adder_dpe_N_CHANNELS_1_with_reg #(
-        .N_CHANNELS(1)
-    ) adder_inst (
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
         .clk(clk),
         .reset(rst),
         .en(en),
         .load_input_reg(w_buf_en),
         .reg_full(reg_full),
         .load_output_reg(load_output_reg),
-        .add_done(pooling_done),
-        .input1(sram_data_in),
-        .input2(sram_data_in2),
-        .output_data(data_out)
-    );
-	
-	// Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram2_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in2),
-        .sram_data_out(sram_data_in2)
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
     );
 
 endmodule
 
-/* module accumulation_layer #(
+module accumulation_layer2 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
+    parameter ADDR_WIDTH = 8,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -2893,7 +3323,423 @@ endmodule
         .sram_data_out(sram_data_in2)
     );
 
-endmodule */
+endmodule
+
+module accumulation_layer3 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 6,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer5 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer7 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module accumulation_layer9 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
 
 module adder_dpe_N_CHANNELS_1 #(
     parameter N_CHANNELS = 1  // Number of channels
@@ -3047,377 +3893,11 @@ module adder_dpe_N_CHANNELS_1_with_reg #(
     end
 endmodule
 
-
-module pool_layer4 #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
-    parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
-    parameter KERNEL_SIZE = 2
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire layer_done,
-    input wire [DATA_WIDTH-1:0] data_in,
-    output wire ready,
-    output wire valid_n,
-    output wire [DATA_WIDTH-1:0] data_out
-);
-
-    // Wires for interconnections
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] pooling_control;
-    wire load_output_reg;
-    wire w_en;
-    wire en;
-    wire reg_full;
-    wire pooling_done;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
-
-    // Instantiate pooling_controller
-    pooling_controller #(
-        .N_CHANNELS(N_CHANNELS),
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
-    ) pooling_ctrl_inst (
-        .clk(clk),
-        .rst(rst),
-        .pooling_done(pooling_done),
-        .valid(valid),
-        .ready_n(ready_n),
-        .layer_done(layer_done),
-        .reg_full(reg_full),
-        .read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .p_en(en),
-        .pooling_control(pooling_control),
-        .load_output_reg(load_output_reg),
-        .w_en(w_en),
-        .ready(ready),
-        .valid_n(valid_n)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data_in)
-    );
-
-    // Instantiate max_pooling_28x28_pipelined
-    max_pooling_N_CHANNELS_1 #(
-        .N_CHANNELS(N_CHANNELS)
-    ) max_pooling_inst (
-        .clk(clk),
-        .reset(rst),
-        .en(en),
-        .load_input_reg(w_buf_en),
-        .reg_full(reg_full),
-        .load_output_reg(load_output_reg),
-        .pooling_done(pooling_done),
-        .sram_data_in(sram_data_in),
-        .sram_data_out(data_out)
-    );
-
-endmodule
-
-module activation_layer7 #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
-    parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
-    parameter KERNEL_SIZE = 2
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire layer_done,
-    input wire [DATA_WIDTH-1:0] data_in,
-    output wire ready,
-    output wire valid_n,
-    output wire [DATA_WIDTH-1:0] data_out
-);
-
-    // Wires for interconnections
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] pooling_control;
-    wire load_output_reg;
-    wire w_en;
-    wire en;
-    wire reg_full;
-    wire pooling_done;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
-
-    // Instantiate pooling_controller
-    pooling_controller #(
-        .N_CHANNELS(N_CHANNELS),
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
-    ) pooling_ctrl_inst (
-        .clk(clk),
-        .rst(rst),
-        .pooling_done(pooling_done),
-        .valid(valid),
-        .ready_n(ready_n),
-        .layer_done(layer_done),
-        .reg_full(reg_full),
-        .read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .p_en(en),
-        .pooling_control(pooling_control),
-        .load_output_reg(load_output_reg),
-        .w_en(w_en),
-        .ready(ready),
-        .valid_n(valid_n)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data_in)
-    );
-
-    // Instantiate ReLu_PE
-    relu_activation_parallel_N_CHANNELS_1 #(
-        .N_CHANNELS(N_CHANNELS)
-    ) relu_inst (
-        .clk(clk),
-        .reset(rst),
-        .en(en),
-        .load_input_reg(w_buf_en),
-        .reg_full(reg_full),
-        .load_output_reg(load_output_reg),
-        .activation_done(pooling_done),
-        .sram_data_in(sram_data_in),
-        .sram_data_out(data_out)
-    );
-
-endmodule
-
-module residual_layer1 #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 8,
-    parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
-    parameter KERNEL_SIZE = 2
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire layer_done,
-    input wire [DATA_WIDTH-1:0] data_in,
-    input wire [DATA_WIDTH-1:0] data_in2,
-    output wire ready,
-    output wire valid_n,
-    output wire [DATA_WIDTH-1:0] data_out
-);
-
-    // Wires for interconnections
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] pooling_control;
-    wire load_output_reg;
-    wire w_en;
-    wire en;
-    wire reg_full;
-    wire pooling_done;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    wire [DATA_WIDTH-1:0] sram_data_in2;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
-
-    // Instantiate pooling_controller
-    pooling_controller #(
-        .N_CHANNELS(N_CHANNELS),
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
-    ) pooling_ctrl_inst (
-        .clk(clk),
-        .rst(rst),
-        .pooling_done(pooling_done),
-        .valid(valid),
-        .ready_n(ready_n),
-        .layer_done(layer_done),
-        .reg_full(reg_full),
-        .read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .p_en(en),
-        .pooling_control(pooling_control),
-        .load_output_reg(load_output_reg),
-        .w_en(w_en),
-        .ready(ready),
-        .valid_n(valid_n)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data_in)
-    );
-
-    // Instantiate max_pooling_28x28_pipelined
-    adder_dpe_N_CHANNELS_1_with_reg #(
-        .N_CHANNELS(1)
-    ) adder_inst (
-        .clk(clk),
-        .reset(rst),
-        .en(en),
-        .load_input_reg(w_buf_en),
-        .reg_full(reg_full),
-        .load_output_reg(load_output_reg),
-        .add_done(pooling_done),
-        .input1(sram_data_in),
-        .input2(sram_data_in2),
-        .output_data(data_out)
-    );
-	
-	// Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram2_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in2),
-        .sram_data_out(sram_data_in2)
-    );
-
-endmodule
-
-module pool_layer3 #(
-    parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
-    parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
-    parameter KERNEL_SIZE = 2
-)(
-    input wire clk,
-    input wire rst,
-    input wire valid,
-    input wire ready_n,
-    input wire layer_done,
-    input wire [DATA_WIDTH-1:0] data_in,
-    output wire ready,
-    output wire valid_n,
-    output wire [DATA_WIDTH-1:0] data_out
-);
-
-    // Wires for interconnections
-    wire [ADDR_WIDTH-1:0] read_address;
-    wire [ADDR_WIDTH-1:0] write_address;
-    wire w_buf_en;
-    wire [1:0] pooling_control;
-    wire load_output_reg;
-    wire w_en;
-    wire en;
-    wire reg_full;
-    wire pooling_done;
-    wire [DATA_WIDTH-1:0] sram_data_in;
-    //wire [8*N_CHANNELS-1:0] sram_data_out;
-
-    // Instantiate pooling_controller
-    pooling_controller #(
-        .N_CHANNELS(N_CHANNELS),
-        .ADDR_WIDTH(ADDR_WIDTH),
-        .N_KERNELS(1),
-        .KERNEL_SIZE(2)        
-    ) pooling_ctrl_inst (
-        .clk(clk),
-        .rst(rst),
-        .pooling_done(pooling_done),
-        .valid(valid),
-        .ready_n(ready_n),
-        .layer_done(layer_done),
-        .reg_full(reg_full),
-        .read_address(read_address),
-        .write_address(write_address),
-        .w_buf_en(w_buf_en),
-        .p_en(en),
-        .pooling_control(pooling_control),
-        .load_output_reg(load_output_reg),
-        .w_en(w_en),
-        .ready(ready),
-        .valid_n(valid_n)
-    );
-
-    // Instantiate sram
-    sram #(
-        .N_CHANNELS(N_CHANNELS),
-        .DEPTH(DEPTH)
-    ) sram_inst (
-        .clk(clk),
-		.rst(rst),
-        .w_en(w_en),
-        .r_addr(read_address),
-        .w_addr(write_address),
-        .sram_data_in(data_in),
-        .sram_data_out(sram_data_in)
-    );
-
-    // Instantiate max_pooling_28x28_pipelined
-    max_pooling_N_CHANNELS_1 #(
-        .N_CHANNELS(N_CHANNELS)
-    ) max_pooling_inst (
-        .clk(clk),
-        .reset(rst),
-        .en(en),
-        .load_input_reg(w_buf_en),
-        .reg_full(reg_full),
-        .load_output_reg(load_output_reg),
-        .pooling_done(pooling_done),
-        .sram_data_in(sram_data_in),
-        .sram_data_out(data_out)
-    );
-
-endmodule
-
 module activation_layer3 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
+    parameter ADDR_WIDTH = 6,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -3500,11 +3980,11 @@ module activation_layer3 #(
 
 endmodule
 
-module pool_layer2 #(
+module activation_layer4 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 9,
+    parameter ADDR_WIDTH = 6,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 512,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -3570,28 +4050,29 @@ module pool_layer2 #(
         .sram_data_out(sram_data_in)
     );
 
-    // Instantiate max_pooling_28x28_pipelined
-    max_pooling_N_CHANNELS_1 #(
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
         .N_CHANNELS(N_CHANNELS)
-    ) max_pooling_inst (
+    ) relu_inst (
         .clk(clk),
         .reset(rst),
         .en(en),
         .load_input_reg(w_buf_en),
         .reg_full(reg_full),
         .load_output_reg(load_output_reg),
-        .pooling_done(pooling_done),
+        .activation_done(pooling_done),
         .sram_data_in(sram_data_in),
         .sram_data_out(data_out)
     );
 
 endmodule
+
 
 module activation_layer5 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
+    parameter ADDR_WIDTH = 4,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -3676,9 +4157,96 @@ endmodule
 
 module activation_layer6 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
+    parameter ADDR_WIDTH = 4,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate ReLu_PE
+    relu_activation_parallel_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) relu_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .activation_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module activation_layer7 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -3763,9 +4331,9 @@ endmodule
 
 module activation_layer8 #(
     parameter N_CHANNELS = 1,
-    parameter ADDR_WIDTH = 7,
+    parameter ADDR_WIDTH = 2,
     parameter DATA_WIDTH = N_CHANNELS*8,
-    parameter DEPTH = 128,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
     parameter KERNEL_SIZE = 2
 )(
     input wire clk,
@@ -3848,91 +4416,710 @@ module activation_layer8 #(
 
 endmodule
 
-/* module xbar_module #(
-    parameter DATA_WIDTH = 8,
-    parameter NUM_INPUTS = 2,
-    parameter NUM_OUTPUTS = 2
+
+module pool_layer3 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 6,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 64,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
 )(
-    input  wire [NUM_INPUTS*DATA_WIDTH-1:0]  in_data,
-    input  wire [$clog2(NUM_INPUTS)-1:0]     in_sel,   // Select input for each output
-    input  wire [$clog2(NUM_OUTPUTS)-1:0]    out_sel,   // Select output for each input
-    output reg  [NUM_OUTPUTS*DATA_WIDTH-1:0] out_data
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
 );
 
-integer i, j;
-reg [DATA_WIDTH-1:0] in_data_arr [NUM_INPUTS-1:0];
-reg [DATA_WIDTH-1:0] out_data_arr [NUM_OUTPUTS-1:0];
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
 
-always @(*) begin
-    // Unpack input data
-    for (i = 0; i < NUM_INPUTS; i = i + 1) begin
-        in_data_arr[i] = in_data[i*DATA_WIDTH +: DATA_WIDTH];
-    end
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
 
-    // Default outputs to zero
-    for (j = 0; j < NUM_OUTPUTS; j = j + 1) begin
-        out_data_arr[j] = {DATA_WIDTH{1'b0}};
-    end
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
 
-    // Route data based on selectors
-    for (j = 0; j < NUM_OUTPUTS; j = j + 1) begin
-        for (i = 0; i < NUM_INPUTS; i = i + 1) begin
-            if ((in_sel[j] == i) && (out_sel[i] == j)) begin
-                out_data_arr[j] = in_data_arr[i];
-            end
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module pool_layer4 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module pool_layer5 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    max_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module avg_pool_layer1 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 2,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 4,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    avg_pooling_N_CHANNELS_1 #(
+        .N_CHANNELS(N_CHANNELS)
+    ) max_pooling_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .pooling_done(pooling_done),
+        .sram_data_in(sram_data_in),
+        .sram_data_out(data_out)
+    );
+
+endmodule
+
+module residual_layer1 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 8,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 256,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+	
+	// Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module residual_layer2 #(
+    parameter N_CHANNELS = 1,
+    parameter ADDR_WIDTH = 4,
+    parameter DATA_WIDTH = N_CHANNELS*8,
+    parameter DEPTH = 16,   // Memory depth, can be replaced by 2^ADDR_WIDTH
+    parameter KERNEL_SIZE = 2
+)(
+    input wire clk,
+    input wire rst,
+    input wire valid,
+    input wire ready_n,
+    input wire layer_done,
+    input wire [DATA_WIDTH-1:0] data_in,
+    input wire [DATA_WIDTH-1:0] data_in2,
+    output wire ready,
+    output wire valid_n,
+    output wire [DATA_WIDTH-1:0] data_out
+);
+
+    // Wires for interconnections
+    wire [ADDR_WIDTH-1:0] read_address;
+    wire [ADDR_WIDTH-1:0] write_address;
+    wire w_buf_en;
+    wire [1:0] pooling_control;
+    wire load_output_reg;
+    wire w_en;
+    wire en;
+    wire reg_full;
+    wire pooling_done;
+    wire [DATA_WIDTH-1:0] sram_data_in;
+    wire [DATA_WIDTH-1:0] sram_data_in2;
+    //wire [8*N_CHANNELS-1:0] sram_data_out;
+
+    // Instantiate pooling_controller
+    pooling_controller #(
+        .N_CHANNELS(N_CHANNELS),
+        .ADDR_WIDTH(ADDR_WIDTH),
+        .N_KERNELS(1),
+        .KERNEL_SIZE(2)        
+    ) pooling_ctrl_inst (
+        .clk(clk),
+        .rst(rst),
+        .pooling_done(pooling_done),
+        .valid(valid),
+        .ready_n(ready_n),
+        .layer_done(layer_done),
+        .reg_full(reg_full),
+        .read_address(read_address),
+        .write_address(write_address),
+        .w_buf_en(w_buf_en),
+        .p_en(en),
+        .pooling_control(pooling_control),
+        .load_output_reg(load_output_reg),
+        .w_en(w_en),
+        .ready(ready),
+        .valid_n(valid_n)
+    );
+
+    // Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in),
+        .sram_data_out(sram_data_in)
+    );
+
+    // Instantiate max_pooling_28x28_pipelined
+    adder_dpe_N_CHANNELS_1 #(
+        .N_CHANNELS(1)
+    ) adder_inst (
+        .clk(clk),
+        .reset(rst),
+        .en(en),
+        .load_input_reg(w_buf_en),
+        .reg_full(reg_full),
+        .load_output_reg(load_output_reg),
+        .add_done(pooling_done),
+        .input1(sram_data_in),
+        .input2(sram_data_in2),
+        .output_data(data_out)
+    );
+	
+	// Instantiate sram
+    sram #(
+        .N_CHANNELS(N_CHANNELS),
+        .DEPTH(DEPTH)
+    ) sram2_inst (
+        .clk(clk),
+		.rst(rst),
+        .w_en(w_en),
+        .r_addr(read_address),
+        .w_addr(write_address),
+        .sram_data_in(data_in2),
+        .sram_data_out(sram_data_in2)
+    );
+
+endmodule
+
+module avg_pooling_N_CHANNELS_1 #(
+    parameter N_CHANNELS = 1  // Number of channels, each channel has 4 inputs
+)(
+    input wire clk,
+    input wire reset,
+    input wire en,
+    input wire load_input_reg,  // Signal to start filling data into registers
+    output reg reg_full,        // Signal indicating all registers are full
+    input wire load_output_reg, // Signal to load the output registers
+    output reg pooling_done,    // Internal signal indicating pooling is complete
+    input wire [8*N_CHANNELS-1:0] sram_data_in,  // Input data from SRAM for all channels
+    output reg [8*N_CHANNELS-1:0] sram_data_out    // Max-pooling output for all channels
+);
+
+    reg [7:0] input_0_0, input_1_0, input_2_0, input_3_0; // Channel 0
+
+    reg [7:0] max_0_1_0, max_2_3_0, max_pool_value_0; // Max values for channel 0
+
+    reg [1:0] read_count;  // Counter to track the number of read operations
+	
+	reg [9:0] sum_0_1, sum_2_3, total_sum;
+
+    // Block 1: Reading and Storing Data
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            input_0_0 <= 8'd0; input_1_0 <= 8'd0; input_2_0 <= 8'd0; input_3_0 <= 8'd0;
+            read_count <= 2'd0;
+            reg_full <= 1'b0;
+        end else if (en && load_input_reg) begin
+            // Increment read count and load inputs based on read count
+            read_count <= read_count + 1;
+            case (read_count)
+                2'd0: begin
+                    input_0_0 <= sram_data_in[7:0];
+                end
+                2'd1: begin
+                    input_1_0 <= sram_data_in[7:0];
+                end
+                2'd2: begin
+                    input_2_0 <= sram_data_in[7:0];
+                end
+                2'd3: begin
+                    input_3_0 <= sram_data_in[7:0];
+                    reg_full <= 1'b1; // Indicate that all inputs are filled
+                end
+            endcase
+        end else begin
+            reg_full <= 1'b0;
         end
     end
 
-    // Pack output data
-    for (j = 0; j < NUM_OUTPUTS; j = j + 1) begin
-        out_data[j*DATA_WIDTH +: DATA_WIDTH] = out_data_arr[j];
-    end
-end
-
-endmodule */
-
-/* module xbar_ip_module #(
-    parameter DATA_WIDTH = 8,
-    parameter NUM_INPUTS = 4,
-    parameter NUM_OUTPUTS = 4
-)(
-    input  wire [NUM_INPUTS*DATA_WIDTH-1:0]  in_data,
-    input  wire [$clog2(NUM_INPUTS)-1:0]     in_sel,   // Select input for each output
-    input  wire [$clog2(NUM_OUTPUTS)-1:0]    out_sel,   // Select output for each input
-    output reg  [NUM_OUTPUTS*DATA_WIDTH-1:0] out_data
-);
-
-integer i, j;
-reg [DATA_WIDTH-1:0] in_data_arr [NUM_INPUTS-1:0];
-reg [DATA_WIDTH-1:0] out_data_arr [NUM_OUTPUTS-1:0];
-
-always @(*) begin
-    // Unpack input data
-    for (i = 0; i < NUM_INPUTS; i = i + 1) begin
-        in_data_arr[i] = in_data[i*DATA_WIDTH +: DATA_WIDTH];
-    end
-
-    // Default outputs to zero
-    for (j = 0; j < NUM_OUTPUTS; j = j + 1) begin
-        out_data_arr[j] = {DATA_WIDTH{1'b0}};
-    end
-
-    // Route data based on selectors
-    for (j = 0; j < NUM_OUTPUTS; j = j + 1) begin
-        for (i = 0; i < NUM_INPUTS; i = i + 1) begin
-            if ((in_sel == i) && (out_sel == j)) begin
-                out_data_arr[j] = in_data_arr[i];
-            end
+    // Block 2: Max-Pooling Logic
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sum_0_1 <= 10'd0; sum_2_3 <= 10'd0; total_sum <= 10'd0;
+            max_pool_value_0 <= 8'd0;
+            pooling_done <= 1'b0;
+        end else if (reg_full) begin
+            sum_0_1 <= input_0_0 + input_1_0;
+            sum_2_3 <= input_2_0 + input_3_0;
+            total_sum <= sum_0_1 + sum_2_3;
+            max_pool_value_0 <= total_sum[9:2];  // divide by 4
+            pooling_done <= 1'b1;
+        end else begin
+            pooling_done <= 1'b0;
         end
     end
 
-    // Pack output data
-    for (j = 0; j < NUM_OUTPUTS; j = j + 1) begin
-        out_data[j*DATA_WIDTH +: DATA_WIDTH] = out_data_arr[j];
+    // Block 3: Storing Max-Pooled Data into Output Registers
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            sram_data_out[7:0] <= 8'd0;
+        end else if (load_output_reg) begin
+            sram_data_out[7:0] <= max_pool_value_0;
+        end
     end
-end
+endmodule
 
-endmodule */
+
+module dummy_adder_residual_N_CHANNELS_1 #(
+    parameter N_CHANNELS = 1  // Number of channels
+)(
+    input wire clk,
+    input wire reset,
+    input wire en,
+    input wire load_input_reg,  // Signal to start filling data into registers
+    output reg reg_full,        // Signal indicating all registers are full
+    input wire load_output_reg, // Signal to load the output registers
+    output reg add_done,        // Internal signal indicating the addition is complete
+    input wire [8*N_CHANNELS-1:0] input1,  // First set of 8-bit inputs for all channels
+    output reg [8*N_CHANNELS-1:0] output_data  // 8-bit addition output for all channels
+);
+
+    reg [7:0] in_data1_0;  // Input storage for first set of inputs for channel 0
+    reg [8:0] sum_0;       // 9-bit sum storage for channel 0 (includes LSB to drop)
+    reg [7:0] result_0;    // 8-bit result after dropping LSB for channel 0
+
+    reg [7:0] channel_index;  // Index to track current channel being processed
+    reg processing;           // Flag to indicate if processing is ongoing
+
+    // Block 1: Reading and Storing Data
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            in_data1_0 <= 8'd0;
+            reg_full <= 1'b0;
+        end else if (en && load_input_reg) begin
+            in_data1_0 <= input1[7:0];
+            reg_full <= 1'b1; // Indicate that all registers are full
+        end else begin
+            reg_full <= 1'b0;
+        end
+    end
+
+    // Block 2: Addition Logic with LSB Dropped
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            result_0 <= 8'd0;
+            channel_index <= 8'd0;
+            processing <= 1'b0;
+            add_done <= 1'b0;
+        end else if (reg_full && !processing) begin
+            sum_0 <= in_data1_0 + 8'd1;
+            result_0 <= sum_0[8:1];  // Right shift to drop LSB
+            processing <= 1'b1;
+        end else if (processing) begin
+            channel_index <= channel_index + 1;
+            if (channel_index == (N_CHANNELS - 1)) begin
+                add_done <= 1'b1;
+                processing <= 1'b0;
+                channel_index <= 8'd0;
+            end else begin
+                processing <= 1'b0;
+            end
+        end else begin
+            add_done <= 1'b0;
+        end
+    end
+
+    // Block 3: Storing Output Data into Output Registers
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            output_data[7:0] <= 8'd0;
+        end else if (load_output_reg) begin
+            output_data[7:0] <= result_0;
+        end
+    end
+endmodule
 
 module xbar_ip_module #(
     parameter DATA_WIDTH = 8,

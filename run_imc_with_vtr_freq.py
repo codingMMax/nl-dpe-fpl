@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""
+Wrapper script that:
+  1. Parses VTR logs to extract actual Fmax for each design
+  2. Patches fpga_specs.freq in the IMC config JSON (creates a temp copy)
+  3. Runs the IMC analytical simulator with the VTR-reported frequency
+  4. Reports latency and energy metrics side-by-side for NL-DPE vs Azure-Lily
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# ── paths ──────────────────────────────────────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parent
+AZURELILY_ROOT = PROJECT_ROOT / "azurelily"
+IMC_TEST = AZURELILY_ROOT / "IMC" / "test.py"
+
+DEFAULT_CONFIGS = {
+    "nl_dpe":    AZURELILY_ROOT / "IMC" / "configs" / "nl_dpe.json",
+    "azurelily": AZURELILY_ROOT / "IMC" / "configs" / "azure_lily.json",
+}
+
+DEFAULT_VTR_DIRS = {
+    "nl_dpe":    PROJECT_ROOT / "nl_dpe_rtl",
+    "azurelily": PROJECT_ROOT / "azurelily_TACO_experiments",
+}
+
+# model name in IMC test.py  →  VTR design folder name
+MODEL_TO_DESIGN = {
+    "lenet":  "lenet_1_channel",
+    "resnet": "resnet_1_channel",
+}
+
+# ── VTR log parsing ───────────────────────────────────────────────────
+FMAX_RE = re.compile(
+    r"Final critical path delay\s*\(least slack\)\s*:\s*([\d.]+)\s*ns,\s*Fmax:\s*([\d.]+)\s*MHz"
+)
+
+
+def parse_fmax(vtr_dir: Path, design: str) -> float | None:
+    """Return Fmax (MHz) from the VPR log, or None if not found."""
+    log = vtr_dir / design / "vpr_stdout.log"
+    if not log.is_file():
+        return None
+    text = log.read_text(errors="replace")
+    matches = FMAX_RE.findall(text)
+    if not matches:
+        return None
+    # take the last match (in case log was appended)
+    return float(matches[-1][1])
+
+
+# ── IMC runner ────────────────────────────────────────────────────────
+def make_patched_config(orig_json: Path, freq_mhz: float) -> Path:
+    """Copy the config JSON, overwrite fpga_specs.freq, return temp path."""
+    with open(orig_json) as f:
+        cfg = json.load(f)
+    cfg["fpga_specs"]["freq"] = freq_mhz
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", prefix="imc_cfg_", delete=False
+    )
+    json.dump(cfg, tmp, indent=4)
+    tmp.close()
+    return Path(tmp.name)
+
+
+# regex to pull key metrics from IMC stdout
+RE_ENERGY_LAYER  = re.compile(r"Energy total \(by layer\):\s+([\d.]+)\s+pJ")
+RE_ENERGY_BREAK  = re.compile(r"Energy total \(by breakdown\):\s+([\d.]+)\s+pJ")
+RE_LAT_CRIT      = re.compile(r"Latency total \(critical path\):\s+([\d.]+)\s+ns")
+RE_LAT_RAW       = re.compile(r"Latency total \(raw sum\):\s+([\d.]+)\s+ns")
+
+
+def run_imc(model: str, config_json: Path, extra_args: list[str] | None = None):
+    """Run IMC/test.py and return parsed metrics dict + raw stdout."""
+    cmd = [
+        sys.executable, str(IMC_TEST),
+        "--model", model,
+        "--imc_file", str(config_json),
+    ]
+    if extra_args:
+        cmd.extend(extra_args)
+
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, cwd=str(AZURELILY_ROOT)
+    )
+    out = result.stdout + result.stderr
+
+    metrics = {}
+    for name, regex in [
+        ("energy_pJ",      RE_ENERGY_LAYER),
+        ("energy_bk_pJ",   RE_ENERGY_BREAK),
+        ("latency_ns",     RE_LAT_CRIT),
+        ("latency_raw_ns", RE_LAT_RAW),
+    ]:
+        m = regex.search(out)
+        metrics[name] = float(m.group(1)) if m else None
+
+    return metrics, out
+
+
+# ── main ──────────────────────────────────────────────────────────────
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run IMC simulator with VTR-reported FPGA frequency"
+    )
+    parser.add_argument(
+        "--models", nargs="+", default=["lenet", "resnet"],
+        help="Model names to evaluate (default: lenet resnet)",
+    )
+    parser.add_argument(
+        "--nl-dpe-dir", type=Path, default=DEFAULT_VTR_DIRS["nl_dpe"],
+        help="NL-DPE VTR output directory",
+    )
+    parser.add_argument(
+        "--azurelily-dir", type=Path, default=DEFAULT_VTR_DIRS["azurelily"],
+        help="Azure-Lily VTR output directory",
+    )
+    parser.add_argument(
+        "--nl-dpe-config", type=Path, default=DEFAULT_CONFIGS["nl_dpe"],
+        help="NL-DPE IMC config JSON",
+    )
+    parser.add_argument(
+        "--azurelily-config", type=Path, default=DEFAULT_CONFIGS["azurelily"],
+        help="Azure-Lily IMC config JSON",
+    )
+    parser.add_argument(
+        "--override-freq", type=float, default=None,
+        help="Override FPGA freq (MHz) for both architectures instead of VTR",
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true",
+        help="Print full IMC stdout for each run",
+    )
+    args = parser.parse_args()
+
+    archs = {
+        "NL-DPE": {
+            "vtr_dir":  args.nl_dpe_dir,
+            "config":   args.nl_dpe_config,
+        },
+        "Azure-Lily": {
+            "vtr_dir":  args.azurelily_dir,
+            "config":   args.azurelily_config,
+        },
+    }
+
+    for model in args.models:
+        design = MODEL_TO_DESIGN.get(model, model)
+        print(f"\n{'='*70}")
+        print(f"  Model: {model}  (VTR design: {design})")
+        print(f"{'='*70}")
+
+        results = {}
+        for arch_name, arch_info in archs.items():
+            # 1. Get frequency
+            if args.override_freq is not None:
+                freq = args.override_freq
+                freq_src = "override"
+            else:
+                freq = parse_fmax(arch_info["vtr_dir"], design)
+                freq_src = "VTR"
+                if freq is None:
+                    print(f"  [{arch_name}] WARNING: Could not parse Fmax from VTR log, using config default")
+                    freq_src = "config default"
+
+            # 2. Patch config if we have a VTR frequency
+            if freq is not None:
+                patched = make_patched_config(arch_info["config"], freq)
+            else:
+                patched = arch_info["config"]
+
+            # 3. Run IMC
+            metrics, raw_out = run_imc(model, patched)
+
+            if freq is not None and patched != arch_info["config"]:
+                patched.unlink(missing_ok=True)
+
+            results[arch_name] = {
+                "freq_mhz": freq,
+                "freq_src": freq_src,
+                **metrics,
+            }
+
+            if args.verbose:
+                print(f"\n  --- {arch_name} raw output ---")
+                for line in raw_out.strip().splitlines():
+                    print(f"    {line}")
+
+        # 4. Print comparison table
+        if len(results) == 2:
+            nl = results["NL-DPE"]
+            al = results["Azure-Lily"]
+
+            print(f"\n  {'Metric':<30} {'NL-DPE':>15} {'Azure-Lily':>15} {'Ratio':>10}")
+            print(f"  {'-'*70}")
+
+            # Frequency
+            nl_f = nl.get("freq_mhz")
+            al_f = al.get("freq_mhz")
+            nl_f_str = f"{nl_f:.1f} MHz" if nl_f else "N/A"
+            al_f_str = f"{al_f:.1f} MHz" if al_f else "N/A"
+            print(f"  {'FPGA Freq (' + nl.get('freq_src','') + ')':<30} {nl_f_str:>15} {al_f_str:>15}")
+
+            # Energy
+            nl_e = nl.get("energy_pJ")
+            al_e = al.get("energy_pJ")
+            if nl_e is not None and al_e is not None:
+                ratio = nl_e / al_e if al_e > 0 else float("inf")
+                print(f"  {'Energy (pJ)':<30} {nl_e:>15.2f} {al_e:>15.2f} {ratio:>9.3f}x")
+
+            # Latency (critical path)
+            nl_l = nl.get("latency_ns")
+            al_l = al.get("latency_ns")
+            if nl_l is not None and al_l is not None:
+                ratio = nl_l / al_l if al_l > 0 else float("inf")
+                print(f"  {'Latency critical (ns)':<30} {nl_l:>15.2f} {al_l:>15.2f} {ratio:>9.3f}x")
+
+            # Latency (raw sum)
+            nl_lr = nl.get("latency_raw_ns")
+            al_lr = al.get("latency_raw_ns")
+            if nl_lr is not None and al_lr is not None:
+                ratio = nl_lr / al_lr if al_lr > 0 else float("inf")
+                print(f"  {'Latency raw sum (ns)':<30} {nl_lr:>15.2f} {al_lr:>15.2f} {ratio:>9.3f}x")
+
+            # Throughput (inferences/sec) from critical-path latency
+            if nl_l and al_l:
+                nl_ips = 1e9 / nl_l
+                al_ips = 1e9 / al_l
+                ratio = nl_ips / al_ips if al_ips > 0 else float("inf")
+                print(f"  {'Throughput (inf/s)':<30} {nl_ips:>15.0f} {al_ips:>15.0f} {ratio:>9.3f}x")
+
+            # Energy efficiency (inf/J)
+            if nl_e and nl_l and al_e and al_l:
+                nl_eff = 1e12 / nl_e  # inferences per Joule (energy in pJ)
+                al_eff = 1e12 / al_e
+                ratio = nl_eff / al_eff if al_eff > 0 else float("inf")
+                print(f"  {'Energy eff (inf/J)':<30} {nl_eff:>15.0f} {al_eff:>15.0f} {ratio:>9.3f}x")
+
+    print()
+
+
+if __name__ == "__main__":
+    main()
