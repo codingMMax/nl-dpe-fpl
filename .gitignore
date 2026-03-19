@@ -1,3 +1,25 @@
-*lenet_1_channel
-*resnet_1_channel
-__pycache__
+# Python
+__pycache__/
+
+# Editor / tool artifacts
+.vscode/
+.codex_runs/
+
+# VTR output directories (workload builds)
+*/lenet_1_channel/
+*/resnet_1_channel/
+*/vgg11_1_channel/
+*/attention_head_1_channel/
+
+# DSE VTR outputs and intermediate configs
+dse/round1/
+dse/round2/
+dse/configs/
+dse/rtl/
+
+# DSE reproducible outputs (regenerate via plot_round1.py)
+dse/results/*.log
+dse/results/*.pdf
+
+# Staging for cleanup
+*/to_delete/

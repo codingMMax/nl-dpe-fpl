@@ -216,16 +216,16 @@
         <!-- output can be broken down into smaller bit widths minimum size 1 -->
       </output_ports>
 	  </model>
-	  <model name="dpe">
+	  <!-- <model name="dpe">
       <input_ports>
-		<port name="data_in" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="reset" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="nl_dpe_control" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="shift_add_control" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="w_buf_en" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="shift_add_bypass" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="load_output_reg" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
-		<port name="load_input_reg" clock="clk" combinational_sink_ports="data_out MSB_SA_Ready dpe_done reg_full shift_add_done shift_add_bypass_ctrl"/>
+		<port name="data_in" clock="clk"/>
+		<port name="reset" clock="clk"/>
+		<port name="nl_dpe_control" clock="clk"/>
+		<port name="shift_add_control" clock="clk"/>
+		<port name="w_buf_en" clock="clk"/>
+		<port name="shift_add_bypass" clock="clk"/>
+		<port name="load_output_reg" clock="clk"/>
+		<port name="load_input_reg" clock="clk"/>
 		<port name="clk" is_clock="1"/>
       </input_ports>
       <output_ports>
@@ -236,7 +236,7 @@
 		<port name="shift_add_done" clock="clk"/>
 		<port name="shift_add_bypass_ctrl" clock="clk"/>
       </output_ports>
-    </model>
+    </model> -->
     <!-- Used inside DSPs. 
          Fixed point multiplication.
          ODIN infers these when * sign appears in RTL. -->
@@ -655,20 +655,19 @@
       </sub_tile>
     </tile>
 	<!-- <tile name="wc" area="270000"> -->
-	<tile name="wc" height="5" width="6" area="2320000">
+	<!-- <tile name="wc" height="8" width="9" area="2320000">
       <sub_tile name="wc">
         <equivalent_sites>
           <site pb_type="wc" pin_mapping="direct"/>
         </equivalent_sites>
 		<input name="I" num_pins="23"/>
-		<input name="reset" num_pins="1" is_non_clock_global="true"/>
+		<input name="reset" num_pins="1"/>
 		<clock name="clk" num_pins="1"/>
 		<output name="O" num_pins="21"/>
 		<fc in_type="frac" in_val="0.15" out_type="frac" out_val="0.10" />
         <pinlocations pattern="spread"/>
-		<switchblock_locations pattern="all"/>
       </sub_tile>
-    </tile>
+    </tile> -->
     <tile name="dsp_top" height="4" width="1" area="253779">
       <sub_tile name="dsp_top">
         <equivalent_sites>
@@ -732,7 +731,7 @@
       <corners type="EMPTY" priority="102"/>
       <fill type="clb" priority="10"/>
       <col type="dsp_top" startx="6" starty="1" repeatx="16" priority="20"/>
-      <col type="wc" startx="6" starty="1" repeatx="16" priority="22"/>
+      <!-- <col type="wc" startx="6" starty="1" repeatx="16" priority="22"/> -->
       <col type="memory" startx="2" starty="1" repeatx="16" priority="20"/>
     </auto_layout>
     <!--
@@ -824,38 +823,13 @@
       <col type="dsp_top" startx="6" starty="1" repeatx="16" priority="20"/>
       <col type="memory" startx="2" starty="1" repeatx="16" priority="20"/>
     </fixed_layout> -->
-	<!-- <fixed_layout name="azure_lily_with_dpe_550_550" width="550" height="550">
+	<fixed_layout name="azure_lily_baseline_800_800" width="800" height="800">
       <perimeter type="io" priority="101"/>
       <corners type="EMPTY" priority="102"/>
       <fill type="clb" priority="10"/>
-	  
-      <col type="dsp_top" startx="4" starty="1" repeatx="10" priority="20"/>
-	  <col type="memory"  startx="6" starty="1" repeatx="10" priority="21"/>
-      <col type="wc"      startx="8" starty="1" repeatx="80" priority="22"/>
-    </fixed_layout> -->
-      	<fixed_layout name="dense_dpe" width="550" height="550">
-      <perimeter type="io" priority="101"/>
-      <corners type="EMPTY" priority="102"/>
-      <fill type="clb" priority="10"/>
-	  
-      <col type="dsp_top" startx="4" starty="1" repeatx="10" priority="20"/>
-	    <col type="memory"  startx="6" starty="1" repeatx="10" priority="21"/>
-
-      <col type="wc"      startx="68" starty="1"  priority="22"/> 
-      <!-- <col type="wc"      startx="88" starty="1"  priority="22"/>  -->
-      <col type="wc"      startx="108" starty="1"  priority="22"/>
-																  
-      <col type="wc"      startx="248" starty="1"  priority="22"/>
-      <!-- <col type="wc"      startx="268" starty="1"  priority="22"/> -->
-      <col type="wc"      startx="288" starty="1"  priority="22"/>
-																  
-      <col type="wc"      startx="348" starty="1"  priority="22"/>
-      <!-- <col type="wc"      startx="368" starty="1"  priority="22"/> -->
-      <col type="wc"      startx="388" starty="1"  priority="22"/>
-																  
-      <col type="wc"      startx="448" starty="1"  priority="22"/>
-      <!-- <col type="wc"      startx="468" starty="1"  priority="22"/> -->
-      <col type="wc"      startx="488" starty="1"  priority="22"/>
+      <col type="dsp_top" startx="4" starty="1" repeatx="16" priority="20"/>
+      <!-- <col type="wc" startx="6" starty="1" repeatx="16" priority="22"/> -->
+      <col type="memory" startx="2" starty="1" repeatx="16" priority="20"/>
     </fixed_layout>
   </layout>
   <device>
@@ -1302,7 +1276,7 @@
     <!-- Define general purpose logic block (CLB) ends -->
 	
 	<!-- Define pb_type IMC begin -->
-	<pb_type name="wc">
+	<!-- <pb_type name="wc">
 		<input name="I" num_pins="23"/>
 		<input name="reset" num_pins="1" is_non_clock_global="true"/>
 		<clock name="clk" num_pins="1"/>
@@ -1314,7 +1288,6 @@
 			<clock name="clk" num_pins="1"/>
 		    <output name="out" num_pins="21"/>
 			
-			<!-- imc: dpe block -->
 			<pb_type name="nl_dpe" blif_model=".subckt dpe" num_pb="1">
 				<input name="data_in" num_pins="16" port_class="in"/>
 				<input name="nl_dpe_control" num_pins="2" port_class="in"/>
@@ -1332,64 +1305,6 @@
 				<output name="shift_add_done" num_pins="1" port_class="out"/>
 				<output name="shift_add_bypass_ctrl" num_pins="1" port_class="out"/>
 				
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.data_in" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.data_in" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.data_in" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.data_in" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.data_in" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.data_in" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.nl_dpe_control" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.nl_dpe_control" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.nl_dpe_control" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.nl_dpe_control" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.nl_dpe_control" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.nl_dpe_control" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_control" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_control" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_control" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_control" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_control" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_control" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.w_buf_en" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.w_buf_en" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.w_buf_en" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.w_buf_en" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.w_buf_en" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.w_buf_en" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_bypass" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_bypass" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_bypass" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_bypass" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_bypass" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.shift_add_bypass" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_output_reg" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_output_reg" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_output_reg" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_output_reg" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_output_reg" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_output_reg" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_input_reg" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_input_reg" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_input_reg" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_input_reg" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_input_reg" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.load_input_reg" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-				
-				<delay_constant max="2.14e-9" in_port="nl_dpe.reset" out_port="nl_dpe.data_out"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.reset" out_port="nl_dpe.MSB_SA_Ready"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.reset" out_port="nl_dpe.dpe_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.reset" out_port="nl_dpe.reg_full"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.reset" out_port="nl_dpe.shift_add_done"/>
-				<delay_constant max="2.14e-9" in_port="nl_dpe.reset" out_port="nl_dpe.shift_add_bypass_ctrl"/>
-
-				
 				<T_setup value="18.91e-12" port="nl_dpe.data_in" clock="clk"/>
 				<T_setup value="18.91e-12" port="nl_dpe.nl_dpe_control" clock="clk"/>
 				<T_setup value="18.91e-12" port="nl_dpe.shift_add_control" clock="clk"/>
@@ -1398,21 +1313,7 @@
 				<T_setup value="18.91e-12" port="nl_dpe.load_output_reg" clock="clk"/>
 				<T_setup value="18.91e-12" port="nl_dpe.load_input_reg" clock="clk"/>
 				<T_setup value="18.91e-12" port="nl_dpe.reset" clock="clk"/>
-				<T_setup value="18.91e-12" port="nl_dpe.data_out" clock="clk"/>
-				<T_setup value="18.91e-12" port="nl_dpe.MSB_SA_Ready" clock="clk"/>
-				<T_setup value="18.91e-12" port="nl_dpe.dpe_done" clock="clk"/>
-				<T_setup value="18.91e-12" port="nl_dpe.reg_full" clock="clk"/>
-				<T_setup value="18.91e-12" port="nl_dpe.shift_add_done" clock="clk"/>
-				<T_setup value="18.91e-12" port="nl_dpe.shift_add_bypass_ctrl" clock="clk"/>
 
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.data_in" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.nl_dpe_control" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.shift_add_control" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.w_buf_en" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.shift_add_bypass" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.load_output_reg" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.load_input_reg" clock="clk"/>
-				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.reset" clock="clk"/>
 				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.data_out" clock="clk"/>
 				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.MSB_SA_Ready" clock="clk"/>
 				<T_clock_to_Q max="60.32e-12" min="60.32e-12" port="nl_dpe.dpe_done" clock="clk"/>
@@ -1422,7 +1323,7 @@
 				
 			</pb_type>			
 		
-			<!-- imc: dpe block -->
+
 			<interconnect>
 				<direct name="dpe_in2in_data" input="wc_slice.in[15:0]" output="nl_dpe.data_in"/>
 				<direct name="dpe_in2in_control_mode" input="wc_slice.in[17:16]" output="nl_dpe.nl_dpe_control"/>
@@ -1449,7 +1350,7 @@
 			<direct name="wc_data_out" input="wc_slice.out" output="wc.O"/>
 		</interconnect>
 		<power method="sum-of-children"/>	
-	</pb_type>
+	</pb_type> -->
 	<!-- Define pb_type CAMs end -->
 
     <!-- Define DSP slice begin -->
