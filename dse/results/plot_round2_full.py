@@ -520,8 +520,8 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
     fig.subplots_adjust(left=0.08, right=0.97, top=0.95, bottom=0.10,
                         wspace=0.18, hspace=0.28)
 
-    # Collect knee-point annotations for footnote
-    footnotes = []
+    # Collect Pareto-optimal points and knee for footnotes
+    pareto_info = []  # list of (cfg, pareto_combos, knee_combo)
 
     # Layout: row 0 = configs 0,1,2; row 1 = note, config 3, config 4
     panel_positions = [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2)]
@@ -549,19 +549,21 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
         if not points:
             continue
 
-        # All points as faded scatter
-        xs = [p[0] for p in points]
-        ys = [p[1] for p in points]
-        ax.scatter(xs, ys, color=color, s=20, alpha=0.3,
-                   edgecolors="none", zorder=2)
-
         # Pareto front (minimize-minimize)
         pareto = compute_pareto_min(points)
+        pareto_set = set((p[0], p[1]) for p in pareto)
+
+        # Dominated points — hollow, visible
+        dom_xs = [p[0] for p in points if (p[0], p[1]) not in pareto_set]
+        dom_ys = [p[1] for p in points if (p[0], p[1]) not in pareto_set]
+        ax.scatter(dom_xs, dom_ys, facecolors="none", edgecolors=color,
+                   s=30, alpha=0.6, linewidths=0.8, zorder=2)
+
+        # Pareto front — filled, connected
         px = [p[0] for p in pareto]
         py = [p[1] for p in pareto]
-
-        ax.plot(px, py, color=color, linewidth=2.0, zorder=3)
-        ax.scatter(px, py, color=color, s=35, edgecolors="white",
+        ax.plot(px, py, color=color, linewidth=1.5, zorder=3)
+        ax.scatter(px, py, color=color, s=30, edgecolors="white",
                    linewidths=0.8, zorder=4)
 
         # Find and annotate knee point (optimal tradeoff)
@@ -571,7 +573,17 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
         ax.scatter([knee[0]], [knee[1]], color=color, s=100,
                    edgecolors="black", linewidths=1.5, zorder=5,
                    marker="*")
-        footnotes.append(f"{CONFIG_SHORT[cfg]}: {kd}% DSP + {kc}% CLB")
+
+        # Collect all Pareto-optimal combos for footnote
+        pareto_combos = [(p[0], p[1], p[2][0], p[2][1]) for p in pareto]
+        pareto_info.append((cfg, pareto_combos, (kd, kc)))
+
+        # Print Pareto table for sanity check
+        print(f"\n  {cfg} — {len(pareto)} Pareto-optimal points:")
+        print(f"  {'DSP%':>5} {'CLB%':>5} {'Area%':>7} {'Eff.Lat':>9} {'':>5}")
+        for area, lat, d, c in pareto_combos:
+            star = " ★" if (d, c) == (kd, kc) else ""
+            print(f"  {d:>5} {c:>5} {area:>7.2f} {lat:>9.4f}{star}")
 
         ax.set_xlabel("DPE Area (% of FPGA)", fontsize=8)
         if (row == 0 and col == 0) or (row == 1 and col == 1):
@@ -587,24 +599,48 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
     ax_note = axes[1, 0]
     ax_note.axis("off")
 
-    # Optimal configs — bold, colored per config
-    ax_note.text(-0.05, 0.95, r"Optimal ($\bigstar$) per config:",
+    # Optimal (knee) points per config
+    y_pos = 0.98
+    ax_note.text(0.0, y_pos, r"Optimal ($\bigstar$) per config:",
                  transform=ax_note.transAxes,
-                 fontsize=9, fontweight="bold", verticalalignment="top",
+                 fontsize=8.5, fontweight="bold", verticalalignment="top",
                  fontfamily="serif", color="#111111")
-    for i, (fn, cfg) in enumerate(zip(footnotes, CONFIGS)):
-        ax_note.text(-0.05, 0.82 - i * 0.13, f"  {fn}",
-                     transform=ax_note.transAxes,
-                     fontsize=8.5, verticalalignment="top",
-                     fontfamily="serif", color=CONFIG_COLORS[cfg],
-                     fontweight="bold")
+    y_pos -= 0.12
 
-    # Definition — lighter, smaller
-    ax_note.text(-0.05, 0.82 - len(footnotes) * 0.13 - 0.06,
-                 r"Eff. Latency $\propto$ 1/(replicas $\times$ freq)",
+    for cfg, combos, knee_combo in pareto_info:
+        color = CONFIG_COLORS[cfg]
+        kd, kc = knee_combo
+        line = f"{CONFIG_SHORT[cfg]}: {kd}% DSP + {kc}% CLB"
+        ax_note.text(0.0, y_pos, line,
+                     transform=ax_note.transAxes,
+                     fontsize=7.5, verticalalignment="top",
+                     fontfamily="serif", color=color,
+                     fontweight="bold")
+        y_pos -= 0.10
+
+    # Legend items (no header)
+    y_pos -= 0.06
+    ax_note.scatter([0.02], [y_pos + 0.02], s=35, c="#555555",
+                    edgecolors="white", linewidths=0.8,
+                    transform=ax_note.transAxes, zorder=5, clip_on=False)
+    ax_note.text(0.06, y_pos + 0.015, "Pareto-optimal (non-dominated)",
                  transform=ax_note.transAxes,
                  fontsize=8, verticalalignment="top",
-                 fontfamily="serif", color="#666666", style="italic")
+                 fontfamily="serif", color="#555555")
+    y_pos -= 0.10
+    ax_note.scatter([0.02], [y_pos + 0.02], s=35, facecolors="none",
+                    edgecolors="#555555", linewidths=0.8,
+                    transform=ax_note.transAxes, zorder=5, clip_on=False)
+    ax_note.text(0.06, y_pos + 0.015, "Dominated",
+                 transform=ax_note.transAxes,
+                 fontsize=8, verticalalignment="top",
+                 fontfamily="serif", color="#555555")
+    y_pos -= 0.12
+    ax_note.text(0.0, y_pos,
+                 r"Eff. Latency $\propto$ 1 / (replicas $\times$ freq)",
+                 transform=ax_note.transAxes,
+                 fontsize=8.5, verticalalignment="top",
+                 fontfamily="serif", color="#888888", style="italic")
 
     fig.savefig(RESULTS_DIR / "round2_full_pareto.pdf")
     print(f"Saved: {RESULTS_DIR / 'round2_full_pareto.pdf'}")
