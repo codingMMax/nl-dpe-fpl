@@ -1,7 +1,7 @@
-# SESSION_STATE.md — Last updated: 2026-03-19
+# SESSION_STATE.md — Last updated: 2026-03-20
 
 ## Current Phase
-**Round 2 full sweep COMPLETE (2026-03-19). 300/300 points × 3 seeds = 900 VTR runs finished on 120×120 grid with P = min(P_dpe, P_clb, P_bram). Three publication figures generated: aggregate scalability heatmap, per-workload heatmaps, and Pareto front (area vs effective latency). Ready for paper writing (T8/T9).**
+**All DSE experiments COMPLETE (2026-03-20). Round 2 FC (900 VTR runs) + Round 2 Attention (240 VTR runs) finished. Publication figures generated for both FC and attention: scalability heatmaps, Pareto fronts (per-config + merged), throughput ceiling plots. Writing materials consolidated in `paper/dse_writing_materials.md`. Ready for paper writing.**
 
 ## Completed Work
 
@@ -69,6 +69,30 @@
   3. Pareto front: DPE area % vs effective latency (5 configs) → `round2_full_pareto.pdf`
 - Directory: `dse/round2_full/{config}/d{d}_c{c}/{workload}/seed{1,2,3}/`
 
+### Round 2 Attention DSE (COMPLETE, 2026-03-20)
+- **80/80 points × 3 seeds = 240 VTR runs** on 120×120 grid
+- **Architecture**: (3V+4)×H DPEs per replica (3 projections + 4 DIMM stages)
+- **DIMM mapping (Fig 6c)**: DPE(I|exp/log) for nonlinear ops, CLB for add/reduce
+- **4-resource constraint**: P = min(P_dpe, P_clb, P_bram, P_dsp)
+- **Per-replica resources** (empirical VTR calibration): 145 CLBs, 64 BRAMs, 2 DSPs
+- **BRAM wall**: P capped at 7 (64 BRAMs/rep, 472 total) — hard ceiling
+- **d=100% excluded**: softmax normalization needs DSP blocks
+- **Output**: `dse/results/plots/round2_attention/round2_attention_results.csv` (80 rows)
+- **Plots**: scalability heatmap, per-config Pareto, merged Pareto, throughput ceiling
+
+### IMC Simulator Fixes (2026-03-20)
+- **mac_sv DPE(I|log)**: Added missing log-domain conversion for attention weights before log-domain matmul
+- **softmax DPE(I|exp)**: Correctly uses DPE for exp (was CLB LUT)
+- **softmax norm DPE(I|log)**: Replaces CLB inverse with DPE log
+- **DPE counting**: Updated to (3V+4)×H formula (was 3VH, missed DIMM DPEs)
+
+### Additional Publication Figures (2026-03-20)
+- FC merged Pareto: `round2_full_pareto_merged.pdf` (cross-config, NL-DPE + AL-like groups)
+- FC throughput ceiling: `round2_full_ceiling.pdf` (soft ceiling from routing degradation)
+- Attention merged Pareto: `round2_attention_pareto_merged.pdf`
+- Attention throughput ceiling: `round2_attention_ceiling.pdf` (BRAM wall)
+- All plots organized into `dse/results/plots/{round1,round2_fc,round2_attention}/`
+
 ### Cleaned Up Directories (2026-03-19)
 - Deleted: `dse/round2/` (995MB, old CLB-only sweep, OBSOLETE)
 - Deleted: `dse/round2_full/` (32GB, inconsistent grid sizes + missing BRAM cap)
@@ -98,9 +122,10 @@
 | 40-bit data width | **Complete** | All RTL, arch XML, IMC config migrated from 16-bit to 40-bit DPE bus |
 | Round 2 Part 1 (old CLB-only) | **Obsolete** | Flat throughput — CLB never stressed. Replaced by DSP+CLB sweep |
 | Round 2 Part 1 (new DSP+CLB) | **COMPLETE** | 300/300 pts × 3 seeds on 120×120. CSV + 3 publication figures generated |
-| Round 2 Part 2 (Attention) | **TODO** | Deferred until Part 1 validates methodology |
-| Paper figures (Round 2) | **COMPLETE** | 3 figures: scalability heatmap, per-workload heatmap, Pareto front |
-| Paper Q1/Q2/Q3 | **UNBLOCKED** | Q1 answered (512×128); Q2 from Round 2 Pareto; Q3 needs ACAM analysis |
+| Round 2 Part 2 (Attention) | **COMPLETE** | 80/80 pts × 3 seeds. BRAM wall at P=7. 4-resource constraint. |
+| Paper figures (Round 2) | **COMPLETE** | FC: 5 figures. Attention: 4 figures. All in dse/results/plots/ |
+| Paper Q1/Q2/Q3 | **UNBLOCKED** | Q1 answered (512×128); Q2 from Round 2 FC (soft ceiling); Q3 needs ACAM analysis |
+| Writing materials | **COMPLETE** | paper/dse_writing_materials.md consolidates all DSE details |
 
 ## Design Decisions (Rationale)
 

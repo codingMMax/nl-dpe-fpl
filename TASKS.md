@@ -40,7 +40,7 @@
   - Root cause: single GEMV doesn't create enough CLB demand
   - Old output: `dse/results/round2_results.csv` (kept for reference)
 
-- [ ] **T5-new**: Round 2 Part 1 — DSP+CLB Replacement Sweep (§11.4 of experiment plan)
+- [x] **T5-new**: Round 2 Part 1 — DSP+CLB Replacement Sweep (§11.4 of experiment plan) (COMPLETE)
   - **Methodology**: sweep DSP→DPE and CLB→DPE replacement simultaneously with GEMM data parallelism
   - DSP replacement adds compute (P replicas), CLB replacement degrades routing → Fmax drops
   - 5 DSP ratios {20%, 40%, 60%, 80%, 100%} × 4 CLB ratios {0%, 20%, 40%, 60%} = 20 points per (config, workload)
@@ -66,10 +66,13 @@
     - All 300/300 points verified feasible in dry-run
   - **Deleted old data**: `dse/round2_full/` (32GB), `dse/round2/` (995MB), `dse/sanity_40bit/`, `dse/sanity_attention/`
 
-- [ ] **T6-new**: Round 2 Part 2 — Attention Head Exploration (TODO, deferred)
-  - Structurally different workload (Q/K/V projections + DIMM + softmax)
-  - Requires parameterized attention RTL generator
-  - Will be addressed after Part 1 prototyping validates methodology
+- [x] **T6-new**: Round 2 Part 2 — Attention Head Exploration (COMPLETE, 2026-03-20)
+  - 80/80 points × 3 seeds = 240 VTR runs on 120×120 grid
+  - Architecture: (3V+4)×H DPEs/rep, DIMM stages use DPE(I|exp/log)
+  - 4-resource constraint: P = min(P_dpe, P_clb, P_bram, P_dsp)
+  - Key finding: BRAM wall at P=7 (64 BRAMs/rep, 472 total)
+  - Output: round2_attention_results.csv (80 rows), 4 publication figures
+  - Plots: scalability heatmap, per-config Pareto, merged Pareto, throughput ceiling
 
 ### P3 — Paper Results
 - [x] **T7-old**: ~~Old paper figures~~ (Round 2 plots OBSOLETE, Round 1 + Attention plots still valid)

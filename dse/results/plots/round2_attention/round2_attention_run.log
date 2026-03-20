@@ -1,0 +1,886 @@
+Round 2 Attention Sweep — DSP+CLB Replacement for Attention Head
+  DSE dir: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse
+
+Round 2 Attention Sweep — DSP+CLB Replacement
+  Configs: ['512x128', '1024x128', '1024x64', '1024x256', '512x256']
+  Workload: attention (N=128, d=128)
+  Fixed grid: 120x120
+  DSP ratios: [0.2, 0.4, 0.6, 0.8, 1.0]
+  CLB ratios: [0.0, 0.2, 0.4, 0.6]
+  Points per config: 20
+  Total: 5 configs × 20 points × 3 seeds = 300 VTR runs
+
+======================================================================
+Phase 1: Attention Feasibility Check
+======================================================================
+
+  --- 512x128 ---
+    d= 20% c=  0%  P= 2  (dpe=  2 clb= 75 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 20%  P= 7  (dpe=  8 clb= 60 bram=  7 dsp= 84)  [OK] [bram]
+    d= 20% c= 40%  P= 7  (dpe= 20 clb= 45 bram=  7 dsp= 84)  [OK] [bram]
+    d= 20% c= 60%  P= 7  (dpe= 30 clb= 30 bram=  7 dsp= 84)  [OK] [bram]
+    d= 40% c=  0%  P= 4  (dpe=  4 clb= 75 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 20%  P= 7  (dpe= 10 clb= 60 bram=  7 dsp= 63)  [OK] [bram]
+    d= 40% c= 40%  P= 7  (dpe= 22 clb= 45 bram=  7 dsp= 63)  [OK] [bram]
+    d= 40% c= 60%  P= 7  (dpe= 32 clb= 30 bram=  7 dsp= 63)  [OK] [bram]
+    d= 60% c=  0%  P= 7  (dpe=  8 clb= 75 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 20%  P= 7  (dpe= 14 clb= 60 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 40%  P= 7  (dpe= 24 clb= 45 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 60%  P= 7  (dpe= 36 clb= 30 bram=  7 dsp= 42)  [OK] [bram]
+    d= 80% c=  0%  P= 7  (dpe= 10 clb= 75 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 20%  P= 7  (dpe= 16 clb= 60 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 40%  P= 7  (dpe= 26 clb= 45 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 60%  P= 7  (dpe= 38 clb= 30 bram=  7 dsp= 20)  [OK] [bram]
+    d=100% c=  0%  P= 0  (dpe= 14 clb= 75 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 20%  P= 0  (dpe= 20 clb= 60 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 40%  P= 0  (dpe= 30 clb= 45 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 60%  P= 0  (dpe= 42 clb= 30 bram=  7 dsp=  0)  [SKIP] [none]
+    Feasible: 16/20
+
+  --- 1024x128 ---
+    d= 20% c=  0%  P= 1  (dpe=  1 clb= 75 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 20%  P= 5  (dpe=  5 clb= 60 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 40%  P= 7  (dpe= 14 clb= 45 bram=  7 dsp= 84)  [OK] [bram]
+    d= 20% c= 60%  P= 7  (dpe= 21 clb= 30 bram=  7 dsp= 84)  [OK] [bram]
+    d= 40% c=  0%  P= 2  (dpe=  2 clb= 75 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 20%  P= 7  (dpe=  7 clb= 60 bram=  7 dsp= 63)  [OK] [bram]
+    d= 40% c= 40%  P= 7  (dpe= 15 clb= 45 bram=  7 dsp= 63)  [OK] [bram]
+    d= 40% c= 60%  P= 7  (dpe= 22 clb= 30 bram=  7 dsp= 63)  [OK] [bram]
+    d= 60% c=  0%  P= 5  (dpe=  5 clb= 75 bram=  7 dsp= 42)  [OK] [dpe]
+    d= 60% c= 20%  P= 7  (dpe= 10 clb= 60 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 40%  P= 7  (dpe= 17 clb= 45 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 60%  P= 7  (dpe= 25 clb= 30 bram=  7 dsp= 42)  [OK] [bram]
+    d= 80% c=  0%  P= 7  (dpe=  7 clb= 75 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 20%  P= 7  (dpe= 11 clb= 60 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 40%  P= 7  (dpe= 18 clb= 45 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 60%  P= 7  (dpe= 27 clb= 30 bram=  7 dsp= 20)  [OK] [bram]
+    d=100% c=  0%  P= 0  (dpe= 10 clb= 75 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 20%  P= 0  (dpe= 14 clb= 60 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 40%  P= 0  (dpe= 21 clb= 45 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 60%  P= 0  (dpe= 30 clb= 30 bram=  7 dsp=  0)  [SKIP] [none]
+    Feasible: 16/20
+
+  --- 1024x64 ---
+    d= 20% c=  0%  P= 1  (dpe=  1 clb= 75 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 20%  P= 5  (dpe=  5 clb= 60 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 40%  P= 7  (dpe= 13 clb= 45 bram=  7 dsp= 84)  [OK] [bram]
+    d= 20% c= 60%  P= 7  (dpe= 20 clb= 30 bram=  7 dsp= 84)  [OK] [bram]
+    d= 40% c=  0%  P= 2  (dpe=  2 clb= 75 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 20%  P= 6  (dpe=  6 clb= 60 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 40%  P= 7  (dpe= 14 clb= 45 bram=  7 dsp= 63)  [OK] [bram]
+    d= 40% c= 60%  P= 7  (dpe= 21 clb= 30 bram=  7 dsp= 63)  [OK] [bram]
+    d= 60% c=  0%  P= 5  (dpe=  5 clb= 75 bram=  7 dsp= 42)  [OK] [dpe]
+    d= 60% c= 20%  P= 7  (dpe=  9 clb= 60 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 40%  P= 7  (dpe= 16 clb= 45 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 60%  P= 7  (dpe= 24 clb= 30 bram=  7 dsp= 42)  [OK] [bram]
+    d= 80% c=  0%  P= 6  (dpe=  6 clb= 75 bram=  7 dsp= 20)  [OK] [dpe]
+    d= 80% c= 20%  P= 7  (dpe= 10 clb= 60 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 40%  P= 7  (dpe= 17 clb= 45 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 60%  P= 7  (dpe= 25 clb= 30 bram=  7 dsp= 20)  [OK] [bram]
+    d=100% c=  0%  P= 0  (dpe=  9 clb= 75 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 20%  P= 0  (dpe= 13 clb= 60 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 40%  P= 0  (dpe= 20 clb= 45 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 60%  P= 0  (dpe= 28 clb= 30 bram=  7 dsp=  0)  [SKIP] [none]
+    Feasible: 16/20
+
+  --- 1024x256 ---
+    d= 20% c=  0%  P= 1  (dpe=  1 clb= 75 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 20%  P= 1  (dpe=  1 clb= 60 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 40%  P= 1  (dpe=  1 clb= 45 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 60%  P= 5  (dpe=  5 clb= 30 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 40% c=  0%  P= 3  (dpe=  3 clb= 75 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 20%  P= 3  (dpe=  3 clb= 60 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 40%  P= 3  (dpe=  3 clb= 45 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 60%  P= 7  (dpe=  7 clb= 30 bram=  7 dsp= 63)  [OK] [bram]
+    d= 60% c=  0%  P= 7  (dpe=  7 clb= 75 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 20%  P= 7  (dpe=  7 clb= 60 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 40%  P= 7  (dpe=  7 clb= 45 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 60%  P= 7  (dpe=  9 clb= 30 bram=  7 dsp= 42)  [OK] [bram]
+    d= 80% c=  0%  P= 7  (dpe=  9 clb= 75 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 20%  P= 7  (dpe=  9 clb= 60 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 40%  P= 7  (dpe=  9 clb= 45 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 60%  P= 7  (dpe=  9 clb= 30 bram=  7 dsp= 20)  [OK] [bram]
+    d=100% c=  0%  P= 0  (dpe= 13 clb= 75 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 20%  P= 0  (dpe= 13 clb= 60 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 40%  P= 0  (dpe= 13 clb= 45 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 60%  P= 0  (dpe= 13 clb= 30 bram=  7 dsp=  0)  [SKIP] [none]
+    Feasible: 16/20
+
+  --- 512x256 ---
+    d= 20% c=  0%  P= 1  (dpe=  1 clb= 75 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 20%  P= 3  (dpe=  3 clb= 60 bram=  7 dsp= 84)  [OK] [dpe]
+    d= 20% c= 40%  P= 7  (dpe=  7 clb= 45 bram=  7 dsp= 84)  [OK] [bram]
+    d= 20% c= 60%  P= 7  (dpe= 12 clb= 30 bram=  7 dsp= 84)  [OK] [bram]
+    d= 40% c=  0%  P= 2  (dpe=  2 clb= 75 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 20%  P= 5  (dpe=  5 clb= 60 bram=  7 dsp= 63)  [OK] [dpe]
+    d= 40% c= 40%  P= 7  (dpe=  7 clb= 45 bram=  7 dsp= 63)  [OK] [bram]
+    d= 40% c= 60%  P= 7  (dpe= 14 clb= 30 bram=  7 dsp= 63)  [OK] [bram]
+    d= 60% c=  0%  P= 5  (dpe=  5 clb= 75 bram=  7 dsp= 42)  [OK] [dpe]
+    d= 60% c= 20%  P= 7  (dpe=  7 clb= 60 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 40%  P= 7  (dpe= 10 clb= 45 bram=  7 dsp= 42)  [OK] [bram]
+    d= 60% c= 60%  P= 7  (dpe= 15 clb= 30 bram=  7 dsp= 42)  [OK] [bram]
+    d= 80% c=  0%  P= 6  (dpe=  6 clb= 75 bram=  7 dsp= 20)  [OK] [dpe]
+    d= 80% c= 20%  P= 7  (dpe=  9 clb= 60 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 40%  P= 7  (dpe= 11 clb= 45 bram=  7 dsp= 20)  [OK] [bram]
+    d= 80% c= 60%  P= 7  (dpe= 16 clb= 30 bram=  7 dsp= 20)  [OK] [bram]
+    d=100% c=  0%  P= 0  (dpe=  9 clb= 75 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 20%  P= 0  (dpe= 10 clb= 60 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 40%  P= 0  (dpe= 12 clb= 45 bram=  7 dsp=  0)  [SKIP] [none]
+    d=100% c= 60%  P= 0  (dpe= 18 clb= 30 bram=  7 dsp=  0)  [SKIP] [none]
+    Feasible: 16/20
+
+  Total feasible: 80
+
+======================================================================
+Phase 2: Generating architecture XMLs and attention RTL
+======================================================================
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c0_fixed.xml
+  Generated attn_gemm_512x128_P2.v (P=2, DPEs/rep=7, total_DPEs=14)
+  SKIP: 512x128 d20_c0 P=2
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c20_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d20_c20 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c40_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d20_c40 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c60_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d20_c60 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c0_fixed.xml
+  Generated attn_gemm_512x128_P4.v (P=4, DPEs/rep=7, total_DPEs=28)
+  SKIP: 512x128 d40_c0 P=4
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c20_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d40_c20 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c40_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d40_c40 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c60_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d40_c60 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c0_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d60_c0 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c20_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d60_c20 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c40_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d60_c40 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c60_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d60_c60 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c0_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+  SKIP: 512x128 d80_c0 P=7
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c20_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c40_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c60_fixed.xml
+  Generated attn_gemm_512x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d20_c0_fixed.xml
+  Generated attn_gemm_1024x128_P1.v (P=1, DPEs/rep=7, total_DPEs=7)
+  SKIP: 1024x128 d20_c0 P=1
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d20_c20_fixed.xml
+  Generated attn_gemm_1024x128_P5.v (P=5, DPEs/rep=7, total_DPEs=35)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d20_c40_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d20_c60_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d40_c0_fixed.xml
+  Generated attn_gemm_1024x128_P2.v (P=2, DPEs/rep=7, total_DPEs=14)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d40_c20_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d40_c40_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d40_c60_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d60_c0_fixed.xml
+  Generated attn_gemm_1024x128_P5.v (P=5, DPEs/rep=7, total_DPEs=35)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d60_c20_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d60_c40_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d60_c60_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d80_c0_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d80_c20_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d80_c40_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_d80_c60_fixed.xml
+  Generated attn_gemm_1024x128_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d20_c0_fixed.xml
+  Generated attn_gemm_1024x64_P1.v (P=1, DPEs/rep=14, total_DPEs=14)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d20_c20_fixed.xml
+  Generated attn_gemm_1024x64_P5.v (P=5, DPEs/rep=14, total_DPEs=70)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d20_c40_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d20_c60_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d40_c0_fixed.xml
+  Generated attn_gemm_1024x64_P2.v (P=2, DPEs/rep=14, total_DPEs=28)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d40_c20_fixed.xml
+  Generated attn_gemm_1024x64_P6.v (P=6, DPEs/rep=14, total_DPEs=84)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d40_c40_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d40_c60_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d60_c0_fixed.xml
+  Generated attn_gemm_1024x64_P5.v (P=5, DPEs/rep=14, total_DPEs=70)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d60_c20_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d60_c40_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d60_c60_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d80_c0_fixed.xml
+  Generated attn_gemm_1024x64_P6.v (P=6, DPEs/rep=14, total_DPEs=84)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d80_c20_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d80_c40_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_d80_c60_fixed.xml
+  Generated attn_gemm_1024x64_P7.v (P=7, DPEs/rep=14, total_DPEs=98)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d20_c0_fixed.xml
+  Generated attn_gemm_1024x256_P1.v (P=1, DPEs/rep=7, total_DPEs=7)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d20_c20_fixed.xml
+  Generated attn_gemm_1024x256_P1.v (P=1, DPEs/rep=7, total_DPEs=7)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d20_c40_fixed.xml
+  Generated attn_gemm_1024x256_P1.v (P=1, DPEs/rep=7, total_DPEs=7)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d20_c60_fixed.xml
+  Generated attn_gemm_1024x256_P5.v (P=5, DPEs/rep=7, total_DPEs=35)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d40_c0_fixed.xml
+  Generated attn_gemm_1024x256_P3.v (P=3, DPEs/rep=7, total_DPEs=21)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d40_c20_fixed.xml
+  Generated attn_gemm_1024x256_P3.v (P=3, DPEs/rep=7, total_DPEs=21)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d40_c40_fixed.xml
+  Generated attn_gemm_1024x256_P3.v (P=3, DPEs/rep=7, total_DPEs=21)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d40_c60_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d60_c0_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d60_c20_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d60_c40_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d60_c60_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d80_c0_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d80_c20_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d80_c40_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_d80_c60_fixed.xml
+  Generated attn_gemm_1024x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d20_c0_fixed.xml
+  Generated attn_gemm_512x256_P1.v (P=1, DPEs/rep=7, total_DPEs=7)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d20_c20_fixed.xml
+  Generated attn_gemm_512x256_P3.v (P=3, DPEs/rep=7, total_DPEs=21)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d20_c40_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d20_c60_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d40_c0_fixed.xml
+  Generated attn_gemm_512x256_P2.v (P=2, DPEs/rep=7, total_DPEs=14)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d40_c20_fixed.xml
+  Generated attn_gemm_512x256_P5.v (P=5, DPEs/rep=7, total_DPEs=35)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d40_c40_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d40_c60_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d60_c0_fixed.xml
+  Generated attn_gemm_512x256_P5.v (P=5, DPEs/rep=7, total_DPEs=35)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d60_c20_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d60_c40_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d60_c60_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d80_c0_fixed.xml
+  Generated attn_gemm_512x256_P6.v (P=6, DPEs/rep=7, total_DPEs=42)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d80_c20_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d80_c40_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_d80_c60_fixed.xml
+  Generated attn_gemm_512x256_P7.v (P=7, DPEs/rep=7, total_DPEs=49)
+
+  Active VTR jobs: 66, skipped: 14
+
+======================================================================
+Phase 3: Running VTR (66 jobs × 3 seeds)
+======================================================================
+  Workers: 12
+  [attn_gemm_512x128_P7] run 1/1  seed=1
+  [attn_gemm_512x128_P7] run 1/1  seed=1
+  [attn_gemm_512x128_P7] run 1/1  seed=1
+  [attn_gemm_1024x128_P5] run 1/1  seed=1
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [attn_gemm_1024x128_P2] run 1/1  seed=1
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [attn_gemm_1024x128_P5] run 1/1  seed=1
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+    wirelength=111041  fmax=147.979 MHz  elapsed=69.3s  wc=14
+  [attn_gemm_1024x128_P2] run 1/1  seed=2
+    wirelength=279638  fmax=156.230 MHz  elapsed=100.9s  wc=35
+  [attn_gemm_1024x128_P5] run 1/1  seed=2
+    wirelength=283688  fmax=168.681 MHz  elapsed=109.8s  wc=35
+  [attn_gemm_1024x128_P5] run 1/1  seed=2
+    wirelength=392699  fmax=151.521 MHz  elapsed=118.0s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=392626  fmax=159.641 MHz  elapsed=119.3s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=388905  fmax=164.502 MHz  elapsed=119.7s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=390478  fmax=157.818 MHz  elapsed=121.2s  wc=49
+  [attn_gemm_512x128_P7] run 1/1  seed=2
+    wirelength=380050  fmax=163.319 MHz  elapsed=121.2s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=393043  fmax=155.379 MHz  elapsed=122.6s  wc=49
+  [attn_gemm_512x128_P7] run 1/1  seed=2
+    wirelength=394635  fmax=152.637 MHz  elapsed=129.7s  wc=49
+  [attn_gemm_512x128_P7] run 1/1  seed=2
+    wirelength=400185  fmax=155.379 MHz  elapsed=130.0s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=411661  fmax=151.457 MHz  elapsed=133.0s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=110963  fmax=170.791 MHz  elapsed=66.2s  wc=14
+  [attn_gemm_1024x128_P2] run 1/1  seed=3
+    wirelength=271189  fmax=150.314 MHz  elapsed=88.3s  wc=35
+  [attn_gemm_1024x128_P5] run 1/1  seed=3
+    wirelength=114613  fmax=169.313 MHz  elapsed=65.9s  wc=14
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [1/66] 1024x128 d40_c0:  P=2  fmax=162.7 MHz [148.0, 170.8, 169.3]  wc=14
+    wirelength=274638  fmax=163.057 MHz  elapsed=96.1s  wc=35
+  [attn_gemm_1024x128_P5] run 1/1  seed=3
+    wirelength=396308  fmax=157.077 MHz  elapsed=106.0s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=389183  fmax=150.681 MHz  elapsed=108.2s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=398822  fmax=147.147 MHz  elapsed=106.9s  wc=49
+  [attn_gemm_512x128_P7] run 1/1  seed=3
+    wirelength=392849  fmax=155.756 MHz  elapsed=112.9s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=397125  fmax=152.884 MHz  elapsed=116.8s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=386070  fmax=161.634 MHz  elapsed=115.5s  wc=49
+  [attn_gemm_512x128_P7] run 1/1  seed=3
+    wirelength=391832  fmax=153.905 MHz  elapsed=111.0s  wc=49
+  [attn_gemm_512x128_P7] run 1/1  seed=3
+    wirelength=405254  fmax=161.709 MHz  elapsed=120.9s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=406581  fmax=152.884 MHz  elapsed=122.5s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=280366  fmax=157.135 MHz  elapsed=94.7s  wc=35
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [2/66] 1024x128 d20_c20:  P=5  fmax=154.6 MHz [156.2, 150.3, 157.1]  wc=35
+    wirelength=273248  fmax=152.676 MHz  elapsed=90.0s  wc=35
+  [3/66] 1024x128 d60_c0:  P=5  fmax=161.5 MHz [168.7, 163.1, 152.7]  wc=35
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+    wirelength=393290  fmax=161.619 MHz  elapsed=116.7s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=398705  fmax=159.655 MHz  elapsed=106.5s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [4/66] 1024x128 d20_c60:  P=7  fmax=156.1 MHz [151.5, 157.1, 159.7]  wc=49
+    wirelength=404483  fmax=136.673 MHz  elapsed=104.8s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+  [5/66] 512x128 d80_c60:  P=7  fmax=146.4 MHz [155.4, 147.1, 136.7]  wc=49
+    wirelength=388926  fmax=155.379 MHz  elapsed=107.6s  wc=49
+  [6/66] 512x128 d80_c40:  P=7  fmax=158.3 MHz [157.8, 161.6, 155.4]  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=1
+    wirelength=392426  fmax=162.380 MHz  elapsed=118.1s  wc=49
+  [attn_gemm_1024x64_P1] run 1/1  seed=1
+  [7/66] 1024x128 d40_c60:  P=7  fmax=157.6 MHz [159.6, 150.7, 162.4]  wc=49
+    wirelength=382851  fmax=159.062 MHz  elapsed=115.2s  wc=49
+  [attn_gemm_1024x64_P5] run 1/1  seed=1
+  [8/66] 1024x128 d40_c40:  P=7  fmax=159.4 MHz [163.3, 155.8, 159.1]  wc=49
+    wirelength=390174  fmax=151.965 MHz  elapsed=112.7s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [9/66] 512x128 d80_c20:  P=7  fmax=152.8 MHz [152.6, 153.9, 152.0]  wc=49
+    wirelength=379542  fmax=149.719 MHz  elapsed=122.1s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [10/66] 1024x128 d20_c40:  P=7  fmax=155.7 MHz [164.5, 152.9, 149.7]  wc=49
+    wirelength=413694  fmax=144.952 MHz  elapsed=110.8s  wc=49
+  [attn_gemm_1024x64_P2] run 1/1  seed=1
+  [11/66] 1024x128 d60_c20:  P=7  fmax=154.0 MHz [155.4, 161.7, 145.0]  wc=49
+    wirelength=409934  fmax=146.834 MHz  elapsed=118.6s  wc=49
+  [attn_gemm_1024x64_P6] run 1/1  seed=1
+  [12/66] 1024x128 d40_c20:  P=7  fmax=150.4 MHz [151.5, 152.9, 146.8]  wc=49
+    wirelength=404540  fmax=163.739 MHz  elapsed=111.3s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=60100  fmax=162.149 MHz  elapsed=58.9s  wc=11
+  [attn_gemm_1024x64_P1] run 1/1  seed=2
+    wirelength=403377  fmax=166.110 MHz  elapsed=115.1s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=112499  fmax=176.249 MHz  elapsed=63.1s  wc=22
+  [attn_gemm_1024x64_P2] run 1/1  seed=2
+    wirelength=382345  fmax=149.503 MHz  elapsed=107.6s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=402429  fmax=148.335 MHz  elapsed=107.2s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=410669  fmax=159.655 MHz  elapsed=115.1s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=397151  fmax=134.777 MHz  elapsed=103.7s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=2
+    wirelength=301609  fmax=157.075 MHz  elapsed=106.3s  wc=55
+  [attn_gemm_1024x64_P5] run 1/1  seed=2
+    wirelength=64002  fmax=168.356 MHz  elapsed=58.0s  wc=11
+  [attn_gemm_1024x64_P1] run 1/1  seed=3
+    wirelength=406855  fmax=158.137 MHz  elapsed=107.0s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=399400  fmax=173.929 MHz  elapsed=117.0s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=360143  fmax=151.780 MHz  elapsed=104.5s  wc=66
+  [attn_gemm_1024x64_P6] run 1/1  seed=2
+    wirelength=401052  fmax=160.349 MHz  elapsed=103.0s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=113105  fmax=168.983 MHz  elapsed=78.1s  wc=22
+  [attn_gemm_1024x64_P2] run 1/1  seed=3
+    wirelength=62141  fmax=168.356 MHz  elapsed=58.8s  wc=11
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [13/66] 1024x64 d20_c0:  P=1  fmax=166.3 MHz [162.1, 168.4, 168.4]  wc=11
+    wirelength=395809  fmax=155.379 MHz  elapsed=120.8s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=387192  fmax=157.710 MHz  elapsed=111.0s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [14/66] 1024x128 d60_c40:  P=7  fmax=156.3 MHz [161.6, 149.5, 157.7]  wc=49
+    wirelength=392400  fmax=145.905 MHz  elapsed=106.4s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=297500  fmax=157.077 MHz  elapsed=98.2s  wc=55
+  [attn_gemm_1024x64_P5] run 1/1  seed=3
+    wirelength=404174  fmax=156.449 MHz  elapsed=117.8s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=399923  fmax=149.148 MHz  elapsed=116.6s  wc=49
+  [attn_gemm_1024x128_P7] run 1/1  seed=3
+    wirelength=113556  fmax=174.315 MHz  elapsed=66.0s  wc=22
+  [attn_gemm_1024x64_P5] run 1/1  seed=1
+  [15/66] 1024x64 d40_c0:  P=2  fmax=173.2 MHz [176.2, 169.0, 174.3]  wc=22
+    wirelength=410838  fmax=175.575 MHz  elapsed=108.6s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=403680  fmax=172.680 MHz  elapsed=114.8s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=358447  fmax=138.784 MHz  elapsed=110.2s  wc=66
+  [attn_gemm_1024x64_P6] run 1/1  seed=3
+    wirelength=395467  fmax=151.427 MHz  elapsed=107.2s  wc=49
+  [16/66] 1024x128 d60_c60:  P=7  fmax=158.5 MHz [163.7, 160.3, 151.4]  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+    wirelength=405207  fmax=157.170 MHz  elapsed=112.0s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=404927  fmax=156.449 MHz  elapsed=114.0s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [17/66] 1024x128 d80_c0:  P=7  fmax=159.3 MHz [166.1, 155.4, 156.4]  wc=49
+    wirelength=404825  fmax=151.718 MHz  elapsed=109.5s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=387230  fmax=121.132 MHz  elapsed=103.9s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [18/66] 1024x128 d80_c40:  P=7  fmax=138.5 MHz [148.3, 145.9, 121.1]  wc=49
+    wirelength=304221  fmax=166.935 MHz  elapsed=100.2s  wc=55
+  [attn_gemm_1024x64_P6] run 1/1  seed=1
+  [19/66] 1024x64 d20_c20:  P=5  fmax=160.4 MHz [157.1, 157.1, 166.9]  wc=55
+    wirelength=402989  fmax=155.379 MHz  elapsed=104.7s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [20/66] 1024x128 d80_c60:  P=7  fmax=146.4 MHz [134.8, 149.1, 155.4]  wc=49
+    wirelength=296761  fmax=148.175 MHz  elapsed=101.3s  wc=55
+  [attn_gemm_1024x64_P5] run 1/1  seed=2
+    wirelength=406651  fmax=163.319 MHz  elapsed=119.6s  wc=49
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [21/66] 1024x128 d80_c20:  P=7  fmax=159.8 MHz [159.7, 156.4, 163.3]  wc=49
+    wirelength=406088  fmax=162.377 MHz  elapsed=111.6s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=1
+  [22/66] 1024x64 d20_c40:  P=7  fmax=170.6 MHz [173.9, 175.6, 162.4]  wc=77
+    wirelength=410323  fmax=172.143 MHz  elapsed=111.4s  wc=77
+  [attn_gemm_1024x256_P1] run 1/1  seed=1
+  [23/66] 1024x64 d20_c60:  P=7  fmax=167.7 MHz [158.1, 172.7, 172.1]  wc=77
+    wirelength=361027  fmax=151.761 MHz  elapsed=108.9s  wc=66
+  [attn_gemm_1024x256_P1] run 1/1  seed=1
+  [24/66] 1024x64 d40_c20:  P=6  fmax=147.4 MHz [151.8, 138.8, 151.8]  wc=66
+    wirelength=421218  fmax=159.751 MHz  elapsed=111.6s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=404578  fmax=168.138 MHz  elapsed=108.9s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=57114  fmax=158.125 MHz  elapsed=56.8s  wc=7
+  [attn_gemm_1024x256_P1] run 1/1  seed=2
+    wirelength=57114  fmax=158.125 MHz  elapsed=64.4s  wc=7
+  [attn_gemm_1024x256_P1] run 1/1  seed=2
+    wirelength=408807  fmax=170.244 MHz  elapsed=111.5s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=365906  fmax=151.995 MHz  elapsed=104.4s  wc=66
+  [attn_gemm_1024x64_P6] run 1/1  seed=2
+    wirelength=410403  fmax=160.183 MHz  elapsed=113.0s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=416708  fmax=169.243 MHz  elapsed=115.9s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=303032  fmax=156.666 MHz  elapsed=98.6s  wc=55
+  [attn_gemm_1024x64_P5] run 1/1  seed=3
+    wirelength=416359  fmax=168.258 MHz  elapsed=111.3s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=418166  fmax=174.094 MHz  elapsed=118.3s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=406493  fmax=170.969 MHz  elapsed=111.3s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=2
+    wirelength=56512  fmax=171.801 MHz  elapsed=56.2s  wc=7
+  [attn_gemm_1024x256_P1] run 1/1  seed=3
+    wirelength=56512  fmax=171.801 MHz  elapsed=56.4s  wc=7
+  [attn_gemm_1024x256_P1] run 1/1  seed=3
+    wirelength=421258  fmax=159.655 MHz  elapsed=121.5s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=404777  fmax=158.399 MHz  elapsed=110.1s  wc=77
+  [attn_gemm_1024x256_P1] run 1/1  seed=1
+  [25/66] 1024x64 d40_c40:  P=7  fmax=161.2 MHz [157.2, 168.1, 158.4]  wc=77
+    wirelength=360358  fmax=157.710 MHz  elapsed=105.1s  wc=66
+  [attn_gemm_1024x64_P6] run 1/1  seed=3
+    wirelength=305084  fmax=151.959 MHz  elapsed=95.9s  wc=55
+  [attn_gemm_1024x256_P5] run 1/1  seed=1
+  [26/66] 1024x64 d60_c0:  P=5  fmax=152.3 MHz [148.2, 156.7, 152.0]  wc=55
+    wirelength=58110  fmax=177.165 MHz  elapsed=56.5s  wc=7
+  [attn_gemm_1024x256_P3] run 1/1  seed=1
+  [27/66] 1024x256 d20_c20:  P=1  fmax=169.0 MHz [158.1, 171.8, 177.2]  wc=7
+    wirelength=412203  fmax=155.139 MHz  elapsed=110.6s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=58110  fmax=177.165 MHz  elapsed=56.4s  wc=7
+  [attn_gemm_1024x256_P3] run 1/1  seed=1
+  [28/66] 1024x256 d20_c0:  P=1  fmax=169.0 MHz [158.1, 171.8, 177.2]  wc=7
+    wirelength=411199  fmax=158.618 MHz  elapsed=115.0s  wc=77
+  [attn_gemm_1024x256_P3] run 1/1  seed=1
+  [29/66] 1024x64 d40_c60:  P=7  fmax=156.8 MHz [151.7, 160.2, 158.6]  wc=77
+    wirelength=411058  fmax=169.506 MHz  elapsed=106.5s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=422118  fmax=153.299 MHz  elapsed=111.6s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=424814  fmax=169.567 MHz  elapsed=105.1s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=409033  fmax=173.688 MHz  elapsed=108.7s  wc=77
+  [attn_gemm_1024x64_P7] run 1/1  seed=3
+    wirelength=57114  fmax=158.125 MHz  elapsed=64.2s  wc=7
+  [attn_gemm_1024x256_P1] run 1/1  seed=2
+    wirelength=170913  fmax=152.884 MHz  elapsed=70.9s  wc=21
+  [attn_gemm_1024x256_P3] run 1/1  seed=2
+    wirelength=170913  fmax=152.884 MHz  elapsed=68.5s  wc=21
+  [attn_gemm_1024x256_P3] run 1/1  seed=2
+    wirelength=170913  fmax=152.884 MHz  elapsed=75.6s  wc=21
+  [attn_gemm_1024x256_P3] run 1/1  seed=2
+    wirelength=415091  fmax=166.055 MHz  elapsed=111.0s  wc=77
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [30/66] 1024x64 d60_c20:  P=7  fmax=161.8 MHz [159.8, 159.7, 166.1]  wc=77
+    wirelength=279823  fmax=145.506 MHz  elapsed=88.9s  wc=35
+  [attn_gemm_1024x256_P5] run 1/1  seed=2
+    wirelength=362508  fmax=159.771 MHz  elapsed=106.8s  wc=66
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [31/66] 1024x64 d80_c0:  P=6  fmax=156.5 MHz [152.0, 157.7, 159.8]  wc=66
+    wirelength=56512  fmax=171.801 MHz  elapsed=57.3s  wc=7
+  [attn_gemm_1024x256_P1] run 1/1  seed=3
+    wirelength=409567  fmax=166.601 MHz  elapsed=113.1s  wc=77
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [32/66] 1024x64 d60_c60:  P=7  fmax=168.5 MHz [169.2, 169.5, 166.6]  wc=77
+    wirelength=405854  fmax=164.424 MHz  elapsed=122.6s  wc=77
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [33/66] 1024x64 d60_c40:  P=7  fmax=163.3 MHz [170.2, 155.1, 164.4]  wc=77
+    wirelength=416653  fmax=164.258 MHz  elapsed=106.3s  wc=77
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [34/66] 1024x64 d80_c60:  P=7  fmax=168.3 MHz [171.0, 169.6, 164.3]  wc=77
+    wirelength=418029  fmax=163.579 MHz  elapsed=121.5s  wc=77
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [35/66] 1024x64 d80_c20:  P=7  fmax=161.7 MHz [168.3, 153.3, 163.6]  wc=77
+    wirelength=411052  fmax=158.137 MHz  elapsed=108.1s  wc=77
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [36/66] 1024x64 d80_c40:  P=7  fmax=168.6 MHz [174.1, 173.7, 158.1]  wc=77
+    wirelength=172220  fmax=160.969 MHz  elapsed=82.3s  wc=21
+  [attn_gemm_1024x256_P3] run 1/1  seed=3
+    wirelength=172220  fmax=160.969 MHz  elapsed=83.8s  wc=21
+  [attn_gemm_1024x256_P3] run 1/1  seed=3
+    wirelength=172220  fmax=160.969 MHz  elapsed=82.6s  wc=21
+  [attn_gemm_1024x256_P3] run 1/1  seed=3
+    wirelength=58110  fmax=177.165 MHz  elapsed=60.1s  wc=7
+  [37/66] 1024x256 d20_c40:  P=1  fmax=169.0 MHz [158.1, 171.8, 177.2]  wc=7
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+    wirelength=281385  fmax=155.542 MHz  elapsed=87.4s  wc=35
+  [attn_gemm_1024x256_P5] run 1/1  seed=3
+    wirelength=399014  fmax=147.401 MHz  elapsed=110.6s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=172358  fmax=157.818 MHz  elapsed=70.3s  wc=21
+  [attn_gemm_1024x256_P7] run 1/1  seed=1
+  [38/66] 1024x256 d40_c0:  P=3  fmax=157.2 MHz [152.9, 161.0, 157.8]  wc=21
+    wirelength=411918  fmax=166.110 MHz  elapsed=124.3s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=411918  fmax=166.110 MHz  elapsed=109.2s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=411918  fmax=166.110 MHz  elapsed=114.6s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=172358  fmax=157.818 MHz  elapsed=76.9s  wc=21
+  [attn_gemm_512x256_P1] run 1/1  seed=1
+  [39/66] 1024x256 d40_c20:  P=3  fmax=157.2 MHz [152.9, 161.0, 157.8]  wc=21
+    wirelength=172358  fmax=157.818 MHz  elapsed=80.1s  wc=21
+  [attn_gemm_512x256_P3] run 1/1  seed=1
+  [40/66] 1024x256 d40_c40:  P=3  fmax=157.2 MHz [152.9, 161.0, 157.8]  wc=21
+    wirelength=409220  fmax=158.346 MHz  elapsed=108.9s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=398193  fmax=152.884 MHz  elapsed=118.1s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=281680  fmax=167.506 MHz  elapsed=90.7s  wc=35
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [41/66] 1024x256 d20_c60:  P=5  fmax=156.2 MHz [145.5, 155.5, 167.5]  wc=35
+    wirelength=409220  fmax=158.346 MHz  elapsed=113.2s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=409220  fmax=158.346 MHz  elapsed=113.6s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=61988  fmax=156.748 MHz  elapsed=61.7s  wc=7
+  [attn_gemm_512x256_P1] run 1/1  seed=2
+    wirelength=401739  fmax=155.379 MHz  elapsed=110.3s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=178380  fmax=158.346 MHz  elapsed=71.9s  wc=21
+  [attn_gemm_512x256_P3] run 1/1  seed=2
+    wirelength=409220  fmax=158.346 MHz  elapsed=109.4s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=2
+    wirelength=421116  fmax=152.884 MHz  elapsed=110.2s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=421116  fmax=152.884 MHz  elapsed=106.4s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=59168  fmax=155.163 MHz  elapsed=61.2s  wc=7
+  [attn_gemm_512x256_P1] run 1/1  seed=3
+    wirelength=421116  fmax=152.884 MHz  elapsed=127.1s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=408366  fmax=159.638 MHz  elapsed=115.4s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=401541  fmax=159.655 MHz  elapsed=106.5s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=408366  fmax=159.638 MHz  elapsed=107.4s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=399420  fmax=160.565 MHz  elapsed=113.8s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=177656  fmax=163.275 MHz  elapsed=75.7s  wc=21
+  [attn_gemm_512x256_P3] run 1/1  seed=3
+    wirelength=408366  fmax=159.638 MHz  elapsed=107.9s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=406162  fmax=157.956 MHz  elapsed=110.8s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [42/66] 1024x256 d40_c60:  P=7  fmax=153.6 MHz [147.4, 155.4, 158.0]  wc=49
+    wirelength=59050  fmax=156.230 MHz  elapsed=54.5s  wc=7
+  [attn_gemm_512x256_P2] run 1/1  seed=1
+  [43/66] 512x256 d20_c0:  P=1  fmax=156.0 MHz [156.7, 155.2, 156.2]  wc=7
+    wirelength=408366  fmax=159.638 MHz  elapsed=105.9s  wc=49
+  [attn_gemm_1024x256_P7] run 1/1  seed=3
+    wirelength=419839  fmax=155.379 MHz  elapsed=112.6s  wc=49
+  [attn_gemm_512x256_P5] run 1/1  seed=1
+  [44/66] 1024x256 d60_c0:  P=7  fmax=158.1 MHz [166.1, 152.9, 155.4]  wc=49
+    wirelength=171625  fmax=152.884 MHz  elapsed=81.5s  wc=21
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [45/66] 512x256 d20_c20:  P=3  fmax=158.2 MHz [158.3, 163.3, 152.9]  wc=21
+    wirelength=419839  fmax=155.379 MHz  elapsed=106.9s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [46/66] 1024x256 d60_c20:  P=7  fmax=158.1 MHz [166.1, 152.9, 155.4]  wc=49
+    wirelength=419839  fmax=155.379 MHz  elapsed=130.1s  wc=49
+  [attn_gemm_512x256_P5] run 1/1  seed=1
+  [47/66] 1024x256 d60_c40:  P=7  fmax=158.1 MHz [166.1, 152.9, 155.4]  wc=49
+    wirelength=405354  fmax=153.970 MHz  elapsed=107.0s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [48/66] 1024x256 d80_c20:  P=7  fmax=157.3 MHz [158.3, 159.6, 154.0]  wc=49
+    wirelength=401717  fmax=165.194 MHz  elapsed=116.8s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [49/66] 1024x256 d60_c60:  P=7  fmax=159.2 MHz [152.9, 159.7, 165.2]  wc=49
+    wirelength=405354  fmax=153.970 MHz  elapsed=119.3s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [50/66] 1024x256 d80_c0:  P=7  fmax=157.3 MHz [158.3, 159.6, 154.0]  wc=49
+    wirelength=109087  fmax=158.056 MHz  elapsed=77.0s  wc=14
+  [attn_gemm_512x256_P2] run 1/1  seed=2
+    wirelength=406110  fmax=166.110 MHz  elapsed=115.4s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=405354  fmax=153.970 MHz  elapsed=119.7s  wc=49
+  [attn_gemm_512x256_P6] run 1/1  seed=1
+  [51/66] 1024x256 d80_c40:  P=7  fmax=157.3 MHz [158.3, 159.6, 154.0]  wc=49
+    wirelength=406865  fmax=159.571 MHz  elapsed=119.8s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=405354  fmax=153.970 MHz  elapsed=104.2s  wc=49
+  [52/66] 1024x256 d80_c60:  P=7  fmax=157.3 MHz [158.3, 159.6, 154.0]  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+    wirelength=293070  fmax=150.314 MHz  elapsed=97.1s  wc=35
+  [attn_gemm_512x256_P5] run 1/1  seed=2
+    wirelength=292804  fmax=156.230 MHz  elapsed=98.0s  wc=35
+  [attn_gemm_512x256_P5] run 1/1  seed=2
+    wirelength=106510  fmax=164.281 MHz  elapsed=77.1s  wc=14
+  [attn_gemm_512x256_P2] run 1/1  seed=3
+    wirelength=388142  fmax=155.554 MHz  elapsed=106.2s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=398132  fmax=147.399 MHz  elapsed=119.0s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=396834  fmax=152.884 MHz  elapsed=109.8s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=407089  fmax=162.380 MHz  elapsed=113.8s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=387636  fmax=141.882 MHz  elapsed=124.4s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=357624  fmax=167.313 MHz  elapsed=114.2s  wc=42
+  [attn_gemm_512x256_P6] run 1/1  seed=2
+    wirelength=400323  fmax=165.196 MHz  elapsed=128.6s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [53/66] 512x256 d20_c40:  P=7  fmax=164.0 MHz [160.6, 166.1, 165.2]  wc=49
+    wirelength=290632  fmax=133.538 MHz  elapsed=92.0s  wc=35
+  [attn_gemm_512x256_P5] run 1/1  seed=3
+    wirelength=111268  fmax=160.335 MHz  elapsed=72.4s  wc=14
+  [attn_gemm_512x256_P7] run 1/1  seed=1
+  [54/66] 512x256 d40_c0:  P=2  fmax=160.9 MHz [158.1, 164.3, 160.3]  wc=14
+    wirelength=390045  fmax=165.103 MHz  elapsed=112.6s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=395220  fmax=160.565 MHz  elapsed=115.5s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=288324  fmax=158.783 MHz  elapsed=99.9s  wc=35
+  [attn_gemm_512x256_P5] run 1/1  seed=3
+    wirelength=391984  fmax=157.009 MHz  elapsed=108.1s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=396820  fmax=148.175 MHz  elapsed=105.7s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=396881  fmax=163.319 MHz  elapsed=123.4s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=397246  fmax=154.460 MHz  elapsed=128.7s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=397815  fmax=159.711 MHz  elapsed=112.4s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=403453  fmax=155.756 MHz  elapsed=111.6s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=343441  fmax=152.676 MHz  elapsed=114.4s  wc=42
+  [attn_gemm_512x256_P6] run 1/1  seed=3
+    wirelength=281998  fmax=132.946 MHz  elapsed=102.2s  wc=35
+  [55/66] 512x256 d40_c20:  P=5  fmax=138.9 MHz [150.3, 133.5, 132.9]  wc=35
+    wirelength=410182  fmax=150.216 MHz  elapsed=103.5s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=2
+    wirelength=404860  fmax=152.044 MHz  elapsed=110.1s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=396801  fmax=148.335 MHz  elapsed=125.8s  wc=49
+  [56/66] 512x256 d20_c60:  P=7  fmax=157.7 MHz [159.6, 165.1, 148.3]  wc=49
+    wirelength=292325  fmax=163.482 MHz  elapsed=105.3s  wc=35
+  [57/66] 512x256 d60_c0:  P=5  fmax=159.5 MHz [156.2, 158.8, 163.5]  wc=35
+    wirelength=402000  fmax=162.304 MHz  elapsed=109.6s  wc=49
+  [58/66] 512x256 d40_c60:  P=7  fmax=158.3 MHz [155.6, 157.0, 162.3]  wc=49
+    wirelength=398837  fmax=160.565 MHz  elapsed=109.1s  wc=49
+  [59/66] 512x256 d60_c20:  P=7  fmax=158.9 MHz [152.9, 163.3, 160.6]  wc=49
+    wirelength=405783  fmax=149.535 MHz  elapsed=115.6s  wc=49
+  [60/66] 512x256 d60_c60:  P=7  fmax=153.4 MHz [162.4, 148.2, 149.5]  wc=49
+    wirelength=397226  fmax=159.655 MHz  elapsed=117.6s  wc=49
+  [61/66] 512x256 d40_c40:  P=7  fmax=153.8 MHz [147.4, 154.5, 159.7]  wc=49
+    wirelength=397845  fmax=153.905 MHz  elapsed=110.2s  wc=49
+  [62/66] 512x256 d60_c40:  P=7  fmax=151.8 MHz [141.9, 159.7, 153.9]  wc=49
+    wirelength=346268  fmax=160.954 MHz  elapsed=99.6s  wc=42
+  [63/66] 512x256 d80_c0:  P=6  fmax=160.3 MHz [167.3, 152.7, 161.0]  wc=42
+    wirelength=403640  fmax=147.399 MHz  elapsed=105.3s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=403819  fmax=159.711 MHz  elapsed=107.6s  wc=49
+  [attn_gemm_512x256_P7] run 1/1  seed=3
+    wirelength=399026  fmax=157.077 MHz  elapsed=107.6s  wc=49
+  [64/66] 512x256 d80_c20:  P=7  fmax=156.6 MHz [160.6, 152.0, 157.1]  wc=49
+    wirelength=403537  fmax=163.319 MHz  elapsed=103.6s  wc=49
+  [65/66] 512x256 d80_c40:  P=7  fmax=155.5 MHz [155.8, 147.4, 163.3]  wc=49
+    wirelength=406822  fmax=158.349 MHz  elapsed=96.0s  wc=49
+  [66/66] 512x256 d80_c60:  P=7  fmax=156.1 MHz [150.2, 159.7, 158.3]  wc=49
+
+  Completed: 66/66
+
+======================================================================
+Phase 4: Computing IMC attention energy
+======================================================================
+  512x128 d20_c0: E=10514385.2 pJ  lat=15824524.0 ns
+  512x128 d20_c20: E=11192770.0 pJ  lat=16850118.3 ns
+  512x128 d20_c40: E=11752467.3 pJ  lat=17696278.6 ns
+  512x128 d20_c60: E=11356817.4 pJ  lat=17098128.0 ns
+  512x128 d40_c0: E=11439219.7 pJ  lat=17222705.2 ns
+  512x128 d40_c20: E=11200619.8 pJ  lat=16861985.7 ns
+  512x128 d40_c40: E=11598227.0 pJ  lat=17463095.3 ns
+  512x128 d40_c60: E=11791235.0 pJ  lat=17754888.3 ns
+  512x128 d60_c0: E=11481243.2 pJ  lat=17286237.1 ns
+  512x128 d60_c20: E=11304519.6 pJ  lat=17019063.2 ns
+  512x128 d60_c40: E=11343478.5 pJ  lat=17077962.0 ns
+  512x128 d60_c60: E=11490062.2 pJ  lat=17299569.9 ns
+  512x128 d80_c0: E=11475036.1 pJ  lat=17276853.2 ns
+  512x128 d80_c20: E=11722525.5 pJ  lat=17651012.0 ns
+  512x128 d80_c40: E=11336695.8 pJ  lat=17067707.7 ns
+  512x128 d80_c60: E=12215908.3 pJ  lat=18396917.0 ns
+  1024x128 d20_c0: E=13482676.4 pJ  lat=16355849.5 ns
+  1024x128 d20_c20: E=14398844.7 pJ  lat=17461756.4 ns
+  1024x128 d20_c40: E=14296899.7 pJ  lat=17338698.6 ns
+  1024x128 d20_c60: E=14263073.2 pJ  lat=17297866.6 ns
+  1024x128 d40_c0: E=13703884.1 pJ  lat=16622869.3 ns
+  1024x128 d40_c20: E=14784054.0 pJ  lat=17926742.6 ns
+  1024x128 d40_c40: E=13978555.0 pJ  lat=16954424.6 ns
+  1024x128 d40_c60: E=14133533.0 pJ  lat=17141498.6 ns
+  1024x128 d60_c0: E=13803895.0 pJ  lat=16743592.6 ns
+  1024x128 d60_c20: E=14448149.8 pJ  lat=17521272.6 ns
+  1024x128 d60_c40: E=14246075.5 pJ  lat=17277348.7 ns
+  1024x128 d60_c60: E=14052878.6 pJ  lat=17044140.6 ns
+  1024x128 d80_c0: E=13984167.3 pJ  lat=16961199.2 ns
+  1024x128 d80_c20: E=13942399.0 pJ  lat=16910780.8 ns
+  1024x128 d80_c40: E=16015307.5 pJ  lat=19412988.8 ns
+  1024x128 d80_c60: E=15170054.1 pJ  lat=18392683.4 ns
+  1024x64 d20_c0: E=14407469.7 pJ  lat=16608744.7 ns
+  1024x64 d20_c20: E=14921304.8 pJ  lat=17184894.7 ns
+  1024x64 d20_c40: E=14053713.3 pJ  lat=16212086.9 ns
+  1024x64 d20_c60: E=14294123.5 pJ  lat=16481652.6 ns
+  1024x64 d40_c0: E=13853719.4 pJ  lat=15987838.9 ns
+  1024x64 d40_c20: E=16185118.1 pJ  lat=18601975.7 ns
+  1024x64 d40_c40: E=14843189.4 pJ  lat=17097305.9 ns
+  1024x64 d40_c60: E=15245221.9 pJ  lat=17548094.5 ns
+  1024x64 d60_c0: E=15688076.4 pJ  lat=18044655.7 ns
+  1024x64 d60_c20: E=14791364.9 pJ  lat=17039196.5 ns
+  1024x64 d60_c40: E=14664555.3 pJ  lat=16897008.1 ns
+  1024x64 d60_c60: E=14228883.5 pJ  lat=16408500.7 ns
+  1024x64 d80_c0: E=15277981.3 pJ  lat=17584826.8 ns
+  1024x64 d80_c20: E=14800939.2 pJ  lat=17049931.9 ns
+  1024x64 d80_c40: E=14213442.3 pJ  lat=16391186.9 ns
+  1024x64 d80_c60: E=14244005.6 pJ  lat=16425456.6 ns
+  1024x256 d20_c0: E=23564730.3 pJ  lat=16025407.2 ns
+  1024x256 d20_c20: E=23564730.3 pJ  lat=16025407.2 ns
+  1024x256 d20_c40: E=23564730.3 pJ  lat=16025407.2 ns
+  1024x256 d20_c60: E=25461764.5 pJ  lat=17287193.8 ns
+  1024x256 d40_c0: E=25296803.7 pJ  lat=17177472.4 ns
+  1024x256 d40_c20: E=25296803.7 pJ  lat=17177472.4 ns
+  1024x256 d40_c40: E=25296803.7 pJ  lat=17177472.4 ns
+  1024x256 d40_c60: E=25885335.9 pJ  lat=17568926.6 ns
+  1024x256 d60_c0: E=25155560.0 pJ  lat=17083526.0 ns
+  1024x256 d60_c20: E=25155560.0 pJ  lat=17083526.0 ns
+  1024x256 d60_c40: E=25155560.0 pJ  lat=17083526.0 ns
+  1024x256 d60_c60: E=24982148.9 pJ  lat=16968184.0 ns
+  1024x256 d80_c0: E=25281934.4 pJ  lat=17167582.2 ns
+  1024x256 d80_c20: E=25281934.4 pJ  lat=17167582.2 ns
+  1024x256 d80_c40: E=25281934.4 pJ  lat=17167582.2 ns
+  1024x256 d80_c60: E=25281934.4 pJ  lat=17167582.2 ns
+  512x256 d20_c0: E=20473925.2 pJ  lat=17301841.4 ns
+  512x256 d20_c20: E=20206031.4 pJ  lat=17078963.9 ns
+  512x256 d20_c40: E=19510274.1 pJ  lat=16500120.1 ns
+  512x256 d20_c60: E=20268357.7 pJ  lat=17130817.0 ns
+  512x256 d40_c0: E=19872589.9 pJ  lat=16801553.2 ns
+  512x256 d40_c20: E=22934456.4 pJ  lat=19348910.6 ns
+  512x256 d40_c40: E=20760742.5 pJ  lat=17540462.6 ns
+  512x256 d40_c60: E=20191008.8 pJ  lat=17066465.7 ns
+  512x256 d60_c0: E=20041706.0 pJ  lat=16942251.4 ns
+  512x256 d60_c20: E=20112493.7 pJ  lat=17001144.1 ns
+  512x256 d60_c40: E=21028342.7 pJ  lat=17763095.9 ns
+  512x256 d60_c60: E=20823451.9 pJ  lat=17592634.4 ns
+  512x256 d80_c0: E=19942236.4 pJ  lat=16859496.4 ns
+  512x256 d80_c20: E=20408220.8 pJ  lat=17247177.9 ns
+  512x256 d80_c40: E=20545306.0 pJ  lat=17361227.6 ns
+  512x256 d80_c60: E=20468166.8 pJ  lat=17297050.6 ns
+  IMC results: 80 points
+
+======================================================================
+Phase 5: Computing throughput scalability
+======================================================================
+  Baseline 512x128: f0=171.3 MHz, E0=10514385.2 pJ
+  Baseline 1024x128: f0=165.5 MHz, E0=13482676.4 pJ
+  Baseline 1024x64: f0=166.3 MHz, E0=14407469.7 pJ
+  Baseline 1024x256: f0=169.0 MHz, E0=23564730.3 pJ
+  Baseline 512x256: f0=156.0 MHz, E0=20473925.2 pJ
+
+  Written: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/results/round2_attention_results.csv  (80 rows)
+
+  Per-config summary:
+    512x128: 16 points, P range 2-7, best gain=6.6x, util range 85.5%-100.0%
+    1024x128: 16 points, P range 1-7, best gain=6.8x, util range 83.7%-100.0%
+    1024x64: 16 points, P range 1-7, best gain=7.2x, util range 88.7%-104.2%
+    1024x256: 16 points, P range 1-7, best gain=6.6x, util range 90.9%-100.0%
+    512x256: 16 points, P range 1-7, best gain=7.4x, util range 89.0%-105.1%
+
+Done. Results in round2_attention_results.csv.

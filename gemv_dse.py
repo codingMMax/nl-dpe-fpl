@@ -813,7 +813,7 @@ def run_attention_dse(args):
             'R': R, 'C': C,
             'V': v, 'H': h,
             'dpes_per_proj': v * h,
-            'total_dpes': 3 * v * h,
+            'total_dpes': (3 * v + 4) * h,  # (3V+4)×H: proj + DIMM, output-limited by C cols
             'acam_eligible': (v == 1),
         }
         if args.skip_existing and not args.force and (run_dir / "imc_result.json").exists():
@@ -2688,6 +2688,461 @@ def run_round2_full(args):
     print("\nDone. Results in round2_full_results.csv.")
 
 
+# ── Round 2 Attention ─────────────────────────────────────────────────────
+
+# Empirically calibrated per-replica costs for attention head
+ATTN_CLBS_PER_REP = 145
+ATTN_CLB_OVERHEAD = 15
+ATTN_BRAMS_PER_REP = 64
+ATTN_BRAM_OVERHEAD = 4
+
+
+ATTN_DSPS_PER_REP = 2     # softmax normalization multiply uses DSP blocks
+BASELINE_DSPS = 210       # 120×120 grid
+
+
+def compute_attention_feasibility(dsp_ratio, clb_ratio, rows, cols,
+                                   n_seq=128, d_head=128,
+                                   grid_w=120, grid_h=120):
+    """Feasibility check for attention head at (d, c) sweep point.
+
+    DPEs per replica = (3V + 4) × H  where V=ceil(d/R), H=ceil(d/C).
+    CLBs, BRAMs, and DSPs per replica from empirical VTR calibration.
+    Four resource limits: P = min(P_dpe, P_clb, P_bram, P_dsp).
+    """
+    specs = dpe_specs(rows, cols)
+    tile_w = specs['tile_width']
+    tile_h = specs['tile_height']
+
+    total_dpes = count_available_wc(
+        grid_w, grid_h, tile_w, tile_h, dsp_ratio, clb_ratio)
+
+    v = math.ceil(d_head / rows)
+    h = math.ceil(d_head / cols)
+    dpes_per_replica = (3 * v + 4) * h
+    p_dpe = total_dpes // dpes_per_replica if dpes_per_replica > 0 else 0
+
+    clbs_avail = int((1 - clb_ratio) * BASELINE_CLBS)
+    p_clb = max(0, (clbs_avail - ATTN_CLB_OVERHEAD) // ATTN_CLBS_PER_REP) \
+        if clbs_avail > ATTN_CLB_OVERHEAD else 0
+
+    brams_avail = count_available_brams(grid_w, grid_h)
+    p_bram = (brams_avail - ATTN_BRAM_OVERHEAD) // ATTN_BRAMS_PER_REP \
+        if brams_avail > ATTN_BRAM_OVERHEAD else 0
+
+    # DSP limit: softmax normalization multiply needs DSP blocks
+    dsps_avail = int(BASELINE_DSPS * (1 - dsp_ratio))
+    p_dsp = dsps_avail // ATTN_DSPS_PER_REP if ATTN_DSPS_PER_REP > 0 else 999
+
+    p = min(p_dpe, p_clb, p_bram, p_dsp)
+
+    if p < 1:
+        limit = 'none'
+    elif p == p_dsp and p_dsp <= min(p_dpe, p_clb, p_bram):
+        limit = 'dsp'
+    elif p == p_bram and p_bram <= min(p_dpe, p_clb):
+        limit = 'bram'
+    elif p == p_clb and p_clb <= p_dpe:
+        limit = 'clb'
+    else:
+        limit = 'dpe'
+
+    clbs_need = p * ATTN_CLBS_PER_REP + ATTN_CLB_OVERHEAD if p > 0 else 0
+    clb_util = clbs_need / clbs_avail if clbs_avail > 0 else float('inf')
+    brams_need = p * ATTN_BRAMS_PER_REP + ATTN_BRAM_OVERHEAD if p > 0 else 0
+
+    return {
+        'feasible': p >= 1,
+        'p': p,
+        'p_dpe': p_dpe, 'p_clb': p_clb, 'p_bram': p_bram, 'p_dsp': p_dsp,
+        'limit': limit,
+        'total_dpes': total_dpes,
+        'v': v, 'h': h,
+        'dpes_per_replica': dpes_per_replica,
+        'clbs_need': clbs_need, 'clbs_avail': clbs_avail, 'clb_util': clb_util,
+        'brams_avail': brams_avail, 'brams_need': brams_need,
+        'dsps_avail': dsps_avail,
+    }
+
+
+def run_round2_attention(args):
+    """Round 2 Attention Sweep: DSP+CLB replacement for attention workload.
+
+    5 configs × 1 workload (attention N=128, d=128) × 20 (d,c) points
+    = 100 VTR points × 3 seeds = 300 VTR runs.
+    """
+    from gen_attention_gemm_wrapper import gen_attention_gemm_wrapper
+
+    dse_dir = args.dse_dir
+    results_dir = dse_dir / "results"
+    arch_dir = dse_dir / "configs" / "arch"
+    rtl_dir = dse_dir / "rtl"
+    r2a_dir = dse_dir / "round2_attention"
+
+    for d in [arch_dir, rtl_dir, r2a_dir, results_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Fixed grid
+    fixed_w = 120
+    fixed_h = 120
+
+    n_seq = ATTENTION_N_SEQ
+    d_head = ATTENTION_D_HEAD
+
+    ATTN_CONFIGS = [(512, 128), (1024, 128), (1024, 64), (1024, 256), (512, 256)]
+    if args.configs:
+        configs = []
+        for s in args.configs.split(","):
+            r, c = s.strip().split("x")
+            configs.append((int(r), int(c)))
+    else:
+        configs = ATTN_CONFIGS
+
+    clb_ratios = [c for c in CLB_RATIOS if c <= 0.6]
+
+    print(f"Round 2 Attention Sweep — DSP+CLB Replacement")
+    print(f"  Configs: {[f'{R}x{C}' for R, C in configs]}")
+    print(f"  Workload: attention (N={n_seq}, d={d_head})")
+    print(f"  Fixed grid: {fixed_w}x{fixed_h}")
+    print(f"  DSP ratios: {DSP_RATIOS}")
+    print(f"  CLB ratios: {clb_ratios}")
+    n_pts = len(DSP_RATIOS) * len(clb_ratios)
+    print(f"  Points per config: {n_pts}")
+    print(f"  Total: {len(configs)} configs × {n_pts} points × 3 seeds "
+          f"= {len(configs) * n_pts * 3} VTR runs")
+    print()
+
+    # ── Phase 1: Feasibility ──
+    print("=" * 70)
+    print("Phase 1: Attention Feasibility Check")
+    print("=" * 70)
+
+    all_jobs = []
+    for R, C in configs:
+        config_name = f"{R}x{C}"
+        print(f"\n  --- {config_name} ---")
+        wl_jobs = 0
+        for dsp_r in DSP_RATIOS:
+            for clb_r in clb_ratios:
+                f = compute_attention_feasibility(
+                    dsp_r, clb_r, R, C, n_seq, d_head,
+                    grid_w=fixed_w, grid_h=fixed_h)
+                dsp_pct = int(round(dsp_r * 100))
+                clb_pct = int(round(clb_r * 100))
+                status = "OK" if f['feasible'] else "SKIP"
+                print(f"    d={dsp_pct:>3}% c={clb_pct:>3}%  P={f['p']:>2}  "
+                      f"(dpe={f['p_dpe']:>3} clb={f['p_clb']:>3} "
+                      f"bram={f['p_bram']:>3} dsp={f['p_dsp']:>3})  "
+                      f"[{status}] [{f['limit']}]")
+
+                if not f['feasible']:
+                    continue
+
+                run_dir = r2a_dir / config_name / f"d{dsp_pct}_c{clb_pct}" / "attention"
+                all_jobs.append({
+                    'dsp_ratio': dsp_r, 'clb_ratio': clb_r,
+                    'dsp_pct': dsp_pct, 'clb_pct': clb_pct,
+                    'R': R, 'C': C, 'config': config_name,
+                    'wl_name': 'attention',
+                    'P': f['p'],
+                    'total_dpes': f['total_dpes'],
+                    'V': f['v'], 'H': f['h'],
+                    'dpes_per_replica': f['dpes_per_replica'],
+                    'clbs_need': f['clbs_need'],
+                    'clbs_avail': f['clbs_avail'],
+                    'clb_util': f['clb_util'],
+                    'brams_avail': f['brams_avail'],
+                    'brams_need': f['brams_need'],
+                    'limit': f['limit'],
+                    'run_dir': run_dir,
+                })
+                wl_jobs += 1
+        print(f"    Feasible: {wl_jobs}/{n_pts}")
+
+    print(f"\n  Total feasible: {len(all_jobs)}")
+
+    if args.dry_run:
+        print("\n  DRY RUN — stopping here.")
+        return
+
+    # ── Phase 2: Generate arch XMLs and RTL ──
+    print("\n" + "=" * 70)
+    print("Phase 2: Generating architecture XMLs and attention RTL")
+    print("=" * 70)
+
+    arch_cache = {}
+    skipped_jobs = []
+    active_jobs = []
+
+    for job in all_jobs:
+        # Arch XML (cached per (config, d, c))
+        dc_key = (job['R'], job['C'], job['dsp_pct'], job['clb_pct'])
+        if dc_key not in arch_cache:
+            arch_path = gen_arch_xml(
+                job['R'], job['C'], mode="fixed_dsp_clb_replace",
+                output_dir=arch_dir,
+                fixed_grid_w=fixed_w, fixed_grid_h=fixed_h,
+                dsp_ratio=job['dsp_ratio'], clb_ratio=job['clb_ratio'],
+            )
+            arch_cache[dc_key] = arch_path
+        job['arch'] = arch_cache[dc_key]
+
+        # RTL (P-replica attention wrapper)
+        rtl_path = gen_attention_gemm_wrapper(
+            n_seq, d_head, job['R'], job['C'], job['P'],
+            output_dir=str(rtl_dir),
+        )
+        job['rtl'] = rtl_path
+
+        if args.skip_existing and not args.force and \
+           (job['run_dir'] / "vtr_done.json").exists():
+            print(f"  SKIP: {job['config']} d{job['dsp_pct']}_c{job['clb_pct']} P={job['P']}")
+            skipped_jobs.append(job)
+            continue
+        active_jobs.append(job)
+
+    print(f"\n  Active VTR jobs: {len(active_jobs)}, skipped: {len(skipped_jobs)}")
+
+    # ── Phase 3: Run VTR ──
+    vtr_results = {}
+    if active_jobs:
+        print("\n" + "=" * 70)
+        print(f"Phase 3: Running VTR ({len(active_jobs)} jobs × 3 seeds)")
+        print("=" * 70)
+
+        cpu_count = os.cpu_count() or 1
+        max_workers = args.jobs if args.jobs > 0 else min(len(active_jobs), cpu_count)
+        print(f"  Workers: {max_workers}")
+
+        def _run_one_attn(job):
+            try:
+                design_name = f"attn_gemm_{job['R']}x{job['C']}_P{job['P']}"
+                seed_fmax = []
+                last_resources = None
+
+                for seed in MULTI_SEEDS:
+                    seed_dir = job['run_dir'] / f"seed{seed}"
+                    r = run_single(
+                        vtr_flow=VTR_FLOW,
+                        vtr_python=VTR_PYTHON,
+                        design=job['rtl'],
+                        arch=job['arch'],
+                        route_chan_width=DEFAULT_ROUTE_CHAN_WIDTH,
+                        sdc_file=None,
+                        run_dir=seed_dir,
+                        seed=seed,
+                        run_index=0,
+                        total_runs=1,
+                        design_name=design_name,
+                    )
+                    seed_fmax.append(r.fmax_mhz)
+                    last_resources = r.resources
+
+                avg_fmax = sum(seed_fmax) / len(seed_fmax)
+                return job, {
+                    'fmax_mhz': avg_fmax,
+                    'fmax_per_seed': seed_fmax,
+                    'grid_w': fixed_w, 'grid_h': fixed_h,
+                    'resources': last_resources,
+                }, None
+            except Exception as exc:
+                return job, None, str(exc)
+
+        completed = 0
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_run_one_attn, j): j for j in active_jobs}
+            for fut in as_completed(futures):
+                job, result, error = fut.result()
+                key = (job['config'], job['dsp_pct'], job['clb_pct'])
+                if error:
+                    print(f"  FAILED {job['config']} d{job['dsp_pct']}_c{job['clb_pct']}: "
+                          f"{error}", file=sys.stderr)
+                else:
+                    vtr_results[key] = result
+                    done_path = job['run_dir'] / "vtr_done.json"
+                    done_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(done_path, 'w') as f_:
+                        json.dump({
+                            'fmax_mhz': result['fmax_mhz'],
+                            'fmax_per_seed': result.get('fmax_per_seed', []),
+                            'grid_w': fixed_w, 'grid_h': fixed_h,
+                        }, f_, indent=2)
+                    completed += 1
+                    seeds_str = ", ".join(f"{f:.1f}" for f in result.get('fmax_per_seed', []))
+                    print(f"  [{completed}/{len(active_jobs)}] "
+                          f"{job['config']} d{job['dsp_pct']}_c{job['clb_pct']}:  "
+                          f"P={job['P']}  fmax={result['fmax_mhz']:.1f} MHz "
+                          f"[{seeds_str}]  "
+                          f"wc={result['resources'].get('wc', 0)}")
+
+        print(f"\n  Completed: {len(vtr_results)}/{len(active_jobs)}")
+
+    # ── Phase 3b: Reload skipped ──
+    for job in skipped_jobs:
+        key = (job['config'], job['dsp_pct'], job['clb_pct'])
+        done_path = job['run_dir'] / "vtr_done.json"
+        try:
+            with open(done_path) as f_:
+                saved = json.load(f_)
+            resources = {}
+            for seed in MULTI_SEEDS:
+                seed_dir = job['run_dir'] / f"seed{seed}"
+                try:
+                    log_path = find_vpr_log(seed_dir)
+                    resources = parse_resources(log_path)
+                    break
+                except Exception:
+                    continue
+            vtr_results[key] = {
+                'fmax_mhz': saved['fmax_mhz'],
+                'fmax_per_seed': saved.get('fmax_per_seed', []),
+                'grid_w': fixed_w, 'grid_h': fixed_h,
+                'resources': resources,
+            }
+        except Exception as e:
+            print(f"  WARNING: reload failed {job['config']} "
+                  f"d{job['dsp_pct']}_c{job['clb_pct']}: {e}")
+
+    # ── Phase 4: IMC energy ──
+    print("\n" + "=" * 70)
+    print("Phase 4: Computing IMC attention energy")
+    print("=" * 70)
+
+    imc_dir = dse_dir / "configs" / "imc"
+    imc_dir.mkdir(parents=True, exist_ok=True)
+
+    imc_results = {}
+    for job in all_jobs:
+        key = (job['config'], job['dsp_pct'], job['clb_pct'])
+        if key not in vtr_results:
+            continue
+        vtr = vtr_results[key]
+        R, C = job['R'], job['C']
+        fn = vtr['fmax_mhz']
+
+        imc_cache_path = job['run_dir'] / "imc_result.json"
+        if imc_cache_path.exists():
+            try:
+                with open(imc_cache_path) as f_:
+                    cached = json.load(f_)
+                imc_results[key] = (cached['energy_pj'], cached['latency_ns'],
+                                    cached.get('breakdown', {}))
+                continue
+            except Exception:
+                pass
+
+        imc_cfg_name = f"nl_dpe_{R}x{C}_attn_d{job['dsp_pct']}_c{job['clb_pct']}.json"
+        imc_cfg_path = imc_dir / imc_cfg_name
+        patch_imc_config(BASE_IMC_CONFIG, R, C, fn, imc_cfg_path)
+
+        energy_pj, latency_ns, breakdown = run_imc_attention(
+            imc_cfg_path, n_seq, d_head)
+        if energy_pj is not None and latency_ns is not None:
+            imc_results[key] = (energy_pj, latency_ns, breakdown)
+            imc_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(imc_cache_path, 'w') as f_:
+                json.dump({
+                    'energy_pj': energy_pj, 'latency_ns': latency_ns,
+                    'breakdown': breakdown, 'fmax_mhz': fn,
+                }, f_, indent=2)
+            print(f"  {job['config']} d{job['dsp_pct']}_c{job['clb_pct']}: "
+                  f"E={energy_pj:.1f} pJ  lat={latency_ns:.1f} ns")
+
+    print(f"  IMC results: {len(imc_results)} points")
+
+    # ── Phase 5: Compute metrics ──
+    print("\n" + "=" * 70)
+    print("Phase 5: Computing throughput scalability")
+    print("=" * 70)
+
+    baseline_fmax = {}
+    baseline_energy = {}
+    for R, C in configs:
+        cfg = f"{R}x{C}"
+        key = (cfg, 20, 0)
+        if key in vtr_results and key in imc_results:
+            baseline_fmax[cfg] = vtr_results[key]['fmax_mhz']
+            baseline_energy[cfg] = imc_results[key][0]
+            print(f"  Baseline {cfg}: f0={baseline_fmax[cfg]:.1f} MHz, "
+                  f"E0={baseline_energy[cfg]:.1f} pJ")
+
+    all_rows = []
+    for job in all_jobs:
+        key = (job['config'], job['dsp_pct'], job['clb_pct'])
+        if key not in vtr_results:
+            continue
+        vtr = vtr_results[key]
+        f0 = baseline_fmax.get(job['config'])
+        e0 = baseline_energy.get(job['config'])
+        fn = vtr['fmax_mhz']
+        n = job['P']
+        gain = n * fn / f0 if f0 and f0 > 0 else None
+        util = fn / f0 if f0 and f0 > 0 else None
+
+        en = imc_results[key][0] if key in imc_results else None
+        energy_ratio = e0 / en if e0 and en and en > 0 else None
+
+        resources = vtr.get('resources', {})
+        row = {
+            'dsp_ratio': job['dsp_ratio'], 'clb_ratio': job['clb_ratio'],
+            'config': job['config'], 'workload': 'attention',
+            'P': n, 'total_dpes': job['total_dpes'],
+            'V': job['V'], 'H': job['H'],
+            'dpes_per_replica': job['dpes_per_replica'],
+            'clbs_need': job['clbs_need'], 'clbs_avail': job['clbs_avail'],
+            'fmax_mhz': fn,
+            'fmax_baseline_mhz': f0 if f0 else 0,
+            'gain': round(gain, 4) if gain else 0,
+            'utilization': round(util, 4) if util else 0,
+            'energy_pj': round(en, 2) if en else 0,
+            'energy_baseline_pj': round(e0, 2) if e0 else 0,
+            'energy_ratio': round(energy_ratio, 4) if energy_ratio else 0,
+            'grid_w': fixed_w, 'grid_h': fixed_h,
+            'clb_count': resources.get('clb', 0),
+            'dsp_count': resources.get('dsp_top', 0),
+            'mem_count': resources.get('memory', 0),
+            'wc_count': resources.get('wc', 0),
+            'limit': job['limit'],
+            'run_dir': str(job['run_dir']),
+        }
+        all_rows.append(row)
+
+    # ── Phase 6: Write CSV ──
+    if all_rows:
+        csv_columns = [
+            'dsp_ratio', 'clb_ratio', 'config', 'workload',
+            'P', 'total_dpes', 'V', 'H', 'dpes_per_replica',
+            'clbs_need', 'clbs_avail',
+            'fmax_mhz', 'fmax_baseline_mhz', 'gain', 'utilization',
+            'energy_pj', 'energy_baseline_pj', 'energy_ratio',
+            'grid_w', 'grid_h',
+            'clb_count', 'dsp_count', 'mem_count', 'wc_count',
+            'limit', 'run_dir',
+        ]
+        csv_path = results_dir / "round2_attention_results.csv"
+        with open(csv_path, 'w', newline='') as f_:
+            writer = csv.DictWriter(f_, fieldnames=csv_columns)
+            writer.writeheader()
+            for row in sorted(all_rows,
+                              key=lambda r: (r['config'], r['dsp_ratio'], r['clb_ratio'])):
+                writer.writerow(row)
+        print(f"\n  Written: {csv_path}  ({len(all_rows)} rows)")
+
+        print("\n  Per-config summary:")
+        for R, C in configs:
+            cfg = f"{R}x{C}"
+            cfg_rows = [r for r in all_rows if r['config'] == cfg]
+            if cfg_rows:
+                best = max(cfg_rows, key=lambda r: r['gain'])
+                utils = [r['utilization'] for r in cfg_rows if r['utilization'] > 0]
+                print(f"    {cfg}: {len(cfg_rows)} points, "
+                      f"P range {min(r['P'] for r in cfg_rows)}-{max(r['P'] for r in cfg_rows)}, "
+                      f"best gain={best['gain']:.1f}x, "
+                      f"util range {min(utils):.1%}-{max(utils):.1%}")
+
+    print("\nDone. Results in round2_attention_results.csv.")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -2708,6 +3163,10 @@ def parse_args():
     parser.add_argument(
         "--round2-full", action="store_true",
         help="Run Round 2 full sweep: DSP+CLB sweep on all FC workloads (512x128)",
+    )
+    parser.add_argument(
+        "--round2-attention", action="store_true",
+        help="Run Round 2 attention sweep: DSP+CLB sweep on attention head",
     )
     parser.add_argument(
         "--configs", type=str, default=None,
@@ -2762,10 +3221,12 @@ def main():
         print(f"Round 2 Prototype — DSP+CLB Replacement Sweep")
     elif args.round2_full:
         print(f"Round 2 Full Sweep — All Workloads")
+    elif args.round2_attention:
+        print(f"Round 2 Attention Sweep — DSP+CLB Replacement for Attention Head")
     elif args.round:
         print(f"GEMV/FC DSE — Round {args.round}")
     else:
-        print("ERROR: specify --round, --attention, --round2-proto, or --round2-full")
+        print("ERROR: specify --round, --attention, --round2-proto, --round2-full, or --round2-attention")
         sys.exit(1)
     print(f"  DSE dir: {args.dse_dir}")
     print()
@@ -2776,6 +3237,8 @@ def main():
         run_round2_prototype(args)
     elif args.round2_full:
         run_round2_full(args)
+    elif args.round2_attention:
+        run_round2_attention(args)
     elif args.round == 1:
         run_round1(args)
     elif args.round == 2:

@@ -493,10 +493,10 @@ def find_knee_point(pareto):
 
 
 def plot_pareto(data, dsp_pcts, clb_pcts):
-    """Figure 3: Pareto front — DPE area vs normalized latency.
+    """Figure 3: Pareto front — DPE area vs effective latency.
 
     X = DPE area (% of total FPGA area). Cost, minimize.
-    Y = Normalized latency = 1/(P × fn/f0). Inverse throughput gain, minimize.
+    Y = Effective latency (ns/inference) = 1000/(P × Fmax_MHz).
     Geomean across 3 workloads. One subplot per config.
     Closer to origin = better.
     """
@@ -504,8 +504,8 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
     with open(CSV_PATH) as f:
         rows = list(csv.DictReader(f))
 
-    # Group by (config, d%, c%) → per-workload gain + total_dpes
-    grouped = defaultdict(lambda: {"gains": {}, "total_dpes": None})
+    # Group by (config, d%, c%) → per-workload gain, fmax, P + total_dpes
+    grouped = defaultdict(lambda: {"gains": {}, "eff_lat_ns": {}, "total_dpes": None})
     for r in rows:
         cfg = r['config']
         d_pct = int(round(float(r['dsp_ratio']) * 100))
@@ -514,11 +514,17 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
         key = (cfg, d_pct, c_pct)
         grouped[key]["gains"][wl] = float(r['gain'])
         grouped[key]["total_dpes"] = int(r['total_dpes'])
+        p = int(r['P'])
+        fmax = float(r['fmax_mhz'])
+        if p > 0 and fmax > 0:
+            grouped[key]["eff_lat_ns"][wl] = 1e3 / (p * fmax)  # ns per inference
 
     # 2×3 grid: 5 config subplots + 1 note panel (bottom-left)
     fig, axes = plt.subplots(2, 3, figsize=(9.5, 5.5), squeeze=False)
-    fig.subplots_adjust(left=0.08, right=0.97, top=0.95, bottom=0.10,
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.91, bottom=0.10,
                         wspace=0.18, hspace=0.28)
+    fig.suptitle("FC Workloads: Per-Config Pareto Front",
+                 fontsize=12, fontweight="bold", y=0.97)
 
     # Collect Pareto-optimal points and knee for footnotes
     pareto_info = []  # list of (cfg, pareto_combos, knee_combo)
@@ -531,20 +537,20 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
         color = CONFIG_COLORS[cfg]
         tw, th = get_tile_dims(cfg)
 
-        # Build points: (dpe_area_pct, norm_latency, (d%, c%))
+        # Build points: (dpe_area_pct, eff_latency_ns, (d%, c%))
+        # Y-axis = geomean of effective latency (ns/inference) across workloads
         points = []
         for (c, d, cp), info in grouped.items():
             if c != cfg:
                 continue
-            if len(info["gains"]) < len(WORKLOADS):
+            if len(info["eff_lat_ns"]) < len(WORKLOADS):
                 continue
-            gains = list(info["gains"].values())
-            if any(g <= 0 for g in gains):
+            lats = list(info["eff_lat_ns"].values())
+            if any(l <= 0 for l in lats):
                 continue
-            gm_gain = math.exp(sum(math.log(g) for g in gains) / len(gains))
-            norm_lat = 1.0 / gm_gain
+            gm_lat = math.exp(sum(math.log(l) for l in lats) / len(lats))
             dpe_area_pct = info["total_dpes"] * tw * th / GRID_CELLS * 100
-            points.append((dpe_area_pct, norm_lat, (d, cp)))
+            points.append((dpe_area_pct, gm_lat, (d, cp)))
 
         if not points:
             continue
@@ -587,9 +593,8 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
 
         ax.set_xlabel("DPE Area (% of FPGA)", fontsize=8)
         if (row == 0 and col == 0) or (row == 1 and col == 1):
-            ax.set_ylabel("Effective Latency", fontsize=8)
-        al_pct = CONFIG_LABELS[cfg].split(', ')[1].rstrip(')')
-        ax.set_title(f"{CONFIG_SHORT[cfg]} ({al_pct})",
+            ax.set_ylabel("Geomean Eff. Latency (ns/inf)", fontsize=8)
+        ax.set_title(f"{CONFIG_SHORT[cfg]}",
                      fontweight="bold", fontsize=9, pad=4)
         ax.set_xlim(left=0)
         ax.set_ylim(bottom=0)
@@ -635,15 +640,291 @@ def plot_pareto(data, dsp_pcts, clb_pcts):
                  transform=ax_note.transAxes,
                  fontsize=8, verticalalignment="top",
                  fontfamily="serif", color="#555555")
-    y_pos -= 0.12
-    ax_note.text(0.0, y_pos,
-                 r"Eff. Latency $\propto$ 1 / (replicas $\times$ freq)",
-                 transform=ax_note.transAxes,
-                 fontsize=8.5, verticalalignment="top",
-                 fontfamily="serif", color="#888888", style="italic")
-
     fig.savefig(RESULTS_DIR / "round2_full_pareto.pdf")
     print(f"Saved: {RESULTS_DIR / 'round2_full_pareto.pdf'}")
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# FIGURE 4: Merged Pareto — NL-DPE group (3) + AL-like group (2)
+# ═════════════════════════════════════════════════════════════════════════
+
+def plot_merged_pareto(data, dsp_pcts, clb_pcts):
+    """Merged Pareto: top 3 configs overlaid, bottom 2 overlaid."""
+    with open(CSV_PATH) as f:
+        rows = list(csv.DictReader(f))
+
+    grouped = defaultdict(lambda: {"eff_lat_ns": {}, "total_dpes": None})
+    for r in rows:
+        cfg = r['config']
+        d_pct = int(round(float(r['dsp_ratio']) * 100))
+        c_pct = int(round(float(r['clb_ratio']) * 100))
+        wl = r['workload']
+        key = (cfg, d_pct, c_pct)
+        grouped[key]["total_dpes"] = int(r['total_dpes'])
+        p = int(r['P'])
+        fmax = float(r['fmax_mhz'])
+        if p > 0 and fmax > 0:
+            grouped[key]["eff_lat_ns"][wl] = 1e3 / (p * fmax)
+
+    groups = [
+        ("NL-DPE Group", ["512x128", "1024x128", "1024x64"]),
+        ("AL-like Group", ["1024x256", "512x256"]),
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig.subplots_adjust(left=0.08, right=0.95, wspace=0.25, top=0.88)
+    fig.suptitle("FC Workloads: Cross-Config Pareto Front (geomean across 3 workloads)",
+                 fontsize=11, fontweight="bold", y=0.96)
+
+    for gi, (group_name, cfgs) in enumerate(groups):
+        ax = axes[gi]
+        all_points = []
+
+        for cfg in cfgs:
+            color = CONFIG_COLORS[cfg]
+            marker = CONFIG_MARKERS[cfg]
+            tw, th = get_tile_dims(cfg)
+
+            points = []
+            for (c, d, cp), info in grouped.items():
+                if c != cfg or len(info["eff_lat_ns"]) < len(WORKLOADS):
+                    continue
+                lats = list(info["eff_lat_ns"].values())
+                if any(l <= 0 for l in lats):
+                    continue
+                gm_lat = math.exp(sum(math.log(l) for l in lats) / len(lats))
+                dpe_area_pct = info["total_dpes"] * tw * th / GRID_CELLS * 100
+                points.append((dpe_area_pct, gm_lat, (d, cp), cfg))
+
+            if not points:
+                continue
+
+            cfg_pareto = compute_pareto_min([(p[0], p[1], p[2]) for p in points])
+            cfg_pareto_set = set((p[0], p[1]) for p in cfg_pareto)
+
+            dom = [p for p in points if (p[0], p[1]) not in cfg_pareto_set]
+            ax.scatter([p[0] for p in dom], [p[1] for p in dom],
+                       facecolors="none", edgecolors=color, marker=marker,
+                       s=25, alpha=0.4, linewidths=0.6, zorder=2)
+
+            px = [p[0] for p in cfg_pareto]
+            py = [p[1] for p in cfg_pareto]
+            ax.plot(px, py, color=color, linewidth=1.2, alpha=0.7, zorder=3)
+            ax.scatter(px, py, color=color, marker=marker, s=30,
+                       edgecolors="white", linewidths=0.6, zorder=4,
+                       label=CONFIG_SHORT[cfg])
+
+            all_points.extend(points)
+
+        global_pts = [(p[0], p[1], (p[2], p[3])) for p in all_points]
+        global_pareto = compute_pareto_min(global_pts)
+
+        gpx = [p[0] for p in global_pareto]
+        gpy = [p[1] for p in global_pareto]
+        ax.plot(gpx, gpy, color="black", linewidth=2, linestyle="--",
+                alpha=0.6, zorder=5, label="Cross-config Pareto")
+
+        knee_idx = find_knee_point(global_pareto)
+        knee = global_pareto[knee_idx]
+        knee_dc, knee_cfg = knee[2]
+        kd, kc = knee_dc
+
+        ax.scatter([knee[0]], [knee[1]], color="black", s=150,
+                   edgecolors="red", linewidths=2, zorder=6, marker="*")
+        ax.annotate(f"{CONFIG_SHORT[knee_cfg]}\nd={kd}% c={kc}%",
+                    xy=(knee[0], knee[1]),
+                    xytext=(knee[0] + max(gpx) * 0.12, knee[1] * 1.15),
+                    fontsize=8, fontweight="bold", color="red",
+                    arrowprops=dict(arrowstyle="->", color="red", lw=1.2),
+                    zorder=7)
+
+        print(f"\n  {group_name} — Global Pareto ({len(global_pareto)} points):")
+        print(f"  {'Config':>12} {'DSP%':>5} {'CLB%':>5} {'Area%':>7} {'Lat(ns)':>9}")
+        for area, lat, meta in global_pareto:
+            dc, c = meta
+            d, cp = dc
+            star = " ★" if (dc, c) == (knee_dc, knee_cfg) else ""
+            print(f"  {CONFIG_SHORT[c]:>12} {d:>5} {cp:>5} {area:>7.2f} {lat:>9.4f}{star}")
+
+        ax.set_xlabel("DPE Area (% of FPGA)", fontsize=10)
+        ax.set_ylabel("Geomean Eff. Latency (ns/inference)", fontsize=10)
+        ax.set_title(group_name, fontweight="bold", fontsize=11)
+        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0)
+        ax.legend(fontsize=8, loc="upper right")
+        ax.grid(True, alpha=0.2, linewidth=0.5)
+
+    fig.savefig(RESULTS_DIR / "round2_full_pareto_merged.pdf")
+    print(f"Saved: {RESULTS_DIR / 'round2_full_pareto_merged.pdf'}")
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# FIGURE 5: Throughput Ceiling — Soft ceiling from routing degradation
+# ═════════════════════════════════════════════════════════════════════════
+
+def plot_throughput_ceiling(data, dsp_pcts, clb_pcts):
+    """Throughput ceiling: actual vs ideal throughput as DPE area grows.
+
+    Shows the soft ceiling from Fmax degradation at high replica counts.
+    2×3 grid: 5 config subplots + 1 note panel (bottom-left).
+    X = DPE Area (% of FPGA), Y = Throughput (P × Fmax).
+    """
+    with open(CSV_PATH) as f:
+        rows = list(csv.DictReader(f))
+
+    # Group by (config, d%, c%) → per-workload metrics
+    grouped = defaultdict(lambda: {"fmax": {}, "P": None, "total_dpes": None})
+    for r in rows:
+        cfg = r['config']
+        d_pct = int(round(float(r['dsp_ratio']) * 100))
+        c_pct = int(round(float(r['clb_ratio']) * 100))
+        wl = r['workload']
+        key = (cfg, d_pct, c_pct)
+        grouped[key]["fmax"][wl] = float(r['fmax_mhz'])
+        grouped[key]["P"] = int(r['P'])
+        grouped[key]["total_dpes"] = int(r['total_dpes'])
+
+    # 2×3 grid
+    fig, axes = plt.subplots(2, 3, figsize=(10, 6.5), squeeze=False)
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.93, bottom=0.09,
+                        wspace=0.25, hspace=0.35)
+
+    panel_positions = [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2)]
+
+    for idx, cfg in enumerate(CONFIGS):
+        row, col = panel_positions[idx]
+        ax = axes[row, col]
+        color = CONFIG_COLORS[cfg]
+        tw, th = get_tile_dims(cfg)
+
+        # Get baseline f0 per workload (d=20%, c=0%)
+        base = grouped.get((cfg, 20, 0), {})
+        if not base or len(base.get("fmax", {})) < len(WORKLOADS):
+            continue
+        f0 = base["fmax"]  # per-workload baseline Fmax
+
+        # Collect points
+        points = []
+        for (c, d, cp), info in grouped.items():
+            if c != cfg or len(info["fmax"]) < len(WORKLOADS):
+                continue
+            P = info["P"]
+            dpe_area_pct = info["total_dpes"] * tw * th / GRID_CELLS * 100
+
+            # Geomean actual throughput: P × fn
+            tputs = [P * info["fmax"][wl] for wl in WORKLOADS]
+            gm_actual = math.exp(sum(math.log(t) for t in tputs) / len(tputs))
+
+            # Geomean ideal throughput: P × f0
+            ideal_tputs = [P * f0[wl] for wl in WORKLOADS]
+            gm_ideal = math.exp(sum(math.log(t) for t in ideal_tputs) / len(ideal_tputs))
+
+            points.append({
+                'area_pct': dpe_area_pct,
+                'P': P,
+                'gm_actual': gm_actual,
+                'gm_ideal': gm_ideal,
+                'efficiency': gm_actual / gm_ideal if gm_ideal > 0 else 0,
+                'd': d, 'c': cp,
+            })
+
+        points.sort(key=lambda p: p['area_pct'])
+
+        # Deduplicate by area (same P at different (d,c) can give same area)
+        seen_areas = {}
+        for pt in points:
+            a = round(pt['area_pct'], 2)
+            if a not in seen_areas or pt['gm_actual'] > seen_areas[a]['gm_actual']:
+                seen_areas[a] = pt
+        points = sorted(seen_areas.values(), key=lambda p: p['area_pct'])
+
+        xs = [p['area_pct'] for p in points]
+        actual = [p['gm_actual'] for p in points]
+        ideal = [p['gm_ideal'] for p in points]
+        effs = [p['efficiency'] for p in points]
+
+        # Convert to inferences/ns: throughput_GHz = P × Fmax_MHz / 1000
+        actual_inf_ns = [a / 1e3 for a in actual]
+        ideal_inf_ns = [i / 1e3 for i in ideal]
+
+        # Plot ideal (linear scaling) as dashed line
+        ax.plot(xs, ideal_inf_ns, color='#888888', linewidth=1.2, linestyle='--',
+                alpha=0.7, zorder=2, label='Ideal (P × f₀)')
+
+        # Fill the gap (wasted throughput)
+        ax.fill_between(xs, actual_inf_ns, ideal_inf_ns, alpha=0.12, color=color,
+                        zorder=1)
+
+        # Plot actual throughput
+        ax.plot(xs, actual_inf_ns, color=color, linewidth=2, zorder=4)
+        ax.scatter(xs, actual_inf_ns, color=color, s=25, edgecolors='white',
+                   linewidths=0.5, zorder=5)
+
+        # Find and mark the negative-return zone (if any)
+        for i in range(1, len(actual_inf_ns)):
+            if actual_inf_ns[i] < actual_inf_ns[i-1]:
+                ax.axvspan(xs[i-1], xs[i], alpha=0.15, color='red', zorder=0)
+
+        # Mark the 80% throughput point (just the dotted line, no text clutter)
+        max_tput = max(actual_inf_ns)
+        for i, pt in enumerate(points):
+            if actual_inf_ns[i] >= max_tput * 0.8:
+                ax.axvline(x=pt['area_pct'], color=color, linewidth=0.8,
+                           linestyle=':', alpha=0.5, zorder=1)
+                break
+
+        # Only annotate efficiency at start and end (no clutter)
+        if points:
+            # Start point
+            ax.annotate(f"{points[0]['efficiency']:.0%}",
+                        xy=(xs[0], actual_inf_ns[0]),
+                        xytext=(xs[0] + 2, actual_inf_ns[0]),
+                        fontsize=6.5, color=color, fontweight='bold',
+                        ha='left', va='center')
+            # End point
+            ax.annotate(f"{points[-1]['efficiency']:.0%}",
+                        xy=(xs[-1], actual_inf_ns[-1]),
+                        xytext=(xs[-1] - 2, actual_inf_ns[-1] * 1.08),
+                        fontsize=6.5, color=color, fontweight='bold',
+                        ha='right', va='bottom')
+
+        ax.set_xlabel("DPE Area (% of FPGA)", fontsize=8)
+        if col == 0 or (row == 1 and col == 1):
+            ax.set_ylabel("Throughput (inferences/ns)", fontsize=8)
+        ax.set_title(f"{CONFIG_SHORT[cfg]}", fontweight="bold", fontsize=9, pad=4)
+        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0)
+        ax.grid(True, alpha=0.15, linewidth=0.5)
+
+    # Bottom-left panel: notes
+    ax_note = axes[1, 0]
+    ax_note.axis("off")
+
+    note_text = (
+        "Throughput Ceiling Analysis\n"
+        "\n"
+        "── Actual: P × fₙ\n"
+        "- - Ideal: P × f₀ (no Fmax loss)\n"
+        "\n"
+        "Shaded gap = throughput lost\n"
+        "  to routing congestion\n"
+        "\n"
+        "Red zone = negative marginal\n"
+        "  return (more DPEs hurts)\n"
+        "\n"
+        "Dotted line = 80% of peak\n"
+        "\n"
+        "% labels = actual/ideal efficiency\n"
+        "  (start → end of curve)\n"
+    )
+    ax_note.text(0.05, 0.95, note_text,
+                 transform=ax_note.transAxes,
+                 fontsize=8.5, verticalalignment="top",
+                 fontfamily="serif", color="#333333",
+                 linespacing=1.4)
+
+    fig.savefig(RESULTS_DIR / "round2_full_ceiling.pdf")
+    print(f"Saved: {RESULTS_DIR / 'round2_full_ceiling.pdf'}")
 
 
 # ═════════════════════════════════════════════════════════════════════════
@@ -666,9 +947,21 @@ def main():
 
     print()
     print("=" * 60)
-    print("Figure 3: Pareto front")
+    print("Figure 3: Pareto front (per-config)")
     print("=" * 60)
     plot_pareto(data, dsp_pcts, clb_pcts)
+
+    print()
+    print("=" * 60)
+    print("Figure 4: Merged Pareto front")
+    print("=" * 60)
+    plot_merged_pareto(data, dsp_pcts, clb_pcts)
+
+    print()
+    print("=" * 60)
+    print("Figure 5: Throughput ceiling")
+    print("=" * 60)
+    plot_throughput_ceiling(data, dsp_pcts, clb_pcts)
 
     print("\nDone.")
 

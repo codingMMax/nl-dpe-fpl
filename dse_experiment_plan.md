@@ -535,14 +535,34 @@ Used **fc_2048_256 on 512×128** (V=4, H=2, 8 DPEs/replica, ~20 CLBs/replica) fo
 
 Triple feasibility check ensures no VTR resource failures: P = min(P_dpe, P_clb, P_bram). All 300/300 points verified feasible in dry-run.
 
-### 11.5 Part 2 — Attention Head Exploration (TODO)
+### 11.5 Part 2 — Attention Head Exploration (COMPLETE)
 
-**Deferred**. The attention head uses a structurally different datapath (Q/K/V projections + DIMM + softmax) with heavy CLB usage (~169 CLBs). Integration into the Round 2 sweep requires:
-- Parameterized attention RTL generator (gen_attention_wrapper.py)
-- Attention-specific energy model integration
-- Separate analysis of ACAM-as-log benefits
+**Scope**: 5 configs × 1 workload (attention N=128, d=128) × 16 (d,c) points × 3 seeds = 240 VTR runs.
 
-This will be addressed after Part 1 prototyping is validated.
+**DSP sweep**: d ∈ {20%, 40%, 60%, 80%}. d=100% excluded — softmax normalization multiply requires DSP blocks; at d=100% all DSPs are replaced by DPEs.
+
+**CLB sweep**: c ∈ {0%, 20%, 40%, 60%}
+
+**Architecture (Fig 6c mapping):**
+- Linear Q/K/V: DPE(W|log) — weight-persistent GEMV, ACAM outputs log domain
+- DMMul_1 (Q·K^T): CLB add(log_Q + log_K) → DPE(I|exp) → CLB reduce
+- Softmax: DPE(I|exp) → CLB sum → CLB reciprocal → CLB multiply
+- DMMul_2 (attn·V): DPE(I|log) on attn → CLB add → DPE(I|exp) → CLB reduce
+
+**DPE counting**: (3V+4)×H per replica. V=ceil(d/R), H=ceil(max(d,N)/C). For d=N=128, all configs have V=1; H=1 for C≥128, H=2 for C=64. Total: 7 DPEs/rep (C≥128) or 14 DPEs/rep (C=64).
+
+**Per-replica resources** (empirically calibrated via P=1,2,3 VTR runs):
+- 145 CLBs (adders, accumulators, FSMs, reciprocal LUT)
+- 64 BRAMs (Q/K/V/score/attn/output buffers)
+- 2 DSPs (softmax normalization multiply)
+
+**Feasibility**: P = min(P_dpe, P_clb, P_bram, P_dsp) — 4-resource constraint (vs 3 for FC).
+
+**Key finding**: BRAM wall at P=7 (64 BRAMs/rep, 472 total). Hard ceiling — unlike FC soft ceiling from routing degradation, attention hits absolute wall regardless of DPE area.
+
+**RTL generators**: gen_attention_wrapper.py (single replica), gen_attention_gemm_wrapper.py (P-replica wrapper).
+
+**Output**: round2_attention_results.csv (80 rows), 4 publication figures.
 
 ### 11.6 Round 2 Totals
 
@@ -550,7 +570,7 @@ This will be addressed after Part 1 prototyping is validated.
 |----------------|--------|-----------|----------|--------|
 | Part 1 prototype (106×106, single-seed) | 20 unique | 1 | 25 | **Complete** (historical) |
 | Part 1 full sweep (120×120, 3-seed) | 20 per (cfg,wl) | 3 wl × 5 cfg | 900 (300×3) | **Re-running** |
-| Part 2: Attention (TODO) | TBD | 1 | TBD | Deferred |
+| Part 2: Attention | 16 per cfg | 1 wl × 5 cfg | 240 (80×3) | **Complete** |
 
 ### 11.7 Expected Outcomes
 
