@@ -1,4 +1,4 @@
-// NL-DPE LeNet-3 (1-channel, 16-bit data width)
+// NL-DPE LeNet-3 (1-channel, 40-bit data width)
 // DPE mapping for 256x256 crossbar:
 //   conv1: K=25, N=6   -> 1 DPE (single)
 //   conv2: K=150, N=16  -> 1 DPE (single)
@@ -45,7 +45,7 @@ module LeNet3_0 (
         .H(32),
         .S(1),
         .DEPTH(512),
-        .DATA_WIDTH(16)
+        .DATA_WIDTH(40)
     ) conv1 (
         .clk(clk),
         .rst(rst),
@@ -63,7 +63,7 @@ module LeNet3_0 (
     pool_layer1 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(10),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(1024)
     ) pool1 (
         .clk(clk),
@@ -88,7 +88,7 @@ module LeNet3_0 (
         .H(14),
         .S(1),
         .DEPTH(512),
-        .DATA_WIDTH(16)
+        .DATA_WIDTH(40)
     ) conv2 (
         .clk(clk),
         .rst(rst),
@@ -106,7 +106,7 @@ module LeNet3_0 (
     pool_layer2 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(7),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(128)
     ) pool2 (
         .clk(clk),
@@ -134,7 +134,7 @@ module LeNet3_0 (
         .N_DPE_H(1),
         .N_BRAM_R(1),
         .N_BRAM_W(1),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(512)
     ) conv3 (
         .clk(clk),
@@ -151,7 +151,7 @@ module LeNet3_0 (
     activation_layer_tanh #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(7),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(128)
     ) act3 (
         .clk(clk),
@@ -175,7 +175,7 @@ module LeNet3_0 (
         .H(1),
         .S(1),
         .DEPTH(512),
-        .DATA_WIDTH(16)
+        .DATA_WIDTH(40)
     ) conv4 (
         .clk(clk),
         .rst(rst),
@@ -200,7 +200,7 @@ module LeNet3_0 (
         .H(1),
         .S(1),
         .DEPTH(128),
-        .DATA_WIDTH(16)
+        .DATA_WIDTH(40)
     ) conv5 (
         .clk(clk),
         .rst(rst),
@@ -228,7 +228,7 @@ module LeNet3_0 (
     // Global SRAM
     sram #(
         .N_CHANNELS(1),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(128)
     ) global_sram_inst (
         .clk(clk),
@@ -272,7 +272,7 @@ module conv_layer #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -314,7 +314,7 @@ module conv_layer #(
         .sram_data_out(sram_data_out)
     );
 
-    // DPE hard block: 16-bit data_in, 16-bit data_out
+    // DPE hard block: 40-bit data_in, 40-bit data_out
     dpe dpe_inst (
         .clk(clk),
         .reset(rst),
@@ -385,7 +385,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
     parameter N_DPE_H = 1,
     parameter N_BRAM_R = 1,
     parameter N_BRAM_W = 1,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -990,7 +990,7 @@ endmodule
 // ============================================================================
 module sram #(
     parameter N_CHANNELS = 1,
-    parameter DATA_WIDTH = 16*N_CHANNELS,
+    parameter DATA_WIDTH = 40*N_CHANNELS,
     parameter DEPTH = 512
 )(
     input wire clk,
@@ -1023,7 +1023,7 @@ endmodule
 // xbar_ip_module: input crossbar for stacked DPEs
 // ============================================================================
 module xbar_ip_module #(
-    parameter DATA_WIDTH = 16,
+    parameter DATA_WIDTH = 40,
     parameter NUM_INPUTS = 1,
     parameter NUM_OUTPUTS = 2
 )(
@@ -1261,7 +1261,7 @@ endmodule
 
 
 // ============================================================================
-// max_pooling_N_CHANNELS_1: 16-bit max pooling (2x2)
+// max_pooling_N_CHANNELS_1: 40-bit max pooling (2x2)
 // ============================================================================
 module max_pooling_N_CHANNELS_1 #(
     parameter N_CHANNELS = 1
@@ -1414,7 +1414,7 @@ endmodule
 
 
 // ============================================================================
-// adder_dpe_N_CHANNELS_1: 16-bit adder for DPE partial sum reduction
+// adder_dpe_N_CHANNELS_1: 40-bit adder for DPE partial sum reduction
 // ============================================================================
 module adder_dpe_N_CHANNELS_1 #(
     parameter N_CHANNELS = 1
@@ -1647,7 +1647,7 @@ module tanh_activation_parallel_N_CHANNELS_1 #(
         tanh_lut[252] = 8'd252; tanh_lut[253] = 8'd253; tanh_lut[254] = 8'd254; tanh_lut[255] = 8'd255;
     end
 
-    // Truncate 16-bit input to 8-bit for LUT lookup
+    // Truncate 40-bit input to 8-bit for LUT lookup
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             tanh_output_0 <= 8'd0;
@@ -1660,7 +1660,7 @@ module tanh_activation_parallel_N_CHANNELS_1 #(
         end
     end
 
-    // Zero-extend 8-bit LUT output to 16-bit
+    // Zero-extend 8-bit LUT output to 40-bit
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             sram_data_out[15:0] <= 16'd0;

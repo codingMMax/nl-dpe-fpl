@@ -66,14 +66,30 @@ plt.rcParams.update({
 COLOR_MM2 = "#2563EB"   # blue
 COLOR_J   = "#F59E0B"   # amber
 COLOR_TOP = "#059669"    # emerald accent
+COLOR_AL  = "#DC2626"   # red for Azure-Lily comparison
+
+# Azure-Lily area comparison (from VTR arch XML: wc tile area = 2,320,000 MWTA)
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "nl_dpe"))
+from area_power import dpe_specs
+AL_AREA_MWTA = 2_320_000  # Azure-Lily 512x128 tile area from arch XML
+
+def area_ratio_to_al(cfg_str):
+    """Return NL-DPE tile area as fraction of Azure-Lily tile area."""
+    R, C = map(int, cfg_str.split("x"))
+    return dpe_specs(R, C)["area_tag_mwta"] / AL_AREA_MWTA
+
+# Config-equivalent: same crossbar size as Azure-Lily
+CONFIG_EQUIV = "512x128"
+# Area-equivalent: within 20% of Azure-Lily tile area
+AREA_EQUIV = [c for c in configs_ranked if abs(area_ratio_to_al(c) - 1.0) < 0.20]
 
 # ═════════════════════════════════════════════════════════════════════════
 # PLOT 1: Config Ranking Bar Chart
 # ═════════════════════════════════════════════════════════════════════════
 
-fig1, ax1 = plt.subplots(figsize=(5.5, 3.8))
-
 n = len(configs_ranked)
+fig1, ax1 = plt.subplots(figsize=(5.5, max(3.8, n * 0.42)))
 y_pos = np.arange(n)
 bar_h = 0.35
 
@@ -86,7 +102,7 @@ bars_mm2 = ax1.barh(y_pos + bar_h / 2, gm_mm2[::-1], bar_h,
 bars_J   = ax1.barh(y_pos - bar_h / 2, gm_J[::-1],   bar_h,
                      color=COLOR_J,   alpha=0.85, label="Geomean Tput/J")
 
-# Labels
+# Labels with Azure-Lily area annotations
 labels_reversed = configs_ranked[::-1]
 for i, cfg in enumerate(labels_reversed):
     is_top = cfg in top_configs
@@ -94,16 +110,31 @@ for i, cfg in enumerate(labels_reversed):
     rank = n - i
     label = f"#{rank}  {cfg}"
     if is_top:
-        label += "  *"  # top-3 marker
+        label += "  *"
     ax1.text(-0.02, i, label, ha="right", va="center", fontsize=9,
              fontweight=weight, transform=ax1.get_yaxis_transform())
 
+    # Annotate area ratio to Azure-Lily on the right side of bars
+    ratio = area_ratio_to_al(cfg)
+    combined = ranking[rank - 1]["geomean_combined"]
+    annot_x = max(gm_mm2[rank - 1], gm_J[rank - 1]) + 0.02
+    area_label = f"{ratio:.0%} AL"
+    color = COLOR_AL if cfg in AREA_EQUIV or cfg == CONFIG_EQUIV else "gray"
+    style = "bold" if cfg in AREA_EQUIV or cfg == CONFIG_EQUIV else "normal"
+    ax1.text(annot_x, i, area_label, ha="left", va="center", fontsize=7.5,
+             fontweight=style, color=color)
+
 ax1.set_yticks([])
-ax1.set_xlim(0, 1.05)
+ax1.set_xlim(0, 1.15)
 ax1.set_xlabel("Normalized Geomean Score (best = 1.0)")
 ax1.set_title("Round 1: Crossbar Configuration Ranking", fontweight="bold", pad=10)
 ax1.legend(loc="lower right", framealpha=0.9)
 ax1.axvline(x=1.0, color="grey", linewidth=0.5, linestyle="--", alpha=0.5)
+
+# Add footnote explaining annotations
+fig1.text(0.19, 0.01,
+          "* = top-3;  %AL = tile area as % of Azure-Lily 512\u00d7128 (red = within 20%)",
+          fontsize=7, color="gray", style="italic")
 
 # Light grid
 ax1.xaxis.grid(True, alpha=0.3, linestyle="--")
@@ -149,7 +180,7 @@ cmap = mcolors.LinearSegmentedColormap.from_list(
     "wg", ["#FFFFFF", "#D1FAE5", "#34D399", "#059669", "#064E3B"], N=256
 )
 
-fig2, ax2 = plt.subplots(figsize=(6, 4.2))
+fig2, ax2 = plt.subplots(figsize=(6, max(4.2, n_cfg * 0.42)))
 im = ax2.imshow(mat, cmap=cmap, aspect="auto", vmin=0, vmax=1.0)
 
 # Annotate cells

@@ -11,15 +11,23 @@ __pycache__/
 */vgg11_1_channel/
 */attention_head_1_channel/
 
-# DSE VTR outputs and intermediate configs
+# DSE VTR outputs and intermediate configs (large, regenerable)
 dse/round1/
 dse/round2/
+dse/round2_proto/
+dse/round2_full/
+dse/attention/
+dse/sanity_*/
 dse/configs/
 dse/rtl/
 
-# DSE reproducible outputs (regenerate via plot_round1.py)
+# DSE reproducible outputs (regenerate via plot scripts)
 dse/results/*.log
 dse/results/*.pdf
+dse/results/*.png
+
+# Claude local config
+.claude/
 
 # Staging for cleanup
 */to_delete/

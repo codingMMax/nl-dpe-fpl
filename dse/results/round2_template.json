@@ -1,0 +1,16 @@
+{
+  "fixed_grid_w": 120,
+  "fixed_grid_h": 120,
+  "max_top3_fc_grid": 44,
+  "max_top3_attn_grid": 88,
+  "overall_max": 88,
+  "scale": 1.36,
+  "note": "120x120 ensures all 5 configs (incl 1024x256 tile 7x9) fit at d=20% c=0%",
+  "top5": [
+    "512x128",
+    "1024x128",
+    "1024x64",
+    "1024x256",
+    "512x256"
+  ]
+}

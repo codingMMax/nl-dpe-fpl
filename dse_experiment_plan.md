@@ -408,87 +408,166 @@ GEMV prefers tall-narrow (high R, low C). Attention DIMM uses ACAM as log across
 
 ---
 
-## 11. Round 2 — FPGA-Aware DSE (on Top-3 Configs)
+## 11. Round 2 — FPGA Resource Allocation DSE (Fixed Area)
 
-Round 1 uses auto_layout (VTR sizes each design freely). Round 2 constrains to a **fixed FPGA template** to evaluate resource trade-offs.
+Round 1 uses auto_layout (VTR sizes each design freely). Round 2 constrains to a **fixed FPGA template** to answer the key architecture question: **given a fixed-area FPGA, how should we allocate area between DPEs, DSPs, BRAMs, and CLBs?**
 
-### 11.1 Template Generation
+### 11.1 Motivation
 
-1. Take the **smallest DPE config** (128×64) with the **largest workload** (fc_2048_256)
-2. Run VTR with auto_layout → get minimum FPGA grid size
-3. **Scale by 1.2×** → fixed_layout template (provides headroom for CLB replacement)
-4. All Round 2 runs use this template — fixed FPGA area
+DPE hard blocks are extremely compute-dense: a single 512×128 DPE performs 65,536 MACs/cycle in 33,755 µm², while a DSP tile performs 4 MACs/cycle in 8,593 µm² (~1,942 vs ~0.47 MACs/cycle/µm²). The natural area source for DPEs is DSP columns (functional replacement). However:
 
-### 11.2 Input
-Top-3 DPE configs selected from Round 1 results (e.g., 256×128, 512×128, 512×256 — TBD from data).
+- **DSP area is limited**: 182 DSPs × 8,593 µm² = 1.56 mm² (only 6% of a 106×106 FPGA)
+- **CLB area dominates**: 8,528 CLBs × 2,239 µm² = 19.09 mm² (76% of FPGA)
+- **BRAMs should be preserved**: on-chip weight/activation storage is critical
 
-### 11.3 Part 1 — CLB Replacement Sweep
+To scale DPE parallelism beyond what DSP area alone provides, CLB area must also be traded. But CLBs serve dual purposes: (1) coordination logic for DPE replicas (adder trees, activation, control FSMs), and (2) routing fabric (switch boxes, connection boxes). Removing CLBs creates a **double squeeze**: more DPEs demand more coordination CLBs, while fewer CLBs are available.
 
-**Sweep**: 4 CLB replacement ratios × 3 configs × 6 workloads = **72 VTR runs**
+### 11.2 GEMM Data Parallelism Model
 
-For each config C and ratio r ∈ {5%, 8%, 12%, 15%}:
-1. Compute DPEs that fit in r% of CLB area: `n_dpes = floor(r × total_CLB_area / dpe_area)`
-2. Remove `n_dpes × tile_cells` CLB grid positions, place DPE columns
-3. Keep all DSPs and BRAMs — do NOT remove them
-4. Run VTR for 6 workloads → Fmax, resource utilization
-5. Compute metrics: inf/J, inf/mm², DPE utilization
+Instead of a single GEMV instance, Round 2 uses **GEMM data parallelism**: replicate the GEMV unit P times, each processing a different subset of the batch dimension M.
 
-**Key question**: at what CLB replacement ratio does the CLB become the bottleneck (not enough CLBs for reduction/activation when V>1)? This is the "balance point" between DPE compute and CLB support logic.
-
-DPE utilization per workload:
 ```
-dpe_util = tiles_needed / n_dpes_placed    (tiles_needed = V × H)
+GEMM: C(M×N) = A(M×K) × B(K×N)
+→ P replicas of GEMV unit (V×H DPEs each), processing M/P vectors each
+→ Total DPEs = P × V × H
+→ Latency = ceil(M/P) × latency_per_vector
+→ Throughput scales with P (until limited by CLB or routing)
 ```
 
-### 11.4 Part 2 — DSP+BRAM Equivalence (DPE Value Proposition)
+Each replica requires its own:
+- Reduction adder trees (if V>1): H × ceil(log2(V)) CLBs
+- Activation LUTs (if V>1): H CLBs
+- Local control logic: ~5 CLBs
 
-**Goal**: prove that a DPE hard block is more efficient than the equivalent DSPs+BRAMs occupying the same area.
+Plus global coordination:
+- Input distribution (P-way demux): ~2×P + 10 CLBs
+- Output collection (P-way mux): ~2×P + 10 CLBs
+- Global FSM + sync: ~P + 10 CLBs
 
-**DPE functional equivalence** for config (R, C) at int8 precision:
-- **Compute**: R×C int8 MACs per VMM pass → X = R×C / DSP_PEAK_MAC DSPs equivalent
-  (DSP in 9×9 SOP-4 mode: DSP_PEAK_MAC = 4 int8 MACs/cycle)
-- **Storage**: R×C×8 bits of weight data → Y = R×C×8 / BRAM_CAPACITY BRAMs equivalent
-  (BRAM_CAPACITY = 36 Kbit = 36,864 bits)
+**Total CLBs ≈ P × CLBs_per_replica + 5×P + 30**
 
-**Area constraint**: for each workload's n_dpes DPEs placed:
-```
-X' × DSP_area + Y' × BRAM_area = n_dpes × DPE_area      (same total area)
-X' / Y' = X / Y                                            (maintain compute/storage ratio)
-```
+### 11.3 Template FPGA (120×120 Grid)
 
-Since X:Y ≈ 1152:1 (DPE is compute-dense), the "balanced" pair is essentially all DSPs. So we explore **4 meaningful pairs** along the area constraint line:
+Fixed grid: 120×120 (from Round 1 max grid 88 × 1.36 scale factor, ensures all 5 configs fit including 1024×256 tile 7×9).
 
-| Pair | Strategy | X' (DSPs) | Y' (BRAMs) | Purpose |
-|------|----------|-----------|------------|---------|
-| 1 | All DSP | area / DSP_area | 0 | Max compute baseline |
-| 2 | Balanced ratio | solve X'/Y' = X/Y | solve | DPE-equivalent split |
-| 3 | Equal area | area/2 / DSP_area | area/2 / BRAM_area | 50-50 split |
-| 4 | Storage-first | min feasible | remainder / BRAM_area | Max weight capacity |
+Baseline resources (from VPR, 120×120):
+| Resource | Count | Area/tile (µm²) | Total Area (mm²) | % of FPGA |
+|----------|-------|-----------------|-------------------|-----------|
+| CLB | 10,978 | 2,239 | 24.58 | 76% |
+| DSP | 210 | 8,593 | 1.80 | 6% |
+| BRAM | 472 | 4,663 | 2.20 | 7% |
+| IO + empty | — | — | ~3.7 | 11% |
+| **Total** | | | **32.28** | |
 
-**VTR runs**: 3 configs × 4 pairs × 6 workloads = **72 VTR runs**
+**BRAM geometry**: height=2, startx=2, repeatx=16 → 8 columns × 59 per column = 472 BRAMs on 120×120.
 
-For each pair, replace the DPE tiles in the arch XML with (X' DSPs + Y' BRAMs). Run the same workload RTL but implemented using DSPs (MAC tree) + BRAMs (weight storage) instead of `dpe` black boxes. Compare throughput/J and throughput/mm² against the DPE version.
+### 11.4 Part 1 — DSP+CLB Replacement Sweep
 
-### 11.5 Round 2 Totals
+**Goal**: Find the optimal DPE density by simultaneously sweeping DSP and CLB replacement with DPE columns, using GEMM data parallelism to consume the DPE slots.
 
-| Sub-experiment | Configs | Variants | Workloads | VTR Runs |
-|----------------|---------|----------|-----------|----------|
-| Part 1: CLB replacement | 3 | 4 ratios | 6 | 72 |
-| Part 2: DSP+BRAM equiv | 3 | 4 pairs | 6 | 72 |
-| **Round 2 Total** | | | | **144** |
+**Configs**: Top-5 from Round 1 extended: 512×128, 1024×128, 1024×64, 1024×256, 512×256
 
-Combined with Round 1: 54 + 144 = **198 VTR runs total** (~1-2 hours).
+**Workloads**: fc_512_128, fc_512_512, fc_2048_256
 
-### 11.6 Expected Outcomes
+**Sweep parameters**:
+- DSP replacement ratio d ∈ {20%, 40%, 60%, 80%, 100%} — DSP columns → DPE columns
+- CLB replacement ratio c ∈ {0%, 20%, 40%, 60%} — CLB columns → DPE columns
+- **20 (d, c) points per (config, workload)**
 
-**Finding 6 — CLB saturation point exists at high replacement ratios**
-At 15% CLB replacement, workloads with V>1 may lack CLBs for reduction/activation, causing Fmax degradation or routing failure. The optimal CLB ratio depends on the workload's CLB demand.
+**Multi-seed methodology**: Each VTR point runs 3 times with seeds {1, 2, 3}. Fmax is averaged across seeds for stability (VTR placement stochasticity). Per-seed results stored in `seed{N}/` subdirectories.
 
-**Finding 7 — DPE is more area-efficient than DSP+BRAM equivalent**
-The analog VMM in a DPE performs R×C MACs in ~8 cycles within a compact crossbar. The equivalent X'≈51 DSPs would need 51 separate DSP tiles + routing + accumulation logic. The DPE's dense analog compute should deliver higher throughput/mm² despite the ACAM overhead.
+**Per-point procedure**:
+1. Compute DPE slots available via **grid-based counting** (`count_available_wc()` in gemv_dse.py):
+   - Simulates VTR's priority-based column placement on the 120×120 grid
+   - Tracks occupied columns (BRAM, DSP, existing wc) and checks tile-width conflicts
+   - **NOT area-based** — DPE tiles (e.g., width=3, height=8 for 512×128) are placed by VTR column priority
+   - Example: 512×128 tile_h=8 → tiles_per_column = floor(118/8) = 14
+2. Compute replicas from DPEs: `P_dpe = floor(Total_DPE_tiles / (V × H))`
+3. Compute CLBs remaining: `CLBs_avail = (1 - c) × baseline_CLBs`
+4. Compute CLBs needed: `CLBs_need = P × CLBs_per_replica + 5×P + 30`
+5. Compute BRAMs available: `count_available_brams(120, 120)` = 472
+6. Compute BRAMs needed: `P × brams_per_replica` (4 for K≤1024, 6 for K>1024)
+7. **Triple feasibility check**: `P = min(P_dpe, P_clb, P_bram)` — skip if P < 1
+8. Generate arch XML (`fixed_dsp_clb_replace` mode): replace d% DSP columns + c% CLB columns with wc (DPE) columns
+9. Generate P-replica RTL (`gen_gemm_wrapper.py`): P copies of fc_top + round-robin input/output
+10. Run VTR × 3 seeds → average Fmax_actual, resource counts
+11. Compute throughput scalability:
+   ```
+   T₀ = 1 × f₀          (baseline: P=1 measured by VTR)
+   Tₙ = n × fₙ          (n replicas at measured fₙ)
+   gain = Tₙ / T₀       (actual speedup)
+   utilization = gain / n (ideal = 100%, measures frequency retention)
+   ```
 
-**Finding 8 — Weight storage advantage**
-A 256×128 DPE stores 32K×8 = 256 Kbit of weights internally (in the crossbar), equivalent to ~7 BRAMs. But the DPE's crossbar storage is co-located with compute — no memory bandwidth bottleneck. The DSP+BRAM alternative requires explicit data movement between BRAM and DSP.
+**Note**: When CLBs are replaced by DPEs, n increases (more replicas) but fₙ may drop (routing congestion from fewer CLB routing tracks). The utilization metric = fₙ/f₀ directly measures routing quality degradation.
+
+**Plot**: Heatmap with X=CLB ratio, Y=DSP ratio. Color = utilization. Each cell annotated with n (replicas), gain (T/T₀), and utilization %.
+
+**Key constraint discovered during prototyping**: c=60% and c=80% produce identical physical wc column layouts on 106×106 (tile placement saturates). For 120×120 grid, c=80% was dropped; effective sweep uses c ∈ {0%, 20%, 40%, 60%} = 20 points per (config, workload).
+
+**BRAM constraint** (discovered during full sweep): Each GEMM replica uses BRAMs for weight/activation buffering. Per replica:
+- K ≤ 1024: 4 BRAMs
+- K > 1024: 6 BRAMs
+
+With 472 BRAMs on 120×120, max P = 118 for 4-BRAM workloads and 78 for 6-BRAM workloads. This is often the binding constraint at high (d, c) points, not CLBs or DPEs.
+
+#### 11.4.1 Prototyping Workload (106×106, single-seed — HISTORICAL)
+
+Used **fc_2048_256 on 512×128** (V=4, H=2, 8 DPEs/replica, ~20 CLBs/replica) for initial prototyping on 106×106 grid. All 25 points completed. Results confirmed methodology viability but are superseded by the 120×120 multi-seed full sweep.
+
+**Key prototype findings** (106×106 grid, single seed):
+- DSP 60% row has best scalability (89–95% utilization across all CLB ratios)
+- DSP 100% + CLB ≥40% degrades significantly (67–70% utilization)
+- Non-monotonic Fmax: some (d,c) points exceed baseline f₀ (VTR placement variability)
+- Maximum gain: 23.3× at (d=60%, c=60%) with 26 replicas
+
+#### 11.4.2 Full Sweep (120×120, multi-seed)
+
+5 configs × 3 workloads × 20 (d,c) points = **300 VTR points × 3 seeds = 900 VTR runs**.
+
+| Config | Workloads (V×H, DPEs/rep) |
+|--------|--------------------------|
+| 512×128 | fc_512_128 (1×1, 1), fc_512_512 (1×4, 4), fc_2048_256 (4×2, 8) |
+| 1024×128 | fc_512_128 (1×1, 1), fc_512_512 (1×4, 4), fc_2048_256 (2×2, 4) |
+| 1024×64 | fc_512_128 (1×2, 2), fc_512_512 (1×8, 8), fc_2048_256 (2×4, 8) |
+| 1024×256 | fc_512_128 (1×1, 1), fc_512_512 (1×2, 2), fc_2048_256 (2×1, 2) |
+| 512×256 | fc_512_128 (1×1, 1), fc_512_512 (1×2, 2), fc_2048_256 (4×1, 4) |
+
+Triple feasibility check ensures no VTR resource failures: P = min(P_dpe, P_clb, P_bram). All 300/300 points verified feasible in dry-run.
+
+### 11.5 Part 2 — Attention Head Exploration (TODO)
+
+**Deferred**. The attention head uses a structurally different datapath (Q/K/V projections + DIMM + softmax) with heavy CLB usage (~169 CLBs). Integration into the Round 2 sweep requires:
+- Parameterized attention RTL generator (gen_attention_wrapper.py)
+- Attention-specific energy model integration
+- Separate analysis of ACAM-as-log benefits
+
+This will be addressed after Part 1 prototyping is validated.
+
+### 11.6 Round 2 Totals
+
+| Sub-experiment | Points | Workloads | VTR Runs | Status |
+|----------------|--------|-----------|----------|--------|
+| Part 1 prototype (106×106, single-seed) | 20 unique | 1 | 25 | **Complete** (historical) |
+| Part 1 full sweep (120×120, 3-seed) | 20 per (cfg,wl) | 3 wl × 5 cfg | 900 (300×3) | **Re-running** |
+| Part 2: Attention (TODO) | TBD | 1 | TBD | Deferred |
+
+### 11.7 Expected Outcomes
+
+**Finding 6 — DPE integration from DSP area has moderate Fmax impact** *(validated)*
+At CLB=0%, utilization ranges from 80% (d=80%) to 102% (d=40%). Fmax is not guaranteed to be highest at the simplest configuration — VTR placement variability causes non-monotonic behavior. DSP→DPE replacement is not strictly "free" but the cost is moderate.
+
+**Finding 7 — CLB replacement degrades Fmax, but DSP ratio matters more** *(validated)*
+Fmax degradation from CLB replacement is 5–33% depending on DSP ratio. DSP 60% maintains 89–95% utilization even at c=60%. DSP 100% drops to 67% at c=60%. The interaction between DSP and CLB replacement is stronger than either alone.
+
+**Finding 8 — Higher DPE density amplifies CLB sensitivity** *(validated)*
+DSP 100% loses 33% utilization at c=60% vs DSP 60% losing only 11%. More DPE tiles create more routing pressure. The heatmap shows a clear degradation gradient from lower-left (green) to upper-right (red).
+
+**Finding 9 — Column saturation limits CLB replacement** *(new finding)*
+c=60% and c=80% produce identical physical wc column layouts — tile placement saturates. Effective CLB replacement maxes out around c=60% for the 106×106 grid with 512×128 DPE tiles. Finer CLB ratios or larger grids needed to explore beyond this point.
+
+**Finding 10 — Optimal operating point is DSP 60% + CLB 60%** *(validated)*
+Best absolute throughput: 23.3× speedup at (d=60%, c=60%) with n=26 replicas at 89% utilization. This balances DPE parallelism against routing quality. Higher DSP ratios yield more replicas but worse utilization.
 
 ---
 

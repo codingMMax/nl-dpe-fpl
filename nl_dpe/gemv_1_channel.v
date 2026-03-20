@@ -15,7 +15,7 @@ module gemv #(
     parameter N = 64,           // Output dimension (cols of W)
     parameter ROWS = 256,       // Crossbar rows (Q1 sweep: 128, 256, 512)
     parameter COLS = 256,       // Crossbar cols (Q1 sweep: 128, 256, 512)
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -270,7 +270,7 @@ module conv_layer_single_dpe #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 
 )(
     input wire clk,
@@ -572,7 +572,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
     parameter N_DPE_H = 1,
     parameter N_BRAM_R = 1,
     parameter N_BRAM_W = 1,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 
 )(
     input wire clk,
@@ -759,7 +759,7 @@ module conv_layer_stacked_dpes_V4_H1 #(
     parameter N_DPE_H = 1,
 	parameter N_BRAM_R = 1,
     parameter N_BRAM_W = 1,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 
 )(
     input wire clk,
@@ -1012,7 +1012,7 @@ module conv_layer_stacked_dpes_V8_H1 #(
     parameter N_DPE_H = 1,
 	parameter N_BRAM_R = 1,
     parameter N_BRAM_W = 1,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 
 )(
     input wire clk,
@@ -1384,7 +1384,7 @@ module conv_layer_stacked_dpes_V1_H2 #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -1550,7 +1550,7 @@ module conv_layer_stacked_dpes_V2_H2 #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -2136,7 +2136,7 @@ endmodule
 // =============================================================================
 module sram #(
     parameter N_CHANNELS = 1,
-    parameter DATA_WIDTH = 16*N_CHANNELS,  // Data width (default: 16 bits) 16 x number of channels
+    parameter DATA_WIDTH = 40*N_CHANNELS,  // Data width (default: 16 bits) 16 x number of channels
     parameter DEPTH = 512       // Memory depth (default: 512)
 
 )(
@@ -2173,7 +2173,7 @@ endmodule
 // xbar_ip_module — crossbar fan-out module
 // =============================================================================
 module xbar_ip_module #(
-    parameter DATA_WIDTH = 16,
+    parameter DATA_WIDTH = 40,
     parameter NUM_INPUTS = 1,
     parameter NUM_OUTPUTS = 4,
     // Derived parameters to handle special cases
@@ -2275,7 +2275,7 @@ endmodule
 // =============================================================================
 module adder_dpe_N_CHANNELS_1 #(
     parameter N_CHANNELS = 1,  // Number of channels
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire reset,

@@ -4,32 +4,35 @@
 
 ## Title (SELECTED)
 
-**ACAM-Enabled Heterogeneous FPGA Hard Blocks: Evaluating NL-DPE for CNN and Transformer Inference**
+**ACAM-Enabled Heterogeneous FPGA Hard Blocks: Crossbar-Size DSE and Evaluation of NL-DPE for FC and Attention Workloads**
 
-*Rationale: Names the mechanism (ACAM), the context (heterogeneous FPGA), and the workload scope. Avoids vague "evaluation" framing.*
+*Rationale: Names the mechanism (ACAM), the context (heterogeneous FPGA), the methodology (crossbar-size DSE), and the workload scope. Avoids vague "evaluation" framing.*
 
 ---
 
 ## Core Story (Read this before writing any section)
 
-NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside the analog block — eliminating the need for fabric LUT/DSP activation. This sounds like a clear win. But in FPGA context, most CNN layers require tiling across multiple DPE blocks, meaning outputs leaving each DPE are *partial sums*, not final activations. ACAM can only activate when the output is final at block exit — i.e., when the layer maps to a single DPE tile (V=1, H=1).
+NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activation or log) inside the analog block — eliminating the need for fabric LUT/DSP activation. This sounds like a clear win. But in FPGA context, layers are executed as tiled GEMMs across multiple DPE blocks, meaning outputs leaving each DPE are *partial sums*, not final results. ACAM can only operate on final outputs — i.e., when the layer maps to a single vertical tile (V=1).
 
-**The core tension:** NL-DPE's wider column dimension (256 vs Azure-Lily's 128) eliminates horizontal tiling for N≤256 layers, always giving H=1. But NL-DPE's shallower row dimension (256 vs 512) forces more vertical tiles for K-large layers, giving V>1. When V>1, ACAM falls back to ADC-only mode, and activation is pushed to CLB fabric — negating the key advantage.
+**The core tension:** The crossbar row dimension R determines ACAM eligibility (V = ceil(K/R) = 1 iff K ≤ R). Larger R means more workloads qualify for ACAM — but larger crossbars cost more area (ACAM is 77% of DPE area, scaling with columns C). The column dimension C determines horizontal tiling (H = ceil(N/C)) and per-tile area cost. There is a non-trivial Pareto front across (R, C).
 
-**The paper's finding:** Whether NL-DPE's ACAM provides real FPGA-level value depends entirely on workload tiling behavior, not just circuit quality. Small/shallow models (LeNet) see clear benefit; large/deep models (ResNet conv3-8, VGG11 conv5-8) see ACAM bypassed on the compute-heavy layers.
+**The paper's methodology:** We perform a systematic crossbar-size DSE across 9 configurations (R ∈ {128, 256, 512} × C ∈ {64, 128, 256}) using 6 representative FC workloads and a separate attention head experiment. VTR synthesis provides real Fmax and grid dimensions; an analytical energy/latency simulator completes each DSE point.
+
+**The paper's finding:** 512×128 is the FPGA-optimal NL-DPE configuration. The 512-row dimension is critical — it enables ACAM eligibility (V=1) on 5/6 FC workloads, yielding 2-4× energy savings over V>1 configs. The 128-column dimension balances tile area against horizontal tiling cost. The ACAM benefit is a step function of tiling geometry: it helps exactly when V=1, and the row dimension is the single knob that controls this boundary.
 
 ---
 
 ## Abstract
 
-* **Problem:** FPGA-based ML acceleration relies on heterogeneous hard blocks. NL-DPE offers an ACAM peripheral that can perform in-DPE activation, potentially saving fabric resources and energy. Whether this advantage survives FPGA integration is unclear.
-* **Gap:** Prior NL-DPE work optimizes an ASIC architecture. Prior FPGA-integrated IMC work (Azure-Lily) uses a passive ADC peripheral. Neither answers: how should NL-DPE be sized, how many should be in the fabric, and when does its ACAM actually help under realistic tiled GEMM mappings?
-* **Method:** We evaluate NL-DPE as an FPGA hard block using VTR-based synthesis and an analytical energy/latency simulator across LeNet, ResNet, VGG11, and BERT-Tiny. We compare against Azure-Lily as a baseline FPGA IMC design.
-* **Findings (fill in numbers before submission):**
-  * NL-DPE achieves [X]% lower energy and [Y]% lower latency than Azure-Lily on LeNet, where ACAM activates on 4/5 layers.
-  * On ResNet, NL-DPE's ACAM activates on only 2/9 layers; CLB pressure rises by 52% due to deeper vertical stacking; Fmax drops 18%.
-  * A moderate NL-DPE block density of [Z] blocks per fixed-area fabric maximizes EDP across the workload suite.
-* **Takeaway:** ACAM dual-mode provides real FPGA-level value only when layer shape permits single-tile mapping. This is a mapping-semantic constraint, not a circuit limitation — and it directly determines whether NL-DPE or a simpler ADC-based IMC is a better FPGA hard block choice.
+* **Problem:** FPGA-based ML acceleration relies on heterogeneous hard blocks. NL-DPE offers an ACAM peripheral that can perform in-DPE nonlinear functions (activation, log), potentially saving fabric resources and energy. But the optimal crossbar configuration for FPGA integration is unknown.
+* **Gap:** Prior NL-DPE work optimizes a fixed ASIC architecture. Prior FPGA-integrated IMC work (Azure-Lily) uses a fixed 512×128 crossbar with ADC-only peripheral. Neither answers: what crossbar size maximizes FPGA-level efficiency, and when does ACAM actually help under realistic tiled GEMM mappings?
+* **Method:** We perform a crossbar-size DSE across 9 NL-DPE configurations (R ∈ {128, 256, 512} × C ∈ {64, 128, 256}) using VTR-based synthesis and an analytical energy/latency simulator. We evaluate 6 representative FC workloads spanning small (64×64) to large (2048×256), plus a separate attention head experiment (N=128, d=128). We compare against Azure-Lily as an architectural baseline.
+* **Findings:**
+  * 512×128 is the FPGA-optimal NL-DPE configuration (SPEC-style geomean score 0.852 vs runner-up 0.635), achieving ACAM eligibility on 5/6 FC workloads.
+  * ACAM eligibility is a step function of tiling geometry: V=1 configs see 2-4× lower energy than V>1 configs on the same workload. The row dimension R is the single knob that controls this boundary.
+  * The attention head uses ACAM as log function (not activation), with CLB-based DIMM/softmax stages dominating energy — motivating future hard-block integration of reduction logic.
+  * [Round 2 finding: optimal DPE density in fixed-area FPGA — pending]
+* **Takeaway:** ACAM value is gated by per-layer tiling geometry (V=1 threshold), not circuit quality. The crossbar row dimension is the primary design knob for FPGA-integrated NL-DPE, and 512 rows are necessary to capture ACAM benefit on typical FC/attention workloads.
 
 ---
 
@@ -38,48 +41,48 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 ### 1.1 Motivation and Problem Statement
 
 * FPGA fabrics increasingly embed domain-specific hard blocks (DSPs, BRAMs, now analog IMC cores) to close the efficiency gap with ASICs for ML workloads.
-* NL-DPE is architecturally distinctive: its ACAM peripheral can operate as either an ADC or an activation function unit, enabling *in-DPE activation* without consuming FPGA fabric resources.
+* NL-DPE is architecturally distinctive: its ACAM peripheral can operate as ADC, activation function, or log function — enabling *in-DPE nonlinear computation* without consuming FPGA fabric resources.
 * **The problem that motivates this paper:**
-  * In FPGA context, CNN layers are executed as tiled GEMMs across multiple DPE blocks.
-  * When a layer spans multiple DPEs (V>1 or H>1), the output of each DPE is a partial sum that must be reduced in FPGA fabric before activation.
-  * ACAM can only activate when its output is a *final* layer output, not a partial sum.
-  * Therefore, the value of ACAM's dual-mode is not a circuit property — it is a mapping-semantic property.
-* **Precise scope:** This paper is about NL-DPE as an FPGA hard block. Not about proving NL-DPE is a better ASIC, not about analog circuit improvements.
+  * NL-DPE crossbar size (R rows × C columns) is a design choice, not fixed. Larger crossbars reduce tiling but cost more area.
+  * In FPGA context, layers are executed as tiled GEMMs. When V = ceil(K/R) > 1, DPE outputs are partial sums — ACAM cannot activate, and CLB-based reduction + activation is required.
+  * Therefore, the crossbar row dimension R directly determines which workloads benefit from ACAM. The optimal (R, C) is non-obvious: it depends on the workload distribution across the (K, N) space.
+* **Precise scope:** This paper is about finding the FPGA-optimal NL-DPE crossbar configuration and quantifying when ACAM provides real value under tiled GEMM mappings. Not about analog circuit improvements.
 
 ### 1.2 Why Prior Work Is Not Enough
 
-* **Azure-Lily** (our primary baseline): demonstrates FPGA-integrated analog IMC, but uses a purely ADC-based peripheral — activation always occurs in FPGA fabric. Does not study what happens when the peripheral itself can activate.
-* **NL-DPE ASIC work:** characterizes the circuit but optimizes for a fixed ASIC mapping. Does not address heterogeneous FPGA block sizing, density, or tiled GEMM mapping semantics.
+* **Azure-Lily** (our primary baseline): demonstrates FPGA-integrated analog IMC with a fixed 512×128 crossbar and ADC-only peripheral. Does not study crossbar sizing or dual-mode peripheral value.
+* **NL-DPE ASIC work:** characterizes the circuit for a fixed 256×256 configuration. Does not address FPGA block sizing, tiled GEMM mapping semantics, or the interaction between crossbar dimensions and ACAM eligibility.
 * **Missing questions:**
-  * What is the FPGA-optimal NL-DPE block configuration (crossbar size, I/O width)?
+  * What crossbar size (R × C) maximizes FPGA-level efficiency across diverse FC and attention workloads?
   * How many NL-DPE blocks should occupy a fixed-area FPGA fabric?
-  * Under realistic tiled GEMM mappings, which layers actually benefit from ACAM dual-mode?
+  * When does ACAM provide meaningful benefit, and what is the structural predictor?
 
 ### 1.3 Our Goal
 
-* Evaluate NL-DPE as a heterogeneous FPGA hard block, using Azure-Lily as the reference IMC design.
-* Answer three architecture questions that prior work leaves open.
-* Provide guidance for FPGA architects deciding whether and how to integrate NL-DPE-like blocks.
+* Perform a systematic crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block.
+* Answer three architecture questions that prior work leaves open, using VTR synthesis + analytical energy/latency simulation.
+* Provide quantitative guidance for FPGA architects on NL-DPE block sizing, density, and ACAM activation opportunity.
 
 ### 1.4 Research Questions
 
-* **Q1.** What crossbar size and I/O configuration make the best NL-DPE FPGA hard block?
-* **Q2.** How many NL-DPE hard blocks should be placed in a fixed-area FPGA fabric?
-* **Q3.** Under realistic tiled GEMM mappings, when does ACAM dual-mode provide meaningful benefit over ADC-only operation?
+* **Q1.** What crossbar configuration (R × C) makes the best NL-DPE FPGA hard block? *(Answered: 512×128)*
+* **Q2.** How many NL-DPE hard blocks should be placed in a fixed-area FPGA fabric? *(Round 2 — pending)*
+* **Q3.** Under realistic tiled GEMM mappings, when does ACAM provide meaningful benefit — and does the tiling geometry (V=1 threshold) predict it?
 
 ### 1.5 Overview Figure
 
 * **Figure 1:** Two-panel diagram.
-  * Left: FPGA fabric with NL-DPE hard blocks, CLB reduction path, ACAM local activation path.
-  * Right: Decision tree for ACAM mode — V=1 and H=1 → ACAM activates; otherwise → ADC-only, CLB activation.
-  * Annotate with: Q1 (block sizing), Q2 (block count), Q3 (activation path decision).
+  * Left: FPGA fabric with NL-DPE hard blocks (variable R×C), CLB reduction path, ACAM activation/log path.
+  * Right: Tiling geometry decision — V=1 → ACAM eligible; V>1 → ADC-only, CLB reduction + activation.
+  * Annotate with: Q1 (block sizing DSE), Q2 (block count), Q3 (ACAM value = f(V=1 threshold)).
 
 ### 1.6 Contributions
 
-1. First evaluation of NL-DPE as a heterogeneous FPGA hard block, benchmarked against Azure-Lily as a baseline FPGA IMC design.
-2. Hard block design study: power/area/timing characterization across crossbar sizes and I/O widths, implemented as a parameterized analytical model.
-3. Fixed-area fabric composition study: identifies the NL-DPE block count that maximizes FPGA-level EDP across LeNet, ResNet, VGG11, and BERT-Tiny.
-4. Mapping-semantic analysis of ACAM dual-mode: shows that ACAM activation benefit is gated by per-layer tiling geometry, not just circuit efficiency — and quantifies the per-workload opportunity fraction.
+1. First crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block: 9 configs × 6 FC workloads, evaluated with VTR synthesis and analytical energy/latency simulation.
+2. Parameterized analytical model for NL-DPE area, power, and energy (`area_power.py`), with routing-aware VTR tile sizing.
+3. Identification of 512×128 as the FPGA-optimal configuration — the row dimension (ACAM eligibility) is the dominant design knob.
+4. Separate attention head experiment showing ACAM-as-log mode and CLB DIMM/softmax overhead, motivating future hard-block reduction integration.
+5. [Pending Round 2] Fixed-area fabric composition study: optimal NL-DPE block density under CLB displacement constraints.
 
 ---
 
@@ -116,12 +119,14 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 
 ### 3.1 NL-DPE Block Architecture
 
-* Crossbar: 256 rows × 256 columns, weights stored in analog cells.
+* Crossbar: R rows × C columns (parameterizable; prior ASIC work used 256×256). Weights stored in analog cells.
 * Computation: VMM — input vector multiplied by weight matrix, one cycle per input row.
 * ACAM peripheral: output stage that can be configured as:
-  * **ADC mode:** converts analog output to digital partial sum. Energy: ~31.12 pJ/row.
-  * **Activation mode:** applies nonlinear function (tanh/ReLU) directly in analog domain. Energy: ~31.12 + 43.89 pJ/row (ACAM cost added).
-  * *Note for writing:* explain that ADC mode always runs; ACAM activation mode adds the 43.89 pJ — so dual-mode is not free even when it saves CLB area.
+  * **ADC mode:** converts analog output to digital partial sum.
+  * **Activation mode:** applies nonlinear function (tanh/ReLU) directly in analog domain.
+  * **Log mode:** computes logarithm for DIMM-based attention score computation.
+* Area: ACAM dominates (77% of DPE area), scales linearly with C. Crossbar area scales with R×C. Full model in `area_power.py`.
+* *Note for writing:* ACAM area cost makes column count C the primary area driver, while row count R is the primary ACAM-eligibility driver. This R-vs-C tension creates the non-trivial design space.
 
 ### 3.2 Azure-Lily Baseline Architecture
 
@@ -130,20 +135,20 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 * Activation: always in FPGA fabric (LUT-based tanh).
 * **This is our primary comparison baseline.** Same VTR flow, same FPGA fabric model, same workloads.
 
-### 3.3 Tiled GEMM Mapping and ACAM Activation Opportunity
+### 3.3 Tiled GEMM Mapping and ACAM Eligibility
 
-* GEMM dimensions: K (input channels/kernel), N (output channels), M (spatial positions, serialized).
-* Tiling: V = ⌈K/crossbar\_rows⌉, H = ⌈N/crossbar\_cols⌉.
-* **Single-tile case (V=1, H=1):** DPE output is a final layer output → ACAM can activate.
-* **Multi-tile case (V>1 or H>1):** DPE output is a partial sum → must reduce in CLB → ACAM in ADC mode.
-* **Key consequence:** NL-DPE (256×256) always achieves H=1 for N≤256 (all CNN layers in our workloads). But V>1 for K>256 layers, which are the compute-heavy layers in deep CNNs.
-* Define: **local activation opportunity ratio** = fraction of total GEMM compute (by M×K) that occurs in single-tile layers.
+* GEMM dimensions: K (input channels), N (output channels), M (spatial positions, serialized).
+* Tiling: V = ⌈K/R⌉ (vertical), H = ⌈N/C⌉ (horizontal). DPE count = V × H.
+* **ACAM-eligible (V=1):** K ≤ R → DPE output is a final result → ACAM can activate (or compute log).
+* **Not eligible (V>1):** K > R → DPE outputs are partial sums → CLB-based adder tree reduction required, then CLB activation.
+* **Key insight from DSE:** ACAM eligibility is a **step function** of R. At the V=1 boundary, energy drops 2-4× (no CLB reduction + no CLB activation). The row dimension R is the single knob that controls which workloads cross this boundary.
+* **Horizontal tiling (H>1):** each DPE column produces independent output channels — no cross-DPE reduction needed. H>1 increases DPE count and grid area but does not affect ACAM eligibility.
 
 ### 3.4 FPGA Hard Block Perspective
 
 * Hard block must justify area across diverse workloads (unlike ASIC macro, which is optimized for one design).
-* Reduction and control logic stay in FPGA CLB fabric — this is a deliberate constraint in our model, matching the realistic initial integration point (same as Azure-Lily).
-* Block density tradeoff: more NL-DPE blocks → more compute capacity, but less remaining CLB budget for reduction/control.
+* Reduction and control logic stay in FPGA CLB fabric — deliberate constraint matching realistic initial integration (same as Azure-Lily).
+* Block density tradeoff: more NL-DPE blocks → more compute capacity, but less remaining CLB budget for reduction/control (studied in Round 2).
 
 ---
 
@@ -153,41 +158,53 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 
 ### 4.1 System Overview Figure
 
-* **Figure 2:** End-to-end evaluation flow.
-  * Box 1: NL-DPE block characterization → area/power/timing model (Python script, Q1 input).
-  * Box 2: RTL designs (LeNet, ResNet, VGG11, BERT-Tiny) → VTR synthesis → resource counts + Fmax.
-  * Box 3: Analytical energy/latency simulator → per-layer energy breakdown using VTR outputs.
-  * Box 4: Results for Q1/Q2/Q3.
+* **Figure 2:** End-to-end DSE flow.
+  * Box 1: NL-DPE block characterization (`area_power.py`) → area/power/energy model for 9 (R,C) configs.
+  * Box 2: Parameterized RTL generation (`gen_gemv_wrappers.py`) → VTR synthesis → Fmax, grid dimensions.
+  * Box 3: IMC energy/latency simulator (patched with VTR Fmax) → per-inference energy/latency breakdown.
+  * Box 4: SPEC-style normalized geomean ranking → optimal config selection → Round 2 inputs.
 
 ### 4.2 NL-DPE Hard Block Model (Q1)
 
-* One NL-DPE hard block = one 256×256 crossbar + ACAM peripheral + digital I/O interface.
-* Parameterized by: crossbar size (rows × cols), input data width, output data width.
-* Characterization data available for multiple configurations; `area_power.py` computes area, power, and timing as a function of these parameters.
-* Fixed: ACAM row count (changing it requires full re-characterization — out of scope).
-* Output of Q1: a single selected configuration used in all Q2/Q3 experiments.
+* One NL-DPE hard block = one R×C crossbar + ACAM peripheral + digital I/O interface (16-bit).
+* Parameterized by: crossbar size (R rows × C columns). I/O width fixed at 16-bit.
+* `area_power.py` computes area (µm²), power (mW), energy (pJ), and VTR tile dimensions (W×H grid cells) as a function of (R, C).
+* 9 configurations: R ∈ {128, 256, 512} × C ∈ {64, 128, 256}. DPE area ranges from 12,198 µm² (128×64) to 66,093 µm² (512×256).
+* Output of Q1: a single selected configuration (512×128) used in Q2/Q3 and the attention experiment.
 
-### 4.3 Mapping Policies
+### 4.3 Mapping Policy
 
-* **P1 (ADC-only):** ACAM always operates in ADC mode. Activation always in CLB fabric. This is the Azure-Lily-equivalent mapping applied to NL-DPE.
-* **P2 (ACAM dual-mode):** ACAM activates locally when the layer maps to a single DPE tile (V=1, H=1). Falls back to ADC + CLB activation for multi-tile layers.
-* *Note for writing:* P1 gives a lower-bound on ACAM value; P2 gives the upper-bound assuming perfect local activation detection. No P3 (e.g., partial activation) — keeps the experiment clean.
+* **ACAM dual-mode (always used):** ACAM activates locally when V=1 (single vertical tile). Falls back to ADC + CLB activation when V>1.
+* The V=1 vs V>1 comparison within Round 1 data implicitly captures the ACAM value (Q3): same config, same workload dimensions, different row counts → different V → different ACAM eligibility → measurable energy gap.
+* *Note for writing:* we do not run a separate P1 (ADC-only) policy. Instead, Q3 is answered by comparing configs that achieve V=1 against those that don't, on the same workload.
 
-### 4.4 Fabric Composition Model (Q2)
+### 4.4 Fabric Composition Model (Q2 — Round 2, pending)
 
-* Fixed total FPGA area (matched to Azure-Lily baseline fabric).
-* Sweep NL-DPE block count: [0 (pure CLB baseline), low, medium, high].
-* As NL-DPE count increases, available CLB count decreases proportionally.
-* Routing architecture and DSP count held constant.
-* Metric: EDP and latency as a function of block count, per workload.
+* Fixed total FPGA area (derived from Round 1 worst-case grid).
+* Sweep CLB-to-DPE replacement ratio: {5%, 8%, 12%, 15%} × top-3 configs × 6 workloads.
+* As DPE count increases, available CLB count decreases proportionally.
+* Metric: throughput/mm² and throughput/J as a function of DPE density.
 
-### 4.5 Workloads and RTL
+### 4.5 Workloads
 
-* **LeNet:** 5 layers, 6 NL-DPE tiles. Small model; ACAM activates on 4/5 layers (conv1, conv2, full2, full3 are single-tile; full1 is V2_H1 due to K=400>256). Overhead-sensitive case.
-* **ResNet:** 9 layers, 40 NL-DPE tiles. ACAM activates on 2/9 layers (conv1: K=9, conv9: K=224). Compute-heavy layers (conv3-8: K=1008–2016) require V4 or V8 stacking — ACAM bypassed.
-* **VGG11:** 9 layers, 146 NL-DPE tiles. [Fill in ACAM opportunity ratio after VTR run.]
-* **BERT-Tiny:** transformer-like workload. QKV projection and FC layers have different K/N shapes — likely higher local activation opportunity for small attention heads. [In progress.]
-* RTL for all workloads implemented in Verilog, synthesized with VTR using NL-DPE and Azure-Lily architecture XMLs.
+**DSE workloads (Round 1):** 6 FC layers spanning the (K, N) space of real CNN/transformer layers:
+
+| Workload | K | N | Rationale |
+|----------|---|---|-----------|
+| fc_64_64 | 64 | 64 | Tiny; all configs V=1 |
+| fc_128_128 | 128 | 128 | Attention projection proxy (Q/K/V, d=128) |
+| fc_512_128 | 512 | 128 | Medium; only R=512 achieves V=1 |
+| fc_256_512 | 256 | 512 | Wide output; R≥256 achieves V=1 |
+| fc_512_512 | 512 | 512 | Large; only R=512 achieves V=1 |
+| fc_2048_256 | 2048 | 256 | Very deep; no config achieves V=1 |
+
+These are chosen to span the ACAM eligibility boundary across the 9 configs.
+
+**Attention workload (separate experiment):** Single attention head (N=128 seq_length, d=128 head_dim). 3 DPE projections (Q/K/V) + CLB-based DIMM score matrix, softmax, weighted sum.
+
+**Validation workloads (from prior work):** LeNet (6 DPEs, 5 layers) and ResNet (40 DPEs, 9 layers) provide full-network NL-DPE vs Azure-Lily comparison points.
+
+* RTL generated parameterically by `gen_gemv_wrappers.py` (FC) and `gen_attention_wrapper.py` (attention, planned). Synthesized with VTR.
 
 ---
 
@@ -195,99 +212,107 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 
 ### 5.1 Tools
 
-* **VTR 8.x:** synthesis and place-and-route. Architecture XMLs define NL-DPE and Azure-Lily hard block geometry, area, timing constants.
-* **Analytical simulator (`run_imc_with_vtr_freq.py`):** takes VTR Fmax + DPE/CLB/BRAM counts, computes per-layer energy and latency using NL-DPE/Azure-Lily energy models.
-* **Block characterization script (`nl_dpe/area_power.py`):** parameterized model for NL-DPE area, power, fmax as a function of crossbar size and I/O width. [Under construction — Q1 depends on this.]
+* **VTR 8.x:** synthesis and place-and-route. Per-config architecture XMLs define DPE tile geometry (`gen_arch_xml.py`). Round 1 uses `auto_layout` (VTR sizes grid to just-fit).
+* **IMC energy/latency simulator (`azurelily/IMC/`):** takes VTR Fmax + crossbar geometry, computes per-inference energy and latency. Patched at runtime with per-config energy parameters from `area_power.py`.
+* **Block characterization (`nl_dpe/area_power.py`):** parameterized analytical model for NL-DPE area, power, energy as a function of (R, C). Routing-aware tile sizing (SB=688, CB=303 µm²).
+* **RTL generator (`nl_dpe/gen_gemv_wrappers.py`):** generates Verilog for each (R, C, K, N) with correct DPE tiling, adder trees, and activation LUTs.
+* **DSE orchestrator (`gemv_dse.py`):** drives the full pipeline (arch XML → RTL → VTR → IMC → metrics → ranking).
 
 ### 5.2 Baselines
 
-* **Primary baseline:** Azure-Lily (same FPGA fabric, same VTR flow, same workloads) — used for all Q2/Q3 comparisons.
-* **Secondary baseline:** NL-DPE under P1 (ADC-only) — isolates the pure IMC advantage before adding ACAM benefit.
-* **Tertiary baseline (Q2 only):** 0 NL-DPE blocks (pure CLB FPGA) — anchors the "no analog" point.
+* **Primary baseline:** Azure-Lily (512×128 crossbar, ADC-only, same VTR flow) — used for architectural context. Full-network comparison data available for LeNet and ResNet from prior work.
+* **Internal baselines:** Within the 9-config sweep, configs with V>1 on a given workload serve as the "no ACAM" baseline for that workload, while V=1 configs capture the ACAM benefit. This eliminates the need for a separate P1 (ADC-only) run.
 
 ### 5.3 Metrics
 
-* **Block-level (Q1):** area (µm²), power (mW), fmax (MHz), effective throughput per area.
-* **FPGA-level (Q2/Q3):** inference latency (ms), total energy (mJ), EDP, Fmax, CLB utilization, DPE utilization.
-* **ACAM-specific (Q3):** local activation opportunity ratio (per workload), energy saved by P2 vs P1, CLB activation count reduction under P2.
+* **Per-point (54 DSE points):** Fmax (MHz), grid_W × grid_H, FPGA area (mm²), energy (pJ), latency (ns), ACAM eligibility (V=1?), DPE count (V×H).
+* **Derived:** throughput/mm² (inf/s/mm²), throughput/J (inf/J).
+* **Ranking:** SPEC-style normalized geomean — per-workload best = 1.0, geomean across 6 workloads, combined score = geomean(GM_tput/mm², GM_tput/J).
 
 ### 5.4 Validation
 
 * Azure-Lily simulator calibrated: e_conv = 2.33 pJ/op is ground truth from prior work.
-* NL-DPE energy model: 31.12 pJ/row (VMM) + 43.89 pJ/row (ACAM activation), validated analytically against 0.548x LeNet energy ratio (see Section 6.3).
-* VTR frequency outputs used directly — no frequency scaling applied.
+* NL-DPE energy model validated against 0.548× LeNet energy ratio (NL-DPE vs Azure-Lily).
+* VTR Fmax outputs used directly — no frequency scaling applied.
+* Round 1: all 54 VTR runs completed successfully; no routing failures.
 
 ---
 
 ## 6. Results
 
-### 6.1 Q1: NL-DPE Hard Block Design-Space Exploration
+### 6.1 Q1: Crossbar-Size Design-Space Exploration (Round 1)
 
-* **Goal:** Select the FPGA-optimal NL-DPE block configuration. Input: `area_power.py` characterization data.
-* **Key claim to make:** The largest crossbar is not the FPGA-optimal choice — beyond a certain size, area overhead dominates and mapping efficiency plateaus because most CNN layers have K<512 anyway.
-* **Figure 3a:** Crossbar size vs block area. Show that area scales super-linearly. Mark the 256×256 point.
-* **Figure 3b:** Crossbar size vs Fmax. Larger crossbars reduce achievable frequency due to longer analog paths.
-* **Figure 3c:** Area-normalized effective throughput for ResNet and BERT-Tiny. Show sweet spot.
-* **Table 2:** Candidate configurations — columns: crossbar size, I/O width, area, power, Fmax, throughput/area. Final selected row highlighted.
+* **Goal:** Select the FPGA-optimal NL-DPE crossbar configuration from 9 candidates.
+* **Key claim:** The row dimension R is the dominant design knob. R=512 enables ACAM on 5/6 workloads; R=256 on 3/6; R=128 on 2/6. The column dimension C trades tile area against horizontal tiling. 512×128 is the Pareto-optimal point.
+* **Data:** 54 VTR+IMC runs complete. Results in `dse/results/round1_results.csv`.
+
+* **Figure 3a:** Config ranking bar chart (`round1_ranking.pdf`) — geomean tput/mm² and tput/J per config, sorted by combined score. Shows clear R=512 tier separation.
+* **Figure 3b:** Config × Workload heatmap (`round1_heatmap.pdf`) — 9×6 grid, normalized tput/mm², annotated with V and ACAM eligibility. Visual proof that V=1 cells cluster in R=512 rows.
+* **Table 2:** All 9 configs — columns: config, DPE area (µm²), tile W×H, power (mW), ACAM-eligible workloads (out of 6), GM tput/mm², GM tput/J, GM combined. 512×128 highlighted.
+
 * **Subsections:**
-  * Q1.1: Impact of crossbar size on area and timing.
-  * Q1.2: Impact of I/O width (16-bit vs alternatives) on interface cost and CLB routing demand.
-  * Q1.3: Selected configuration and rationale. *[Write: "We select 256×256 with 16-bit interface because..."]*
+  * Q1.1: Row dimension determines ACAM eligibility — V=1 threshold analysis across (R, workload) pairs.
+  * Q1.2: Column dimension determines tile area and horizontal tiling — C=128 balances area vs H.
+  * Q1.3: ACAM energy discontinuity — on FC 512×128, V=1 configs use 159-275 pJ vs V=2 configs using 328-573 pJ (2-4× gap).
+  * Q1.4: Selected configuration (512×128) and rationale. *[Write: "512×128 achieves ACAM eligibility on 5/6 workloads while maintaining the most compact tile among R=512 options."]*
 
-### 6.2 Q2: Fabric Composition Under Fixed Area
+### 6.2 Q2: Fabric Composition Under Fixed Area (Round 2 — pending)
 
-* **Goal:** Identify the NL-DPE block count that maximizes FPGA-level efficiency across the workload suite.
-* **Key claim to make:** Performance improves with NL-DPE block count up to a moderate density point, then saturates or degrades as remaining CLB budget becomes insufficient for reduction and control.
-* **Known data points:**
-  * LeNet needs 6 NL-DPE tiles; ResNet needs 40; VGG11 needs 146. Different models need different minimum block counts.
-  * The "best" block count is suite-level, not per-workload — a table should show the per-workload optimal and the suite-optimal, and the regret of the latter.
-* **Figure 4a:** Latency vs NL-DPE block count, series = workloads. Mark the inflection point.
-* **Figure 4b:** EDP vs NL-DPE block count. Show moderate density is best.
-* **Figure 4c:** CLB utilization vs block count. Show CLB pressure rising as blocks displace fabric.
-* **Table 3:** Per-workload best block count, best EDP, suite-optimal block count, regret vs per-workload best.
-* **Subsections:**
-  * Q2.1: NL-DPE block count vs throughput — show scaling behavior.
-  * Q2.2: NL-DPE block count vs EDP — show moderate density is best.
-  * Q2.3: CLB pressure — explain why too many blocks hurts large models.
+* **Goal:** Identify the optimal NL-DPE block density in a fixed-area FPGA.
+* **Method:** Fix FPGA grid size (derived from Round 1 worst-case), sweep CLB-to-DPE replacement ratio {5%, 8%, 12%, 15%} × top-3 configs (512×128, 512×256, 512×64) × 6 workloads = 72 VTR runs.
+* **Expected claim:** Performance improves with DPE count up to a density point, then degrades as CLB budget becomes insufficient for reduction/activation logic (especially for V>1 workloads).
+* **Figure 4a:** Throughput/mm² vs DPE density, series = workloads. Mark inflection point.
+* **Figure 4b:** CLB utilization vs DPE density. Show CLB pressure rising.
+* **Table 3:** Per-workload best density, suite-optimal density, regret.
+* **Status:** Not yet implemented. Depends on T4-T6 in TASKS.md.
 
-### 6.3 Q3: Value of ACAM Dual-Mode
+### 6.3 Q3: Value of ACAM — Tiling Geometry as Predictor
 
-* **Goal:** Quantify when and by how much ACAM dual-mode (P2) outperforms ADC-only (P1), and connect the benefit to per-layer tiling geometry.
-* **Key claim to make:** ACAM dual-mode provides meaningful energy savings only when local activation opportunity ratio is high. For LeNet (ratio ≈ 4/5 layers by count), P2 reduces activation energy significantly. For ResNet (ratio ≈ 2/9), ACAM activates only on compute-light layers (conv1, conv9); the compute-heavy layers (V8_H1) bypass ACAM entirely.
-* **Anchor finding (validated):** NL-DPE achieves 0.548x energy ratio vs Azure-Lily on LeNet, driven by ACAM activation savings on 4/5 layers plus elimination of activation layer FSMs (reflected in +8% Fmax, fewer controller states).
-* **Figure 5a:** P1 vs P2 energy, per workload. Show that LeNet sees large gap; ResNet sees small gap.
-* **Figure 5b:** Local activation opportunity ratio per workload (bar chart). Explains Figure 5a pattern directly.
-* **Figure 5c:** Per-layer ACAM activation decision for ResNet — show which layers use ACAM vs bypass. Visual proof of the tiling-semantic argument.
-* **Table 4:** P1 vs P2 — workload | policy | energy | latency | EDP | ACAM activation ratio | CLB activation ops saved.
-* **Subsections:**
-  * Q3.1: ACAM activation opportunity by workload — define and compute local activation ratio.
-  * Q3.2: Energy and latency impact of P2 vs P1 — quantify the benefit where it exists.
-  * Q3.3: Why ResNet and VGG11 see limited benefit — the V>1 tiling argument. *[Write: "Conv3-8 of ResNet require V=4–8 vertical tiles because K=1008–2016 > 256 rows. Each DPE outputs a partial sum; ACAM cannot activate. This is not a circuit limitation but a mapping constraint intrinsic to the FPGA integration model."]*
+* **Goal:** Show that ACAM benefit is a step function of V=1 eligibility, and that the row dimension R is the structural predictor.
+* **Key claim:** Within Round 1 data, the same workload evaluated at V=1 (large R) vs V>1 (small R) shows 2-4× energy gap. This is not a separate experiment — it falls directly out of the crossbar-size sweep.
 
-### 6.4 NL-DPE vs Azure-Lily: Head-to-Head Summary
+* **Evidence from Round 1:**
+  * FC 512×128: V=1 configs (R=512) use 159-275 pJ; V=2 configs (R=256) use 328-573 pJ.
+  * FC 256×512: V=1 configs (R≥256) vs V=2 configs (R=128) — same pattern.
+  * FC 2048×256: No config achieves V=1 — all configs pay CLB reduction + activation cost; energy differences come only from tiling efficiency.
 
-* **Goal:** Provide a direct comparison across all four metrics for both architectures. This is the table reviewers will look at first.
-* **Key claim to make:** NL-DPE beats Azure-Lily on small/shallow models (LeNet) due to ACAM savings and simpler pipeline. Azure-Lily is competitive on large/deep models (ResNet) because its 512-row crossbar reduces vertical tile count (fewer DPEs, shorter routing, higher Fmax).
-* **Known data:**
-  * LeNet: NL-DPE 276.8 MHz vs Azure-Lily 256.4 MHz (+8%). NL-DPE 6 DPEs vs 5 (+1). NL-DPE 53 CLBs vs 28 (+89%).
-  * ResNet: NL-DPE 177.1 MHz vs Azure-Lily 215.1 MHz (−18%). NL-DPE 40 DPEs vs 35 (+14%). NL-DPE 281 CLBs vs 185 (+52%).
-* **Table 5:** Workload × {DPEs, CLBs, Fmax, Latency, Energy, EDP} for NL-DPE (P2) vs Azure-Lily. Rows: LeNet, ResNet, VGG11, BERT-Tiny.
-* **Figure 6:** Normalized EDP bar chart, NL-DPE vs Azure-Lily, per workload. Shows crossover between small and large models.
+* **Attention head (separate experiment, pending):**
+  * ACAM used as **log function** (for DIMM), not activation. All configs V=1 for d=128 projections.
+  * CLB-based DIMM/softmax stages dominate energy → ACAM benefit is on a different axis than FC workloads.
+  * Key finding expected: DPE projection energy is a small fraction; CLB overhead is the bottleneck.
 
-### 6.5 Flexibility / Adaptability Summary
+* **Validation from prior work:**
+  * LeNet: NL-DPE 0.548× energy vs Azure-Lily (ACAM activates on 4/5 layers).
+  * ResNet: NL-DPE ACAM activates on only 2/9 layers; CLB +52%, Fmax −18%.
 
-> **STATUS: UNSOLVED** — adaptability regret metric is not yet defined or computed. Either define regret concretely (formula + source data) before submission, or fold this into Section 6.4 as a paragraph about which fixed fabric point generalizes best.
+* **Figure 5a:** Energy vs config for a workload that crosses the V=1 boundary (e.g., fc_512_128). Show step-function discontinuity at R=512.
+* **Figure 5b:** Attention head energy breakdown — DPE projections vs CLB DIMM/softmax stages.
+* **Table 4:** Per-workload ACAM eligibility count across 9 configs + energy gap at the V=1 boundary.
 
-* Tentative goal: show that one NL-DPE block count generalizes across the workload suite without catastrophic per-workload regret.
-* Candidate metric: for each workload, compute (EDP_chosen_fabric − EDP_optimal_fabric) / EDP_optimal_fabric. Average across workloads. Low average regret = good generalization.
+### 6.4 NL-DPE vs Azure-Lily: Architectural Context
+
+* **Goal:** Position the DSE-optimal NL-DPE (512×128) against Azure-Lily (512×128, ADC-only) to highlight the ACAM value in isolation.
+* **Key claim:** With the same crossbar dimensions (512×128), NL-DPE's advantage comes purely from ACAM — not from crossbar sizing. This is a clean comparison.
+* **Known data (from prior full-network work):**
+  * LeNet: NL-DPE 276.8 MHz vs Azure-Lily 256.4 MHz (+8%). Energy ratio 0.548×. ACAM activates on 4/5 layers.
+  * ResNet: NL-DPE 177.1 MHz vs Azure-Lily 215.1 MHz (−18%). ACAM activates on only 2/9 layers; CLB +52%.
+* **Note:** The prior comparison used NL-DPE at 256×256 (pre-DSE). With our DSE-optimal 512×128, the comparison changes: NL-DPE now has the same R=512 as Azure-Lily, eliminating the row-dimension disadvantage. A re-run with 512×128 NL-DPE would update these numbers.
+* **Table 5:** Workload × {DPEs, CLBs, Fmax, Energy, EDP} for NL-DPE (512×128) vs Azure-Lily (512×128). Rows: LeNet, ResNet. [Update after re-running with optimal config.]
+* **Figure 6:** Energy comparison bar chart, NL-DPE vs Azure-Lily, per workload.
+
+### 6.5 Attention Head Case Study
+
+* **Goal:** Show how ACAM-as-log mode and CLB DIMM/softmax overhead differ from FC workloads.
+* **Data:** 9 configs × 1 attention workload (N=128, d=128) — pending T3a/T3b/T3c.
+* **Expected finding:** DPE projections are a small fraction of total energy; CLB DIMM/softmax dominate. All configs achieve V=1 for d=128, so differentiation is purely from tile area.
+* **Figure 7:** Attention energy breakdown: DPE (Q/K/V projections) vs CLB (DIMM + softmax + weighted sum).
 
 ### 6.6 Summary of Main Findings
 
-* ACAM dual-mode benefit is gated by tiling geometry: only single-tile layers (V=1, H=1) can use local activation.
-* NL-DPE outperforms Azure-Lily on LeNet (ACAM activates on 4/5 layers) but trails on ResNet (ACAM activates on 2/9 layers, CLB +52%, Fmax −18%).
-* A moderate NL-DPE fabric density balances DPE compute capacity and CLB reduction budget.
-* [Fill in Q1 finding after block characterization script runs.]
-* [Fill in BERT-Tiny finding after RTL implementation.]
+* **Q1 (answered):** 512×128 is the FPGA-optimal NL-DPE configuration. R=512 enables ACAM on 5/6 FC workloads; C=128 minimizes tile area among R=512 options. Combined geomean score 0.852 vs runner-up 0.635.
+* **Q3 (answered from Round 1 data):** ACAM benefit is a step function of V=1 eligibility. At the V=1 boundary, energy drops 2-4×. The row dimension R is the single structural predictor.
+* **Q2 (pending):** Optimal DPE density under fixed area — Round 2 CLB replacement sweep.
+* **Attention (pending):** ACAM-as-log provides uniform benefit across configs; CLB overhead dominates and motivates hard-block reduction integration.
 
 ---
 
@@ -295,22 +320,25 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 
 ### 7.1 Broader Interpretation
 
-* Analog block circuit quality (ACAM, crossbar efficiency) is a necessary but not sufficient condition for FPGA hard block value.
-* The tiling-semantic constraint generalizes: any analog activation unit integrated into an FPGA hard block faces the same issue. ACAM is useful only at the boundary of the computation graph, not inside a reduction chain.
-* Implication for future FPGA hard block design: consider integrating partial-sum reduction *inside* the hard block before activation, so ACAM can activate more often (see Future Work).
+* The crossbar row dimension is the primary architectural knob for ACAM-enabled FPGA hard blocks — it determines the V=1 eligibility threshold, which gates all ACAM benefit.
+* This tiling-semantic constraint generalizes: any analog nonlinear unit integrated into an FPGA hard block faces the same issue. The unit is useful only at the computation boundary, not inside a reduction chain.
+* The DSE methodology (parameterized RTL generation + VTR synthesis + analytical energy model) is reusable for other analog hard block designs.
+* Implication for future FPGA hard block design: integrating partial-sum reduction *inside* the hard block would move the V=1 boundary, enabling ACAM on more workloads.
 
 ### 7.2 Limitations
 
 * Reduction always stays in CLB (conservative but realistic for initial integration).
-* ACAM row count not swept in Q1 (would require new analog characterization).
-* BERT-Tiny represents only one class of transformer-like workload.
-* NL-DPE timing model currently uses Azure-Lily delay constants as a placeholder — updating with real NL-DPE timing data would change Fmax estimates.
-* Simulator simplifications: energy model is per-layer analytic; no routing congestion or thermal effects.
+* I/O width fixed at 16-bit (not swept — would require additional VTR tile sizing).
+* Attention head experiment uses a single configuration (N=128, d=128) — not swept across sequence lengths.
+* Round 1 uses auto_layout (variable grid per design); fixed-area comparison deferred to Round 2.
+* Energy model is per-inference analytic; no routing congestion, thermal effects, or multi-batch scheduling.
+* Azure-Lily comparison uses prior-work data at 256×256 NL-DPE; re-running with DSE-optimal 512×128 would update the numbers.
 
 ### 7.3 Future Extensions
 
-* Integrate partial-sum reduction inside NL-DPE hard block → enables ACAM to activate on more layers.
-* Broader workload set: larger transformers (BERT-Base, GPT-2 small).
+* Integrate partial-sum reduction inside NL-DPE hard block → enables ACAM to activate on V>1 layers.
+* Round 2: fixed-area FPGA with CLB replacement sweep → answers Q2 (optimal DPE density).
+* Broader workload set: larger transformers, multi-head attention, depthwise convolution.
 * Co-design routing architecture with NL-DPE block placement to reduce CLB pressure.
 
 ---
@@ -319,21 +347,22 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear activation inside
 
 ### 8.1 Summary
 
-* We evaluate NL-DPE as a heterogeneous FPGA hard block and compare against Azure-Lily across LeNet, ResNet, VGG11, and BERT-Tiny.
-* We answer three questions: optimal block configuration (Q1), optimal block density (Q2), and mapping-semantic value of ACAM dual-mode (Q3).
+* We perform a systematic crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block, evaluating 9 configurations across 6 FC workloads and a separate attention head experiment.
+* Q1 is answered: 512×128 is the FPGA-optimal configuration. Q3 is answered: ACAM benefit is a step function of V=1 eligibility. Q2 (optimal density) is addressed in Round 2.
 
 ### 8.2 Key Insights
 
-* **ACAM dual-mode is conditionally valuable:** it helps when and only when the layer is single-tile. The local activation opportunity ratio is the predictor.
-* **Bigger FPGA crossbars are not always better:** NL-DPE's 256-row limit forces more vertical tiles than Azure-Lily's 512-row for K-heavy layers, increasing DPE count, CLB pressure, and routing delay.
-* **NL-DPE wins on small models, Azure-Lily is competitive on large models** — the crossover is explained by tiling geometry, not circuit quality.
-* **Hard block density has a sweet spot:** too few blocks underutilize the NL-DPE advantage; too many displace the CLB fabric needed for reduction.
+* **Row dimension is the primary design knob:** R determines ACAM eligibility (V=1 threshold). R=512 enables ACAM on 5/6 FC workloads; R=128 on only 2/6.
+* **ACAM benefit is a step function:** at the V=1 boundary, energy drops 2-4×. This is a mapping-semantic property, not a circuit property.
+* **Column dimension is secondary:** C affects tile area and horizontal tiling, but does not affect ACAM eligibility. C=128 is the sweet spot (compact tile, moderate H).
+* **Attention uses ACAM differently:** ACAM-as-log for DIMM is uniformly available (d=128 → V=1 for all configs), but CLB DIMM/softmax overhead dominates — motivating hard-block reduction integration.
+* **[Pending]** Hard block density has a sweet spot under fixed area constraints (Round 2).
 
 ---
 
 ## Appendix Notes
 
-* **Appendix A:** Additional block configurations from Q1 sweep.
-* **Appendix B:** Per-layer energy breakdown for ResNet (shows which layers consume most energy and whether ACAM activated).
-* **Appendix C:** BERT-Tiny layer-by-layer tiling analysis and ACAM opportunity ratio.
+* **Appendix A:** Full Round 1 results table (54 data points) with per-workload metrics.
+* **Appendix B:** Per-workload tiling analysis — V and H for all 9 configs × 6 workloads.
+* **Appendix C:** DPE physical specs table (area, power, tile dimensions for all 9 configs).
 * **Appendix D:** Sensitivity to ACAM energy cost (what if ACAM activation is cheaper/more expensive?).

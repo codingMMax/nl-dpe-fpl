@@ -1,4 +1,4 @@
-// NL-DPE ResNet RTL - 256x256 crossbar mapping, 16-bit data width
+// NL-DPE ResNet RTL - 256x256 crossbar mapping, 40-bit data width
 // Total DPEs: 40 (1+2+4+4+4+8+8+8+1)
 // Activation layers added for multi-DPE conv layers (ACAM in unity/ADC mode)
 // Single-DPE layers (conv1, conv9): ACAM handles activation internally
@@ -47,7 +47,7 @@ module resnet (
         .H(32),
         .S(1),
         .DEPTH(1024),
-        .DATA_WIDTH(16)
+        .DATA_WIDTH(40)
     ) conv1 (
         .clk(clk),
         .rst(rst),
@@ -75,7 +75,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(1024)
     ) conv2 (
         .clk(clk),
@@ -92,7 +92,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(10),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(1024)
     ) act2 (
         .clk(clk),
@@ -109,7 +109,7 @@ module resnet (
     pool_layer1 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(10),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(1024)
     ) pool1 (
         .clk(clk),
@@ -137,7 +137,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(512)
     ) conv3 (
         .clk(clk),
@@ -154,7 +154,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(512)
     ) act3 (
         .clk(clk),
@@ -181,7 +181,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(512)
     ) conv4 (
         .clk(clk),
@@ -198,7 +198,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(512)
     ) act4 (
         .clk(clk),
@@ -242,7 +242,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(512)
     ) conv5 (
         .clk(clk),
@@ -259,7 +259,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(8),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(256)
     ) act5 (
         .clk(clk),
@@ -276,7 +276,7 @@ module resnet (
     pool_layer2 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(8),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(256)
     ) pool2 (
         .clk(clk),
@@ -304,7 +304,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(512)
     ) conv6 (
         .clk(clk),
@@ -321,7 +321,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(512)
     ) act6 (
         .clk(clk),
@@ -338,7 +338,7 @@ module resnet (
     pool_layer3 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(64),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(64)
     ) pool3 (
         .clk(clk),
@@ -366,7 +366,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(512)
     ) conv7 (
         .clk(clk),
@@ -383,7 +383,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(512)
     ) act7 (
         .clk(clk),
@@ -410,7 +410,7 @@ module resnet (
 		.N_DPE_H(1),
 		.N_BRAM_R(1),
 		.N_BRAM_W(1),
-		.DATA_WIDTH(16),
+		.DATA_WIDTH(40),
         .DEPTH(512)
     ) conv8 (
         .clk(clk),
@@ -427,7 +427,7 @@ module resnet (
     activation_layer_relu #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(512)
     ) act8 (
         .clk(clk),
@@ -461,7 +461,7 @@ module resnet (
     pool_layer4 #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(4),
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .DEPTH(16)
     ) pool4 (
         .clk(clk),
@@ -486,7 +486,7 @@ module resnet (
         .H(1),
         .S(1),
         .DEPTH(128),
-        .DATA_WIDTH(16)
+        .DATA_WIDTH(40)
     ) conv9 (
         .clk(clk),
         .rst(rst),
@@ -515,7 +515,7 @@ module resnet (
 // Global SRAM
 sram #(
     .N_CHANNELS(1),
-    .DATA_WIDTH(16),
+    .DATA_WIDTH(40),
     .DEPTH(16)
 ) global_sram_inst (
     .clk(clk),
@@ -922,7 +922,7 @@ module conv_layer_stacked_dpes_V2_H1 #(
 
 	// Instantiate crossbar module for inputs
 	xbar_ip_module #(
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .NUM_INPUTS(1),
         .NUM_OUTPUTS(2)
     ) u_xbar (
@@ -1107,7 +1107,7 @@ module conv_layer_stacked_dpes_V4_H1 #(
 
 	// Instantiate crossbar module for inputs
 	xbar_ip_module #(
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .NUM_INPUTS(1),
         .NUM_OUTPUTS(4)
     ) u_xbar (
@@ -1363,7 +1363,7 @@ module conv_layer_stacked_dpes_V8_H1 #(
 
 	// Instantiate crossbar module for inputs
 	xbar_ip_module #(
-        .DATA_WIDTH(16),
+        .DATA_WIDTH(40),
         .NUM_INPUTS(1),
         .NUM_OUTPUTS(8)
     ) u_xbar (

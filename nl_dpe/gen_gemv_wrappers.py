@@ -142,17 +142,18 @@ def _gen_activation_lut_module() -> str:
     """Generate the activation_lut module definition (piecewise-linear tanh)."""
     return """\
 module activation_lut #(
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire [DATA_WIDTH-1:0] data_in,
     output reg [DATA_WIDTH-1:0] data_out
 );
+    // Saturation to int8 range [-128, 127]
     always @(posedge clk) begin
-        if ($signed(data_in) > $signed(16'sd16384))
-            data_out <= 16'sd16384;
-        else if ($signed(data_in) < $signed(-16'sd16384))
-            data_out <= -16'sd16384;
+        if ($signed(data_in) > $signed(127))
+            data_out <= 127;
+        else if ($signed(data_in) < $signed(-128))
+            data_out <= -128;
         else
             data_out <= data_in;
     end
@@ -160,7 +161,7 @@ endmodule"""
 
 
 def _gen_adder_tree(v: int, input_prefix: str, output_name: str,
-                    data_width: int = 16, wire_prefix: str = "") -> str:
+                    data_width: int = 40, wire_prefix: str = "") -> str:
     """Generate a binary adder tree reducing *v* inputs to one output.
 
     *input_prefix* is the wire name prefix; inputs are
@@ -217,7 +218,7 @@ def _gen_adder_tree(v: int, input_prefix: str, output_name: str,
 
 def _gen_fc_layer_v1_h1(k: int, n: int, rows: int, cols: int,
                          depth: int, addr_width: int,
-                         data_width: int = 16) -> str:
+                         data_width: int = 40) -> str:
     """V=1 H=1 — reuse conv_layer_single_dpe directly.  fc_layer is not
     needed; fc_top instantiates conv_layer_single_dpe."""
     return ""  # No separate fc_layer module needed
@@ -225,7 +226,7 @@ def _gen_fc_layer_v1_h1(k: int, n: int, rows: int, cols: int,
 
 def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
                   depth: int, addr_width: int,
-                  data_width: int = 16) -> str:
+                  data_width: int = 40) -> str:
     """Generate the fc_layer module for arbitrary (V, H) tiling.
 
     The fc_layer contains:
@@ -459,7 +460,7 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
 
 def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
                 depth: int, addr_width: int,
-                data_width: int = 16) -> str:
+                data_width: int = 40) -> str:
     """Generate the fc_top module (top-level wrapper)."""
     lines = []
     lines.append(f"module fc_top #(")
@@ -594,7 +595,7 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     v = math.ceil(k / rows)
     h = math.ceil(n / cols)
     total_dpes = v * h
-    data_width = 16
+    data_width = 40
     depth = max(512, k)
     addr_width = math.ceil(math.log2(depth)) if depth > 1 else 1
     acam_eligible = (v == 1)

@@ -32,18 +32,20 @@ Q3 shows that P2 gain ≈ f(CW-AOR). Main results confirm the predictor generali
 
 | Role | Workloads | Rationale |
 |---|---|---|
-| DSE (Q1+Q2) | Weight-persistent GEMV shapes | Parameterizable, architecturally equivalent to CNN/transformer layers, avoids full-network reuse |
-| Validation (main results) | ResNet, VGG11, BERT-Tiny | Full networks, clean separation from DSE |
+| DSE (Q1+Q2) | 6 FC workloads spanning (K,N) space | Parameterizable, architecturally equivalent to CNN/transformer layers |
+| Attention case study | Single attention head (N=128, d=128) | Tests ACAM-as-log mode and CLB DIMM/softmax overhead |
+| Validation (main results) | LeNet, ResNet | Full networks from prior work, Azure-Lily comparison points |
 
-**GEMV shapes for DSE** — span (K, N) space of real workload layers:
+**FC workloads for DSE** — span (K, N) space of real workload layers:
 
 | Name | K | N | Represents |
 |---|---|---|---|
-| Small | 64 | 64 | Early CNN layers, attention head dim |
-| Medium-K | 512 | 128 | ResNet conv2-4 range |
-| Large-K | 2048 | 256 | ResNet/VGG11 deep layers |
-| Wide-N | 256 | 512 | VGG11 conv5+, transformer FFN |
-| Square-large | 512 | 512 | Large FC, transformer projection |
+| fc_64_64 | 64 | 64 | Early CNN layers, tiny FC |
+| fc_128_128 | 128 | 128 | Attention projection proxy (Q/K/V, d=128) |
+| fc_512_128 | 512 | 128 | ResNet conv2-4 range |
+| fc_2048_256 | 2048 | 256 | ResNet/VGG11 deep layers |
+| fc_256_512 | 256 | 512 | VGG11 conv5+, transformer FFN |
+| fc_512_512 | 512 | 512 | Large FC, transformer projection |
 
 ---
 
@@ -51,16 +53,16 @@ Q3 shows that P2 gain ≈ f(CW-AOR). Main results confirm the predictor generali
 
 | Field | Details |
 |---|---|
-| **Question** | What crossbar size and interface width maximizes System CW-AOR per unit area under realistic FPGA mapping? |
+| **Question** | What crossbar configuration (R × C) maximizes throughput per area and throughput per Joule under realistic FPGA mapping? |
 | **Goal** | Select one NL-DPE block configuration for Q2/Q3 and main evaluation. |
-| **Knobs** | Crossbar size: 3 points (128×128, 256×256, 512×512); I/O width: 2 points (16-bit, wider) |
-| **What stays fixed** | ACAM rows (re-characterization out of scope); CLB-based reduction; baseline FPGA style |
-| **Workloads** | GEMV shapes (5 representative shapes covering small/medium/large K and N) |
-| **Predictor** | Compute System CW-AOR analytically for each config; validate against simulator energy efficiency |
-| **Metrics** | Block area (from `area_power.py`); block power; Fmax; System CW-AOR; throughput/area; energy efficiency |
-| **Expected finding** | The FPGA-optimal block is not the largest — beyond a crossbar size where most GEMV K dims are already single-tile, area cost grows faster than CW-AOR gain. A 256×256 or modest variant is likely optimal. |
-| **Main figures** | CW-AOR vs crossbar size (fixed area budget); energy efficiency vs crossbar size; CW-AOR as predictor vs simulated efficiency (scatter plot showing correlation) |
-| **Main table** | Candidate configs: crossbar size, area, power, Fmax, System CW-AOR, energy eff, throughput/area. Final selected row highlighted. |
+| **Knobs** | R ∈ {128, 256, 512} × C ∈ {64, 128, 256} = 9 non-square configs; I/O width fixed at 16-bit |
+| **What stays fixed** | I/O width (16-bit); ACAM rows (re-characterization out of scope); CLB-based reduction; VTR auto_layout |
+| **Workloads** | 6 FC workloads (fc_64_64 through fc_2048_256) spanning the ACAM eligibility boundary |
+| **Predictor** | CW-AOR can be computed analytically; Round 1 validates it against actual VTR+IMC results |
+| **Metrics** | Block area (from `area_power.py`); FPGA area (grid × CLB_tile); Fmax; throughput/mm²; throughput/J |
+| **Actual finding** | **512×128 is optimal** (GM combined = 0.852). R=512 enables ACAM on 5/6 workloads; R=256 on 3/6; R=128 on 2/6. C=128 balances tile area vs horizontal tiling. The row dimension is the dominant knob — ACAM eligibility (V=1 threshold) drives the ranking more than area or Fmax. |
+| **Main figures** | Config ranking bar chart (GM tput/mm² and tput/J); 9×6 heatmap (normalized tput/mm², annotated with V and ACAM eligibility) |
+| **Main table** | All 9 configs: area, tile W×H, power, ACAM-eligible workloads, GM tput/mm², GM tput/J, GM combined. 512×128 highlighted. |
 
 ---
 
@@ -72,7 +74,7 @@ Q3 shows that P2 gain ≈ f(CW-AOR). Main results confirm the predictor generali
 | **Goal** | Identify the NL-DPE fabric density where compute capacity gain balances CLB displacement cost. |
 | **Knobs** | NL-DPE block count: 5–6 points from 0 (pure CLB) to high density; block config fixed from Q1 |
 | **What stays fixed** | Block design from Q1; DSP count; routing architecture; total FPGA area budget |
-| **Workloads** | GEMV shapes (same set as Q1) |
+| **Workloads** | 6 FC workloads (same set as Q1) |
 | **Predictor** | System CW-AOR also decreases as block count grows beyond the point where CLB reduction budget is starved — show this analytically |
 | **Metrics** | Throughput (inf/s); energy efficiency (inf/J); throughput/area; CLB utilization; CLB pressure proxy (CLBs remaining after reduction logic) |
 | **Expected finding** | Performance improves with NL-DPE count up to a density point, then degrades as remaining CLBs become insufficient for adder-tree reduction. Sweet spot is workload-dependent but predictable from CW-AOR. |
@@ -89,33 +91,35 @@ Q3 shows that P2 gain ≈ f(CW-AOR). Main results confirm the predictor generali
 | **Goal** | Validate CW-AOR as a predictor of P2 vs P1 gain; quantify the architectural value of dual-mode independent of circuit efficiency differences. |
 | **Policies** | P1: ACAM always in ADC mode (activation in CLB fabric); P2: ACAM activates locally when V=1 and H=1, falls back to ADC otherwise |
 | **Knobs** | Policy (P1 vs P2) at the Q1+Q2 optimal fabric point |
-| **Workloads** | GEMV shapes (DSE) + ResNet, VGG11, BERT-Tiny (main results) |
-| **Predictor** | P2 gain ≈ f(CW-AOR): validate on GEMV, confirm it holds for full networks |
+| **Workloads** | 6 FC workloads (DSE) + attention head (N=128, d=128) + LeNet/ResNet (validation from prior work) |
+| **Predictor** | ACAM benefit ≈ f(V=1 eligibility): validated by comparing V=1 vs V>1 configs on same workload within Round 1 data |
 | **Metrics** | Energy (pJ); energy efficiency (inf/J); FPGA fabric energy reduction; CLB activation ops eliminated |
-| **Expected finding** | P2 gain is well-predicted by CW-AOR. BERT-Tiny attention heads (small K/N → high CW-AOR) see the largest gain. ResNet/VGG11 deep layers (large K → low CW-AOR) see limited gain from dual-mode. The predictor generalizes from GEMV to full networks without re-running DSE. |
-| **Main figures** | P2/P1 energy ratio vs CW-AOR (one point per GEMV shape + one per full network) — show linear predictor fit; per-workload P1 vs P2 bar chart |
-| **Main table** | Workload, CW-AOR, P1 energy, P2 energy, P2/P1 ratio, predicted ratio from CW-AOR model, prediction error |
+| **Actual finding** | Within Round 1 data, the V=1 boundary creates a 2-4× energy discontinuity (e.g., fc_512_128: V=1 at 159-275 pJ vs V=2 at 328-573 pJ). LeNet (prior work): 0.548× energy ratio vs Azure-Lily, ACAM on 4/5 layers. ResNet: ACAM on 2/9 layers only. Attention (pending): CLB DIMM/softmax dominates; ACAM-as-log is uniformly available. |
+| **Main figures** | Energy vs config for a workload crossing V=1 boundary (step-function plot); attention energy breakdown (DPE vs CLB) |
+| **Main table** | Per-workload ACAM eligibility count across 9 configs + energy gap at V=1 boundary |
 
 ---
 
-## Main Evaluation: Full-Network Results
+## Main Evaluation: Full-Network Validation
 
 | Field | Details |
 |---|---|
-| **Workloads** | ResNet, VGG11, BERT-Tiny |
-| **Configuration** | Optimal NL-DPE block from Q1, optimal fabric density from Q2, P2 mapping policy |
-| **Metrics** | Throughput (inf/s), energy efficiency (inf/J), throughput/area, CW-AOR (reported for context) |
-| **Baseline** | Azure-Lily (same FPGA fabric, same VTR flow) — used as architectural context, not primary claim |
-| **Primary claim** | Under our systematic methodology (Q1+Q2+Q3), NL-DPE achieves X% better throughput/area and Y% better energy efficiency vs a naively-sized NL-DPE deployment. CW-AOR predicts results across all three workloads. |
-| **Secondary claim** | NL-DPE compares favorably to Azure-Lily; differences attributed to architectural block design choices, not circuit-level factors. |
+| **Workloads** | LeNet, ResNet (from prior work); attention head (pending) |
+| **Configuration** | Optimal NL-DPE block from Q1 (512×128), optimal fabric density from Q2 (pending Round 2) |
+| **Metrics** | Throughput (inf/s), energy efficiency (inf/J), throughput/area |
+| **Baseline** | Azure-Lily (512×128, ADC-only, same VTR flow) — used as architectural context |
+| **Primary claim** | The crossbar-size DSE reveals R (row dimension) as the dominant FPGA design knob for ACAM-enabled hard blocks. 512×128 maximizes ACAM eligibility while minimizing tile area. |
+| **Secondary claim** | With the DSE-optimal 512×128, NL-DPE has the same row dimension as Azure-Lily; ACAM provides additional energy savings on V=1 layers without a row-dimension penalty. |
+| **Note** | VGG11 and BERT-Tiny are deferred — current scope focuses on FC DSE + attention head + LeNet/ResNet validation. May add if time permits before submission. |
 
 ---
 
 ## Evaluation Matrix
 
-| Question | Workloads | Sweep | Purpose |
-|---|---|---|---|
-| Q1 block sizing | 5 GEMV shapes | 3 crossbar sizes × 2 I/O widths | Find optimal NL-DPE block; validate CW-AOR as predictor |
-| Q2 fabric density | 5 GEMV shapes | 5–6 block count points | Find optimal NL-DPE density; show CLB displacement tradeoff |
-| Q3 dual-mode value | GEMV + ResNet + VGG11 + BERT-Tiny | P1 vs P2 at optimal fabric | Validate CW-AOR predicts P2 gain; quantify dual-mode benefit |
-| Main results | ResNet, VGG11, BERT-Tiny | Fixed optimal config | Full-network validation of methodology |
+| Question | Workloads | Sweep | Status | Purpose |
+|---|---|---|---|---|
+| Q1 block sizing | 6 FC workloads | 9 configs (3R × 3C) × 6 WL = 54 runs | **Done** | Find optimal NL-DPE block → 512×128 |
+| Q2 fabric density | 6 FC workloads | 4 ratios × 3 configs × 6 WL = 72 runs | Pending (Round 2) | Find optimal NL-DPE density; CLB displacement tradeoff |
+| Q3 ACAM value | 6 FC + attention | V=1 vs V>1 within Round 1 data | **Partially done** (FC done, attention pending) | Quantify ACAM step-function benefit |
+| Attention case study | N=128, d=128 | 9 configs × 1 WL = 9 runs | Pending (T3a-T3c) | ACAM-as-log + CLB DIMM/softmax analysis |
+| Validation | LeNet, ResNet | Fixed config, NL-DPE vs Azure-Lily | Prior work data available | Full-network comparison |

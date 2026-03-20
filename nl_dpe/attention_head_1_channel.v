@@ -16,7 +16,7 @@
 module attention_head #(
     parameter N = 128,        // sequence length
     parameter d = 128,        // head dimension
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -255,7 +255,7 @@ endmodule
 module dimm_score_matrix #(
     parameter N = 128,
     parameter d = 128,
-    parameter DATA_WIDTH = 16,
+    parameter DATA_WIDTH = 40,
     parameter ADDR_WIDTH = 8,
     parameter DEPTH = 256
 )(
@@ -526,7 +526,7 @@ endmodule
 module softmax_approx #(
     parameter N = 128,
     parameter d = 128,
-    parameter DATA_WIDTH = 16,
+    parameter DATA_WIDTH = 40,
     parameter ADDR_WIDTH = 8,
     parameter DEPTH = 256
 )(
@@ -850,7 +850,7 @@ endmodule
 module dimm_weighted_sum #(
     parameter N = 128,
     parameter d = 128,
-    parameter DATA_WIDTH = 16,
+    parameter DATA_WIDTH = 40,
     parameter ADDR_WIDTH = 8,
     parameter DEPTH = 256
 )(
@@ -1168,7 +1168,7 @@ module conv_layer_single_dpe #(
     parameter H = 32,
     parameter S = 1,
     parameter DEPTH = 512,
-    parameter DATA_WIDTH = 16
+    parameter DATA_WIDTH = 40
 )(
     input wire clk,
     input wire rst,
@@ -1488,7 +1488,7 @@ endmodule
 
 module sram #(
     parameter N_CHANNELS = 1,
-    parameter DATA_WIDTH = 16*N_CHANNELS,
+    parameter DATA_WIDTH = 40*N_CHANNELS,
     parameter DEPTH = 512
 )(
     input wire clk,
