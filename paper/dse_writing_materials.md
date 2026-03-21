@@ -257,6 +257,65 @@ round2_attention_pareto_merged.pdf, round2_attention_ceiling.pdf
 
 ---
 
+## §5b Round 2 FC+BN+Softmax: DSP Bottleneck Benchmark
+
+### Setup
+
+- **Benchmark**: Complete FC layer = GEMV (DPE) + BatchNorm (DSP) + Softmax (CLB+DSP)
+- **16 mac_int_9x9 per replica** = 4 DSP tiles/rep (4 BN + 12 softmax normalize)
+- **Per-replica resources** (calibrated): 93 CLBs, 16 BRAMs, 4 DSP tiles
+- **4-resource constraint**: P = min(P_dpe, P_clb, P_bram, P_dsp)
+- **5 configs × 3 workloads × 16 (d,c) × 3 seeds = 720 VTR runs** → 234 data points (6 failures)
+- **d=100% excluded**: 0 DSPs remaining → infeasible
+
+### Key Findings
+
+**5b.1 DSP crossover creates throughput peak:**
+
+fc_512_128 on 512×128 (c=0%):
+- d=20%: P=14 (DPE-limited) → 1.83 inf/ns
+- d=40%: P=28 (DPE-limited) → **3.66 inf/ns** ← PEAK
+- d=60%: P=21 (DSP-limited) → 2.75 inf/ns ← -25%
+- d=80%: P=14 (DSP-limited) → 1.88 inf/ns ← -49%
+
+**5b.2 Binding distribution:**
+
+| Resource | Points | Fraction |
+|----------|--------|----------|
+| DPE | 100 | 43% |
+| **DSP** | **99** | **42%** |
+| BRAM | 35 | 15% |
+| CLB | 0 | 0% |
+
+vs Bare GEMV: DPE=91%, BRAM=9%, DSP=0%.
+
+**5b.3 Balanced config shifts with workload resource profile:**
+
+| Benchmark | NL-DPE group balanced | Why |
+|-----------|----------------------|-----|
+| Bare GEMV (DPE-only) | **1024×128** d=20% c=20% | Fewer DPEs/rep → more replicas |
+| FC+BN+Softmax (DSP) | **512×128** d=40% c=0% | DSP caps P → smaller tile wastes less |
+| Attention (BRAM) | **512×128** d=20% c=20% | BRAM caps P=7 → smaller tile wastes less |
+
+**512×128 is the robust choice** — optimal for resource-constrained workloads (DSP or BRAM limited).
+1024×128 only wins for purely DPE-limited workloads (bare GEMV).
+
+**5b.4 Cross-workload contrast (updated):**
+
+| | Bare FC | FC+BN+Softmax | Attention |
+|---|---|---|---|
+| Non-DPE bottleneck | None | **DSP** | **BRAM** |
+| Throughput peak? | No (monotonic) | **Yes** (d=40%) | No (BRAM wall) |
+| Binding at high d% | DPE | DSP | BRAM |
+| Balanced config | 1024×128 | 512×128 | 512×128 |
+
+**Figures**: fc_softmax_pareto.pdf, fc_softmax_pareto_merged.pdf,
+fc_softmax_vs_gemv_throughput.pdf, fc_softmax_binding_heatmap.pdf,
+fc_softmax_dsp_sweep_*.pdf
+**Data**: round2_fc_softmax_results.csv (234 rows)
+
+---
+
 ## §6 IMC Simulator: Energy Model Details
 
 ### §6.1 Architecture Configs

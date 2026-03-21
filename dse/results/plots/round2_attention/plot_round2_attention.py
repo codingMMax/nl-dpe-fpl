@@ -286,18 +286,22 @@ def plot_pareto(rows):
         pareto = compute_pareto_min(points)
         pareto_set = set((p[0], p[1]) for p in pareto)
 
-        # Dominated points — hollow
+        # Sub-optimal — hollow
         dom_xs = [p[0] for p in points if (p[0], p[1]) not in pareto_set]
         dom_ys = [p[1] for p in points if (p[0], p[1]) not in pareto_set]
+        lbl_sub = "Sub-optimal" if idx == 0 else None
         ax.scatter(dom_xs, dom_ys, facecolors="none", edgecolors=color,
-                   s=30, alpha=0.6, linewidths=0.8, zorder=2)
+                   s=30, alpha=0.6, linewidths=0.8, zorder=2, label=lbl_sub)
 
-        # Pareto front — filled, connected
+        # Optimal — filled, connected
         px = [p[0] for p in pareto]
         py = [p[1] for p in pareto]
+        lbl_opt = "Optimal" if idx == 0 else None
         ax.plot(px, py, color=color, linewidth=1.5, zorder=3)
         ax.scatter(px, py, color=color, s=30, edgecolors="white",
-                   linewidths=0.8, zorder=4)
+                   linewidths=0.8, zorder=4, label=lbl_opt)
+        if idx == 0:
+            ax.legend(fontsize=7, loc="upper right")
 
         # Find and annotate knee point
         knee_idx = find_knee_point(pareto)
@@ -325,49 +329,46 @@ def plot_pareto(rows):
         ax.set_ylim(bottom=0)
         ax.grid(True, alpha=0.2, linewidth=0.5)
 
-    # Bottom-left panel: note with optimal points
+    # Bottom-left panel: balanced config table
     ax_note = axes[1, 0]
     ax_note.axis("off")
+    FS = 8
 
-    y_pos = 0.98
-    ax_note.text(0.0, y_pos, r"Optimal ($\bigstar$) per config:",
+    # Title
+    ax_note.text(0.5, 0.97, r"Balanced Config ($\bigstar$)",
                  transform=ax_note.transAxes,
-                 fontsize=8.5, fontweight="bold", verticalalignment="top",
-                 fontfamily="serif", color="#111111")
-    y_pos -= 0.12
+                 fontsize=FS + 1, fontweight="bold", verticalalignment="top",
+                 ha="center", fontfamily="serif", color="#111111")
 
+    # Table
+    table_data = [["Config", "DSP %", "CLB %"]]
+    table_colors = [["#E5E7EB", "#E5E7EB", "#E5E7EB"]]
     for cfg, combos, knee_combo in pareto_info:
-        color = CONFIG_COLORS[cfg]
         kd, kc = knee_combo
-        line = f"{CONFIG_SHORT[cfg]}: {kd}% DSP + {kc}% CLB"
-        ax_note.text(0.0, y_pos, line,
-                     transform=ax_note.transAxes,
-                     fontsize=7.5, verticalalignment="top",
-                     fontfamily="serif", color=color, fontweight="bold")
-        y_pos -= 0.10
+        table_data.append([CONFIG_SHORT[cfg], f"{kd}%", f"{kc}%"])
+        table_colors.append(["#F9FAFB", "#F9FAFB", "#F9FAFB"])
 
-    y_pos -= 0.06
-    ax_note.scatter([0.02], [y_pos + 0.02], s=35, c="#555555",
-                    edgecolors="white", linewidths=0.8,
-                    transform=ax_note.transAxes, zorder=5, clip_on=False)
-    ax_note.text(0.06, y_pos + 0.015, "Pareto-optimal (non-dominated)",
+    tbl = ax_note.table(cellText=table_data, cellColours=table_colors,
+                        loc="upper center", cellLoc="center",
+                        bbox=[0.0, 0.28, 1.0, 0.62])
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(FS)
+    tbl.scale(1, 1.3)
+    for j in range(3):
+        tbl[0, j].set_text_props(fontweight="bold", fontsize=FS)
+    for i, (cfg, combos, knee_combo) in enumerate(pareto_info):
+        tbl[i + 1, 0].set_text_props(color=CONFIG_COLORS[cfg], fontweight="bold")
+
+    # Explanation
+    ax_note.text(0.5, 0.20,
+                 "Balanced = best latency-per-area\n"
+                 "efficiency. Beyond this, each\n"
+                 "additional % of DPE area yields\n"
+                 "less improvement.",
                  transform=ax_note.transAxes,
-                 fontsize=8, verticalalignment="top",
-                 fontfamily="serif", color="#555555")
-    y_pos -= 0.10
-    ax_note.scatter([0.02], [y_pos + 0.02], s=35, facecolors="none",
-                    edgecolors="#555555", linewidths=0.8,
-                    transform=ax_note.transAxes, zorder=5, clip_on=False)
-    ax_note.text(0.06, y_pos + 0.015, "Dominated",
-                 transform=ax_note.transAxes,
-                 fontsize=8, verticalalignment="top",
-                 fontfamily="serif", color="#555555")
-    y_pos -= 0.12
-    ax_note.text(0.0, y_pos,
-                 r"Eff. Latency $\propto$ 1 / (replicas $\times$ freq)",
-                 transform=ax_note.transAxes,
-                 fontsize=8.5, verticalalignment="top",
-                 fontfamily="serif", color="#888888", style="italic")
+                 fontsize=FS, verticalalignment="top",
+                 ha="center", fontfamily="serif", color="#AAAAAA",
+                 linespacing=1.3)
 
     out = RESULTS_DIR / "round2_attention_pareto.pdf"
     fig.savefig(out, )
@@ -462,7 +463,7 @@ def plot_merged_pareto(rows):
 
         ax.scatter([knee[0]], [knee[1]], color="black", s=150,
                    edgecolors="red", linewidths=2, zorder=6, marker="*")
-        ax.annotate(f"{CONFIG_SHORT[knee_cfg]}\nd={kd}% c={kc}%",
+        ax.annotate(f"Balanced: {CONFIG_SHORT[knee_cfg]}\nd={kd}% c={kc}%",
                     xy=(knee[0], knee[1]),
                     xytext=(knee[0] + max(gpx) * 0.12, knee[1] * 1.15),
                     fontsize=8, fontweight="bold", color="red",
@@ -523,7 +524,7 @@ def plot_throughput_ceiling(rows):
     f0 = baseline_rows[0]['fmax_mhz']
     p_bram = 7  # empirically calibrated
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(10, 6.5))
 
     # Collect all points sorted by available DPE count
     points = []

@@ -1,8 +1,49 @@
-# TASKS.md — NL-DPE DSE Research Pipeline
+# TASKS.md — NL-DPE Research Pipeline
 
 ## Active Sprint
 
-### P0 — Round 1 DSE
+### P0 — BERT-Tiny End-to-End Workload (Main Result)
+
+- [x] **T10**: BERT-Tiny IMC simulator model
+  - Architecture: 2L/2H/128d/512ff, GELU, LayerNorm, Embedding (TinyBERT)
+  - New layer types: `LayerNorm_Layer`, `Embedding_Layer` (nn module)
+  - New FPGAFabric methods: `layernorm()`, `embedding_lookup()`
+  - Scheduler dispatch for `"layernorm"` and `"embedding"` types
+  - `run_bert_model()` traversal with multi-head parallel (energy scales, latency doesn't)
+  - Sanity checked: scaling, ACAM eligibility, dimensions all verified
+  - Files: `azurelily/models/bert_tiny.py`, `azurelily/nn/{layernorm,embedding}_layer.py`
+  - Run: `python IMC/test.py --model bert_tiny --imc_file IMC/configs/nl_dpe.json --seq_length 1024`
+
+- [ ] **T11**: RTL for DPE-independent CLB modules
+  - LayerNorm: CLB reduction trees (mean, variance) + rsqrt LUT + element-wise normalize
+  - Residual Add: CLB element-wise add (128-wide, seq_len tokens)
+  - Embedding Add: CLB 3-way element-wise add (token + position + segment)
+  - Use plain `+`/`*` operators (VTR infers DSPs)
+
+- [ ] **T12**: Select DPE config for BERT-Tiny
+  - Candidate configs from Round 1: 512×128 (best FC), 512×256, 1024×128
+  - Consider: ACAM eligibility on all BERT-Tiny layers, tile area, FFN2 V=ceil(512/R)
+  - Decision gates T13 and T14
+
+- [ ] **T13**: RTL for DPE-dependent linear projections (after T12)
+  - Q/K/V/O projections: GEMM(seq_len, 128, 128) with V×H DPE tiling
+  - FFN1: GEMM(seq_len, 128, 512) with GELU activation (ACAM if V=1)
+  - FFN2: GEMM(seq_len, 512, 128)
+  - Reuse `gen_gemv_wrappers.py` infrastructure
+
+- [ ] **T14**: RTL for attention DIMM modules (after T12)
+  - QK^T: log-domain GEMM(seq_len, d_head=64, seq_len) — uses DPE(I|exp/log)
+  - Softmax: DPE(I|exp) + CLB norm
+  - Score×V: log-domain GEMM(seq_len, d_head=64, seq_len) — uses DPE(I|log)
+
+- [ ] **T15**: VTR synthesis and validation of full BERT-Tiny
+  - Assemble all modules into top-level BERT-Tiny wrapper
+  - Run VTR: extract Fmax, grid size, resource usage
+  - Compare against IMC simulator predictions
+
+## Prior DSE Sprint (Complete)
+
+### P0-old — Round 1 DSE
 - [x] **T1**: Run full Round 1 sweep: `python gemv_dse.py --round 1`
   - 54/54 runs completed (9 configs × 6 workloads). Bug fix applied: skip-existing now reloads pre-existing results into CSV.
   - Output: `dse/results/round1_results.csv`, `top3_configs.json`
@@ -66,6 +107,13 @@
     - All 300/300 points verified feasible in dry-run
   - **Deleted old data**: `dse/round2_full/` (32GB), `dse/round2/` (995MB), `dse/sanity_40bit/`, `dse/sanity_attention/`
 
+- [x] **T6-softmax**: Round 2 Part 3 — FC+BN+Softmax DSP Bottleneck (COMPLETE, 2026-03-21)
+  - 234/240 points × 3 seeds = 720 VTR runs. 16 mac_int_9x9/rep = 4 DSP tiles/rep
+  - DSP crossover: fc_512_128 peaks at d=40%, drops 50% by d=80%
+  - Binding: DPE=43%, DSP=42%, BRAM=15%
+  - Key finding: balanced config shifts to 512×128 (from 1024×128 in bare GEMV)
+  - Output: round2_fc_softmax_results.csv, 6 plots
+
 - [x] **T6-new**: Round 2 Part 2 — Attention Head Exploration (COMPLETE, 2026-03-20)
   - 80/80 points × 3 seeds = 240 VTR runs on 120×120 grid
   - Architecture: (3V+4)×H DPEs/rep, DIMM stages use DPE(I|exp/log)
@@ -74,25 +122,11 @@
   - Output: round2_attention_results.csv (80 rows), 4 publication figures
   - Plots: scalability heatmap, per-config Pareto, merged Pareto, throughput ceiling
 
-### P3 — Paper Results
+### P3 — Paper Results (deferred until BERT-Tiny complete)
 - [x] **T7-old**: ~~Old paper figures~~ (Round 2 plots OBSOLETE, Round 1 + Attention plots still valid)
-  - Valid: `round1_ranking.pdf`, `round1_heatmap.pdf`, `attention_ranking.pdf`, `attention_energy_breakdown.pdf`
-  - Obsolete: `round2_clb_tput_mm2.pdf`, `round2_clb_tput_J.pdf`, `round2_geomean.pdf`, `round2_dsp_comparison.pdf`
-
 - [x] **T7-new**: Round 2 paper figures COMPLETE
-  - `round2_full_scalability.pdf` — aggregate geomean normalized Fmax heatmaps (5 configs, RdYlGn)
-  - `round2_full_per_workload.pdf` — per-workload heatmaps mean across configs (PuBuGn)
-  - `round2_full_pareto.pdf` — Pareto front: DPE area % vs effective latency, 5 configs, knee points annotated
-  - Plot script: `dse/results/plot_round2_full.py`
-
-- [ ] **T8**: Fill paper Q1/Q2/Q3 with actual data (UNBLOCKED)
-  - Q1: Which (R,C) config is best? → from Round 1 ranking (512×128)
-  - Q2: Optimal DPE density? → from new Round 2 throughput utilization curve
-  - Q3: ACAM value? → compare V=1 vs V>1 energy across FC workloads + attention ACAM-as-log analysis
-
-- [ ] **T9**: Write paper sections (after T7/T8)
-  - Section 5 (Results): Q1, Q2, Q3 subsections
-  - Section 6 (Discussion): ACAM dual-mode value (activation + log), limitations
+- [ ] **T8**: Fill paper Q1/Q2/Q3 with actual data (UNBLOCKED, deferred)
+- [ ] **T9**: Write paper sections (deferred — BERT-Tiny results will be the main result)
 
 ## Backlog / Deferred
 - [ ] Delete old GEMV wrapper files in `nl_dpe/to_delete/` (staged for removal)

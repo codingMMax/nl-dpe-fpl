@@ -1,15 +1,64 @@
-# SESSION_STATE.md — Last updated: 2026-03-20
+# SESSION_STATE.md — Last updated: 2026-03-21
 
 ## Current Phase
-**All DSE experiments COMPLETE (2026-03-20). Round 2 FC (900 VTR runs) + Round 2 Attention (240 VTR runs) finished. Publication figures generated for both FC and attention: scalability heatmaps, Pareto fronts (per-config + merged), throughput ceiling plots. Writing materials consolidated in `paper/dse_writing_materials.md`. Ready for paper writing.**
+**All DSE experiments COMPLETE (2026-03-21). Four sweeps done: Round 1 (72 runs), Round 2 FC bare GEMV (900 runs), Round 2 Attention (240 runs), Round 2 FC+BN+Softmax (720 runs). Key findings: 512×128 is the robust balanced config across all workload types; DSP bottleneck confirmed for complete inference pipelines; BRAM wall for attention. Writing materials and plots consolidated.**
 
-## Completed Work
+## BERT-Tiny Workload (NEW — Main Result, 2026-03-20)
+
+### Architecture (TinyBERT: 2L/2H/128d)
+| Parameter | Value |
+|-----------|-------|
+| Layers | 2 |
+| Hidden dim (d_model) | 128 |
+| Attention heads | 2 |
+| Head dim (d_head) | 64 |
+| FFN intermediate (d_ff) | 512 |
+| Activation | GELU (modeled same as existing: ACAM if V=1, CLB if V>1) |
+| Default seq_len | 1024 |
+
+### IMC Simulator Model (COMPLETE)
+- [x] `azurelily/models/bert_tiny.py` — full BERT-Tiny model definition
+- [x] `azurelily/nn/layernorm_layer.py` — LayerNorm layer class
+- [x] `azurelily/nn/embedding_layer.py` — Embedding layer class
+- [x] `azurelily/IMC/peripherals/fpga_fabric.py` — `layernorm()` and `embedding_lookup()` methods
+- [x] `azurelily/IMC/scheduler_stats/scheduler.py` — dispatch for `layernorm` and `embedding` types
+- [x] `azurelily/IMC/test.py` — `bert_tiny` registered, `run_bert_model()` traversal with multi-head parallel
+- [x] Multi-head strategy: run head layers num_heads times, subtract (num_heads-1)×latency for parallel execution
+
+### IMC Simulator Sanity Check Results (256×256 DPE, default config)
+| seq_len | Total Energy (pJ) | Latency (ns) | DPE % | FPGA % | Mem % |
+|---------|--------------------|--------------|-------|--------|-------|
+| 128 | 14.0M | 9.97M | 72.3% | 25.8% | 1.9% |
+| 256 | 54.9M | 39.4M | 72.6% | 25.5% | 1.9% |
+| 1024 | 868.7M | 625.6M | 72.9% | 25.2% | 1.9% |
+
+- Scaling: ~4× per 2× seq_len (quadratic from attention) — correct
+- ACAM: All projections V=1 on 256×256, no fpga_activation energy — correct
+- Dimensions verified: Q/K/V (S,128,128), QK^T (S,64,S), FFN1 (S,128,512), FFN2 (S,512,128)
+
+### RTL Implementation Status
+**DPE-independent modules** (can implement now — pure CLB):
+- [ ] LayerNorm RTL — CLB reduction trees + element-wise ops, 128-wide
+- [ ] Residual Add RTL — CLB element-wise add, 128-wide
+- [ ] Embedding Add RTL — CLB 3-way element-wise add, 128-wide
+
+**DPE-dependent modules** (blocked on DPE config selection):
+- [ ] Q/K/V/O projections — V=ceil(128/R), H=ceil(128/C) DPE tiling
+- [ ] FFN1 — V=ceil(128/R), H=ceil(512/C) DPE tiling + GELU activation
+- [ ] FFN2 — V=ceil(512/R), H=ceil(128/C) DPE tiling
+- [ ] Attention DIMM (QK^T, Score×V) — uses DPE(I|exp) and DPE(I|log) via ACAM
+
+### RTL Style
+- Use plain `+` and `*` Verilog operators (VTR infers DSPs from arch XML)
+- No explicit DSP instantiation — consistent with all existing RTL
+
+## Completed Work (Prior DSE)
 
 ### Infrastructure (all done)
 - [x] `nl_dpe/gen_arch_xml.py` — auto mode: patches DPE tile W/H/area in XML template
 - [x] `nl_dpe/gen_gemv_wrappers.py` — FC mode: generates V×H DPE tiling with adder tree + activation_lut
 - [x] `azurelily/models/fc.py` — FC+activation model for IMC simulator (V=1 → ACAM free; V>1 → CLB)
-- [x] `azurelily/IMC/test.py` — updated with fc_model import and `"fc"` registration
+- [x] `azurelily/IMC/test.py` — updated with fc_model, attention, and bert_tiny registration
 - [x] `gemv_dse.py` — full Round 1 orchestrator with SPEC-style normalized geomean ranking
 
 ### Key Bug Fixes Applied
@@ -93,6 +142,21 @@
 - Attention throughput ceiling: `round2_attention_ceiling.pdf` (BRAM wall)
 - All plots organized into `dse/results/plots/{round1,round2_fc,round2_attention}/`
 
+### Round 2 FC+BN+Softmax DSE (COMPLETE, 2026-03-21)
+- **234/240 points × 3 seeds = 720 VTR runs** (6 failures at 1024×64 c=60%)
+- **Benchmark**: Complete FC layer = GEMV (DPE) + BatchNorm (4 DSP MACs) + Softmax (12 DSP MACs + CLB)
+- **16 mac_int_9x9 per replica** = 4 DSP tiles/rep, 93 CLBs/rep, 16 BRAMs/rep
+- **4-resource constraint**: P = min(P_dpe, P_clb, P_bram, P_dsp)
+- **DSP crossover confirmed**: fc_512_128 peaks at d=40% (3.66 inf/ns), drops 50% by d=80% (1.88 inf/ns)
+- **Binding distribution**: DPE=43%, DSP=42%, BRAM=15%, CLB=0%
+- **Merged Pareto balanced**: NL-DPE group → 512×128 at d=40% c=0% (differs from bare GEMV: 1024×128)
+- **Key insight**: Non-DPE resource constraints (DSP, BRAM) shift the optimal config to 512×128
+  - Bare GEMV (DPE-only) → 1024×128 wins (fewer DPEs/rep)
+  - FC+BN+Softmax (DSP-constrained) → 512×128 wins (smaller tile, less waste under DSP cap)
+  - Attention (BRAM-constrained) → 512×128 wins (same reason)
+- **Output**: `dse/results/plots/round2_fc_softmax/round2_fc_softmax_results.csv` (234 rows)
+- **Plots**: per-config Pareto, merged Pareto, DSP sweep curves, binding heatmap, comparison overlay
+
 ### Cleaned Up Directories (2026-03-19)
 - Deleted: `dse/round2/` (995MB, old CLB-only sweep, OBSOLETE)
 - Deleted: `dse/round2_full/` (32GB, inconsistent grid sizes + missing BRAM cap)
@@ -123,9 +187,11 @@
 | Round 2 Part 1 (old CLB-only) | **Obsolete** | Flat throughput — CLB never stressed. Replaced by DSP+CLB sweep |
 | Round 2 Part 1 (new DSP+CLB) | **COMPLETE** | 300/300 pts × 3 seeds on 120×120. CSV + 3 publication figures generated |
 | Round 2 Part 2 (Attention) | **COMPLETE** | 80/80 pts × 3 seeds. BRAM wall at P=7. 4-resource constraint. |
-| Paper figures (Round 2) | **COMPLETE** | FC: 5 figures. Attention: 4 figures. All in dse/results/plots/ |
-| Paper Q1/Q2/Q3 | **UNBLOCKED** | Q1 answered (512×128); Q2 from Round 2 FC (soft ceiling); Q3 needs ACAM analysis |
+| Round 2 Part 3 (FC+BN+Softmax) | **COMPLETE** | 234/240 pts. DSP bottleneck at d≥60%. Balanced: 512×128 (not 1024×128). |
+| Paper figures (Round 2) | **COMPLETE** | FC: 5 figs, Attention: 4 figs, FC+Softmax: 6 figs. All in dse/results/plots/ |
+| Paper Q1/Q2/Q3 | **UNBLOCKED** | Q1: 512×128; Q2: balanced config shifts with workload resource profile; Q3: ACAM analysis pending |
 | Writing materials | **COMPLETE** | paper/dse_writing_materials.md consolidates all DSE details |
+| Config robustness | **RESOLVED** | 512×128 is balanced for DSP/BRAM-constrained workloads; 1024×128 only wins for DPE-only |
 
 ## Design Decisions (Rationale)
 

@@ -31,7 +31,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(PROJECT_ROOT / "nl_dpe"))
 from run_vtr import run_single, find_vpr_log, parse_metrics, parse_resources
-from gen_arch_xml import gen_arch_xml
+from gen_arch_xml import gen_arch_xml, _baseline_col_positions
 from gen_gemv_wrappers import gen_wrapper
 from gen_attention_wrapper import gen_attention_wrapper
 from gen_dsp_gemv_wrapper import gen_dsp_fc_wrapper
@@ -1766,6 +1766,9 @@ MWTA_TO_UM2 = 0.033864
 BRAM_TILE_HEIGHT = 2   # from arch XML: <tile name="memory" height="2">
 BRAM_STARTX = 2
 BRAM_REPEATX = 16
+DSP_TILE_HEIGHT = 4    # from arch XML: <tile name="dsp_top" height="4">
+DSP_STARTX = 6         # from arch XML: BASELINE_DSP_STARTX
+DSP_REPEATX = 16       # from arch XML: BASELINE_DSP_REPEATX
 
 PROTO_CSV_COLUMNS = [
     'dsp_ratio', 'clb_ratio', 'config', 'workload',
@@ -1943,6 +1946,84 @@ def compute_feasibility(dsp_ratio, clb_ratio, rows, cols, k, n,
         'brams_avail': brams_avail,
         'brams_need': p * brams_per_rep,
         'brams_per_rep': brams_per_rep,
+    }
+
+
+def count_available_dsps(grid_w, grid_h, dsp_ratio):
+    """Count physical DSP tiles remaining after DSP→DPE replacement.
+
+    DSP tiles: height=4, at columns startx=6, repeatx=16.
+    dsp_ratio fraction of DSP columns are removed (replaced by DPE).
+    """
+    interior_h = grid_h - 2
+    dsps_per_col = interior_h // DSP_TILE_HEIGHT
+    dsp_positions = _baseline_col_positions(DSP_STARTX, DSP_REPEATX, grid_w)
+    n_remove = min(len(dsp_positions), max(0, round(dsp_ratio * len(dsp_positions))))
+    n_kept = len(dsp_positions) - n_remove
+    return n_kept * dsps_per_col
+
+
+# Calibrated from VTR P=1,P=2 runs (fc_softmax benchmark)
+FC_SOFTMAX_CLBS_PER_REP = 93       # 93 CLBs per replica (GEMV + BN + softmax)
+FC_SOFTMAX_DSP_TILES_PER_REP = 4   # 16 mac_int_9x9 packed into 4 DSP tiles
+FC_SOFTMAX_BRAMS_PER_REP = 16      # 16 BRAMs per replica
+FC_SOFTMAX_CLB_OVERHEAD = 10       # global routing overhead
+
+
+def compute_fc_softmax_feasibility(dsp_ratio, clb_ratio, rows, cols, k, n,
+                                    grid_w=120, grid_h=120):
+    """4-resource feasibility for FC+BN+softmax benchmark.
+
+    P = min(P_dpe, P_clb, P_bram, P_dsp).
+    """
+    specs = dpe_specs(rows, cols)
+    tile_w, tile_h = specs['tile_width'], specs['tile_height']
+
+    total_dpes = count_available_wc(
+        grid_w, grid_h, tile_w, tile_h, dsp_ratio, clb_ratio)
+
+    v = math.ceil(k / rows)
+    h = math.ceil(n / cols)
+    dpes_per_replica = v * h
+    p_dpe = total_dpes // dpes_per_replica if dpes_per_replica > 0 else 0
+
+    clbs_avail = int((1 - clb_ratio) * BASELINE_CLBS)
+    p_clb = max(0, (clbs_avail - FC_SOFTMAX_CLB_OVERHEAD) // FC_SOFTMAX_CLBS_PER_REP)
+
+    brams_avail = count_available_brams(grid_w, grid_h)
+    p_bram = brams_avail // FC_SOFTMAX_BRAMS_PER_REP
+
+    dsps_avail = count_available_dsps(grid_w, grid_h, dsp_ratio)
+    p_dsp = dsps_avail // FC_SOFTMAX_DSP_TILES_PER_REP
+
+    p = min(p_dpe, p_clb, p_bram, p_dsp)
+
+    # Determine limiting factor
+    if p < 1:
+        limit = 'none'
+    elif p == p_dsp and p_dsp <= p_dpe and p_dsp <= p_clb and p_dsp <= p_bram:
+        limit = 'dsp'
+    elif p == p_bram and p_bram <= p_dpe and p_bram <= p_clb:
+        limit = 'bram'
+    elif p == p_clb and p_clb <= p_dpe:
+        limit = 'clb'
+    else:
+        limit = 'dpe'
+
+    return {
+        'feasible': p >= 1,
+        'p': p,
+        'p_dpe': p_dpe,
+        'p_clb': p_clb,
+        'p_bram': p_bram,
+        'p_dsp': p_dsp,
+        'limit': limit,
+        'total_dpes': total_dpes,
+        'v': v, 'h': h,
+        'dpes_per_replica': dpes_per_replica,
+        'clbs_avail': clbs_avail,
+        'dsps_avail': dsps_avail,
+        'brams_avail': brams_avail,
     }
 
 
@@ -3143,6 +3224,279 @@ def run_round2_attention(args):
     print("\nDone. Results in round2_attention_results.csv.")
 
 
+def run_round2_fc_softmax(args):
+    """Round 2 FC+BN+Softmax sweep: 4-resource DSP bottleneck benchmark.
+
+    Each replica = GEMV (DPE) + BatchNorm (DSP) + Softmax (CLB+DSP).
+    Uses 4 DSP tiles per replica → DSP becomes bottleneck at high d%.
+    d=100% excluded (0 DSPs remaining).
+    """
+    from gen_fc_softmax_wrapper import gen_fc_softmax_wrapper
+
+    dse_dir = args.dse_dir
+    results_dir = dse_dir / "results" / "plots" / "round2_fc_softmax"
+    arch_dir = dse_dir / "configs" / "arch"
+    rtl_dir = dse_dir / "rtl"
+    r2_dir = dse_dir / "round2_fc_softmax"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    GRID_W, GRID_H = 120, 120
+    CONFIGS = [
+        ("512x128", 512, 128),
+        ("1024x128", 1024, 128),
+        ("1024x64", 1024, 64),
+        ("1024x256", 1024, 256),
+        ("512x256", 512, 256),
+    ]
+    WORKLOADS = [
+        ("fc_512_128", 512, 128),
+        ("fc_512_512", 512, 512),
+        ("fc_2048_256", 2048, 256),
+    ]
+    DSP_RATIOS = [0.2, 0.4, 0.6, 0.8]  # d=100% excluded
+    CLB_RATIOS = [0.0, 0.2, 0.4, 0.6]
+    N_SEEDS = 3
+
+    # ── Phase 1: Compute feasibility for all points ──
+    print("Phase 1: Computing feasibility (4-resource: DPE, CLB, BRAM, DSP)...")
+    jobs = []
+    for cfg_name, rows, cols in CONFIGS:
+        for wl_name, K, N in WORKLOADS:
+            for d_ratio in DSP_RATIOS:
+                for c_ratio in CLB_RATIOS:
+                    feas = compute_fc_softmax_feasibility(
+                        d_ratio, c_ratio, rows, cols, K, N, GRID_W, GRID_H)
+                    if not feas['feasible']:
+                        continue
+                    jobs.append({
+                        'config': cfg_name, 'rows': rows, 'cols': cols,
+                        'workload': wl_name, 'K': K, 'N': N,
+                        'dsp_ratio': d_ratio, 'clb_ratio': c_ratio,
+                        **feas,
+                    })
+
+    print(f"  {len(jobs)} feasible points")
+
+    # Print summary table
+    print(f"\n  {'Config':>12} {'Workload':>14} | {'DPE':>4} {'CLB':>4} {'BRAM':>4} {'DSP':>4} | {'Total':>5}")
+    bind_counts = {'dpe': 0, 'clb': 0, 'bram': 0, 'dsp': 0}
+    for cfg_name, rows, cols in CONFIGS:
+        for wl_name, K, N in WORKLOADS:
+            cfg_jobs = [j for j in jobs if j['config'] == cfg_name and j['workload'] == wl_name]
+            binds = {'dpe': 0, 'clb': 0, 'bram': 0, 'dsp': 0}
+            for j in cfg_jobs:
+                binds[j['limit']] += 1
+                bind_counts[j['limit']] += 1
+            print(f"  {cfg_name:>12} {wl_name:>14} | {binds['dpe']:>4} {binds['clb']:>4} "
+                  f"{binds['bram']:>4} {binds['dsp']:>4} | {len(cfg_jobs):>5}")
+    print(f"  {'TOTAL':>12} {'':>14} | {bind_counts['dpe']:>4} {bind_counts['clb']:>4} "
+          f"{bind_counts['bram']:>4} {bind_counts['dsp']:>4} | {len(jobs):>5}")
+
+    if args.dry_run:
+        print("\n[DRY RUN] Printing feasibility table and exiting.")
+        print(f"\n{'cfg':>12} {'wl':>14} {'d%':>4} {'c%':>4} | {'P':>4} {'P_dpe':>6} {'P_clb':>6} "
+              f"{'P_bram':>6} {'P_dsp':>6} | {'bind':>5}")
+        print("-" * 85)
+        for j in jobs:
+            print(f"{j['config']:>12} {j['workload']:>14} "
+                  f"{int(j['dsp_ratio']*100):>4} {int(j['clb_ratio']*100):>4} | "
+                  f"{j['p']:>4} {j['p_dpe']:>6} {j['p_clb']:>6} "
+                  f"{j['p_bram']:>6} {j['p_dsp']:>6} | {j['limit']:>5}")
+        return
+
+    # ── Phase 2: Pre-generate RTL + arch XML ──
+    print(f"\nPhase 2a: Generating RTL and arch XML...")
+    MULTI_SEEDS = [1, 2, 3]
+    arch_cache = {}
+
+    for job in jobs:
+        cfg = job['config']
+        rows, cols = job['rows'], job['cols']
+        K, N = job['K'], job['N']
+        d_ratio, c_ratio = job['dsp_ratio'], job['clb_ratio']
+        d_pct, c_pct = int(d_ratio * 100), int(c_ratio * 100)
+        P = job['p']
+
+        # Arch XML (cache by config + d% + c%)
+        dc_key = (cfg, d_pct, c_pct)
+        if dc_key not in arch_cache:
+            arch_path = gen_arch_xml(
+                rows, cols, mode="fixed_dsp_clb_replace",
+                output_dir=arch_dir,
+                fixed_grid_w=GRID_W, fixed_grid_h=GRID_H,
+                dsp_ratio=d_ratio, clb_ratio=c_ratio,
+            )
+            arch_cache[dc_key] = arch_path
+        job['arch'] = Path(arch_cache[dc_key])
+
+        # RTL
+        rtl_path = gen_fc_softmax_wrapper(K, N, rows, cols, P, str(rtl_dir))
+        job['rtl'] = rtl_path
+
+        # Run dir
+        job['run_dir'] = r2_dir / cfg / f"d{d_pct}_c{c_pct}" / job['workload']
+        job['run_dir'].mkdir(parents=True, exist_ok=True)
+
+    # ── Phase 2b: Run VTR in parallel ──
+    print(f"\nPhase 2b: Running VTR ({len(jobs)} points × {len(MULTI_SEEDS)} seeds "
+          f"= {len(jobs) * len(MULTI_SEEDS)} runs)...")
+
+    cpu_count = os.cpu_count() or 1
+    max_workers = args.jobs if args.jobs > 0 else min(len(jobs), cpu_count)
+    print(f"  Workers: {max_workers}")
+
+    def _run_one_fc_softmax(job):
+        """Run VTR with multiple seeds, return averaged Fmax."""
+        try:
+            K, N = job['K'], job['N']
+            rows, cols = job['rows'], job['cols']
+            design_name = f"gemm_softmax_{K}_{N}_{rows}x{cols}_P{job['p']}"
+            seed_fmax = []
+            last_resources = None
+
+            for seed in MULTI_SEEDS:
+                seed_dir = job['run_dir'] / f"seed{seed}"
+
+                # Skip existing
+                done_file = seed_dir / "vtr_done.flag"
+                if done_file.exists() and not args.force:
+                    log_path = find_vpr_log(seed_dir)
+                    if log_path:
+                        metrics = parse_metrics(log_path)
+                        if metrics.get('fmax_mhz'):
+                            seed_fmax.append(metrics['fmax_mhz'])
+                            last_resources = parse_resources(log_path)
+                            continue
+
+                r = run_single(
+                    vtr_flow=VTR_FLOW,
+                    vtr_python=VTR_PYTHON,
+                    design=job['rtl'],
+                    arch=job['arch'],
+                    route_chan_width=300,
+                    sdc_file=None,
+                    run_dir=seed_dir,
+                    seed=seed,
+                    run_index=0,
+                    total_runs=1,
+                    design_name=design_name,
+                )
+                seed_fmax.append(r.fmax_mhz)
+                last_resources = r.resources
+
+                # Mark done
+                done_file.parent.mkdir(parents=True, exist_ok=True)
+                done_file.write_text("done")
+
+            if not seed_fmax:
+                return job, None, "No valid Fmax"
+
+            avg_fmax = sum(seed_fmax) / len(seed_fmax)
+            return job, {
+                'fmax_mhz': avg_fmax,
+                'fmax_per_seed': seed_fmax,
+                'resources': last_resources or {},
+            }, None
+        except Exception as exc:
+            return job, None, str(exc)
+
+    vtr_results = {}
+    completed = 0
+    failures = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_run_one_fc_softmax, j): j for j in jobs}
+        for fut in as_completed(futures):
+            job, result, error = fut.result()
+            cfg = job['config']
+            wl = job['workload']
+            d_pct = int(job['dsp_ratio'] * 100)
+            c_pct = int(job['clb_ratio'] * 100)
+            key = (cfg, wl, d_pct, c_pct)
+
+            if error:
+                print(f"  FAILED {cfg}/{wl} d{d_pct}_c{c_pct}: {error}",
+                      file=sys.stderr)
+                failures += 1
+            else:
+                vtr_results[key] = result
+                completed += 1
+                res = result['resources']
+                seeds_str = ", ".join(f"{f:.1f}" for f in result.get('fmax_per_seed', []))
+                print(f"  [{completed}/{len(jobs)}] {cfg}/{wl} d{d_pct}_c{c_pct}: "
+                      f"P={job['p']}({job['limit']}) fmax={result['fmax_mhz']:.1f} "
+                      f"[{seeds_str}] wc={res.get('wc', 0)} dsp={res.get('dsp_top', 0)} "
+                      f"clb={res.get('clb', 0)}")
+
+    print(f"\n  Completed: {completed}/{len(jobs)}, Failures: {failures}")
+
+    # ── Phase 3: Compute baselines + write CSV ──
+    print("\nPhase 3: Computing baselines and writing CSV...")
+
+    # Collect baselines (d=20%, c=0%)
+    baselines = {}
+    for (cfg, wl, d_pct, c_pct), result in vtr_results.items():
+        if d_pct == 20 and c_pct == 0:
+            baselines[(cfg, wl)] = result['fmax_mhz']
+
+    all_rows = []
+    for job in jobs:
+        cfg = job['config']
+        wl = job['workload']
+        d_pct = int(job['dsp_ratio'] * 100)
+        c_pct = int(job['clb_ratio'] * 100)
+        key = (cfg, wl, d_pct, c_pct)
+
+        if key not in vtr_results:
+            continue
+
+        result = vtr_results[key]
+        fn = result['fmax_mhz']
+        f0 = baselines.get((cfg, wl), fn)
+        P = job['p']
+        util = fn / f0 if f0 > 0 else 0
+        gain = P * fn / f0 if f0 > 0 else 0
+        res = result['resources']
+
+        row = {
+            'dsp_ratio': job['dsp_ratio'], 'clb_ratio': job['clb_ratio'],
+            'config': cfg, 'workload': wl,
+            'P': P, 'total_dpes': job['total_dpes'],
+            'V': job['v'], 'H': job['h'],
+            'dpes_per_replica': job['dpes_per_replica'],
+            'clbs_avail': job['clbs_avail'],
+            'dsps_avail': job['dsps_avail'],
+            'p_dpe': job['p_dpe'], 'p_clb': job['p_clb'],
+            'p_bram': job['p_bram'], 'p_dsp': job['p_dsp'],
+            'limit': job['limit'],
+            'fmax_mhz': round(fn, 4),
+            'fmax_baseline_mhz': round(f0, 4),
+            'gain': round(gain, 4),
+            'utilization': round(util, 4),
+            'grid_w': GRID_W, 'grid_h': GRID_H,
+            'clb_count': res.get('clb', 0),
+            'dsp_count': res.get('dsp_top', 0),
+            'mem_count': res.get('memory', 0),
+            'wc_count': res.get('wc', 0),
+            'run_dir': str(job['run_dir']),
+        }
+        all_rows.append(row)
+
+    csv_path = results_dir / "round2_fc_softmax_results.csv"
+    if all_rows:
+        fieldnames = list(all_rows[0].keys())
+        import csv as csv_mod
+        with open(csv_path, 'w', newline='') as f:
+            writer = csv_mod.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_rows)
+        print(f"\nCSV written: {csv_path} ({len(all_rows)} rows)")
+    else:
+        print("\nWARNING: No results to write.")
+
+    print(f"\nDone. Results in {csv_path}")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -3167,6 +3521,10 @@ def parse_args():
     parser.add_argument(
         "--round2-attention", action="store_true",
         help="Run Round 2 attention sweep: DSP+CLB sweep on attention head",
+    )
+    parser.add_argument(
+        "--round2-fc-softmax", action="store_true",
+        help="Run Round 2 FC+BN+softmax sweep: 4-resource DSP bottleneck benchmark",
     )
     parser.add_argument(
         "--configs", type=str, default=None,
@@ -3223,10 +3581,12 @@ def main():
         print(f"Round 2 Full Sweep — All Workloads")
     elif args.round2_attention:
         print(f"Round 2 Attention Sweep — DSP+CLB Replacement for Attention Head")
+    elif args.round2_fc_softmax:
+        print(f"Round 2 FC+BN+Softmax Sweep — 4-Resource DSP Bottleneck Benchmark")
     elif args.round:
         print(f"GEMV/FC DSE — Round {args.round}")
     else:
-        print("ERROR: specify --round, --attention, --round2-proto, --round2-full, or --round2-attention")
+        print("ERROR: specify --round, --attention, --round2-proto, --round2-full, --round2-attention, or --round2-fc-softmax")
         sys.exit(1)
     print(f"  DSE dir: {args.dse_dir}")
     print()
@@ -3239,6 +3599,8 @@ def main():
         run_round2_full(args)
     elif args.round2_attention:
         run_round2_attention(args)
+    elif args.round2_fc_softmax:
+        run_round2_fc_softmax(args)
     elif args.round == 1:
         run_round1(args)
     elif args.round == 2:
