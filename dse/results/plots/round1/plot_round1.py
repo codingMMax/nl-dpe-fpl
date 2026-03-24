@@ -1,53 +1,30 @@
 #!/usr/bin/env python3
 """Generate Round 1 DSE plots for paper.
 
-Plot 1: Config ranking bar chart (geomean tput/mm² and tput/J)
-Plot 2: Config × Workload heatmap (normalized tput/mm², annotated with V)
+Plot 1: Config ranking bar chart (EDAP = Energy × Delay × Area, lower is better)
+Plot 2: Config × Workload heatmap (normalized EDAP, annotated with V)
 
 Outputs:
-    dse/results/round1_ranking.pdf
-    dse/results/round1_heatmap.pdf
+    round1_ranking.pdf
+    round1_heatmap.pdf
 """
 
 import csv
-import json
 import math
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.patches import FancyBboxPatch
 from pathlib import Path
 
 RESULTS_DIR = Path(__file__).resolve().parent
 CSV_PATH = RESULTS_DIR / "round1_results.csv"
-TOP3_PATH = RESULTS_DIR / "top3_configs.json"
 
-# ── Load data ────────────────────────────────────────────────────────────
-
-with open(CSV_PATH) as f:
-    rows = list(csv.DictReader(f))
-
-with open(TOP3_PATH) as f:
-    top3 = json.load(f)
-
-ranking = top3["ranking"]
-top_configs = top3["top_configs"]
-
-# Sorted config names by rank (best first)
-configs_ranked = [e["config"] for e in ranking]
-workloads_ordered = ["fc_64_64", "fc_128_128", "fc_512_128", "fc_256_512", "fc_512_512", "fc_2048_256"]
-workload_labels = {
-    "fc_64_64": "FC 64×64",
-    "fc_128_128": "FC 128×128",
-    "fc_512_128": "FC 512×128",
-    "fc_256_512": "FC 256×512",
-    "fc_512_512": "FC 512×512",
-    "fc_2048_256": "FC 2048×256",
-}
-
-# ── Shared style ─────────────────────────────────────────────────────────
+import sys
+_nl_dpe_dir = str(Path(__file__).resolve().parents[4] / "nl_dpe")
+sys.path.insert(0, _nl_dpe_dir)
+from area_power import dpe_specs
 
 plt.rcParams.update({
     "font.family": "serif",
@@ -63,176 +40,220 @@ plt.rcParams.update({
     "savefig.pad_inches": 0.05,
 })
 
-COLOR_MM2 = "#2563EB"   # blue
-COLOR_J   = "#F59E0B"   # amber
-COLOR_TOP = "#059669"    # emerald accent
-COLOR_AL  = "#DC2626"   # red for Azure-Lily comparison
+COLOR_EDAP = "#2563EB"
+COLOR_TOP = "#059669"
+COLOR_AL = "#DC2626"
 
-# Azure-Lily area comparison (from VTR arch XML: wc tile area = 2,320,000 MWTA)
-import sys as _sys
-_sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "nl_dpe"))
-from area_power import dpe_specs
-AL_AREA_MWTA = 2_320_000  # Azure-Lily 512x128 tile area from arch XML
+AL_AREA_MWTA = 2_320_000
+
+workloads_ordered = ["fc_64_64", "fc_128_128", "fc_512_128", "fc_256_512",
+                     "fc_512_512", "fc_2048_256"]
+workload_labels = {
+    "fc_64_64": "FC 64\u00d764", "fc_128_128": "FC 128\u00d7128",
+    "fc_512_128": "FC 512\u00d7128", "fc_256_512": "FC 256\u00d7512",
+    "fc_512_512": "FC 512\u00d7512", "fc_2048_256": "FC 2048\u00d7256",
+}
+
 
 def area_ratio_to_al(cfg_str):
-    """Return NL-DPE tile area as fraction of Azure-Lily tile area."""
     R, C = map(int, cfg_str.split("x"))
     return dpe_specs(R, C)["area_tag_mwta"] / AL_AREA_MWTA
 
-# Config-equivalent: same crossbar size as Azure-Lily
-CONFIG_EQUIV = "512x128"
-# Area-equivalent: within 20% of Azure-Lily tile area
-AREA_EQUIV = [c for c in configs_ranked if abs(area_ratio_to_al(c) - 1.0) < 0.20]
 
-# ═════════════════════════════════════════════════════════════════════════
-# PLOT 1: Config Ranking Bar Chart
-# ═════════════════════════════════════════════════════════════════════════
+def load_and_rank():
+    """Load CSV, compute EDAP, return ranked configs."""
+    with open(CSV_PATH) as f:
+        rows = list(csv.DictReader(f))
 
-n = len(configs_ranked)
-fig1, ax1 = plt.subplots(figsize=(5.5, max(3.8, n * 0.42)))
-y_pos = np.arange(n)
-bar_h = 0.35
+    for r in rows:
+        r["energy_pj"] = float(r["energy_pj"])
+        r["latency_ns"] = float(r["latency_ns"])
+        r["fpga_area_mm2"] = float(r["fpga_area_mm2"])
+        r["fmax_mhz"] = float(r["fmax_mhz"])
 
-gm_mm2 = [e["geomean_tput_mm2"] for e in ranking]
-gm_J   = [e["geomean_tput_J"]   for e in ranking]
+    workloads = sorted(set(r["workload"] for r in rows))
+    configs = sorted(set(r["config"] for r in rows))
+    idx = {(r["config"], r["workload"]): r for r in rows}
 
-# Plot bars (reversed so #1 is at top)
-bars_mm2 = ax1.barh(y_pos + bar_h / 2, gm_mm2[::-1], bar_h,
-                     color=COLOR_MM2, alpha=0.85, label="Geomean Tput/mm²")
-bars_J   = ax1.barh(y_pos - bar_h / 2, gm_J[::-1],   bar_h,
-                     color=COLOR_J,   alpha=0.85, label="Geomean Tput/J")
+    # EDAP per (config, workload)
+    edap = {}
+    best_edap = {}
+    for wl in workloads:
+        for c in configs:
+            if (c, wl) not in idx:
+                continue
+            r = idx[(c, wl)]
+            e, d, a = r["energy_pj"], r["latency_ns"], r["fpga_area_mm2"]
+            edap[(c, wl)] = e * d * a if (e > 0 and d > 0 and a > 0) else float("inf")
+        wl_vals = [edap[(c, wl)] for c in configs
+                   if (c, wl) in edap and edap[(c, wl)] < float("inf")]
+        best_edap[wl] = min(wl_vals) if wl_vals else 1.0
 
-# Labels with Azure-Lily area annotations
-labels_reversed = configs_ranked[::-1]
-for i, cfg in enumerate(labels_reversed):
-    is_top = cfg in top_configs
-    weight = "bold" if is_top else "normal"
-    rank = n - i
-    label = f"#{rank}  {cfg}"
-    if is_top:
-        label += "  *"
-    ax1.text(-0.02, i, label, ha="right", va="center", fontsize=9,
-             fontweight=weight, transform=ax1.get_yaxis_transform())
+    # Normalized geomean
+    scores = {}
+    for cfg in configs:
+        norm_vals = []
+        per_wl = {}
+        for wl in workloads:
+            if (cfg, wl) not in edap:
+                continue
+            e = edap[(cfg, wl)]
+            n = best_edap[wl] / e if e > 0 and e < float("inf") else 0
+            norm_vals.append(n)
+            per_wl[wl] = {"norm_edap": n, "edap": e}
+        if norm_vals and all(v > 0 for v in norm_vals):
+            gm = math.exp(sum(math.log(v) for v in norm_vals) / len(norm_vals))
+            scores[cfg] = {"gm": gm, "per_wl": per_wl}
 
-    # Annotate area ratio to Azure-Lily on the right side of bars
-    ratio = area_ratio_to_al(cfg)
-    combined = ranking[rank - 1]["geomean_combined"]
-    annot_x = max(gm_mm2[rank - 1], gm_J[rank - 1]) + 0.02
-    area_label = f"{ratio:.0%} AL"
-    color = COLOR_AL if cfg in AREA_EQUIV or cfg == CONFIG_EQUIV else "gray"
-    style = "bold" if cfg in AREA_EQUIV or cfg == CONFIG_EQUIV else "normal"
-    ax1.text(annot_x, i, area_label, ha="left", va="center", fontsize=7.5,
-             fontweight=style, color=color)
+    ranked = sorted(scores.items(), key=lambda x: -x[1]["gm"])
+    return rows, ranked, scores, idx
 
-ax1.set_yticks([])
-ax1.set_xlim(0, 1.15)
-ax1.set_xlabel("Normalized Geomean Score (best = 1.0)")
-ax1.set_title("Round 1: Crossbar Configuration Ranking", fontweight="bold", pad=10)
-ax1.legend(loc="lower right", framealpha=0.9)
-ax1.axvline(x=1.0, color="grey", linewidth=0.5, linestyle="--", alpha=0.5)
 
-# Add footnote explaining annotations
-fig1.text(0.19, 0.01,
-          "* = top-3;  %AL = tile area as % of Azure-Lily 512\u00d7128 (red = within 20%)",
-          fontsize=7, color="gray", style="italic")
+def plot_ranking(ranked, top_k=5):
+    """Bar chart: EDAP geomean ranking."""
+    configs_ranked = [cfg for cfg, _ in ranked]
+    gm_vals = [sc["gm"] for _, sc in ranked]
+    n = len(configs_ranked)
+    top_configs = configs_ranked[:top_k]
 
-# Light grid
-ax1.xaxis.grid(True, alpha=0.3, linestyle="--")
-ax1.set_axisbelow(True)
+    top3 = configs_ranked[:3]
 
-fig1.tight_layout(rect=[0.18, 0, 1, 1])
-fig1.savefig(RESULTS_DIR / "round1_ranking.pdf")
-# fig1.savefig(RESULTS_DIR / "round1_ranking.png")
-print(f"Saved: {RESULTS_DIR / 'round1_ranking.pdf'}")
+    fig, ax = plt.subplots(figsize=(6, max(4, n * 0.4)))
+    y_pos = np.arange(n)
 
-# ═════════════════════════════════════════════════════════════════════════
-# PLOT 2: Config × Workload Heatmap
-# ═════════════════════════════════════════════════════════════════════════
+    # Reversed so #1 at top
+    colors = [COLOR_TOP if configs_ranked[n - 1 - i] in top3
+              else COLOR_EDAP for i in range(n)]
+    bars = ax.barh(y_pos, gm_vals[::-1], 0.6, color=colors, alpha=0.85)
 
-# Build index: (config, workload) -> row
-idx = {(r["config"], r["workload"]): r for r in rows}
+    # Compute area overhead and power for all configs
+    cfg_overhead = {}
+    cfg_power = {}
+    cfg_area = {}
+    for cfg in configs_ranked:
+        R, C = map(int, cfg.split("x"))
+        s = dpe_specs(R, C)
+        cfg_overhead[cfg] = s['routing_um2'] / s['tile_total_um2'] * 100  # routing as % of total tile
+        cfg_power[cfg] = s['power_total_mw']
+        cfg_area[cfg] = s['tile_total_um2']
+    max_overhead = max(cfg_overhead.values())
+    max_power = max(cfg_power.values())
+    min_area = min(cfg_area.values())
 
-# Per-workload best tput/mm² for normalization
-best_mm2 = {}
-for wl in workloads_ordered:
-    vals = [float(idx[(c, wl)]["throughput_per_mm2"])
-            for c in configs_ranked if (c, wl) in idx]
-    best_mm2[wl] = max(vals) if vals else 1.0
+    # Labels + annotations
+    for i in range(n):
+        cfg = configs_ranked[n - 1 - i]
+        rank = n - i
+        is_top3 = cfg in top3
+        weight = "bold" if is_top3 else "normal"
+        marker = "  *" if is_top3 else ""
 
-# Build matrix (configs_ranked × workloads_ordered)
-n_cfg = len(configs_ranked)
-n_wl  = len(workloads_ordered)
-mat       = np.zeros((n_cfg, n_wl))
-V_mat     = np.zeros((n_cfg, n_wl), dtype=int)
-acam_mat  = np.zeros((n_cfg, n_wl), dtype=bool)
+        label = f"#{rank}  {cfg}{marker}"
+        ax.text(-0.02, i, label, ha="right", va="center", fontsize=9,
+                fontweight=weight, transform=ax.get_yaxis_transform())
 
-for i, cfg in enumerate(configs_ranked):
-    for j, wl in enumerate(workloads_ordered):
-        r = idx.get((cfg, wl))
-        if r:
-            norm = float(r["throughput_per_mm2"]) / best_mm2[wl]
-            mat[i, j] = norm
-            V_mat[i, j] = int(r["V"])
-            acam_mat[i, j] = r["acam_eligible"] == "True"
+        annot_x = gm_vals[n - 1 - i] + 0.02
 
-# Colormap: white (0) -> green (1)
-cmap = mcolors.LinearSegmentedColormap.from_list(
-    "wg", ["#FFFFFF", "#D1FAE5", "#34D399", "#059669", "#064E3B"], N=256
-)
+        # Annotate worst peripheral overhead (smallest configs)
+        if cfg_area[cfg] == min_area:
+            ax.text(annot_x, i,
+                    f"FPGA integration overhead: {cfg_overhead[cfg]:.0f}% block area",
+                    ha="left", va="center", fontsize=7.5,
+                    color=COLOR_AL)
 
-fig2, ax2 = plt.subplots(figsize=(6, max(4.2, n_cfg * 0.42)))
-im = ax2.imshow(mat, cmap=cmap, aspect="auto", vmin=0, vmax=1.0)
+        # Annotate highest power (largest config) + AL comparison if applicable
+        elif cfg_power[cfg] == max_power:
+            annot = f"DPE power: {cfg_power[cfg]:.0f} mW"
+            if cfg in ("1024x256", "512x256"):
+                ratio = area_ratio_to_al(cfg)
+                annot += f",  {ratio*100:.0f}% of Azure-Lily DPE area"
+            ax.text(annot_x, i, annot,
+                    ha="left", va="center", fontsize=7.5,
+                    color=COLOR_AL)
 
-# Annotate cells
-for i in range(n_cfg):
-    for j in range(n_wl):
-        v = V_mat[i, j]
-        score = mat[i, j]
-        is_acam = acam_mat[i, j]
+        # AL comparison for remaining AL-like configs
+        elif cfg in ("1024x256", "512x256"):
+            ratio = area_ratio_to_al(cfg)
+            ax.text(annot_x, i, f"{ratio*100:.0f}% of Azure-Lily DPE area",
+                    ha="left", va="center", fontsize=7.5,
+                    fontweight="normal", color=COLOR_AL)
 
-        # Text color: dark on light cells, light on dark cells
-        text_color = "white" if score > 0.6 else "#1F2937"
+    ax.set_yticks([])
+    ax.set_xlim(0, 1.25)
+    ax.set_xlabel("Normalized Geomean EDAP Score (best = 1.0)")
+    ax.set_title("DPE Config Ranking by Energy-Delay-Area Product (EDAP)",
+                 fontweight="bold")
+    ax.axvline(1.0, color="gray", linewidth=0.5, linestyle="--", alpha=0.3)
 
-        # Main annotation: V value
-        label = f"V={v}"
-        if is_acam:
-            label += "\nACAM"
-        ax2.text(j, i, label, ha="center", va="center",
-                 fontsize=8, color=text_color, fontweight="bold" if is_acam else "normal")
+    out = RESULTS_DIR / "round1_ranking.pdf"
+    fig.savefig(out)
+    print(f"Saved {out}")
+    plt.close(fig)
 
-        # ACAM border
-        if is_acam:
-            rect = plt.Rectangle((j - 0.48, i - 0.48), 0.96, 0.96,
-                                  linewidth=1.5, edgecolor=COLOR_TOP,
-                                  facecolor="none", linestyle="-")
-            ax2.add_patch(rect)
 
-# Axes
-ax2.set_xticks(range(n_wl))
-ax2.set_xticklabels([workload_labels[w] for w in workloads_ordered], rotation=30, ha="right")
-ax2.set_yticks(range(n_cfg))
+def plot_heatmap(rows, scores, idx):
+    """Config × Workload heatmap of normalized EDAP."""
+    configs_ranked = [cfg for cfg, _ in sorted(scores.items(), key=lambda x: -x[1]["gm"])]
+    workloads = [wl for wl in workloads_ordered if wl in set(r["workload"] for r in rows)]
 
-# Config labels with rank
-ylabels = []
-for i, cfg in enumerate(configs_ranked):
-    is_top = cfg in top_configs
-    ylabels.append(f"#{i+1}  {cfg}" + ("  *" if is_top else ""))
-ax2.set_yticklabels(ylabels, fontsize=9)
-for i, cfg in enumerate(configs_ranked):
-    if cfg in top_configs:
-        ax2.get_yticklabels()[i].set_fontweight("bold")
+    n_cfg = len(configs_ranked)
+    n_wl = len(workloads)
 
-ax2.set_title("Normalized Throughput/mm² by Config × Workload\n"
-              "(ACAM = eligible for in-DPE activation, green border = V=1)",
-              fontweight="bold", fontsize=10, pad=10)
+    mat = np.full((n_cfg, n_wl), np.nan)
+    v_mat = np.full((n_cfg, n_wl), 0, dtype=int)
 
-# Colorbar
-cbar = fig2.colorbar(im, ax=ax2, shrink=0.85, pad=0.02)
-cbar.set_label("Normalized Tput/mm²\n(per-workload best = 1.0)", fontsize=9)
+    for i, cfg in enumerate(configs_ranked):
+        for j, wl in enumerate(workloads):
+            if cfg in scores and wl in scores[cfg]["per_wl"]:
+                mat[i, j] = scores[cfg]["per_wl"][wl]["norm_edap"]
+            if (cfg, wl) in idx:
+                v_mat[i, j] = int(idx[(cfg, wl)].get("V", 0))
 
-fig2.tight_layout()
-fig2.savefig(RESULTS_DIR / "round1_heatmap.pdf")
-# fig2.savefig(RESULTS_DIR / "round1_heatmap.png")
-print(f"Saved: {RESULTS_DIR / 'round1_heatmap.pdf'}")
+    fig, ax = plt.subplots(figsize=(8, max(4, n_cfg * 0.45)))
+    norm = mcolors.TwoSlopeNorm(vmin=0, vcenter=0.4, vmax=1.0)
+    im = ax.imshow(mat, cmap="RdYlGn", norm=norm, aspect="auto")
 
-print("Done.")
+    # Cell annotations
+    for i in range(n_cfg):
+        for j in range(n_wl):
+            val = mat[i, j]
+            v = v_mat[i, j]
+            if np.isnan(val):
+                continue
+            tc = "white" if val < 0.2 else "black"
+            acam = "\u2713" if v == 1 else ""
+            ax.text(j, i, f"{val:.2f}\n{acam}", ha="center", va="center",
+                    fontsize=7.5, color=tc, fontweight="bold" if v == 1 else "normal")
+
+    ax.set_xticks(range(n_wl))
+    ax.set_xticklabels([workload_labels.get(wl, wl) for wl in workloads],
+                       rotation=30, ha="right", fontsize=8)
+    ax.set_yticks(range(n_cfg))
+    ax.set_yticklabels([f"#{i+1} {cfg}" for i, cfg in enumerate(configs_ranked)],
+                       fontsize=8)
+    ax.set_title("Round 1: Normalized EDAP per Workload\n"
+                 "(\u2713 = ACAM-eligible, V=1)",
+                 fontweight="bold")
+
+    cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.04)
+    cbar.set_label("Normalized EDAP (best = 1.0)", fontsize=9)
+
+    out = RESULTS_DIR / "round1_heatmap.pdf"
+    fig.savefig(out)
+    print(f"Saved {out}")
+    plt.close(fig)
+
+
+def main():
+    rows, ranked, scores, idx = load_and_rank()
+
+    print("Round 1 EDAP Ranking:")
+    for rank, (cfg, sc) in enumerate(ranked, 1):
+        print(f"  #{rank} {cfg}: GM_EDAP={sc['gm']:.4f}")
+
+    plot_ranking(ranked)
+    plot_heatmap(rows, scores, idx)
+
+
+if __name__ == "__main__":
+    main()

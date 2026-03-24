@@ -71,6 +71,7 @@ def gen_arch_xml(
     pair_name: str = None,
     dsp_ratio: float = None,
     clb_ratio: float = None,
+    bram_ratio: float = None,
 ) -> Path:
     """Generate a patched architecture XML for VTR.
 
@@ -169,6 +170,17 @@ def gen_arch_xml(
         dsp_removed = sorted(dsp_positions[-n_dsp_remove:]) if n_dsp_remove > 0 else []
         dsp_kept = sorted(set(dsp_positions) - set(dsp_removed))
 
+        # Enumerate baseline BRAM column positions
+        bram_positions = _baseline_col_positions(
+            BASELINE_BRAM_STARTX, BASELINE_BRAM_REPEATX, fixed_grid_w)
+        n_bram_cols = len(bram_positions)
+
+        # How many BRAM columns to remove (revert to CLB fill)
+        bram_ratio_val = bram_ratio if bram_ratio is not None else 0.0
+        n_bram_remove = min(n_bram_cols, max(0, round(bram_ratio_val * n_bram_cols)))
+        bram_removed = sorted(bram_positions[-n_bram_remove:]) if n_bram_remove > 0 else []
+        bram_kept = sorted(set(bram_positions) - set(bram_removed))
+
         # CLB replacement: wc columns in CLB space (same approach as fixed_clb_replace)
         interior_cols = fixed_grid_w - 2
         if clb_ratio > 0:
@@ -191,9 +203,15 @@ def gen_arch_xml(
             lines.append(f'      <col type="dsp_top" startx="{pos}" starty="1" '
                          f'repeatx="{fixed_grid_w + 1}" priority="20"/>')
 
-        # BRAM columns (unchanged)
-        lines.append(f'      <col type="memory" startx="{BASELINE_BRAM_STARTX}" '
-                     f'starty="1" repeatx="{BASELINE_BRAM_REPEATX}" priority="20"/>')
+        # Remaining BRAM columns (individual directives when any removed,
+        # otherwise single repeatx directive for backward compat)
+        if n_bram_remove > 0:
+            for pos in bram_kept:
+                lines.append(f'      <col type="memory" startx="{pos}" starty="1" '
+                             f'repeatx="{fixed_grid_w + 1}" priority="20"/>')
+        else:
+            lines.append(f'      <col type="memory" startx="{BASELINE_BRAM_STARTX}" '
+                         f'starty="1" repeatx="{BASELINE_BRAM_REPEATX}" priority="20"/>')
 
         # wc columns at removed DSP positions (priority 20 to claim DSP slots)
         for pos in dsp_removed:
@@ -212,7 +230,8 @@ def gen_arch_xml(
 
         dsp_pct = int(round(dsp_ratio * 100))
         clb_pct = int(round(clb_ratio * 100))
-        out_name = f"nl_dpe_{rows}x{cols}_d{dsp_pct}_c{clb_pct}_fixed.xml"
+        bram_pct = int(round(bram_ratio_val * 100))
+        out_name = f"nl_dpe_{rows}x{cols}_d{dsp_pct}_c{clb_pct}_b{bram_pct}_fixed.xml"
 
     else:
         raise ValueError(f"Unknown mode: {mode!r}")
@@ -262,6 +281,9 @@ if __name__ == "__main__":
     parser.add_argument("--clb-ratio", type=float,
                         help="Fraction of CLB area to replace with wc "
                              "(for fixed_dsp_clb_replace mode)")
+    parser.add_argument("--bram-ratio", type=float,
+                        help="Fraction of BRAM columns to remove "
+                             "(for fixed_dsp_clb_replace mode)")
 
     args = parser.parse_args()
 
@@ -282,4 +304,5 @@ if __name__ == "__main__":
         pair_name=args.pair_name,
         dsp_ratio=args.dsp_ratio,
         clb_ratio=args.clb_ratio,
+        bram_ratio=args.bram_ratio,
     )

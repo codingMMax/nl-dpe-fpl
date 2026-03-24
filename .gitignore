@@ -16,10 +16,13 @@ dse/round1/
 dse/round2/
 dse/round2_proto/
 dse/round2_full/
+dse/round2_fc_softmax/
+dse/round2_attention/
 dse/attention/
 dse/sanity_*/
 dse/configs/
 dse/rtl/
+dse/flexscore_60/
 
 # DSE reproducible outputs (regenerate via plot scripts)
 dse/results/*.log

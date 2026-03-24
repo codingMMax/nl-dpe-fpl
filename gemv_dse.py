@@ -77,7 +77,7 @@ CSV_COLUMNS = [
     'V', 'H', 'dpe_count', 'acam_eligible',
     'fmax_mhz', 'grid_w', 'grid_h', 'fpga_area_mm2',
     'latency_ns', 'energy_pj',
-    'throughput_per_mm2', 'throughput_per_J',
+    'throughput_per_mm2', 'throughput_per_J', 'edap',
     'e_imc_vmm', 'e_imc_digital', 'e_clb_reduction', 'e_clb_activation', 'e_sram',
     'clb_count', 'dsp_count', 'mem_count', 'wc_count',
     'run_dir',
@@ -313,62 +313,59 @@ def run_vtr_dse(rtl: Path, arch: Path, run_dir: Path,
 
 # ── Top-K selection ───────────────────────────────────────────────────────
 def compute_normalized_geomean(results: list) -> dict:
-    """Compute per-config normalized geometric mean scores across workloads.
+    """Compute per-config normalized geometric mean EDAP across workloads.
 
-    For each workload, normalize each config's metric to the best config for
-    that workload (best = 1.0, others ≤ 1.0).  Then take the geometric mean
-    of the normalized values across all workloads.
+    EDAP = Energy (pJ) × Delay (ns) × Area (mm²). Lower is better.
+    For each workload, normalize: best_EDAP / config_EDAP (best = 1.0, others ≤ 1.0).
+    Then take geomean across all workloads.
 
-    Returns a dict: config -> {'geomean_tput_mm2': float,
-                                'geomean_tput_J':   float,
-                                'geomean_combined': float,
-                                'per_workload': {wl: {'norm_tput_mm2', 'norm_tput_J'}}}
+    Returns a dict: config -> {'geomean_edap': float,
+                                'per_workload': {wl: {'norm_edap': float, 'edap': float}}}
     """
-    # Collect metrics per workload across all configs
     workloads = sorted({r['workload'] for r in results})
     configs   = sorted({r['config']   for r in results})
 
-    # index: (config, workload) -> row
     idx = {(r['config'], r['workload']): r for r in results}
 
-    # Per-workload best values
-    best_tput_mm2 = {}
-    best_tput_J   = {}
+    # Compute EDAP per (config, workload) and find best per workload
+    edap_vals = {}
+    best_edap = {}
     for wl in workloads:
-        vals_mm2 = [idx[(c, wl)]['throughput_per_mm2']
-                    for c in configs if (c, wl) in idx]
-        vals_J   = [idx[(c, wl)]['throughput_per_J']
-                    for c in configs if (c, wl) in idx]
-        best_tput_mm2[wl] = max(vals_mm2) if vals_mm2 else 1.0
-        best_tput_J[wl]   = max(vals_J)   if vals_J   else 1.0
+        for c in configs:
+            if (c, wl) not in idx:
+                continue
+            r = idx[(c, wl)]
+            e = r.get('energy_pj', 0)
+            d = r.get('latency_ns', 0)
+            a = r.get('fpga_area_mm2', 0)
+            edap = e * d * a if (e > 0 and d > 0 and a > 0) else float('inf')
+            edap_vals[(c, wl)] = edap
+        wl_vals = [edap_vals[(c, wl)] for c in configs
+                   if (c, wl) in edap_vals and edap_vals[(c, wl)] < float('inf')]
+        best_edap[wl] = min(wl_vals) if wl_vals else 1.0
 
     scores = {}
     for cfg in configs:
-        norm_mm2_vals = []
-        norm_J_vals   = []
+        norm_vals = []
         per_wl = {}
         for wl in workloads:
-            if (cfg, wl) not in idx:
+            if (cfg, wl) not in edap_vals:
                 continue
-            r = idx[(cfg, wl)]
-            n_mm2 = r['throughput_per_mm2'] / best_tput_mm2[wl] if best_tput_mm2[wl] > 0 else 0
-            n_J   = r['throughput_per_J']   / best_tput_J[wl]   if best_tput_J[wl]   > 0 else 0
-            norm_mm2_vals.append(n_mm2)
-            norm_J_vals.append(n_J)
-            per_wl[wl] = {'norm_tput_mm2': n_mm2, 'norm_tput_J': n_J}
+            edap = edap_vals[(cfg, wl)]
+            if edap < float('inf') and best_edap[wl] > 0:
+                n = best_edap[wl] / edap  # best=1.0, others ≤ 1.0
+            else:
+                n = 0
+            norm_vals.append(n)
+            per_wl[wl] = {'norm_edap': n, 'edap': edap}
 
-        if not norm_mm2_vals:
+        if not norm_vals or any(v <= 0 for v in norm_vals):
             continue
-        # Geometric mean: exp(mean(log(values)))
-        gm_mm2 = math.exp(sum(math.log(v) for v in norm_mm2_vals) / len(norm_mm2_vals))
-        gm_J   = math.exp(sum(math.log(v) for v in norm_J_vals)   / len(norm_J_vals))
-        gm_combined = math.exp((math.log(gm_mm2) + math.log(gm_J)) / 2)
+        gm = math.exp(sum(math.log(v) for v in norm_vals) / len(norm_vals))
 
         scores[cfg] = {
-            'geomean_tput_mm2': gm_mm2,
-            'geomean_tput_J':   gm_J,
-            'geomean_combined': gm_combined,
-            'per_workload':     per_wl,
+            'geomean_edap':  gm,
+            'per_workload':  per_wl,
         }
     return scores
 
@@ -376,7 +373,7 @@ def compute_normalized_geomean(results: list) -> dict:
 def select_top_configs(results: list, k: int = 3) -> list:
     """Select top-K configs by normalized geometric mean across workloads."""
     scores = compute_normalized_geomean(results)
-    sorted_cfgs = sorted(scores.items(), key=lambda x: -x[1]['geomean_combined'])
+    sorted_cfgs = sorted(scores.items(), key=lambda x: -x[1]['geomean_edap'])
     return [cfg for cfg, _ in sorted_cfgs[:k]]
 
 
@@ -584,6 +581,9 @@ def run_round1(args):
         throughput_per_s = 1e9 / latency_ns if latency_ns > 0 else 0
         throughput_per_mm2 = throughput_per_s / fpga_area_mm2 if fpga_area_mm2 > 0 else 0
         throughput_per_J = 1e12 / energy_pj if energy_pj > 0 else 0  # energy in pJ
+        # EDAP: Energy-Delay-Area Product (lower is better)
+        # energy_pj (pJ) × latency_ns (ns) × fpga_area_mm2 (mm²)
+        edap = energy_pj * latency_ns * fpga_area_mm2 if (energy_pj > 0 and latency_ns > 0) else float('inf')
 
         resources = vtr.get('resources', {})
 
@@ -697,17 +697,15 @@ def run_round1(args):
     with open(top_json, 'w') as f:
         json.dump({
             'top_k': args.top_k,
-            'metric': 'geomean_normalized_tput_mm2_and_J',
+            'metric': 'geomean_normalized_EDAP',
             'ranking': [
                 {
                     'config': cfg,
-                    'geomean_combined': geomean_scores[cfg]['geomean_combined'],
-                    'geomean_tput_mm2': geomean_scores[cfg]['geomean_tput_mm2'],
-                    'geomean_tput_J':   geomean_scores[cfg]['geomean_tput_J'],
-                    'per_workload':     geomean_scores[cfg]['per_workload'],
+                    'geomean_edap': geomean_scores[cfg]['geomean_edap'],
+                    'per_workload': geomean_scores[cfg]['per_workload'],
                 }
                 for cfg, _ in sorted(geomean_scores.items(),
-                                     key=lambda x: -x[1]['geomean_combined'])
+                                     key=lambda x: -x[1]['geomean_edap'])
             ],
             'top_configs': top_configs,
         }, f, indent=2)
@@ -717,18 +715,16 @@ def run_round1(args):
 
     # Print per-config normalized geomean ranking table
     print("\n" + "=" * 70)
-    print("Config ranking (normalized geomean across workloads)")
-    print("  Each metric normalized to best config per workload, then geomean'd")
+    print("Config ranking (EDAP = Energy × Delay × Area, lower is better)")
+    print("  Normalized: best EDAP per workload = 1.0, then geomean across workloads")
     print("=" * 70)
-    hdr2 = (f"{'Rank':>4} {'Config':<10} {'GM_Tput/mm2':>12} "
-            f"{'GM_Tput/J':>11} {'GM_combined':>12}")
+    hdr2 = f"{'Rank':>4} {'Config':<10} {'GM_EDAP':>12}"
     print(hdr2)
     print("-" * len(hdr2))
     for rank, (cfg, sc) in enumerate(
-            sorted(geomean_scores.items(), key=lambda x: -x[1]['geomean_combined']), 1):
+            sorted(geomean_scores.items(), key=lambda x: -x[1]['geomean_edap']), 1):
         marker = " ◀ top" if cfg in top_configs else ""
-        print(f"{rank:>4} {cfg:<10} {sc['geomean_tput_mm2']:>12.4f} "
-              f"{sc['geomean_tput_J']:>11.4f} {sc['geomean_combined']:>12.4f}{marker}")
+        print(f"{rank:>4} {cfg:<10} {sc['geomean_edap']:>12.4f}{marker}")
 
     # Print per-workload raw results table
     print("\n" + "=" * 70)
