@@ -1,0 +1,16 @@
+Design: bert_tiny_proposed
+Architecture: nl_dpe_proposed_auto.xml
+Total runs: 3
+Successful: 3
+Failed: 0
+
+Run    Seed         Wirelength   Fmax (MHz)    Elapsed       clb   dsp_top        io    memory        wc
+------------------------------------------------------------------------------------------------------
+1      11928            154642      132.992      41.2s       471         4        45       240        26  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/bert_tiny_proposed/run_1_11928
+2      39810            156653      126.840      41.5s       471         4        45       240        26  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/bert_tiny_proposed/run_2_39810
+3      31328            154936      129.378      41.9s       471         4        45       240        26  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/bert_tiny_proposed/run_3_31328
+
+Averages over 3 runs:
+  wirelength = 155410
+  fmax       = 129.737 MHz
+  fmax range = [126.840, 132.992] MHz

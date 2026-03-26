@@ -1,0 +1,16 @@
+Design: resnet9_proposed
+Architecture: nl_dpe_proposed_auto.xml
+Total runs: 3
+Successful: 3
+Failed: 0
+
+Run    Seed         Wirelength   Fmax (MHz)    Elapsed       clb   dsp_top        io    memory        wc
+------------------------------------------------------------------------------------------------------
+1      7215              40988      145.325      14.1s        61         0        85        28        19  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/resnet9_proposed/run_1_7215
+2      54877             43211      165.360      14.0s        61         0        85        28        19  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/resnet9_proposed/run_2_54877
+3      21311             41705      190.646      14.1s        61         0        85        28        19  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/resnet9_proposed/run_3_21311
+
+Averages over 3 runs:
+  wirelength = 41968
+  fmax       = 167.110 MHz
+  fmax range = [145.325, 190.646] MHz

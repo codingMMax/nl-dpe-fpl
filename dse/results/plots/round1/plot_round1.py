@@ -244,15 +244,140 @@ def plot_heatmap(rows, scores, idx):
     plt.close(fig)
 
 
+def load_combined_and_rank():
+    """Load combined FC+attention CSV, compute separate rankings."""
+    combined_csv = RESULTS_DIR.parent.parent / "round1_results_combined.csv"
+    if not combined_csv.exists():
+        return None, None
+
+    with open(combined_csv) as f:
+        rows = list(csv.DictReader(f))
+
+    for r in rows:
+        for k in ['energy_pj', 'latency_ns', 'fpga_area_mm2', 'fmax_mhz']:
+            if k in r:
+                try:
+                    r[k] = float(r[k])
+                except (ValueError, TypeError):
+                    r[k] = 0.0
+
+    def compute_ranking_for(wl_filter):
+        filtered = [r for r in rows if wl_filter(r['workload'])]
+        workloads = sorted(set(r['workload'] for r in filtered))
+        configs = sorted(set(r['config'] for r in filtered))
+
+        edap = {}
+        best_edap = {}
+        for wl in workloads:
+            for cfg in configs:
+                matches = [r for r in filtered if r['config'] == cfg and r['workload'] == wl]
+                if matches:
+                    r = matches[0]
+                    e, d, a = r['energy_pj'], r['latency_ns'], r['fpga_area_mm2']
+                    edap[(cfg, wl)] = e * d * a if (e > 0 and d > 0 and a > 0) else float('inf')
+            wl_vals = [edap[(c, wl)] for c in configs
+                       if (c, wl) in edap and edap[(c, wl)] < float('inf')]
+            best_edap[wl] = min(wl_vals) if wl_vals else 1.0
+
+        rankings = []
+        for cfg in configs:
+            norm_vals = []
+            for wl in workloads:
+                if (cfg, wl) in edap and edap[(cfg, wl)] < float('inf') and best_edap[wl] > 0:
+                    norm_vals.append(best_edap[wl] / edap[(cfg, wl)])
+            if norm_vals and all(v > 0 for v in norm_vals):
+                gm = math.exp(sum(math.log(v) for v in norm_vals) / len(norm_vals))
+                rankings.append((cfg, gm))
+
+        rankings.sort(key=lambda x: -x[1])
+        return rankings
+
+    fc_ranking = compute_ranking_for(lambda w: w.startswith('fc'))
+    attn_ranking = compute_ranking_for(lambda w: w.startswith('attention'))
+    return fc_ranking, attn_ranking
+
+
+def plot_fc_vs_attention_ranking(fc_ranking, attn_ranking):
+    """Two subplots: FC ranking and Attention ranking, with top-3 annotated."""
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig.subplots_adjust(wspace=0.30, left=0.12, right=0.97)
+
+    AL_MATCHED = {"512x128", "1024x256", "512x256"}
+
+    for ax, ranking, title in [
+        (ax1, fc_ranking, "(a) FC Workloads (6 workloads)"),
+        (ax2, attn_ranking, "(b) Attention Workloads (3 workloads)"),
+    ]:
+        n = len(ranking)
+        cfgs = [r[0] for r in ranking][::-1]   # reversed: #1 at top
+        vals = [r[1] for r in ranking][::-1]
+        top3 = [r[0] for r in ranking[:3]]
+
+        y_pos = np.arange(n)
+
+        colors = []
+        for cfg in cfgs:
+            if cfg in top3:
+                colors.append(COLOR_TOP)
+            else:
+                colors.append(COLOR_EDAP)
+
+        bars = ax.barh(y_pos, vals, 0.6, color=colors, alpha=0.85,
+                       edgecolor="white", linewidth=0.5)
+
+        # Y-axis: config labels as tick labels
+        ylabels = []
+        for i, cfg in enumerate(cfgs):
+            rank = n - i
+            ylabels.append(f"#{rank}  {cfg}")
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(ylabels, fontsize=8.5)
+        for i, label in enumerate(ax.get_yticklabels()):
+            cfg = cfgs[i]
+            if cfg in top3:
+                label.set_fontweight("bold")
+                label.set_color(COLOR_TOP)
+
+        # Area ratio annotation for top-3 and AL-matched
+        for i, (cfg, val) in enumerate(zip(cfgs, vals)):
+            is_top3 = cfg in top3
+            is_al = cfg in AL_MATCHED
+            if is_top3 or is_al:
+                ratio = area_ratio_to_al(cfg)
+                annot = f"{ratio*100:.0f}% area of Azure-Lily"
+                ax.text(val + 0.012, i, annot, ha="left", va="center",
+                        fontsize=7, color=COLOR_AL, fontweight="bold")
+
+        ax.set_xlim(0, max(vals) * 1.45)
+        ax.set_xlabel("EDAP Geomean Score", fontsize=10)
+        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.grid(True, alpha=0.1, axis="x")
+
+    out = RESULTS_DIR / "round1_ranking_fc_vs_attention.pdf"
+    fig.savefig(out)
+    print(f"Saved {out}")
+    plt.close(fig)
+
+
 def main():
     rows, ranked, scores, idx = load_and_rank()
 
-    print("Round 1 EDAP Ranking:")
+    print("Round 1 EDAP Ranking (FC only):")
     for rank, (cfg, sc) in enumerate(ranked, 1):
         print(f"  #{rank} {cfg}: GM_EDAP={sc['gm']:.4f}")
 
     plot_ranking(ranked)
     plot_heatmap(rows, scores, idx)
+
+    # Generate FC vs Attention ranking plot if combined CSV exists
+    fc_ranking, attn_ranking = load_combined_and_rank()
+    if fc_ranking and attn_ranking:
+        print("\nFC vs Attention Rankings:")
+        print("  FC top-3:", [c for c, _ in fc_ranking[:3]])
+        print("  Attn top-3:", [c for c, _ in attn_ranking[:3]])
+        plot_fc_vs_attention_ranking(fc_ranking, attn_ranking)
 
 
 if __name__ == "__main__":

@@ -75,54 +75,27 @@ def main():
         print(f"{N:>5} | {nl['dpe_pct']:>11.1f}% {nl['total_e']/1e3:>9.0f} | "
               f"{al['dpe_pct']:>9.1f}% {al['total_e']/1e3:>9.0f}")
 
-    # Plot: 2 panels
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.5))
-    fig.subplots_adjust(wspace=0.3)
+    # Plot: single panel — DPE Energy %
+    fig, ax = plt.subplots(figsize=(5.5, 3.5))
 
-    # (a) DPE Energy %
     for cname, _, _, _ in CONFIGS:
         ys = [results[(N, cname)]["dpe_pct"] for N in SEQ_LENS]
-        ax1.plot(SEQ_LENS, ys, color=COLORS[cname], linewidth=2.5,
-                 linestyle=STYLES[cname], marker=MARKERS[cname],
-                 markersize=7, markeredgecolor="white", markeredgewidth=1,
-                 label=cname)
+        ax.plot(SEQ_LENS, ys, color=COLORS[cname], linewidth=2.5,
+                linestyle=STYLES[cname], marker=MARKERS[cname],
+                markersize=7, markeredgecolor="white", markeredgewidth=1,
+                label=cname)
 
-    ax1.axhline(y=50, color="#888", linewidth=0.8, linestyle=":", alpha=0.5)
-    ax1.set_xlabel("Sequence Length (N)", fontsize=10)
-    ax1.set_ylabel("DPE Energy Contribution (%)", fontsize=10)
-    ax1.set_title("(a) DPE Energy Ratio", fontsize=10, fontweight="bold")
-    ax1.set_xscale("log", base=2)
-    ax1.set_xticks(SEQ_LENS)
-    ax1.set_xticklabels([str(n) for n in SEQ_LENS], fontsize=8)
-    ax1.set_ylim(0, 100)
-    ax1.legend(fontsize=7.5, loc="best")
-    ax1.grid(True, alpha=0.1)
-
-    # (b) Energy efficiency ratio (NL-DPE / Azure-Lily)
-    for cname, _, _, _ in CONFIGS:
-        ys = [results[(N, "Azure-Lily")]["total_e"] / results[(N, cname)]["total_e"] for N in SEQ_LENS]
-        ax2.plot(SEQ_LENS, ys, color=COLORS[cname], linewidth=2.5,
-                 linestyle=STYLES[cname], marker=MARKERS[cname],
-                 markersize=7, markeredgecolor="white", markeredgewidth=1,
-                 label=cname)
-        if "NL-DPE" in cname:
-            for j, (N, v) in enumerate(zip(SEQ_LENS, ys)):
-                ax2.annotate(f"{v:.2f}×", xy=(N, v), xytext=(0, 8),
-                             textcoords='offset points', ha='center',
-                             fontsize=7, fontweight='bold', color=COLORS[cname])
-
-    ax2.axhline(y=1.0, color="#888", linewidth=0.8, linestyle=":", alpha=0.5)
-    ax2.set_xlabel("Sequence Length (N)", fontsize=10)
-    ax2.set_ylabel("Energy Efficiency\n(vs Azure-Lily)", fontsize=9)
-    ax2.set_title("(b) NL-DPE Advantage", fontsize=10, fontweight="bold")
-    ax2.set_xscale("log", base=2)
-    ax2.set_xticks(SEQ_LENS)
-    ax2.set_xticklabels([str(n) for n in SEQ_LENS], fontsize=8)
-    ax2.legend(fontsize=7.5, loc="best")
-    ax2.grid(True, alpha=0.1)
-
-    fig.suptitle("Attention Head: DPE Contribution & Energy Efficiency (d_head=64)",
-                 fontsize=11, fontweight="bold", y=1.02)
+    ax.axhline(y=50, color="#888", linewidth=0.8, linestyle=":", alpha=0.5)
+    ax.set_xlabel("Sequence Length (N)", fontsize=10)
+    ax.set_ylabel("DPE Energy Contribution (%)", fontsize=10)
+    ax.set_title("Attention Head: DPE Energy Ratio vs Sequence Length\n(d_head=64)",
+                 fontsize=10, fontweight="bold")
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(SEQ_LENS)
+    ax.set_xticklabels([str(n) for n in SEQ_LENS], fontsize=8)
+    ax.set_ylim(0, 100)
+    ax.legend(fontsize=8, loc="best")
+    ax.grid(True, alpha=0.1)
 
     out = RESULTS_DIR / "attention_dpe_ratio_vs_seqlen.pdf"
     fig.savefig(out)

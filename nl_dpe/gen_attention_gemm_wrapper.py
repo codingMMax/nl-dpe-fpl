@@ -131,7 +131,7 @@ def gen_attention_gemm_wrapper(n_seq: int, d_head: int,
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"attn_gemm_{rows}x{cols}_P{p}.v"
+    filename = f"attn_gemm_{n_seq}_{d_head}_{rows}x{cols}_P{p}.v"
     out_path = out_dir / filename
 
     parts = []

@@ -1,0 +1,127 @@
+/usr/bin/env time -v /mnt/vault0/jiajunh5/vtr-verilog-to-routing/abc/abc -c echo ""; echo "Load Netlist"; echo "============"; read 0_vgg11_proposed.parmys.blif; time; echo ""; echo "Circuit Info"; echo "=========="; print_stats; print_latch; time; echo ""; echo "LUT Costs"; echo "========="; print_lut; time; echo ""; echo "Logic Opt + Techmap"; echo "==================="; strash; ifraig -v; scorr -v; dc2 -v; dch -f; if -K 6 -v; mfs2 -v; print_stats; time; echo ""; echo "Output Netlist"; echo "=============="; write_hie 0_vgg11_proposed.parmys.blif 0_vgg11_proposed.raw.abc.blif; time;
+ABC command line: "echo ""; echo "Load Netlist"; echo "============"; read 0_vgg11_proposed.parmys.blif; time; echo ""; echo "Circuit Info"; echo "=========="; print_stats; print_latch; time; echo ""; echo "LUT Costs"; echo "========="; print_lut; time; echo ""; echo "Logic Opt + Techmap"; echo "==================="; strash; ifraig -v; scorr -v; dc2 -v; dch -f; if -K 6 -v; mfs2 -v; print_stats; time; echo ""; echo "Output Netlist"; echo "=============="; write_hie 0_vgg11_proposed.parmys.blif 0_vgg11_proposed.raw.abc.blif; time;".
+
+ 
+Load Netlist 
+============ 
+Warning: Constant-0 drivers added to 12 non-driven nets in network "vgg11_proposed":
+$techmap$auto$hard_block.cc:122:cell_hard_block$3949.$auto$alumacc.cc:495:replace_alu$7531.Y[0], $techmap$auto$hard_block.cc:122:cell_hard_block$3947.$auto$alumacc.cc:495:replace_alu$7531.Y[0], $techmap$auto$hard_block.cc:122:cell_hard_block$3877.$auto$alumacc.cc:495:replace_alu$7531.Y[0], $techmap$auto$hard_block.cc:122:cell_hard_block$3875.$auto$alumacc.cc:495:replace_alu$7531.Y[0] ...
+Hierarchy reader converted 1290 instances of blackboxes.
+elapse: 0.03 seconds, total: 0.03 seconds
+ 
+Circuit Info 
+========== 
+[1;37mvgg11_proposed                :[0m i/o = 6277/ 3116  lat =  853  nd =  8520  edge =  15196  cube = 11312  lev = 26
+Total latches =   853. Init0 = 853. Init1 = 0. InitDC = 0. Const data = 0.
+elapse: 0.00 seconds, total: 0.03 seconds
+ 
+LUT Costs 
+========= 
+# The area/delay of k-variable LUTs:
+# k    area     delay
+1      1.00      1.00
+2      1.00      1.00
+3      1.00      1.00
+4      1.00      1.00
+elapse: 0.00 seconds, total: 0.03 seconds
+ 
+Logic Opt + Techmap 
+=================== 
+SimWords = 32. Rounds = 271. Mem = 2.18 MB.  Classes: Beg = 480. End = 486.
+Proof = 917. Counter-example = 261. Fail = 0. FailReal = 0. Zero = 136.
+Final = 4857. Miter = 6710. Total = 6770. Mux = 0. (Exor = 0.) SatVars = 4860.
+starts        :              299
+conflicts     :              212
+decisions     :           114297
+propagations  :           869580
+AIG simulation   =     0.02 sec
+AIG traversal    =     0.00 sec
+SAT solving      =     0.03 sec
+    Unsat        =     0.00 sec
+    Sat          =     0.02 sec
+    Fail         =     0.00 sec
+Class refining   =     0.00 sec
+TOTAL RUNTIME    =     0.12 sec
+Allocated 0.49 MB to store simulation information.
+Initial simulation of 4 frames with 2 words.     Time =     0.00 sec
+Collecting candidate equivalence classes.        Time =     0.00 sec
+Simulation of 4 frames with 2 words (15 rounds). Time =     0.00 sec
+Before BMC: Equiv classes: Const1 =   444. Class =   119. Lit =  2998.
+After  BMC: Equiv classes: Const1 =   301. Class =   141. Lit =  2516.
+  0 : C =    288. Cl =    105. LR =   800. NR =  5817. F =    0. - T =     0.02 sec
+  1 : C =    288. Cl =    105. LR =   663. NR =  5872. F =    0. - T =     0.00 sec
+Parameters: F = 1. AddF = 2. C-lim = 1000. Constr = 0. MaxLev = 0. Mem = 0.73 MB.
+AIG       : PI = 6277. PO = 3116. Latch = 853. Node = 4857.  Ave SAT vars = 0.
+SAT calls : Proof = 370. Cex = 248. Fail = 0. Lits proved = 2355.
+SAT solver: Vars max = 3400. Calls max = 243. Recycles = 0. Sim rounds = 0.
+NBeg = 4857. NEnd = 2931. (Gain =  39.65 %).  RBeg = 853. REnd = 373. (Gain =  56.27 %).
+BMC         =     0.04 sec ( 67.55 %)
+Spec reduce =     0.00 sec (  1.57 %)
+Mark cones  =     0.00 sec (  0.00 %)
+Sim SAT     =     0.04 sec ( 69.68 %)
+SAT solving =     0.01 sec ( 17.79 %)
+  unsat     =     0.00 sec (  0.36 %)
+  sat       =     0.01 sec ( 17.48 %)
+  undecided =     0.00 sec (  0.00 %)
+Other       =    -0.04 sec (-56.59 %)
+TOTAL       =     0.06 sec (100.00 %)
+Starting:  vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2931  lev =  28
+Rewrite:   vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2557  lev =  25
+Refactor:  vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2457  lev =  25
+Balance:   vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2454  lev =  25
+Rewrite:   vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2369  lev =  25
+RewriteZ:  vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2189  lev =  24
+RefactorZ: vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2185  lev =  28
+RewriteZ:  vgg11_proposed  : pi =  6277  po =  3116  lat =   373  and =    2177  lev =  27
+K = 6. Memory (bytes): Truth =    0. Cut =   56. Obj =  136. Set =  600. CutMin = no
+Node =    3631.  Ch =   291.  Total mem =    2.00 MB. Peak cut mem =    0.05 MB.
+P:  Del =    6.00.  Ar =     749.0.  Edge =     3251.  Cut =    34366.  T =     0.00 sec
+P:  Del =    6.00.  Ar =     682.0.  Edge =     2975.  Cut =    25790.  T =     0.00 sec
+P:  Del =    6.00.  Ar =     645.0.  Edge =     2798.  Cut =    27412.  T =     0.00 sec
+F:  Del =    6.00.  Ar =     626.0.  Edge =     2753.  Cut =    26568.  T =     0.00 sec
+A:  Del =    6.00.  Ar =     611.0.  Edge =     2727.  Cut =    26941.  T =     0.00 sec
+A:  Del =    6.00.  Ar =     611.0.  Edge =     2727.  Cut =    27985.  T =     0.00 sec
+Total time =     0.02 sec
+Duplicated 566 gates to decouple the CO drivers.
+Performing MFS with 6650 PIs, 3489 POs, 1180 nodes (1180 flexible, 0 fixed, 0 empty).
+Nodes = 1180. Try = 1180. Resub = 0. Div = 28689 (ave = 24). SAT calls = 9792. Timeouts = 0. MaxDivs = 0.
+Attempts :   Remove      0 out of   3293 (  0.00 %)   Resub       0 out of    236 (  0.00 %)   
+Reduction:   Nodes       0 out of   1177 (  0.00 %)   Edges       0 out of   3293 (  0.00 %)   
+Win =     0.00 sec (  1.50 %)
+Div =     0.00 sec (  1.13 %)
+Cnf =     0.00 sec ( 10.70 %)
+Sat =     0.02 sec ( 85.66 %)
+Oth =     0.00 sec (  1.01 %)
+ALL =     0.03 sec (100.00 %)
+[1;37mvgg11_proposed                :[0m i/o = 6277/ 3116  lat =  373  nd =  1180  edge =   3293  cube =  1927  lev = 6
+elapse: 0.34 seconds, total: 0.38 seconds
+ 
+Output Netlist 
+============== 
+Warning: Constant-0 drivers added to 12 non-driven nets in network "vgg11_proposed":
+$techmap$auto$hard_block.cc:122:cell_hard_block$3949.$auto$alumacc.cc:495:replace_alu$7531.Y[0], $techmap$auto$hard_block.cc:122:cell_hard_block$3947.$auto$alumacc.cc:495:replace_alu$7531.Y[0], $techmap$auto$hard_block.cc:122:cell_hard_block$3877.$auto$alumacc.cc:495:replace_alu$7531.Y[0], $techmap$auto$hard_block.cc:122:cell_hard_block$3875.$auto$alumacc.cc:495:replace_alu$7531.Y[0] ...
+Hierarchy writer reintroduced 1290 instances of blackboxes.
+elapse: 0.03 seconds, total: 0.41 seconds
+	Command being timed: "/mnt/vault0/jiajunh5/vtr-verilog-to-routing/abc/abc -c echo ""; echo "Load Netlist"; echo "============"; read 0_vgg11_proposed.parmys.blif; time; echo ""; echo "Circuit Info"; echo "=========="; print_stats; print_latch; time; echo ""; echo "LUT Costs"; echo "========="; print_lut; time; echo ""; echo "Logic Opt + Techmap"; echo "==================="; strash; ifraig -v; scorr -v; dc2 -v; dch -f; if -K 6 -v; mfs2 -v; print_stats; time; echo ""; echo "Output Netlist"; echo "=============="; write_hie 0_vgg11_proposed.parmys.blif 0_vgg11_proposed.raw.abc.blif; time;"
+	User time (seconds): 0.40
+	System time (seconds): 0.01
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.42
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 48756
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 11819
+	Voluntary context switches: 1
+	Involuntary context switches: 0
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 1728
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

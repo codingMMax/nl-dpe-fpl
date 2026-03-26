@@ -1,0 +1,16 @@
+Design: resnet_1_azurelily
+Architecture: azure_lily_auto.xml
+Total runs: 3
+Successful: 3
+Failed: 0
+
+Run    Seed         Wirelength   Fmax (MHz)    Elapsed       clb   dsp_top        io    memory        wc
+------------------------------------------------------------------------------------------------------
+1      29329             43502      225.200      63.6s       185         0        37        16        35  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/resnet_1_azurelily/run_1_29329
+2      28945             44223      215.128      63.7s       185         0        37        16        35  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/resnet_1_azurelily/run_2_28945
+3      25645             44182      230.654      64.0s       185         0        37        16        35  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/resnet_1_azurelily/run_3_25645
+
+Averages over 3 runs:
+  wirelength = 43969
+  fmax       = 223.661 MHz
+  fmax range = [215.128, 230.654] MHz

@@ -1,7 +1,7 @@
 # CLAUDE.md — NL-DPE FPGA Research Project
 
 ## Project in One Line
-Crossbar-size DSE for NL-DPE (IMC FPGA hard block) to find optimal (rows, cols) for FC+activation and attention workloads, targeting a research paper comparing NL-DPE vs Azure-Lily.
+NL-DPE FPGA hard block research: crossbar-size DSE (complete) + BERT-Tiny end-to-end workload (in progress) for a paper comparing NL-DPE vs Azure-Lily.
 
 ## Session Start Protocol
 1. Read SESSION_STATE.md → understand where we are
@@ -20,8 +20,11 @@ Crossbar-size DSE for NL-DPE (IMC FPGA hard block) to find optimal (rows, cols) 
 | `nl_dpe/attention_head_1_channel.v` | Hand-written attention head RTL (N=128, d=128, 3 DPEs) |
 | `nl_dpe/area_power.py` | DPE physical specs: `dpe_specs(rows, cols)` → tile W/H/area/power |
 | `nl_dpe/run_vtr.py` | VTR flow runner (called by gemv_dse.py) |
-| `azurelily/IMC/test.py` | IMC energy/latency simulator (supports `fc` and `attention` models) |
+| `azurelily/IMC/test.py` | IMC energy/latency simulator (supports `fc`, `attention`, `bert_tiny` models) |
 | `azurelily/models/attention.py` | Attention energy model (linear_Q/K/V + mac_qk + softmax + mac_sv) |
+| `azurelily/models/bert_tiny.py` | BERT-Tiny model (2L/2H/128d/512ff, embedding + LayerNorm + multi-head attention + FFN) |
+| `azurelily/nn/layernorm_layer.py` | LayerNorm layer class for scheduler dispatch |
+| `azurelily/nn/embedding_layer.py` | Embedding layer class for scheduler dispatch |
 | `dse_experiment_plan.md` | Full methodology spec (authoritative) |
 | `paper_outline.md` | Paper structure and narrative |
 | `dse/results/` | CSVs, JSONs, plots, analysis (DSE outputs) |
@@ -41,6 +44,9 @@ Crossbar-size DSE for NL-DPE (IMC FPGA hard block) to find optimal (rows, cols) 
 - Throughput = 1e9 / latency_ns [inferences/s]
 - Ranking: SPEC-style normalized geomean across workloads (per-workload best = 1.0)
 - BRAM: height=2, startx=2, repeatx=16. 120×120 grid has 472 BRAMs. Per replica: 4 BRAMs (K≤1024), 6 BRAMs (K>1024)
+- BERT-Tiny: 2 layers, 2 heads, d_model=128, d_head=64, d_ff=512, vocab=30522, max_pos=512, default seq_len=1024
+- BERT-Tiny DPE-independent modules: LayerNorm, Residual Add, Embedding Add (all pure CLB)
+- BERT-Tiny DPE-dependent modules: Q/K/V/O projections, FFN1/FFN2, Attention DIMM (QK^T, Score×V)
 
 ## Coding Rules
 - All paths passed to VTR subprocesses must be **absolute** (VTR changes CWD to its scripts dir)

@@ -1,0 +1,16 @@
+Design: vgg11_proposed
+Architecture: nl_dpe_proposed_auto.xml
+Total runs: 3
+Successful: 3
+Failed: 0
+
+Run    Seed         Wirelength   Fmax (MHz)    Elapsed       clb   dsp_top        io    memory        wc
+------------------------------------------------------------------------------------------------------
+1      36087            142839      103.791      50.6s        99         0        85        30        85  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/vgg11_proposed/run_1_36087
+2      13618            138117      107.275      52.5s        99         0        85        30        85  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/vgg11_proposed/run_2_13618
+3      13826            141173      130.093      51.4s        99         0        85        30        85  /mnt/vault0/jiajunh5/nl-dpe-fpl/benchmarks/rtl/vgg11_proposed/run_3_13826
+
+Averages over 3 runs:
+  wirelength = 140710
+  fmax       = 113.720 MHz
+  fmax range = [103.791, 130.093] MHz

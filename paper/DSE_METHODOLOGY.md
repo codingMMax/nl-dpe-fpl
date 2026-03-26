@@ -12,16 +12,29 @@ Integrating DPE (Digital Processing Element) hard blocks into FPGA fabric requir
 
 | Round | Question | Grid | Method |
 |-------|----------|------|--------|
-| **Round 1** | Which crossbar size is best? | Auto (per-workload) | 12 configs × 6 FC workloads, EDAP geomean ranking |
-| **Round 2** | What is the optimal DPE area budget? | 60×60 fixed | 5 configs × 6 budgets, FlexScore + DL latency → Pareto front |
+| **Round 1** | Which crossbar size is best? | Auto (per-workload) | 12 configs × 9 workloads (6 FC + 3 attention), separate EDAP rankings |
+| **Round 2 (FC)** | Optimal DPE area for FC? | 60×60 fixed | FC top-3 configs × 6 budgets, FlexScore + bare GEMV latency → Pareto |
+| **Round 2 (Attention)** | Optimal DPE area for attention? | 60×60 fixed | Attn top-3 configs × 6 budgets, FlexScore + attention latency → Pareto |
 
 ## 3. Round 1: Crossbar Size Selection
 
-**Goal**: Identify the best DPE crossbar configuration (R×C) for FC workloads.
+**Goal**: Identify the best DPE crossbar configuration (R×C) for FC AND attention workloads separately.
 
-**Method**: VTR auto-layout (grid sized to each design). 12 crossbar configs × 6 FC workloads. EDAP (Energy-Delay-Area Product) ranking: per-workload best = 1.0, geomean across workloads determines rank.
+**Key insight**: FC workloads and attention workloads favor DIFFERENT crossbar dimensions:
+- FC: large R (more ACAM eligibility) → 512×128 wins
+- Attention: small C (less ACAM waste on DIMM identity exp) → 128×64 wins
+
+By ranking separately, we select the right configs for each workload class.
+
+**Method**: VTR auto-layout (grid sized to each design). 12 crossbar configs × 9 workloads (6 FC + 3 attention). Two SEPARATE EDAP rankings: one for FC workloads, one for attention workloads.
 
 **Metric**: EDAP = Energy(pJ) × Delay(ns) × Area(mm²). Lower is better.
+
+**Workloads**:
+- FC (6): fc_64_64, fc_128_128, fc_512_128, fc_256_512, fc_512_512, fc_2048_256
+- Attention (3): attention_128_64, attention_256_64, attention_128_128
+
+**Total VTR runs**: 12 configs × 9 workloads = 108 runs
 
 **Design space justification**:
 - R ∈ {128, 256, 512, 1024}: covers small to large crossbars
@@ -29,15 +42,35 @@ Integrating DPE (Digital Processing Element) hard blocks into FPGA fabric requir
 - Area overhead: smallest configs (256×64) have 47% peripheral overhead
 - Power wall: at C≥256, ACAM power exceeds 50 mW per DPE
 
-**Result**: Top-3 configs are R=512 (ACAM-eligible on 5/6 workloads). 512×128 ranked #1.
+**FC Ranking Result**: Top-3 are R≥512 (ACAM-eligible on 5/6 workloads). 512×128 ranked #1.
+**Attention Ranking Result**: Top-3 are C=64 (less ACAM waste on DIMM). 128×64 ranked #1.
 
-**Configs carried forward to Round 2**: 512×128, 1024×128, 1024×64 (NL-DPE group) + 1024×256, 512×256 (AL-like group).
+**Configs carried forward to Round 2**:
+- FC top-3: 512×128, 1024×128, 1024×64
+- Attention top-3: 128×64, 512×64, 128×128
+- AL-matched: 1024×256, 512×256
+
+**Key finding**: FC and attention workloads favor OPPOSITE crossbar dimensions — FC wants large R, attention wants small C. This motivates separate Round 2 sweeps.
 
 ## 4. Round 2: Proportional Budget Sweep (FlexScore DSE)
 
 ### 4.1 Problem
 
 The 2D sweep (d% DSP, c% CLB) from earlier exploration was unfair — DPE replaces compute, memory, and routing functions, so all resource types should be reduced proportionally.
+
+### 4.1b Two Separate Pareto Fronts
+
+Since FC and attention have different optimal configs, Round 2 runs TWO separate DL sweeps:
+
+1. **FC Pareto**: FC top-3 configs (512×128, 1024×128, 1024×64) × 6 budgets × 3 FC workloads
+   - Y-axis: FC effective latency (geomean of 3 bare GEMV workloads)
+   - X-axis: Non-DL degradation (1 − FlexScore)
+
+2. **Attention Pareto**: Attention top-3 configs (128×64, 512×64, 128×128) × 6 budgets × 3 attention workloads
+   - Y-axis: Attention effective latency (geomean of 3 attention workloads)
+   - X-axis: Non-DL degradation (1 − FlexScore)
+
+Both share the same FlexScore non-DL baseline (tw3 tile group).
 
 ### 4.2 Proportional Area Budget
 

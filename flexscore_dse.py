@@ -89,10 +89,30 @@ DL_WORKLOADS = [
     ("fc_2048_256", 2048, 256),
 ]
 
+# Attention DL workloads (n_seq, d_head)
+DL_ATTENTION_WORKLOADS = [
+    ("attention_128_64",  128, 64),
+    ("attention_256_64",  256, 64),
+    ("attention_128_128", 128, 128),
+]
+
+# Attention-optimal configs (from Round 1 attention ranking top-3)
+ATTN_CONFIGS = [
+    {"name": "128x64",  "R": 128, "C": 64},
+    {"name": "512x64",  "R": 512, "C": 64},
+    {"name": "128x128", "R": 128, "C": 128},
+]
+
 # Bare GEMV per-replica resources (calibrated from VTR)
 GEMV_CLBS_PER_REP = 25
 GEMV_CLB_OVERHEAD = 30
 GEMV_BRAMS_PER_REP = 4
+
+# Attention per-replica resources (from 120×120 calibration — will re-calibrate on 60×60)
+ATTN_CLBS_PER_REP = 145
+ATTN_CLB_OVERHEAD = 15
+ATTN_BRAMS_PER_REP = 64
+ATTN_DSPS_PER_REP = 2
 
 # Layout constants
 BRAM_TILE_HEIGHT = 2
@@ -227,6 +247,16 @@ def avail_clbs(clb_ratio):
     return int((1 - clb_ratio) * BASELINE_CLBS_60)
 
 
+def avail_dsps(dsp_ratio):
+    """Remaining DSP tiles after proportional removal on 60×60."""
+    dsp_positions = _baseline_col_positions(DSP_STARTX, DSP_REPEATX, GRID_W)
+    n_dsp_cols = len(dsp_positions)
+    n_removed = min(n_dsp_cols, max(0, round(dsp_ratio * n_dsp_cols)))
+    remaining_cols = n_dsp_cols - n_removed
+    dsps_per_col = (GRID_W - 2) // 4  # DSP tile height = 4
+    return remaining_cols * dsps_per_col
+
+
 def dpe_area_pct(tile_w, tile_h, clb_ratio, dsp_ratio, bram_ratio=0.0):
     n_dpes = count_available_wc(tile_w, tile_h, clb_ratio, dsp_ratio, bram_ratio)
     return n_dpes * tile_w * tile_h / (GRID_W * GRID_H) * 100
@@ -263,6 +293,42 @@ def compute_dl_feasibility(R, C, K, N, budget_pct):
     }
 
 
+def compute_dl_attention_feasibility(R, C, n_seq, d_head, budget_pct):
+    """4-resource feasibility for attention head on 60×60."""
+    clb_ratio, dsp_ratio, bram_ratio = budget_to_ratios(budget_pct)
+    tile_w, tile_h = get_tile_dims(R, C)
+    total_dpes = count_available_wc(tile_w, tile_h, clb_ratio, dsp_ratio, bram_ratio)
+
+    V = math.ceil(d_head / R)
+    H = math.ceil(d_head / C)
+    h_dimm = math.ceil(max(d_head, n_seq) / C)
+    dpes_per_rep = 3 * V * H + 4 * h_dimm  # projections + DIMM
+
+    p_dpe = total_dpes // dpes_per_rep if dpes_per_rep > 0 else 0
+
+    clbs = avail_clbs(clb_ratio)
+    p_clb = max(0, (clbs - ATTN_CLB_OVERHEAD) // ATTN_CLBS_PER_REP)
+
+    brams = count_available_brams(bram_ratio)
+    p_bram = brams // ATTN_BRAMS_PER_REP
+
+    dsps = avail_dsps(dsp_ratio)
+    p_dsp = dsps // ATTN_DSPS_PER_REP if ATTN_DSPS_PER_REP > 0 else 999
+
+    P = min(p_dpe, p_clb, p_bram, p_dsp)
+
+    limits = {'dpe': p_dpe, 'clb': p_clb, 'bram': p_bram, 'dsp': p_dsp}
+    limit = min(limits, key=limits.get) if P >= 1 else 'none'
+
+    return {
+        'feasible': P >= 1, 'P': P,
+        'p_dpe': p_dpe, 'p_clb': p_clb, 'p_bram': p_bram, 'p_dsp': p_dsp,
+        'limit': limit, 'total_dpes': total_dpes,
+        'V': V, 'H': H, 'h_dimm': h_dimm, 'dpes_per_rep': dpes_per_rep,
+        'area_pct': dpe_area_pct(tile_w, tile_h, clb_ratio, dsp_ratio, bram_ratio),
+    }
+
+
 # ── Arch XML Generation ──────────────────────────────────────────────────
 
 def gen_arch_xmls():
@@ -270,7 +336,7 @@ def gen_arch_xmls():
     from gen_arch_xml import gen_arch_xml
 
     tile_groups = {}
-    for cfg in CONFIGS:
+    for cfg in list(CONFIGS) + list(ATTN_CONFIGS):
         tw, th = get_tile_dims(cfg["R"], cfg["C"])
         key = f"tw{tw}"
         if key not in tile_groups:
@@ -329,6 +395,9 @@ def parse_resources(vpr_log: Path) -> dict:
 
 def run_vtr(design: Path, arch: Path, out_dir: Path, seed: int, timeout=1200):
     """Run single VTR flow. Returns (fmax, resources, status)."""
+    design = Path(design).resolve()
+    arch = Path(arch).resolve()
+    out_dir = Path(out_dir).resolve()
     cmd = [
         sys.executable, str(VTR_FLOW),
         str(design), str(arch),
@@ -416,7 +485,7 @@ def run_nondl_single(tg_name, R, C, budget, bname, bfile, seeds):
 def run_nondl_sweep(args, seeds, sanity=False):
     """Run non-DL FlexScore sweep."""
     tile_groups = {}
-    for cfg in CONFIGS:
+    for cfg in list(CONFIGS) + list(ATTN_CONFIGS):
         tw, th = get_tile_dims(cfg["R"], cfg["C"])
         key = f"tw{tw}"
         if key not in tile_groups:
@@ -591,6 +660,117 @@ def run_dl_sweep(args, seeds):
     return results
 
 
+# ── Attention DL Sweep ───────────────────────────────────────────────────
+
+def run_dl_attention_single(cfg_name, R, C, budget, wl_name, n_seq, d_head, P, seeds):
+    """Run one attention DL point (all seeds)."""
+    from gen_attention_gemm_wrapper import gen_attention_gemm_wrapper
+
+    tw, th = get_tile_dims(R, C)
+    arch = arch_xml_path(f"tw{tw}", budget)
+    rtl_dir = OUTPUT_BASE / "rtl"
+    rtl_dir.mkdir(parents=True, exist_ok=True)
+
+    rtl_path = gen_attention_gemm_wrapper(n_seq, d_head, R, C, P, str(rtl_dir))
+    base_dir = OUTPUT_BASE / "dl_attention" / cfg_name / f"b{budget}" / wl_name
+
+    avg, seeds_f, res, status = run_multi_seed(
+        Path(rtl_path), arch, base_dir, seeds, timeout=900)
+
+    clb_ratio, dsp_ratio, bram_ratio = budget_to_ratios(budget)
+    area = dpe_area_pct(tw, th, clb_ratio, dsp_ratio, bram_ratio)
+    eff_lat = 1e3 / (P * avg) if P > 0 and avg == avg and avg > 0 else float("inf")
+
+    result = {"config": cfg_name, "budget_pct": budget,
+              "workload": wl_name, "wl_type": "attention",
+              "n_seq": n_seq, "d_head": d_head,
+              "P": P, "fmax_mhz": avg,
+              "eff_latency_ns": eff_lat, "dpe_area_pct": area,
+              "status": status}
+    for i, sf in enumerate(seeds_f):
+        result[f"fmax_seed{i+1}"] = sf
+    return result
+
+
+def run_dl_attention_sweep(args, seeds):
+    """Run attention DL sweep on 60×60 for attention-optimal configs."""
+    jobs = []
+    for cfg in ATTN_CONFIGS:
+        R, C = cfg["R"], cfg["C"]
+        cfg_name = cfg["name"]
+        for wl_name, n_seq, d_head in DL_ATTENTION_WORKLOADS:
+            for budget in BUDGET_LEVELS:
+                if budget == 0:
+                    continue
+                feas = compute_dl_attention_feasibility(R, C, n_seq, d_head, budget)
+                if not feas['feasible']:
+                    continue
+                jobs.append((cfg_name, R, C, budget, wl_name, n_seq, d_head, feas['P']))
+
+    print(f"DL Attention: {len(jobs)} feasible points × {NUM_SEEDS} seeds "
+          f"= {len(jobs)*NUM_SEEDS} VTR runs")
+
+    if args.skip_existing:
+        pending, cached = [], []
+        for job in jobs:
+            cfg_name, R, C, budget, wl_name, n_seq, d_head, P = job
+            base_dir = OUTPUT_BASE / "dl_attention" / cfg_name / f"b{budget}" / wl_name
+            if check_existing_seeds(base_dir, seeds):
+                cached.append(job)
+            else:
+                pending.append(job)
+        print(f"  Cached: {len(cached)} | Pending: {len(pending)}")
+    else:
+        pending, cached = jobs, []
+
+    if args.dry_run:
+        print(f"\n{'Config':>12} {'Workload':>20} {'Budget':>7} {'P':>4} {'Area%':>6}")
+        for j in pending:
+            cfg_name, R, C, budget, wl_name, n_seq, d_head, P = j
+            tw, th = get_tile_dims(R, C)
+            clb_r, dsp_r, bram_r = budget_to_ratios(budget)
+            area = dpe_area_pct(tw, th, clb_r, dsp_r, bram_r)
+            print(f"{cfg_name:>12} {wl_name:>20} {budget:>6}% {P:>4} {area:>6.1f}")
+        return []
+
+    results = []
+    for job in cached:
+        cfg_name, R, C, budget, wl_name, n_seq, d_head, P = job
+        base_dir = OUTPUT_BASE / "dl_attention" / cfg_name / f"b{budget}" / wl_name
+        avg, sf, res = load_existing_seeds(base_dir, seeds)
+        tw, th = get_tile_dims(R, C)
+        clb_r, dsp_r, bram_r = budget_to_ratios(budget)
+        area = dpe_area_pct(tw, th, clb_r, dsp_r, bram_r)
+        eff_lat = 1e3 / (P * avg) if P > 0 and avg == avg and avg > 0 else float("inf")
+        r = {"config": cfg_name, "budget_pct": budget,
+             "workload": wl_name, "wl_type": "attention",
+             "n_seq": n_seq, "d_head": d_head,
+             "P": P, "fmax_mhz": avg,
+             "eff_latency_ns": eff_lat, "dpe_area_pct": area,
+             "status": "OK (cached)"}
+        for i, f in enumerate(sf):
+            r[f"fmax_seed{i+1}"] = f
+        results.append(r)
+
+    if pending:
+        print(f"Running {len(pending)} attention DL points (--jobs {args.jobs})...")
+        with ProcessPoolExecutor(max_workers=args.jobs) as executor:
+            futures = {}
+            for job in pending:
+                f = executor.submit(run_dl_attention_single, *job, seeds)
+                futures[f] = job
+            for i, f in enumerate(as_completed(futures), 1):
+                r = f.result()
+                results.append(r)
+                cfg_name, _, _, budget, wl_name, _, _, P = futures[f]
+                print(f"  [{i}/{len(pending)}] {cfg_name} {wl_name} "
+                      f"budget={budget}% P={P}: "
+                      f"Fmax={r['fmax_mhz']:.1f} lat={r['eff_latency_ns']:.2f} "
+                      f"({r['status']})")
+
+    return results
+
+
 # ── FlexScore Computation ────────────────────────────────────────────────
 
 def compute_flexscore(nondl_results):
@@ -692,6 +872,8 @@ def main():
                         help="Run non-DL FlexScore sweep")
     parser.add_argument("--dl", action="store_true",
                         help="Run DL bare GEMV sweep")
+    parser.add_argument("--dl-attention", action="store_true",
+                        help="Run DL attention sweep (attention-optimal configs)")
     parser.add_argument("--sanity", action="store_true",
                         help="Run sanity check only")
     parser.add_argument("--jobs", type=int, default=4)
@@ -730,6 +912,34 @@ def main():
         dl_results = run_dl_sweep(args, seeds)
         if dl_results:
             write_dl_csv(dl_results)
+
+    if args.dl_attention:
+        print("\n=== DL Attention Sweep ===")
+        # Generate arch XMLs for attention configs (tw3 — all have tile_width=3)
+        # Check if tw3 arch XMLs already exist, generate if needed
+        for budget in BUDGET_LEVELS:
+            arch_path = arch_xml_path("tw3", budget)
+            if not arch_path.exists():
+                print(f"  Missing arch XML: {arch_path} — run --gen-arch first")
+                return
+        dl_attn_results = run_dl_attention_sweep(args, seeds)
+        if dl_attn_results:
+            write_dl_attention_csv(dl_attn_results)
+
+
+def write_dl_attention_csv(results):
+    """Write attention DL results to CSV."""
+    path = RESULTS_DIR / "flexscore_dl_attention_results.csv"
+    seed_cols = [f"fmax_seed{i+1}" for i in range(NUM_SEEDS)]
+    fields = ["config", "budget_pct", "workload", "wl_type",
+              "n_seq", "d_head", "P", "fmax_mhz",
+              "eff_latency_ns", "dpe_area_pct"] + seed_cols + ["status"]
+    rows = sorted(results, key=lambda r: (r["config"], r["budget_pct"], r["workload"]))
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+    print(f"DL Attention results -> {path} ({len(rows)} rows)")
 
 
 if __name__ == "__main__":

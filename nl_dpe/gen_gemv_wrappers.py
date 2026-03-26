@@ -200,8 +200,9 @@ def _gen_adder_tree(v: int, input_prefix: str, output_name: str,
             last = current_names[-1]
             pname = f"{pfx}pass_L{level}"
             lines.append(f"    wire signed [{next_width - 1}:0] {pname};")
+            # Sign-extend: replicate MSB. Avoid $signed()[bit] which Parmys rejects.
             lines.append(
-                f"    assign {pname} = {{{{1{{$signed({last})[{current_width - 1}]}}}}, $signed({last})}};"
+                f"    assign {pname} = {{{{{last}[{current_width - 1}]}}, {last}}};"
             )
             next_names.append(pname)
 
@@ -226,7 +227,8 @@ def _gen_fc_layer_v1_h1(k: int, n: int, rows: int, cols: int,
 
 def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
                   depth: int, addr_width: int,
-                  data_width: int = 40) -> str:
+                  data_width: int = 40,
+                  module_name: str = "fc_layer") -> str:
     """Generate the fc_layer module for arbitrary (V, H) tiling.
 
     The fc_layer contains:
@@ -239,7 +241,7 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
     total_dpes = v * h
     lines = []
 
-    lines.append(f"module fc_layer #(")
+    lines.append(f"module {module_name} #(")
     lines.append(f"    parameter DATA_WIDTH = {data_width}")
     lines.append(f")(")
     lines.append(f"    input wire clk,")

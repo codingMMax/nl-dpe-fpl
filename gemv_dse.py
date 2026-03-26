@@ -67,13 +67,21 @@ CLB_TILE_UM2 = 2239
 ATTENTION_N_SEQ = 128
 ATTENTION_D_HEAD = 128
 
+# Attention workloads for combined Round 1 DSE (FC + attention)
+ATTENTION_WORKLOADS = {
+    "attention_128_64":  (128, 64),    # BERT-Tiny scale
+    "attention_256_64":  (256, 64),    # BERT-Small scale
+    "attention_128_128": (128, 128),   # LLM (LLaMA) d_head
+}
+
 DEFAULT_ROUTE_CHAN_WIDTH = 300
 DEFAULT_SEED = 42
 MULTI_SEEDS = [1, 2, 3]   # 3 seeds for stable Fmax averaging in Round 2
 
 CSV_COLUMNS = [
     'config', 'rows', 'cols',
-    'workload', 'K', 'N',
+    'workload', 'wl_type', 'K', 'N',
+    'n_seq', 'd_head', 'h_dimm', 'dimm_dpes',
     'V', 'H', 'dpe_count', 'acam_eligible',
     'fmax_mhz', 'grid_w', 'grid_h', 'fpga_area_mm2',
     'latency_ns', 'energy_pj',
@@ -400,14 +408,27 @@ def run_round1(args):
     else:
         configs = DPE_CONFIGS
 
+    # Build combined workload dict (FC + attention)
+    ALL_WORKLOADS = {}
+    for k, v in FC_WORKLOADS.items():
+        ALL_WORKLOADS[k] = {'type': 'fc', 'K': v[0], 'N': v[1]}
+    for k, v in ATTENTION_WORKLOADS.items():
+        ALL_WORKLOADS[k] = {'type': 'attention', 'n_seq': v[0], 'd_head': v[1]}
+
     if args.workloads:
         workload_names = [w.strip() for w in args.workloads.split(",")]
-        workloads = {k: v for k, v in FC_WORKLOADS.items() if k in workload_names}
-        missing = set(workload_names) - set(workloads.keys())
-        if missing:
-            print(f"WARNING: unknown workloads: {missing}", file=sys.stderr)
+        # Support "fc" and "attention" as group filters
+        if workload_names == ["fc"]:
+            workloads = {k: v for k, v in ALL_WORKLOADS.items() if v['type'] == 'fc'}
+        elif workload_names == ["attention"]:
+            workloads = {k: v for k, v in ALL_WORKLOADS.items() if v['type'] == 'attention'}
+        else:
+            workloads = {k: v for k, v in ALL_WORKLOADS.items() if k in workload_names}
+            missing = set(workload_names) - set(workloads.keys())
+            if missing:
+                print(f"WARNING: unknown workloads: {missing}", file=sys.stderr)
     else:
-        workloads = FC_WORKLOADS
+        workloads = ALL_WORKLOADS
 
     # ── Phase 1: Generate artifacts ──────────────────────────────────────
     print("=" * 70)
@@ -416,8 +437,15 @@ def run_round1(args):
 
     for (R, C) in configs:
         gen_arch_xml(R, C, mode="auto", output_dir=arch_dir)
-        for wl_name, (K, N) in workloads.items():
-            gen_fc_wrapper_for_dse(K, N, R, C, output_dir=rtl_dir)
+        for wl_name, wl_info in workloads.items():
+            if wl_info['type'] == 'fc':
+                gen_fc_wrapper_for_dse(wl_info['K'], wl_info['N'], R, C, output_dir=rtl_dir)
+            elif wl_info['type'] == 'attention':
+                from gen_attention_wrapper import gen_attention_wrapper
+                gen_attention_wrapper(
+                    n_seq=wl_info['n_seq'], d_head=wl_info['d_head'],
+                    rows=R, cols=C, output_dir=str(rtl_dir)
+                )
 
     # ── Phase 2: Build VTR job list ──────────────────────────────────────
     print("\n" + "=" * 70)
@@ -432,25 +460,44 @@ def run_round1(args):
             print(f"  WARNING: arch XML not found: {arch_path}", file=sys.stderr)
             continue
 
-        for wl_name, (K, N) in workloads.items():
-            rtl_path = rtl_dir / f"fc_{K}_{N}_{R}x{C}.v"
+        for wl_name, wl_info in workloads.items():
+            if wl_info['type'] == 'fc':
+                K, N = wl_info['K'], wl_info['N']
+                rtl_path = rtl_dir / f"fc_{K}_{N}_{R}x{C}.v"
+                v = math.ceil(K / R)
+                h = math.ceil(N / C)
+                dpe_count = v * h
+                job_extra = {'K': K, 'N': N, 'n_seq': 0, 'd_head': 0, 'h_dimm': 0, 'dimm_dpes': 0}
+            elif wl_info['type'] == 'attention':
+                n_seq, d_head = wl_info['n_seq'], wl_info['d_head']
+                rtl_path = rtl_dir / f"attention_{n_seq}_{d_head}_{R}x{C}.v"
+                v = math.ceil(d_head / R)
+                h = math.ceil(d_head / C)
+                h_dimm = math.ceil(max(d_head, n_seq) / C)
+                dimm_dpes = 4 * h_dimm
+                dpe_count = 3 * v * h + dimm_dpes
+                job_extra = {'K': d_head, 'N': n_seq, 'n_seq': n_seq, 'd_head': d_head,
+                             'h_dimm': h_dimm, 'dimm_dpes': dimm_dpes}
+            else:
+                continue
+
             if not rtl_path.is_file():
                 print(f"  WARNING: RTL not found: {rtl_path}", file=sys.stderr)
                 continue
 
             run_dir = r1_dir / f"{R}x{C}" / wl_name
-            v = math.ceil(K / R)
-            h = math.ceil(N / C)
             acam = (v == 1)
             job = {
                 'rtl': rtl_path,
                 'arch': arch_path,
                 'run_dir': run_dir,
-                'R': R, 'C': C, 'K': K, 'N': N,
+                'R': R, 'C': C,
                 'wl_name': wl_name,
+                'wl_type': wl_info['type'],
                 'V': v, 'H': h,
-                'dpe_count': v * h,
+                'dpe_count': dpe_count,
                 'acam_eligible': acam,
+                **job_extra,
             }
             if args.skip_existing and not args.force and (run_dir / "imc_result.json").exists():
                 print(f"  SKIP (existing): {R}x{C} / {wl_name}")
@@ -548,10 +595,15 @@ def run_round1(args):
         imc_cfg_path = imc_dir / f"nl_dpe_{config_name}_{wl_name}.json"
         patch_imc_config(BASE_IMC_CONFIG, R, C, vtr['fmax_mhz'], imc_cfg_path)
 
-        # Run IMC
+        # Run IMC — dispatch based on workload type
         print(f"  IMC: {config_name} / {wl_name} @ {vtr['fmax_mhz']:.1f} MHz ... ",
               end="", flush=True)
-        energy_pj, latency_ns, breakdown = run_imc_fc(imc_cfg_path, K, N)
+        if job.get('wl_type') == 'attention':
+            energy_pj, latency_ns, breakdown = run_imc_attention(
+                imc_cfg_path, job['n_seq'], job['d_head']
+            )
+        else:
+            energy_pj, latency_ns, breakdown = run_imc_fc(imc_cfg_path, K, N)
 
         if energy_pj is not None and latency_ns is not None:
             print(f"energy={energy_pj:.2f} pJ  latency={latency_ns:.2f} ns")
@@ -592,8 +644,13 @@ def run_round1(args):
             'rows': R,
             'cols': C,
             'workload': wl_name,
+            'wl_type': job.get('wl_type', 'fc'),
             'K': K,
             'N': N,
+            'n_seq': job.get('n_seq', 0),
+            'd_head': job.get('d_head', 0),
+            'h_dimm': job.get('h_dimm', 0),
+            'dimm_dpes': job.get('dimm_dpes', 0),
             'V': job['V'],
             'H': job['H'],
             'dpe_count': job['dpe_count'],
@@ -606,6 +663,7 @@ def run_round1(args):
             'energy_pj': energy_pj,
             'throughput_per_mm2': throughput_per_mm2,
             'throughput_per_J': throughput_per_J,
+            'edap': edap,
             'e_imc_vmm': breakdown.get('imc_vmm', 0),
             'e_imc_digital': breakdown.get('imc_digital_post', 0),
             'e_clb_reduction': breakdown.get('clb_reduction', 0),
