@@ -23,8 +23,10 @@ from scheduler_stats.stats import Stats
 from scheduler_stats.scheduler import Scheduler
 from models.attention import attention_model
 
-plt.rcParams.update({"font.family":"serif","font.size":9,"axes.labelsize":10,"axes.titlesize":11,
-    "figure.dpi":150,"savefig.dpi":300,"savefig.bbox":"tight","savefig.pad_inches":0.05})
+from style_constants import (apply_style, ARCH_COLORS, ARCH_MARKERS,
+                              ARCH_LINESTYLES, BASELINE_COLOR, BASELINE_LS,
+                              BASELINE_ALPHA, ANNOT_FONTSIZE, ANNOT_FONTWEIGHT)
+apply_style()
 
 RESULTS_DIR = Path(__file__).resolve().parent
 
@@ -97,7 +99,7 @@ def main():
     ax.legend(fontsize=8, loc="best")
     ax.grid(True, alpha=0.1)
 
-    out = RESULTS_DIR / "attention_dpe_ratio_vs_seqlen.pdf"
+    out = RESULTS_DIR.parent / "figures" / "benchmarks" / "attention_dpe_ratio_vs_seqlen.pdf"
     fig.savefig(out)
     print(f"\nSaved: {out}")
 

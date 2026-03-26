@@ -13,9 +13,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-plt.rcParams.update({"font.family": "serif", "font.size": 9, "axes.labelsize": 10,
-    "axes.titlesize": 11, "figure.dpi": 150, "savefig.dpi": 300,
-    "savefig.bbox": "tight", "savefig.pad_inches": 0.1})
+from style_constants import (apply_style, BASELINE_COLOR, BASELINE_LS,
+                              BASELINE_ALPHA, ANNOT_FONTSIZE, ANNOT_FONTWEIGHT,
+                              DUAL_COLORS, FIG_SINGLE)
+apply_style()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUT_DIR = SCRIPT_DIR.parent / "figures" / "benchmarks"
@@ -53,29 +54,30 @@ for N in seq_lens:
     ratios_dual.append(total_al / total_dual)
     ratios_regular.append(total_al / total_regular)
 
-fig, ax = plt.subplots(figsize=(6, 4))
+fig, ax = plt.subplots(figsize=FIG_SINGLE)
 
-ax.plot(seq_lens, ratios_dual, color="#059669", linewidth=2.5,
-        marker="o", markersize=7, markeredgecolor="white", markeredgewidth=1,
+ax.plot(seq_lens, ratios_dual, color=DUAL_COLORS["dual"], linewidth=2,
+        marker="o", markersize=6, markeredgecolor="white", markeredgewidth=1,
         label="Dual-identity mapping")
 
-ax.plot(seq_lens, ratios_regular, color="#2563EB", linewidth=1.8,
+ax.plot(seq_lens, ratios_regular, color=DUAL_COLORS["regular"], linewidth=2,
         linestyle="--", marker="s", markersize=6, markeredgecolor="white", markeredgewidth=1,
         label="Regular mapping")
 
-ax.axhline(y=1.0, color="#EF4444", linewidth=1.5, linestyle=":", alpha=0.6)
+ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
+           alpha=BASELINE_ALPHA)
 
-ax.fill_between(seq_lens, ratios_regular, ratios_dual, alpha=0.08, color="#059669")
+ax.fill_between(seq_lens, ratios_regular, ratios_dual, alpha=0.08,
+                color=DUAL_COLORS["dual"])
 
-# Annotate below data points
+# Annotate above data points (consistent with other figures)
 for i, N in enumerate(seq_lens):
     y = ratios_dual[i]
-    ax.text(N, y - 0.04, f"{y:.2f}\u00d7", ha='center', va='top',
-            fontsize=7, fontweight='bold', color='#059669')
-
-# Baseline label on the left
-ax.text(55, 1.03, "Azure-Lily baseline", fontsize=7, color="#EF4444",
-        ha="left", fontstyle="italic")
+    ax.annotate(f"{y:.2f}\u00d7", xy=(N, y),
+                xytext=(0, 8), textcoords='offset points',
+                ha='center', va='bottom',
+                fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
+                color=DUAL_COLORS["dual"])
 
 ax.set_xlabel("Sequence Length (N)", fontsize=10)
 ax.set_ylabel("Energy Efficiency\n(normalized, Azure-Lily = 1.0\u00d7)", fontsize=9)
