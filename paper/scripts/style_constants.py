@@ -6,19 +6,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-# ── Global rcParams ──
+# ── Global rcParams (IEEE two-column: columnwidth=3.5in, textwidth=7.16in) ──
 RCPARAMS = {
     "font.family": "serif",
-    "font.size": 9,
-    "axes.labelsize": 10,
-    "axes.titlesize": 11,
-    "xtick.labelsize": 8,
-    "ytick.labelsize": 8,
-    "legend.fontsize": 8,
+    "font.size": 8,
+    "axes.labelsize": 8,
+    "axes.titlesize": 9,
+    "xtick.labelsize": 7,
+    "ytick.labelsize": 7,
+    "legend.fontsize": 7,
     "figure.dpi": 150,
     "savefig.dpi": 300,
     "savefig.bbox": "tight",
-    "savefig.pad_inches": 0.05,
+    "savefig.pad_inches": 0.02,
 }
 
 def apply_style():
@@ -26,20 +26,20 @@ def apply_style():
 
 # ── Architecture colors (used in line plots, grouped bars) ──
 ARCH_COLORS = {
-    "NL-DPE Proposed": "#10B981",     # emerald
-    "NL-DPE AL-Matched": "#3B82F6",   # royal blue
+    "Proposed": "#10B981",     # emerald
+    "AL-like": "#3B82F6",   # royal blue
     "Azure-Lily": "#F97316",          # coral/orange
 }
 
 ARCH_MARKERS = {
-    "NL-DPE Proposed": "o",
-    "NL-DPE AL-Matched": "s",
+    "Proposed": "o",
+    "AL-like": "s",
     "Azure-Lily": "D",
 }
 
 ARCH_LINESTYLES = {
-    "NL-DPE Proposed": "-",
-    "NL-DPE AL-Matched": "--",
+    "Proposed": "-",
+    "AL-like": "--",
     "Azure-Lily": ":",
 }
 
@@ -87,13 +87,36 @@ BERT_LAYER_COLORS = {
 }
 
 # ── Annotation style ──
-ANNOT_FONTSIZE = 7
+ANNOT_FONTSIZE = 6
 ANNOT_FONTWEIGHT = "bold"
 
-# ── Figure sizes ──
-FIG_SINGLE = (5.5, 3.8)           # single panel
-FIG_DUAL = (10, 4.2)              # two panels side by side
+# ── Single-column annotation style (for figures rendered at columnwidth) ──
+ANNOT_FONTSIZE_SC = 7
+ANNOT_FONTWEIGHT_SC = "bold"
+
+# ── Figure sizes (IEEE two-column) ──
+FIG_SINGLE = (3.5, 2.4)           # single column width
+FIG_DUAL = (7.16, 2.8)            # double column (textwidth)
 FIG_DUAL_RATIO = {'width_ratios': [1, 1.2]}  # left:right ratio
+
+# ── Single-column rcParams (for dual-panel figures rendered at columnwidth) ──
+RCPARAMS_SC = {
+    "font.family": "serif",
+    "font.size": 9,
+    "axes.labelsize": 10,
+    "axes.titlesize": 9,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 9,
+    "figure.dpi": 150,
+    "savefig.dpi": 300,
+    "savefig.bbox": "tight",
+    "savefig.pad_inches": 0.02,
+}
+
+def apply_style_sc():
+    """Apply single-column style (larger fonts for figures shown at columnwidth)."""
+    plt.rcParams.update(RCPARAMS_SC)
 
 # ── FPGA constants ──
 FPGA_GRID = 150
