@@ -24,23 +24,13 @@ OUTPUT_DIR = RESULTS_DIR.parent / "figures"
 CSV_PATH = RESULTS_DIR / "round1_results.csv"
 
 import sys
-_nl_dpe_dir = str(Path(__file__).resolve().parents[4] / "nl_dpe")
+# paper/scripts/ -> paper/ -> nl-dpe-fpl/ -> nl_dpe/
+_nl_dpe_dir = str(Path(__file__).resolve().parent.parent.parent / "nl_dpe")
 sys.path.insert(0, _nl_dpe_dir)
 from area_power import dpe_specs
 
-plt.rcParams.update({
-    "font.family": "serif",
-    "font.size": 10,
-    "axes.labelsize": 11,
-    "axes.titlesize": 12,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
-    "legend.fontsize": 9,
-    "figure.dpi": 150,
-    "savefig.dpi": 300,
-    "savefig.bbox": "tight",
-    "savefig.pad_inches": 0.05,
-})
+from style_constants import apply_style
+apply_style()
 
 COLOR_EDAP = "#2563EB"
 COLOR_TOP = "#059669"
@@ -120,13 +110,13 @@ def plot_ranking(ranked, top_k=5):
 
     top3 = configs_ranked[:3]
 
-    fig, ax = plt.subplots(figsize=(6, max(4, n * 0.4)))
+    fig, ax = plt.subplots(figsize=(3.5, 2.8))
     y_pos = np.arange(n)
 
     # Reversed so #1 at top
     colors = [COLOR_TOP if configs_ranked[n - 1 - i] in top3
               else COLOR_EDAP for i in range(n)]
-    bars = ax.barh(y_pos, gm_vals[::-1], 0.6, color=colors, alpha=0.85)
+    bars = ax.barh(y_pos, gm_vals[::-1], 0.55, color=colors, alpha=0.85)
 
     # Compute area overhead and power for all configs
     cfg_overhead = {}
@@ -149,9 +139,11 @@ def plot_ranking(ranked, top_k=5):
         is_top3 = cfg in top3
         weight = "bold" if is_top3 else "normal"
         marker = "  *" if is_top3 else ""
-
+        if cfg in ("1024x256", "512x256"):
+            marker = " *"
+            weight = "bold"
         label = f"#{rank}  {cfg}{marker}"
-        ax.text(-0.02, i, label, ha="right", va="center", fontsize=9,
+        ax.text(-0.02, i, label, ha="right", va="center", fontsize=7,
                 fontweight=weight, transform=ax.get_yaxis_transform())
 
         annot_x = gm_vals[n - 1 - i] + 0.02
@@ -159,32 +151,33 @@ def plot_ranking(ranked, top_k=5):
         # Annotate worst peripheral overhead (smallest configs)
         if cfg_area[cfg] == min_area:
             ax.text(annot_x, i,
-                    f"FPGA integration overhead: {cfg_overhead[cfg]:.0f}% block area",
-                    ha="left", va="center", fontsize=7.5,
+                    f"{cfg_overhead[cfg]:.0f}% DPE logic area accounts for block peripheral",
+                    ha="left", va="center", fontsize=6,
                     color=COLOR_AL)
 
         # Annotate highest power (largest config) + AL comparison if applicable
-        elif cfg_power[cfg] == max_power:
-            annot = f"DPE power: {cfg_power[cfg]:.0f} mW"
-            if cfg in ("1024x256", "512x256"):
-                ratio = area_ratio_to_al(cfg)
-                annot += f",  {ratio*100:.0f}% of Azure-Lily DPE area"
-            ax.text(annot_x, i, annot,
-                    ha="left", va="center", fontsize=7.5,
-                    color=COLOR_AL)
+        # elif cfg_power[cfg] == max_power:
+        #     # annot = f"DPE power: {cfg_power[cfg]:.0f} mW"
+        #     annot = ""
+        #     if cfg in ("1024x256", "512x256"):
+        #         ratio = area_ratio_to_al(cfg)
+        #         annot += f"{ratio*100:.0f}% of Azure-Lily DPE area"
+        #     ax.text(annot_x, i, annot,
+        #             ha="left", va="center", fontsize=6,
+        #             color=COLOR_AL)
 
         # AL comparison for remaining AL-like configs
         elif cfg in ("1024x256", "512x256"):
             ratio = area_ratio_to_al(cfg)
-            ax.text(annot_x, i, f"{ratio*100:.0f}% of Azure-Lily DPE area",
-                    ha="left", va="center", fontsize=7.5,
+            ax.text(annot_x, i, f"AL-Like:{ratio*100:.0f}% of Azure-Lily DPE area",
+                    ha="left", va="center", fontsize=6,
                     fontweight="normal", color=COLOR_AL)
 
     ax.set_yticks([])
     ax.set_xlim(0, 1.25)
     ax.set_xlabel("Normalized Geomean EDAP Score (best = 1.0)")
-    ax.set_title("DPE Config Ranking by Energy-Delay-Area Product (EDAP)",
-                 fontweight="bold")
+    # ax.set_title("",
+    #              fontweight="bold")
     ax.axvline(1.0, color="gray", linewidth=0.5, linestyle="--", alpha=0.3)
 
     out = RESULTS_DIR / "round1_ranking.pdf"

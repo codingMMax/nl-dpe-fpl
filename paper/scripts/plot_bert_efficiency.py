@@ -14,10 +14,10 @@ sys.path.insert(0, str(ROOT_DIR / "azurelily"))
 sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
 
 import matplotlib.pyplot as plt
-from style_constants import (apply_style, ARCH_COLORS, ARCH_MARKERS, ARCH_LINESTYLES,
+from style_constants import (apply_style_sc, ARCH_COLORS, ARCH_MARKERS, ARCH_LINESTYLES,
                               BASELINE_COLOR, BASELINE_LS, BASELINE_ALPHA,
-                              ANNOT_FONTSIZE, ANNOT_FONTWEIGHT, FPGA_AREA_MM2, FIG_DUAL)
-apply_style()
+                              ANNOT_FONTSIZE_SC, ANNOT_FONTWEIGHT_SC, FPGA_AREA_MM2)
+apply_style_sc()
 
 from imc_core.config import Config
 from imc_core.imc_core import IMCCore
@@ -54,8 +54,8 @@ def run_bert(cfile, R, C, fmax, N):
 
 SEQ_LENS = [128, 256, 512, 1024]
 CONFIGS = [
-    ("NL-DPE Proposed", "nl_dpe", 1024, 128, 141.5),
-    ("NL-DPE AL-Matched", "nl_dpe", 1024, 256, 140.1),
+    ("Proposed", "nl_dpe", 1024, 128, 141.5),
+    ("AL-like", "nl_dpe", 1024, 256, 140.1),
     ("Azure-Lily", "azure_lily", 512, 128, 124.9),
 ]
 
@@ -66,26 +66,26 @@ for N in SEQ_LENS:
         e, l = run_bert(cfile, R, C, fmax, N)
         data[(N, cname)] = {"energy": e, "latency": l}
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=FIG_DUAL)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 2.8))
 fig.subplots_adjust(wspace=0.28)
 
-for ax, metric_fn, title in [
+for ax, metric_fn, ylabel in [
     (ax1, lambda N, c: (1e9 / data[(N, c)]["latency"]) / FPGA_AREA_MM2,
-     "(a) Area Efficiency (inf/s/mm\u00b2)"),
+     "Normalized Throughput/mm\u00b2"),
     (ax2, lambda N, c: 1e12 / data[(N, c)]["energy"],
-     "(b) Energy Efficiency (inf/J)"),
+     "Normalized Inference/J"),
 ]:
-    for cname in ["NL-DPE Proposed", "NL-DPE AL-Matched", "Azure-Lily"]:
+    for cname in ["Proposed", "AL-like", "Azure-Lily"]:
         ys = []
         for N in SEQ_LENS:
             val = metric_fn(N, cname)
             bl = metric_fn(N, "Azure-Lily")
             ys.append(val / bl)
 
-        ax.plot(SEQ_LENS, ys, color=ARCH_COLORS[cname], linewidth=2,
+        ax.plot(SEQ_LENS, ys, color=ARCH_COLORS[cname], linewidth=1.5,
                 linestyle=ARCH_LINESTYLES[cname],
-                marker=ARCH_MARKERS[cname], markersize=6,
-                markeredgecolor="white", markeredgewidth=1, label=cname)
+                marker=ARCH_MARKERS[cname], markersize=4,
+                markeredgecolor="white", markeredgewidth=0.8, label=cname)
 
         if "Proposed" in cname:
             for i, (N, r) in enumerate(zip(SEQ_LENS, ys)):
@@ -93,30 +93,29 @@ for ax, metric_fn, title in [
                 ax.annotate(f"{r:.2f}\u00d7", xy=(N, r),
                             xytext=(0, 8), textcoords='offset points',
                             ha='center', va='bottom',
-                            fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
+                            fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
                             color=ARCH_COLORS[cname])
 
     ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
                alpha=BASELINE_ALPHA)
     ax.set_xlabel("Sequence Length (N)")
-    ax.set_ylabel("Normalized (Azure-Lily = 1.0\u00d7)", fontsize=9)
-    ax.set_title(title, fontsize=10, fontweight="bold")
+    ax.set_ylabel(ylabel)
     ax.set_xscale("log", base=2)
     ax.set_xticks(SEQ_LENS)
     ax.set_xticklabels([str(n) for n in SEQ_LENS])
     # Ensure headroom for annotations
-    all_proposed = [metric_fn(N, "NL-DPE Proposed") / metric_fn(N, "Azure-Lily")
+    all_proposed = [metric_fn(N, "Proposed") / metric_fn(N, "Azure-Lily")
                     for N in SEQ_LENS]
-    ax.set_ylim(bottom=0.8, top=max(all_proposed) * 1.12)
+    ax.set_ylim(bottom=0.8, top=max(all_proposed) * 1.15)
     ax.set_xlim(105, 1250)
     ax.grid(True, alpha=0.1)
 
 # Shared legend above both panels
 from matplotlib.patches import Patch
 handles = [Patch(facecolor=ARCH_COLORS[a], label=a)
-           for a in ["NL-DPE Proposed", "NL-DPE AL-Matched", "Azure-Lily"]]
-fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=8,
-           bbox_to_anchor=(0.5, 1.02), frameon=False)
+           for a in ["Proposed", "AL-like", "Azure-Lily"]]
+fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=12,
+           bbox_to_anchor=(0.5, 1), frameon=False)
 
 fig.savefig(OUT_PATH)
 print(f"Saved: {OUT_PATH}")

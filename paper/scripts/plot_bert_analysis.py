@@ -17,11 +17,11 @@ sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from style_constants import (apply_style, ARCH_COLORS, ARCH_MARKERS,
+from style_constants import (apply_style_sc, ARCH_COLORS, ARCH_MARKERS,
                               ARCH_LINESTYLES, BASELINE_COLOR, BASELINE_LS,
-                              BASELINE_ALPHA, ANNOT_FONTSIZE, ANNOT_FONTWEIGHT,
+                              BASELINE_ALPHA, ANNOT_FONTSIZE_SC, ANNOT_FONTWEIGHT_SC,
                               BREAKDOWN_COLORS)
-apply_style()
+apply_style_sc()
 
 from imc_core.config import Config
 from imc_core.imc_core import IMCCore
@@ -129,20 +129,20 @@ def run_bert_breakdown(cfile, R, C, fmax, N):
 
 
 def main():
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.8),
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 2.8),
                                     gridspec_kw={'width_ratios': [1, 1.2]})
-    fig.subplots_adjust(wspace=0.12, top=0.92)
+    fig.subplots_adjust(wspace=0.15, top=0.88)
 
     # ── Left: DPE energy contribution vs seq_len ──
     seq_lens = [64, 128, 256, 512, 1024, 2048]
     attn_configs = [
-        ("NL-DPE Proposed", "nl_dpe", 1024, 128),
+        ("Proposed", "nl_dpe", 1024, 128),
         ("Azure-Lily", "azure_lily", 512, 128),
     ]
-    attn_colors = {"NL-DPE Proposed": ARCH_COLORS["NL-DPE Proposed"],
+    attn_colors = {"Proposed": ARCH_COLORS["Proposed"],
                    "Azure-Lily": ARCH_COLORS["Azure-Lily"]}
-    attn_markers = {"NL-DPE Proposed": "o", "Azure-Lily": "D"}
-    attn_styles = {"NL-DPE Proposed": "-", "Azure-Lily": "--"}
+    attn_markers = {"Proposed": "o", "Azure-Lily": "D"}
+    attn_styles = {"Proposed": "-", "Azure-Lily": "--"}
 
     for cname, cfile, R, C in attn_configs:
         dpe_pcts = []
@@ -151,19 +151,17 @@ def main():
             dpe_pcts.append(e_dpe / total_e * 100 if total_e > 0 else 0)
         ax1.plot(seq_lens, dpe_pcts, color=attn_colors[cname], linewidth=2,
                  linestyle=attn_styles[cname], marker=attn_markers[cname],
-                 markersize=6, markeredgecolor="white", markeredgewidth=1,
+                 markersize=4, markeredgecolor="white", markeredgewidth=0.8,
                  label=cname)
 
     ax1.axhline(y=50, color="#888", linewidth=0.8, linestyle=":", alpha=0.5)
     ax1.set_xlabel("Sequence Length (N)")
-    ax1.set_ylabel("DPE Energy Contribution (%)", fontsize=9)
-    ax1.set_title("(a) DPE Utilization (Attention Head)", fontsize=10,
-                   fontweight="bold", pad=8)
+    ax1.set_ylabel("DPE Energy Contribution (%)")
     ax1.set_xscale("log", base=2)
     ax1.set_xticks(seq_lens)
     ax1.set_xticklabels([str(n) for n in seq_lens])
     ax1.set_ylim(0, 100)
-    ax1.legend(fontsize=7, loc="best")
+    ax1.legend(fontsize=8, loc="best")
     ax1.grid(True, alpha=0.1)
 
     # ── Right: Stacked % breakdown — shows DIMM dominance ──
@@ -177,7 +175,7 @@ def main():
     cat_keys = {
         "DIMM\n(QK\u1d40 + S\u00d7V)": ["DIMM\nQK\u1d40", "DIMM\nS\u00d7V"],
         "Proj + FFN": ["Proj\n(Q/K/V/O)", "FFN"],
-        "Other\n(Softmax+LN+Res)": ["Softmax", "Other\n(LN+Res)"],
+        "Other": ["Softmax", "Other\n(LN+Res)"],
     }
     layer_keys = ["Proj\n(Q/K/V/O)", "FFN", "DIMM\nQK\u1d40", "Softmax",
                    "DIMM\nS\u00d7V", "Other\n(LN+Res)"]
@@ -206,7 +204,7 @@ def main():
     categories_merged = list(cat_keys.keys())
     bar_colors = [BREAKDOWN_COLORS["DIMM"], BREAKDOWN_COLORS["Proj_FFN"],
                   BREAKDOWN_COLORS["Other"]]
-    archs = ["Azure-Lily", "NL-DPE\nProposed"]
+    archs = ["Azure-Lily ", "Proposed "]
 
     # Normalize all segments to NL-DPE total = 100
     arch_vals = [
@@ -231,8 +229,8 @@ def main():
                      label=cat if idx == 0 else None, zorder=3)
             own_pct = arch_own_pcts[idx][j]
             if val > 5:
-                ax2.text(left + val / 2, y_pos[idx], f"{own_pct:.0f}%",
-                         ha='center', va='center', fontsize=ANNOT_FONTSIZE,
+                ax2.text(left + val / 2, y_pos[idx], f"         {own_pct:.0f}%",
+                         ha='center', va='center', fontsize=ANNOT_FONTSIZE_SC,
                          fontweight='bold', color='white', zorder=5)
             left += val
 
@@ -240,14 +238,14 @@ def main():
     # Place arch labels inside the bars (left-aligned)
     for idx, arch in enumerate(archs):
         ax2.text(2, y_pos[idx], arch, ha='left', va='center',
-                 fontsize=8, fontweight='bold', color='white', zorder=6)
-    ax2.set_xlabel("Energy (normalized to NL-DPE = 100%)", fontsize=9)
-    ax2.set_title("(b) BERT-Tiny Energy Breakdown (N=128)",
-                   fontsize=10, fontweight="bold", pad=8)
+                 fontsize=9, fontweight='bold', color='white', zorder=6)
+    ax2.set_xlabel("Energy normalized to proposed")
+    # ax2.set_title("(b) BERT-Tiny Energy Breakdown (N=128)",
+                #    fontweight="bold", pad=4)
     ax2.set_xlim(0, 185)
     ax2.set_ylim(-0.5, 1.7)
-    ax2.legend(fontsize=7, loc="upper left", frameon=False, ncol=3,
-               columnspacing=1.0, handletextpad=0.5)
+    ax2.legend(fontsize=8, loc="upper left", frameon=False, ncol=3,
+               columnspacing=0.8, handletextpad=0.4)
     ax2.grid(True, alpha=0.08, axis="x", zorder=0)
 
     fig.savefig(OUT_PATH)

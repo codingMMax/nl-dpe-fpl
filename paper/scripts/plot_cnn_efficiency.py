@@ -11,14 +11,14 @@ import numpy as np
 from matplotlib.patches import Patch
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-from style_constants import apply_style, ARCH_COLORS, ANNOT_FONTSIZE, ANNOT_FONTWEIGHT, FPGA_AREA_MM2
-apply_style()
+from style_constants import apply_style_sc, ARCH_COLORS, ANNOT_FONTSIZE_SC, ANNOT_FONTWEIGHT_SC, FPGA_AREA_MM2
+apply_style_sc()
 
 CSV_PATH = SCRIPT_DIR / "imc_benchmark_results.csv"
 OUT_PATH = SCRIPT_DIR.parent / "figures" / "benchmarks" / "cnn_efficiency.pdf"
 
 MODELS = ["ResNet-9", "VGG-11"]
-ARCHS = ["NL-DPE Proposed", "NL-DPE AL-Matched", "Azure-Lily"]
+ARCHS = ["Proposed", "AL-like", "Azure-Lily"]
 
 
 def main():
@@ -29,8 +29,8 @@ def main():
         m = label.split(" NL-DPE")[0].split(" Azure")[0]
         if m not in MODELS:
             continue
-        a = "NL-DPE Proposed" if "Proposed" in label else (
-            "NL-DPE AL-Matched" if "AL-Matched" in label else "Azure-Lily")
+        a = "Proposed" if "Proposed" in label else (
+            "AL-like" if ("AL-Matched" in label or "AL-like" in label) else "Azure-Lily")
         e, l = float(r['total_energy_pj']), float(r['total_latency_ns'])
         data[(m, a)] = {'tput_mm2': (1e9 / l) / FPGA_AREA_MM2, 'tput_j': 1e12 / e}
 
@@ -46,12 +46,12 @@ def main():
                 sum(math.log(v) for v in vals) / len(vals))
 
     cats = MODELS + ["Geomean"]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
-    fig.subplots_adjust(wspace=0.25)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 2.8))
+    fig.subplots_adjust(wspace=0.30)
 
-    for ax, (metric, title) in zip([ax1, ax2],
-            [('tput_mm2', '(a) Area Efficiency (inf/s/mm\u00b2)'),
-             ('tput_j', '(b) Energy Efficiency (inf/J)')]):
+    for ax, (metric, ylabel) in zip([ax1, ax2],
+            [('tput_mm2', 'Normalized Throughput/mm\u00b2'),
+             ('tput_j', 'Normalized Inference/J')]):
         x = np.arange(len(cats))
         w = 0.25
         max_val = 0
@@ -66,21 +66,20 @@ def main():
                 for j, v in enumerate(vals):
                     ax.text(x[j] + (i - 1) * w, v + max_val * 0.02,
                             f"{v:.1f}\u00d7", ha='center', va='bottom',
-                            fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
+                            fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
                             color=ARCH_COLORS[a], rotation=0)
 
         ax.axhline(y=1.0, color='#94A3B8', linewidth=1, linestyle=':', alpha=0.5, zorder=2)
-        ax.set_ylabel("Normalized (Azure-Lily = 1.0\u00d7)", fontsize=9)
-        ax.set_title(title, fontsize=10, fontweight="bold")
+        ax.set_ylabel(ylabel)
         ax.set_xticks(x)
-        lbls = ax.set_xticklabels(cats, fontsize=9)
+        lbls = ax.set_xticklabels(cats)
         lbls[-1].set_fontweight('bold')
         ax.grid(True, alpha=0.08, axis="y", zorder=0)
         ax.set_ylim(bottom=0, top=max_val * 1.3)
 
     handles = [Patch(facecolor=ARCH_COLORS[a], label=a) for a in ARCHS]
-    fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=8,
-               bbox_to_anchor=(0.5, 1.02), frameon=False)
+    fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=12,
+               bbox_to_anchor=(0.5, 1), frameon=False)
 
     fig.savefig(OUT_PATH)
     print(f"Saved: {OUT_PATH}")

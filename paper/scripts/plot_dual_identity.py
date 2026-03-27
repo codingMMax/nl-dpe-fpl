@@ -57,11 +57,11 @@ for N in seq_lens:
 fig, ax = plt.subplots(figsize=FIG_SINGLE)
 
 ax.plot(seq_lens, ratios_dual, color=DUAL_COLORS["dual"], linewidth=2,
-        marker="o", markersize=6, markeredgecolor="white", markeredgewidth=1,
+        marker="o", markersize=4, markeredgecolor="white", markeredgewidth=0.8,
         label="Dual-identity mapping")
 
 ax.plot(seq_lens, ratios_regular, color=DUAL_COLORS["regular"], linewidth=2,
-        linestyle="--", marker="s", markersize=6, markeredgecolor="white", markeredgewidth=1,
+        linestyle="--", marker="s", markersize=4, markeredgecolor="white", markeredgewidth=0.8,
         label="Regular mapping")
 
 ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
@@ -79,16 +79,16 @@ for i, N in enumerate(seq_lens):
                 fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
                 color=DUAL_COLORS["dual"])
 
-ax.set_xlabel("Sequence Length (N)", fontsize=10)
-ax.set_ylabel("Energy Efficiency\n(normalized, Azure-Lily = 1.0\u00d7)", fontsize=9)
-ax.set_title("Attention Head: Dual-Identity vs Regular Mapping",
-             fontsize=10, fontweight="bold")
+ax.set_xlabel("Sequence Length (N)")
+ax.set_ylabel("Normalized Inference/J")
+# ax.set_title("Attention Head: Dual-Identity vs Regular Mapping",
+#              fontweight="bold")
 ax.set_xscale("log", base=2)
 ax.set_xticks(seq_lens)
 ax.set_xticklabels([str(n) for n in seq_lens])
 ax.set_ylim(bottom=0.9, top=max(ratios_dual) + 0.15)
 ax.set_xlim(50, 2500)
-ax.legend(fontsize=8, loc="upper right")
+ax.legend(fontsize=7, loc="upper right")
 ax.grid(True, alpha=0.1)
 
 out = OUT_DIR / "dual_identity_vs_regular.pdf"
