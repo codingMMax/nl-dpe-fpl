@@ -32,5 +32,29 @@ dse/results/*.png
 # Claude local config
 .claude/
 
+# Benchmark VTR run outputs (large, regenerable)
+benchmarks/test_runs/
+benchmarks/vtr_runs/
+benchmarks/rtl/**/vpr_stdout.log
+benchmarks/rtl/**/*.net.post_routing
+benchmarks/rtl/**/abc*.out
+benchmarks/rtl/**/parmys.out
+benchmarks/rtl/**/vpr.out
+benchmarks/rtl/**/run.log
+benchmarks/rtl/**/*.rpt
+benchmarks/rtl/**/arch.info
+benchmarks/rtl/**/*_occupancy.txt
+benchmarks/rtl/**/synthesis.tcl
+benchmarks/rtl/**/odin_config.xml
+benchmarks/rtl/**/slang_filelist.tcl
+benchmarks/rtl/**/abc.history
+benchmarks/rtl/**/abc.rc
+benchmarks/rtl/**/output.txt
+benchmarks/rtl/**/report_clk*.out
+
+# Generated PDFs (regenerate via plot scripts)
+paper/scripts/*.pdf
+dse/results/plots/**/*.pdf
+
 # Staging for cleanup
 */to_delete/
