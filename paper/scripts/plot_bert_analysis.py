@@ -34,9 +34,12 @@ from models.attention import attention_model
 OUT_PATH = SCRIPT_DIR.parent / "figures" / "benchmarks" / "bert_analysis.pdf"
 
 
-def _make_sim(cfile, R, C, fmax):
+def _make_sim(cfile, R, C, fmax, total_dsp=None, total_clb=None, total_mem=None):
     cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / f"{cfile}.json"))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
+    if total_dsp is not None: cfg.total_dsp = total_dsp
+    if total_clb is not None: cfg.total_clb = total_clb
+    if total_mem is not None: cfg.total_mem = total_mem
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats); fpga = FPGAFabric(cfg, mem, stats, imc_core=imc)
     sched = Scheduler(cfg, stats, imc, fpga)
@@ -80,6 +83,14 @@ def run_bert_total(cfile, R, C, fmax, N):
     return sum(stats.energy_breakdown.values())
 
 
+# VTR ground truth: AVAILABLE resources per arch
+VTR_AVAILABLE = {
+    "nl_dpe_1024x128": {"DSPs": 222, "CLBs": 13806, "BRAMs": 518},
+    "nl_dpe_1024x256": {"DSPs": 222, "CLBs": 16528, "BRAMs": 444},
+    "azure_lily":      {"DSPs": 333, "CLBs": 11262, "BRAMs": 740},
+}
+
+
 def run_bert_breakdown(cfile, R, C, fmax, N):
     """Run BERT-Tiny tracking energy per layer category.
 
@@ -87,6 +98,10 @@ def run_bert_breakdown(cfile, R, C, fmax, N):
     """
     from models.bert_tiny import bert_tiny_model
     md, _ = bert_tiny_model(1, 1, N, 128, False, False)
+
+    # Look up available resources
+    key = f"{cfile}_{R}x{C}" if cfile == "nl_dpe" else cfile
+    avail = VTR_AVAILABLE.get(key, {})
 
     groups = defaultdict(float)
 
@@ -99,7 +114,10 @@ def run_bert_breakdown(cfile, R, C, fmax, N):
         groups[group_name] += (e_after - e_before)
 
     # Single simulator instance — accumulate energy deltas per group
-    _, stats, sched = _make_sim(cfile, R, C, fmax)
+    _, stats, sched = _make_sim(cfile, R, C, fmax,
+                                 total_dsp=avail.get("DSPs"),
+                                 total_clb=avail.get("CLBs"),
+                                 total_mem=avail.get("BRAMs"))
 
     # Embedding + LayerNorm → Other
     run_group(md["embedding"], "Other\n(LN+Res)", sched)
@@ -133,6 +151,12 @@ def main():
                                     gridspec_kw={'width_ratios': [1, 1.2]})
     fig.subplots_adjust(wspace=0.15, top=0.88)
 
+    # Panel labels
+    ax1.text(-0.12, 1.08, '(a)', transform=ax1.transAxes, fontsize=10,
+             fontweight='bold', va='top')
+    ax2.text(-0.10, 1.08, '(b)', transform=ax2.transAxes, fontsize=10,
+             fontweight='bold', va='top')
+
     # ── Left: DPE energy contribution vs seq_len ──
     seq_lens = [64, 128, 256, 512, 1024, 2048]
     attn_configs = [
@@ -165,8 +189,8 @@ def main():
     ax1.grid(True, alpha=0.1)
 
     # ── Right: Stacked % breakdown — shows DIMM dominance ──
-    nl_groups = run_bert_breakdown("nl_dpe", 1024, 128, 141.5, 128)
-    al_groups = run_bert_breakdown("azure_lily", 512, 128, 124.9, 128)
+    nl_groups = run_bert_breakdown("nl_dpe", 1024, 128, 135.7, 128)
+    al_groups = run_bert_breakdown("azure_lily", 512, 128, 45.3, 128)
 
     # Merge into 3 high-level categories for clarity:
     #   DIMM (QK^T + S×V) — the O(N²) bottleneck
@@ -228,23 +252,23 @@ def main():
                      edgecolor="white", linewidth=0.8,
                      label=cat if idx == 0 else None, zorder=3)
             own_pct = arch_own_pcts[idx][j]
-            if val > 5:
-                ax2.text(left + val / 2, y_pos[idx], f"         {own_pct:.0f}%",
+            if val > 8:
+                ax2.text(left + val / 2, y_pos[idx], f"{own_pct:.0f}%",
                          ha='center', va='center', fontsize=ANNOT_FONTSIZE_SC,
                          fontweight='bold', color='white', zorder=5)
             left += val
 
     ax2.set_yticks([])
-    # Place arch labels inside the bars (left-aligned)
+    # Place arch labels on top of each bar
     for idx, arch in enumerate(archs):
-        ax2.text(2, y_pos[idx], arch, ha='left', va='center',
-                 fontsize=9, fontweight='bold', color='white', zorder=6)
+        total_width = sum(arch_vals[idx])
+        ax2.text(total_width / 2, y_pos[idx] + bar_h / 2 + 0.06, arch.strip(),
+                 ha='center', va='bottom', fontsize=8, fontweight='bold',
+                 color='black', zorder=6)
     ax2.set_xlabel("Energy normalized to proposed")
-    # ax2.set_title("(b) BERT-Tiny Energy Breakdown (N=128)",
-                #    fontweight="bold", pad=4)
-    ax2.set_xlim(0, 185)
-    ax2.set_ylim(-0.5, 1.7)
-    ax2.legend(fontsize=8, loc="upper left", frameon=False, ncol=3,
+    ax2.set_xlim(0, 190)
+    ax2.set_ylim(-0.5, 2.2)
+    ax2.legend(fontsize=7, loc="upper left", frameon=False, ncol=3,
                columnspacing=0.8, handletextpad=0.4)
     ax2.grid(True, alpha=0.08, axis="x", zorder=0)
 

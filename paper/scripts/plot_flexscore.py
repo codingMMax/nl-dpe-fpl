@@ -26,9 +26,9 @@ plt.rcParams.update({
 RESULTS_DIR = Path(__file__).resolve().parent
 DATA_DIR = RESULTS_DIR.parent / "data"
 OUTPUT_DIR = RESULTS_DIR.parent / "figures"
-RAW_CSV = RESULTS_DIR / "flexscore_raw_results.csv"
-SUMMARY_CSV = RESULTS_DIR / "flexscore_summary.csv"
-DL_CSV = RESULTS_DIR / "flexscore_dl_gemv_results.csv"
+RAW_CSV = DATA_DIR / "flexscore_raw_results.csv"
+SUMMARY_CSV = DATA_DIR / "flexscore_summary.csv"
+DL_CSV = DATA_DIR / "flexscore_dl_results.csv"
 
 BUDGET_LEVELS = [0, 10, 20, 30, 40, 50]
 BENCHMARKS = ["bgm", "LU8PEEng", "stereovision1", "arm_core"]
@@ -37,22 +37,22 @@ BENCH_COLORS = {"bgm": "#2563EB", "LU8PEEng": "#DC2626",
 BENCH_MARKERS = {"bgm": "o", "LU8PEEng": "s",
                  "stereovision1": "^", "arm_core": "D"}
 
-CONFIGS = ["512x128", "1024x128", "1024x64", "1024x256", "512x256"]
+CONFIGS = ["512x128", "1024x128", "512x64", "512x256", "1024x256"]
 CONFIG_LABELS = {
-    "512x128": "512\u00d7128", "1024x128": "1024\u00d7128", "1024x64": "1024\u00d764",
-    "1024x256": "1024\u00d7256", "512x256": "512\u00d7256",
+    "512x128": "512\u00d7128", "1024x128": "1024\u00d7128", "512x64": "512\u00d764",
+    "512x256": "512\u00d7256", "1024x256": "1024\u00d7256",
 }
+# Per-config FlexScore (tg = config name in CSV)
 CONFIG_TG = {
-    "512x128": "tw3", "1024x128": "tw3", "1024x64": "tw3",
-    "1024x256": "tw7", "512x256": "tw4",
+    "512x128": "512x128", "1024x128": "1024x128", "512x64": "512x64",
+    "512x256": "512x256", "1024x256": "1024x256",
 }
 CONFIG_COLORS = {
-    "512x128": "#2563EB", "1024x128": "#DC2626", "1024x64": "#059669",
-    "1024x256": "#D97706", "512x256": "#7C3AED",
+    "512x128": "#10B981", "1024x128": "#3B82F6", "512x64": "#8B5CF6",
+    "512x256": "#F97316", "1024x256": "#EC4899",
 }
-TG_LABELS = {"tw3": "tw3 (512\u00d7128, 1024\u00d7128, 1024\u00d764)",
-             "tw4": "tw4 (512\u00d7256)", "tw7": "tw7 (1024\u00d7256)"}
-TG_COLORS = {"tw3": "#2563EB", "tw4": "#7C3AED", "tw7": "#D97706"}
+TG_LABELS = {c: CONFIG_LABELS[c] for c in CONFIGS}
+TG_COLORS = {c: CONFIG_COLORS[c] for c in CONFIGS}
 DL_WORKLOADS = ["fc_512_128", "fc_512_512", "fc_2048_256"]
 
 

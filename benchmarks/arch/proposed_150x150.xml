@@ -655,15 +655,15 @@
       </sub_tile>
     </tile>
 	<!-- <tile name="wc" area="270000"> -->
-	<tile name="wc" height="5" width="6" area="2320000">
+	<tile name="wc" height="7" width="3" area="1379212">
       <sub_tile name="wc">
         <equivalent_sites>
           <site pb_type="wc" pin_mapping="direct"/>
         </equivalent_sites>
-		<input name="I" num_pins="23"/>
+		<input name="I" num_pins="47"/>
 		<input name="reset" num_pins="1" is_non_clock_global="true"/>
 		<clock name="clk" num_pins="1"/>
-		<output name="O" num_pins="21"/>
+		<output name="O" num_pins="45"/>
 		<fc in_type="frac" in_val="0.15" out_type="frac" out_val="0.10" />
         <pinlocations pattern="spread"/>
 		<switchblock_locations pattern="all"/>
@@ -725,17 +725,32 @@
     </tile>
   </tiles>
   <!-- ODIN II specific config ends -->
+  <!-- VTR-verified resources (150x150, ResNet-9 test, 2025-03-27):
+       DPEs=294, DSPs=222, BRAMs=518, CLBs=13806
+       DPE tile: 3x7, area=1379212 MWTA, budget=30%
+       Config: Proposed (1024x128) -->
   <layout>
-  <!-- Azure-Lily 150x150: DPEs and DSPs at separate columns.
-       DPE tile: 6x5, area=2320000 MWTA (from Azure-Lily paper)
-       DPEs at startx=6 repeatx=16, DSPs at startx=14 repeatx=16 (non-overlapping) -->
-    <fixed_layout name="azure_lily_150x150" width="150" height="150">
-      <fill type="clb" priority="10"/>
+    <fixed_layout name="nl_dpe_1024x128" width="150" height="150">
       <perimeter type="io" priority="101"/>
       <corners type="EMPTY" priority="102"/>
-      <col type="wc" startx="6" starty="1" repeatx="16" priority="22"/>
-      <col type="dsp_top" startx="14" starty="1" repeatx="16" priority="20"/>
-      <col type="memory" startx="2" starty="1" repeatx="16" priority="20"/>
+      <fill type="clb" priority="10"/>
+      <col type="dsp_top" startx="6" starty="1" repeatx="151" priority="20"/>
+      <col type="dsp_top" startx="22" starty="1" repeatx="151" priority="20"/>
+      <col type="dsp_top" startx="38" starty="1" repeatx="151" priority="20"/>
+      <col type="dsp_top" startx="54" starty="1" repeatx="151" priority="20"/>
+      <col type="dsp_top" startx="70" starty="1" repeatx="151" priority="20"/>
+      <col type="dsp_top" startx="86" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="2" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="18" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="34" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="50" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="66" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="82" starty="1" repeatx="151" priority="20"/>
+      <col type="memory" startx="98" starty="1" repeatx="151" priority="20"/>
+      <col type="wc" startx="102" starty="1" repeatx="151" priority="20"/>
+      <col type="wc" startx="118" starty="1" repeatx="151" priority="20"/>
+      <col type="wc" startx="134" starty="1" repeatx="151" priority="20"/>
+      <col type="wc" startx="6" starty="1" repeatx="9" priority="15"/>
     </fixed_layout>
   </layout>
   <device>
@@ -1183,20 +1198,20 @@
 	
 	<!-- Define pb_type IMC begin -->
 	<pb_type name="wc">
-		<input name="I" num_pins="23"/>
+		<input name="I" num_pins="47"/>
 		<input name="reset" num_pins="1" is_non_clock_global="true"/>
 		<clock name="clk" num_pins="1"/>
-		<output name="O" num_pins="21"/>
-		
+		<output name="O" num_pins="45"/>
+
 		<pb_type name="wc_slice" num_pb="1">
-			<input name="in" num_pins="23"/>
+			<input name="in" num_pins="47"/>
             <input name="reset" num_pins="1"/>
 			<clock name="clk" num_pins="1"/>
-		    <output name="out" num_pins="21"/>
+		    <output name="out" num_pins="45"/>
 			
 			<!-- imc: dpe block -->
 			<pb_type name="nl_dpe" blif_model=".subckt dpe" num_pb="1">
-				<input name="data_in" num_pins="16" port_class="in"/>
+				<input name="data_in" num_pins="40" port_class="in"/>
 				<input name="nl_dpe_control" num_pins="2" port_class="in"/>
 				<input name="shift_add_control" num_pins="1" port_class="in"/>
 				<input name="w_buf_en" num_pins="1" port_class="in"/>
@@ -1205,7 +1220,7 @@
 				<input name="load_input_reg" num_pins="1" port_class="in"/>
 				<input name="reset" num_pins="1" port_class="reset"/>
 				<clock name="clk" num_pins="1"/>
-				<output name="data_out" num_pins="16" port_class="out"/>
+				<output name="data_out" num_pins="40" port_class="out"/>
 				<output name="MSB_SA_Ready" num_pins="1" port_class="out"/>
 				<output name="dpe_done" num_pins="1" port_class="out"/>
 				<output name="reg_full" num_pins="1" port_class="out"/>
@@ -1304,21 +1319,21 @@
 		
 			<!-- imc: dpe block -->
 			<interconnect>
-				<direct name="dpe_in2in_data" input="wc_slice.in[15:0]" output="nl_dpe.data_in"/>
-				<direct name="dpe_in2in_control_mode" input="wc_slice.in[17:16]" output="nl_dpe.nl_dpe_control"/>
-				<direct name="dpe_in2in_control_shift_add" input="wc_slice.in[18]" output="nl_dpe.shift_add_control"/>
-				<direct name="dpe_in2in_control_w_buf" input="wc_slice.in[19]" output="nl_dpe.w_buf_en"/>
-				<direct name="dpe_in2in_control_shift_add_bypass" input="wc_slice.in[20]" output="nl_dpe.shift_add_bypass"/>
-				<direct name="dpe_in2in_control_load_output" input="wc_slice.in[21]" output="nl_dpe.load_output_reg"/>
-				<direct name="dpe_in2in_control_load_input" input="wc_slice.in[22]" output="nl_dpe.load_input_reg"/>
+				<direct name="dpe_in2in_data" input="wc_slice.in[39:0]" output="nl_dpe.data_in"/>
+				<direct name="dpe_in2in_control_mode" input="wc_slice.in[41:40]" output="nl_dpe.nl_dpe_control"/>
+				<direct name="dpe_in2in_control_shift_add" input="wc_slice.in[42]" output="nl_dpe.shift_add_control"/>
+				<direct name="dpe_in2in_control_w_buf" input="wc_slice.in[43]" output="nl_dpe.w_buf_en"/>
+				<direct name="dpe_in2in_control_shift_add_bypass" input="wc_slice.in[44]" output="nl_dpe.shift_add_bypass"/>
+				<direct name="dpe_in2in_control_load_output" input="wc_slice.in[45]" output="nl_dpe.load_output_reg"/>
+				<direct name="dpe_in2in_control_load_input" input="wc_slice.in[46]" output="nl_dpe.load_input_reg"/>
 				<direct name="dpe_reset2reset" input="wc_slice.reset" output="nl_dpe.reset"/>
 				<direct name="dpe_clk2clk" input="wc_slice.clk" output="nl_dpe.clk"/>
-				<direct name="dpe_out2out_data" input="nl_dpe.data_out" output="wc_slice.out[15:0]"/>
-				<direct name="dpe_out2out_ready" input="nl_dpe.MSB_SA_Ready" output="wc_slice.out[16]"/>
-				<direct name="dpe_out2out_done" input="nl_dpe.dpe_done" output="wc_slice.out[17]"/>
-				<direct name="dpe_out2out_reg" input="nl_dpe.reg_full" output="wc_slice.out[18]"/>
-				<direct name="dpe_out2out_shift_add_done" input="nl_dpe.shift_add_done" output="wc_slice.out[19]"/>
-				<direct name="dpe_out2out_shift_add_bypass" input="nl_dpe.shift_add_bypass_ctrl" output="wc_slice.out[20]"/>
+				<direct name="dpe_out2out_data" input="nl_dpe.data_out" output="wc_slice.out[39:0]"/>
+				<direct name="dpe_out2out_ready" input="nl_dpe.MSB_SA_Ready" output="wc_slice.out[40]"/>
+				<direct name="dpe_out2out_done" input="nl_dpe.dpe_done" output="wc_slice.out[41]"/>
+				<direct name="dpe_out2out_reg" input="nl_dpe.reg_full" output="wc_slice.out[42]"/>
+				<direct name="dpe_out2out_shift_add_done" input="nl_dpe.shift_add_done" output="wc_slice.out[43]"/>
+				<direct name="dpe_out2out_shift_add_bypass" input="nl_dpe.shift_add_bypass_ctrl" output="wc_slice.out[44]"/>
 				
 			</interconnect>
 		</pb_type>

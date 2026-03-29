@@ -14,7 +14,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 from style_constants import apply_style_sc, ARCH_COLORS, ANNOT_FONTSIZE_SC, ANNOT_FONTWEIGHT_SC, FPGA_AREA_MM2
 apply_style_sc()
 
-CSV_PATH = SCRIPT_DIR / "imc_benchmark_results.csv"
+DATA_DIR = SCRIPT_DIR.parent / "data"
+CSV_PATH = DATA_DIR / "imc_benchmark_results.csv"
 OUT_PATH = SCRIPT_DIR.parent / "figures" / "benchmarks" / "cnn_efficiency.pdf"
 
 MODELS = ["ResNet-9", "VGG-11"]

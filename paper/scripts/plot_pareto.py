@@ -26,29 +26,31 @@ from style_constants import apply_style, ANNOT_FONTSIZE, ANNOT_FONTWEIGHT
 apply_style()
 
 RESULTS_DIR = Path(__file__).resolve().parent
-DL_CSV = RESULTS_DIR / "flexscore_dl_gemv_results.csv"
-SUMMARY_CSV = RESULTS_DIR / "flexscore_summary.csv"
+DATA_DIR = RESULTS_DIR.parent / "data"
+DL_CSV = DATA_DIR / "flexscore_dl_results.csv"
+SUMMARY_CSV = DATA_DIR / "flexscore_summary.csv"
 
 CONFIG_LABELS = {
-    "512x128": "512\u00d7128", "1024x128": "1024\u00d7128", "1024x64": "1024\u00d764",
-    "1024x256": "1024\u00d7256", "512x256": "512\u00d7256",
+    "512x128": "512\u00d7128", "1024x128": "1024\u00d7128", "512x64": "512\u00d764",
+    "512x256": "512\u00d7256", "1024x256": "1024\u00d7256",
 }
+# Per-config FlexScore (tg = config name in CSV)
 CONFIG_TG = {
-    "512x128": "tw3", "1024x128": "tw3", "1024x64": "tw3",
-    "1024x256": "tw7", "512x256": "tw4",
+    "512x128": "512x128", "1024x128": "1024x128", "512x64": "512x64",
+    "512x256": "512x256", "1024x256": "1024x256",
 }
 CONFIG_COLORS = {
-    "512x128": "#2563EB", "1024x128": "#DC2626", "1024x64": "#059669",
-    "1024x256": "#D97706", "512x256": "#7C3AED",
+    "512x128": "#10B981", "1024x128": "#3B82F6", "512x64": "#8B5CF6",
+    "512x256": "#F97316", "1024x256": "#EC4899",
 }
 CONFIG_MARKERS = {
-    "512x128": "o", "1024x128": "s", "1024x64": "^",
-    "1024x256": "D", "512x256": "v",
+    "512x128": "o", "1024x128": "s", "512x64": "^",
+    "512x256": "D", "1024x256": "v",
 }
 DL_WORKLOADS = ["fc_512_128", "fc_512_512", "fc_2048_256"]
 GROUPS = [
-    ("", ["512x128", "1024x128", "1024x64"]),
-    ("", ["1024x256", "512x256"]),
+    ("Proposed", ["512x128", "1024x128", "512x64"]),
+    ("AL-like", ["512x256", "1024x256"]),
 ]
 
 

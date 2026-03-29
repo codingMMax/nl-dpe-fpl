@@ -1,5 +1,0 @@
-vpr_status=success
-vpr_seconds=50
-rundir=/mnt/vault0/jiajunh5/nl-dpe-fpl
-hostname=en4234856l
-error=

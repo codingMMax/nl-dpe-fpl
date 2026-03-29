@@ -64,9 +64,9 @@ BUDGET_LEVELS = [0, 10, 20, 30, 35, 40, 50]
 CONFIGS = [
     {"name": "512x128",  "R": 512,  "C": 128},
     {"name": "1024x128", "R": 1024, "C": 128},
-    {"name": "1024x64",  "R": 1024, "C": 64},
-    {"name": "1024x256", "R": 1024, "C": 256},
+    {"name": "512x64",   "R": 512,  "C": 64},
     {"name": "512x256",  "R": 512,  "C": 256},
+    {"name": "1024x256", "R": 1024, "C": 256},
 ]
 
 # ── Non-DL Benchmarks ────────────────────────────────────────────────────
@@ -332,21 +332,20 @@ def compute_dl_attention_feasibility(R, C, n_seq, d_head, budget_pct):
 # ── Arch XML Generation ──────────────────────────────────────────────────
 
 def gen_arch_xmls():
-    """Generate 60×60 arch XMLs for all tile groups × budget levels."""
+    """Generate arch XMLs per config × budget level on {GRID_W}×{GRID_H} grid."""
     from gen_arch_xml import gen_arch_xml
 
-    tile_groups = {}
+    # Per-config (no tile-width grouping — each config has unique tile W×H)
+    config_map = {}
     for cfg in list(CONFIGS) + list(ATTN_CONFIGS):
         tw, th = get_tile_dims(cfg["R"], cfg["C"])
-        key = f"tw{tw}"
-        if key not in tile_groups:
-            tile_groups[key] = (cfg["R"], cfg["C"], tw, th)
+        config_map[cfg["name"]] = (cfg["R"], cfg["C"], tw, th)
 
     ARCH_DIR.mkdir(parents=True, exist_ok=True)
     count = 0
-    for tg_name, (R, C, tw, th) in tile_groups.items():
+    for cfg_name, (R, C, tw, th) in config_map.items():
         for budget in BUDGET_LEVELS:
-            out_name = f"nl_dpe_{tg_name}_b{budget}_fixed.xml"
+            out_name = f"nl_dpe_{cfg_name}_b{budget}_{GRID_W}x{GRID_H}.xml"
             out_path = ARCH_DIR / out_name
             if out_path.exists():
                 continue
@@ -358,7 +357,7 @@ def gen_arch_xmls():
                 dsp_ratio=dsp_ratio, clb_ratio=clb_ratio,
                 bram_ratio=bram_ratio,
             )
-            # Rename from default name to tile-group + budget name
+            # Rename from default name to config + budget + grid name
             dsp_pct = int(round(dsp_ratio * 100))
             clb_pct = int(round(clb_ratio * 100))
             bram_pct = int(round(bram_ratio * 100))
@@ -368,11 +367,11 @@ def gen_arch_xmls():
                 src.rename(out_path)
             count += 1
     print(f"Generated {count} arch XMLs in {ARCH_DIR}")
-    return tile_groups
+    return config_map
 
 
-def arch_xml_path(tg_name, budget_pct):
-    return ARCH_DIR / f"nl_dpe_{tg_name}_b{budget_pct}_fixed.xml"
+def arch_xml_path(cfg_name, budget_pct):
+    return ARCH_DIR / f"nl_dpe_{cfg_name}_b{budget_pct}_{GRID_W}x{GRID_H}.xml"
 
 
 # ── VTR Helpers ───────────────────────────────────────────────────────────
@@ -483,25 +482,22 @@ def run_nondl_single(tg_name, R, C, budget, bname, bfile, seeds):
 
 
 def run_nondl_sweep(args, seeds, sanity=False):
-    """Run non-DL FlexScore sweep."""
-    tile_groups = {}
+    """Run non-DL FlexScore sweep (per-config, not tile-group)."""
+    # Each config gets its own arch XML (unique tile W×H)
+    config_map = {}
     for cfg in list(CONFIGS) + list(ATTN_CONFIGS):
-        tw, th = get_tile_dims(cfg["R"], cfg["C"])
-        key = f"tw{tw}"
-        if key not in tile_groups:
-            tile_groups[key] = (cfg["R"], cfg["C"])
+        config_map[cfg["name"]] = (cfg["R"], cfg["C"])
 
     jobs = []
     if sanity:
         for budget, bname in SANITY_POINTS:
-            for tg_name in tile_groups:
-                R, C = tile_groups[tg_name]
-                jobs.append((tg_name, R, C, budget, bname, BENCHMARKS[bname]))
+            for cfg_name, (R, C) in config_map.items():
+                jobs.append((cfg_name, R, C, budget, bname, BENCHMARKS[bname]))
     else:
-        for tg_name, (R, C) in tile_groups.items():
+        for cfg_name, (R, C) in config_map.items():
             for budget in BUDGET_LEVELS:
                 for bname, bfile in BENCHMARKS.items():
-                    jobs.append((tg_name, R, C, budget, bname, bfile))
+                    jobs.append((cfg_name, R, C, budget, bname, bfile))
 
     if args.skip_existing:
         pending, cached = [], []
@@ -560,7 +556,7 @@ def run_dl_single(cfg_name, R, C, budget, wl_name, K, N, P, seeds):
     from gen_gemm_wrapper import gen_gemm_wrapper
 
     tw, th = get_tile_dims(R, C)
-    arch = arch_xml_path(f"tw{tw}", budget)
+    arch = arch_xml_path(cfg_name, budget)
     rtl_dir = OUTPUT_BASE / "rtl"
     rtl_dir.mkdir(parents=True, exist_ok=True)
 
@@ -667,7 +663,7 @@ def run_dl_attention_single(cfg_name, R, C, budget, wl_name, n_seq, d_head, P, s
     from gen_attention_gemm_wrapper import gen_attention_gemm_wrapper
 
     tw, th = get_tile_dims(R, C)
-    arch = arch_xml_path(f"tw{tw}", budget)
+    arch = arch_xml_path(cfg_name, budget)
     rtl_dir = OUTPUT_BASE / "rtl"
     rtl_dir.mkdir(parents=True, exist_ok=True)
 
@@ -915,13 +911,13 @@ def main():
 
     if args.dl_attention:
         print("\n=== DL Attention Sweep ===")
-        # Generate arch XMLs for attention configs (tw3 — all have tile_width=3)
-        # Check if tw3 arch XMLs already exist, generate if needed
-        for budget in BUDGET_LEVELS:
-            arch_path = arch_xml_path("tw3", budget)
-            if not arch_path.exists():
-                print(f"  Missing arch XML: {arch_path} — run --gen-arch first")
-                return
+        # Check arch XMLs exist for all attention configs
+        for cfg in ATTN_CONFIGS:
+            for budget in BUDGET_LEVELS:
+                arch_path = arch_xml_path(cfg["name"], budget)
+                if not arch_path.exists():
+                    print(f"  Missing arch XML: {arch_path} — run --gen-arch first")
+                    return
         dl_attn_results = run_dl_attention_sweep(args, seeds)
         if dl_attn_results:
             write_dl_attention_csv(dl_attn_results)

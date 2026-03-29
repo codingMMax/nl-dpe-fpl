@@ -784,6 +784,16 @@ module conv_controller #(
     reg [KH_BITWIDTH-1:0] m;
     reg [ADDR_WIDTH-1:0] pointer_offset;
 
+    // Shift-add multiply to avoid DSP inference: W * (m + sv)
+    reg [ADDR_WIDTH-1:0] mul_w_result;
+    integer mul_i;
+    always @(*) begin
+        mul_w_result = 0;
+        for (mul_i = 0; mul_i < ADDR_WIDTH; mul_i = mul_i + 1)
+            if (W[mul_i])
+                mul_w_result = mul_w_result + ((m + sv) << mul_i);
+    end
+
     // always block for sram control
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -805,7 +815,7 @@ module conv_controller #(
             end
 
             if (~reg_full && ready_n && memory_flag) begin
-                pointer_offset <= n + W * (m + sv) + s * S;
+                pointer_offset <= n + mul_w_result + s * S;
                 if (n < KERNEL_WIDTH-1) begin
                     n <= n + 1;
                 end else begin
@@ -2388,7 +2398,7 @@ module controller_scalable #(
             end
 
             if (~(&reg_full) && ready_n && memory_flag) begin
-                pointer_offset <= n + W * (m + sv) + s * S;
+                pointer_offset <= n + mul_w_result + s * S;
                 if (n < KERNEL_WIDTH-1) begin
                     n <= n + 1;
                 end else begin

@@ -78,40 +78,34 @@ def dpe_specs(row=256, col=256, freq_ghz=1.0):
     area_um2 = area_mm2 * 1e6
     area_tag_mwta = area_um2 / MWTA_UM2
 
-    # ── VTR tile sizing (routing-aware) ──────────────────────────────────
-    # Formula: DPE_logic + M*N*SB + (M+N)*CB ≈ M*N * CLB_tile
-    # Rearranged: DPE_logic ≈ M*N*(CLB_tile - SB) - (M+N)*CB
-    #           = M*N*1551 - (M+N)*303
-    #
-    # Find minimum M*N (grid cells) with overshoot < 10%.
-    best_tile = None
-    for w in range(1, 15):
-        for h in range(w, 15):  # h >= w avoids duplicates
-            capacity = w * h * (CLB_TILE_UM2 - SB_AREA_UM2) - (w + h) * CB_AREA_UM2
-            if capacity >= area_um2:
-                overshoot = (area_um2 - capacity) / (w * h * CLB_TILE_UM2)
-                # Check total area: DPE + routing vs M*N CLB tiles
-                routing = w * h * SB_AREA_UM2 + (w + h) * CB_AREA_UM2
-                total_tile = area_um2 + routing
-                clb_equiv = w * h * CLB_TILE_UM2
-                tile_overshoot = (total_tile / clb_equiv) - 1.0
-                if tile_overshoot < 0.10:  # accept up to 10% overshoot
-                    if best_tile is None or w * h < best_tile[0] * best_tile[1]:
-                        best_tile = (w, h, routing, total_tile, tile_overshoot)
-                    break  # h is increasing, first valid h is optimal for this w
+    # ── VTR tile sizing ─────────────────────────────────────────────────
+    # Hardcoded tiles for the 3 evaluation configs (from DSE + Azure-Lily paper).
+    # All other configs: proportional scaling (area_MWTA / CLB_TILE_MWTA).
+    FIXED_TILES = {
+        (1024, 128): (3, 7),   # Proposed — from proportional scaling, DSE-validated
+        (1024, 256): (5, 8),   # AL-like — from proportional scaling, DSE-validated
+        (512,  128): (6, 5),   # Azure-Lily — from their published arch XML
+    }
 
-    if best_tile is None:
-        # Fallback: use rough estimate
-        cells_needed = math.ceil(area_um2 / (CLB_TILE_UM2 - SB_AREA_UM2))
-        side = math.ceil(math.sqrt(cells_needed))
-        routing = side * side * SB_AREA_UM2 + 2 * side * CB_AREA_UM2
-        total_tile = area_um2 + routing
-        best_tile = (side, side, routing, total_tile, 0.0)
-
-    tile_w, tile_h = best_tile[0], best_tile[1]
-    routing_um2 = best_tile[2]
-    tile_total_um2 = best_tile[3]
-    tile_overshoot = best_tile[4]
+    if (row, col) in FIXED_TILES:
+        tile_w, tile_h = FIXED_TILES[(row, col)]
+    else:
+        CLB_TILE_MWTA = CLB_TILE_UM2 / MWTA_UM2  # ~66117
+        target_cells = max(1, round(area_tag_mwta / CLB_TILE_MWTA))
+        best_tile = None
+        for w in range(1, target_cells + 1):
+            h = math.ceil(target_cells / w)
+            wh = w * h
+            diff = abs(w - h)
+            if best_tile is None or wh < best_tile[2] or \
+               (wh == best_tile[2] and diff < best_tile[3]):
+                best_tile = (w, h, wh, diff)
+        tile_w, tile_h = best_tile[0], best_tile[1]
+    # Compute routing area (informational only — not used for tile sizing)
+    routing_um2 = tile_w * tile_h * SB_AREA_UM2 + (tile_w + tile_h) * CB_AREA_UM2
+    tile_total_um2 = area_um2 + routing_um2
+    clb_equiv = tile_w * tile_h * CLB_TILE_UM2
+    tile_overshoot = (tile_total_um2 / clb_equiv) - 1.0 if clb_equiv > 0 else 0.0
 
     # ── Power components (mW) ────────────────────────────────────────────
     crossbar_power = 1.31 * (row / 256) * (col / 256)
@@ -172,33 +166,60 @@ def dpe_specs(row=256, col=256, freq_ghz=1.0):
 
 # ── CLI: print specs for all DSE configs when run directly ───────────────
 if __name__ == "__main__":
-    configs = [(r, c) for r in [128, 256, 512] for c in [64, 128, 256]]
+    import csv as _csv
+    from pathlib import Path as _Path
 
-    print("NL-DPE Area, Power, and VTR Tile Sizing")
-    print("=" * 95)
-    print(f"{'Config':>10} {'logic_um2':>10} {'tile WxH':>8} {'cells':>5} "
-          f"{'route_um2':>10} {'total_um2':>10} {'over%':>6} "
-          f"{'area_MWTA':>10} {'power_mW':>9}")
-    print("-" * 95)
+    configs = [(r, c) for r in [128, 256, 512, 1024] for c in [64, 128, 256]]
 
+    # Azure-Lily reference for area ratio
+    AL_REF_CELLS = 30  # 6×5 tile
+
+    print("NL-DPE Area, Power, and VTR Tile Sizing (proportional to Azure-Lily)")
+    print("=" * 105)
+    print(f"{'Config':>10} {'logic_um2':>10} {'MWTA':>10} {'tile WxH':>8} {'cells':>5} "
+          f"{'tile_um2':>10} {'AL_ratio':>8} {'power_mW':>9}")
+    print("-" * 105)
+
+    csv_rows = []
     for r, c in configs:
         s = dpe_specs(r, c)
-        print(f"{r}x{c:>3}: {s['area_um2']:>10.0f} "
+        tile_area_um2 = s['tile_cells'] * CLB_TILE_UM2
+        al_ratio = s['tile_cells'] / AL_REF_CELLS
+        print(f"{r}x{c:>3}: {s['area_um2']:>10.0f} {s['area_tag_mwta']:>10.0f} "
               f"{s['tile_width']}x{s['tile_height']:>2}   {s['tile_cells']:>5} "
-              f"{s['routing_um2']:>10.0f} {s['tile_total_um2']:>10.0f} "
-              f"{s['tile_overshoot']*100:>5.1f}% "
-              f"{s['area_tag_mwta']:>10.0f} {s['power_total_mw']:>9.2f}")
+              f"{tile_area_um2:>10.0f} {al_ratio:>7.2f}x "
+              f"{s['power_total_mw']:>9.2f}")
+        csv_rows.append({
+            'config': f"{r}x{c}",
+            'rows': r, 'cols': c,
+            'logic_area_mwta': int(s['area_tag_mwta']),
+            'logic_area_um2': int(s['area_um2']),
+            'tile_w': s['tile_width'],
+            'tile_h': s['tile_height'],
+            'tile_cells': s['tile_cells'],
+            'tile_area_um2': int(tile_area_um2),
+            'al_area_ratio': round(al_ratio, 3),
+            'power_mw': round(s['power_total_mw'], 2),
+        })
 
     print()
-    print("VTR Routing Constants:")
-    print(f"  SB = {SB_AREA_UM2} um^2, CB = {CB_AREA_UM2} um^2")
-    print(f"  CLB_logic = {CLB_LOGIC_UM2} um^2, CLB_tile = {CLB_TILE_UM2} um^2")
-    print(f"  1 MWTA = {MWTA_UM2} um^2")
+    print(f"Azure-Lily reference: 512x128, tile 6x5={AL_REF_CELLS} cells, "
+          f"area=2,320,000 MWTA")
+    print(f"CLB_TILE = {CLB_TILE_UM2} um^2 = {CLB_TILE_UM2/MWTA_UM2:.0f} MWTA")
     print()
+
+    # Save CSV reference table
+    csv_path = _Path(__file__).resolve().parent.parent / "dse" / "results" / "config_tile_reference.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(csv_path, 'w', newline='') as f:
+        writer = _csv.DictWriter(f, fieldnames=csv_rows[0].keys())
+        writer.writeheader()
+        writer.writerows(csv_rows)
+    print(f"Saved: {csv_path}")
 
     # Print energy params for baseline 256x256
     s256 = dpe_specs(256, 256)
-    print("Energy params (256x256 baseline, freq=1GHz):")
+    print(f"\nEnergy params (256x256 baseline, freq=1GHz):")
     print(f"  e_analogue_pj = {s256['e_analogue_pj']:.6f}")
     print(f"  e_digital_pj  = {s256['e_digital_pj']:.9f}")
     print(f"  e_conv_pj     = {s256['e_conv_pj']}")

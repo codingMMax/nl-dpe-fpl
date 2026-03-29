@@ -67,26 +67,34 @@ ax.plot(seq_lens, ratios_regular, color=DUAL_COLORS["regular"], linewidth=2,
 ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
            alpha=BASELINE_ALPHA)
 
-ax.fill_between(seq_lens, ratios_regular, ratios_dual, alpha=0.08,
+ax.fill_between(seq_lens, ratios_regular, ratios_dual, alpha=0.12,
                 color=DUAL_COLORS["dual"])
 
-# Annotate above data points (consistent with other figures)
+# Annotate first and last points only to reduce clutter
 for i, N in enumerate(seq_lens):
-    y = ratios_dual[i]
-    ax.annotate(f"{y:.2f}\u00d7", xy=(N, y),
-                xytext=(0, 8), textcoords='offset points',
-                ha='center', va='bottom',
-                fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
-                color=DUAL_COLORS["dual"])
+    if i == 0 or i == len(seq_lens) - 1:
+        y = ratios_dual[i]
+        ax.annotate(f"{y:.2f}\u00d7", xy=(N, y),
+                    xytext=(0, 8), textcoords='offset points',
+                    ha='center', va='bottom',
+                    fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
+                    color=DUAL_COLORS["dual"])
+        y_r = ratios_regular[i]
+        # First point: regular below; last point: regular above to avoid axis clip
+        r_yoff = -12 if i == 0 else 8
+        r_va = 'top' if i == 0 else 'bottom'
+        ax.annotate(f"{y_r:.2f}\u00d7", xy=(N, y_r),
+                    xytext=(0, r_yoff), textcoords='offset points',
+                    ha='center', va=r_va,
+                    fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
+                    color=DUAL_COLORS["regular"])
 
 ax.set_xlabel("Sequence Length (N)")
-ax.set_ylabel("Normalized Inference/J")
-# ax.set_title("Attention Head: Dual-Identity vs Regular Mapping",
-#              fontweight="bold")
+ax.set_ylabel("Energy Efficiency\n(norm. to Azure-Lily = 1.0\u00d7)")
 ax.set_xscale("log", base=2)
 ax.set_xticks(seq_lens)
 ax.set_xticklabels([str(n) for n in seq_lens])
-ax.set_ylim(bottom=0.9, top=max(ratios_dual) + 0.15)
+ax.set_ylim(bottom=0.9, top=max(ratios_dual) + 0.2)
 ax.set_xlim(50, 2500)
 ax.legend(fontsize=7, loc="upper right")
 ax.grid(True, alpha=0.1)

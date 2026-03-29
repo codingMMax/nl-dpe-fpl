@@ -726,15 +726,14 @@
   </tiles>
   <!-- ODIN II specific config ends -->
   <layout>
-  <!-- Azure-Lily 150x150: DPEs and DSPs at separate columns.
-       DPE tile: 6x5, area=2320000 MWTA (from Azure-Lily paper)
-       DPEs at startx=6 repeatx=16, DSPs at startx=14 repeatx=16 (non-overlapping) -->
-    <fixed_layout name="azure_lily_150x150" width="150" height="150">
+  <!-- VTR-verified resources (150x150, arm_core test, 2025-03-27):
+       DPEs=0, DSPs=333, BRAMs=740, CLBs=19092
+       Config: Baseline FPGA (no DPE hard blocks, pure CLB + DSP + BRAM) -->
+    <fixed_layout name="baseline_150x150" width="150" height="150">
       <fill type="clb" priority="10"/>
       <perimeter type="io" priority="101"/>
       <corners type="EMPTY" priority="102"/>
-      <col type="wc" startx="6" starty="1" repeatx="16" priority="22"/>
-      <col type="dsp_top" startx="14" starty="1" repeatx="16" priority="20"/>
+      <col type="dsp_top" startx="6" starty="1" repeatx="16" priority="20"/>
       <col type="memory" startx="2" starty="1" repeatx="16" priority="20"/>
     </fixed_layout>
   </layout>

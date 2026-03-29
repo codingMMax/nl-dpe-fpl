@@ -21,7 +21,7 @@ from pathlib import Path
 RESULTS_DIR = Path(__file__).resolve().parent
 DATA_DIR = RESULTS_DIR.parent / "data"
 OUTPUT_DIR = RESULTS_DIR.parent / "figures"
-CSV_PATH = RESULTS_DIR / "round1_results.csv"
+CSV_PATH = DATA_DIR / "round1_results.csv"
 
 import sys
 # paper/scripts/ -> paper/ -> nl-dpe-fpl/ -> nl_dpe/
@@ -108,13 +108,13 @@ def plot_ranking(ranked, top_k=5):
     n = len(configs_ranked)
     top_configs = configs_ranked[:top_k]
 
-    top3 = configs_ranked[:3]
+    top5 = configs_ranked[:5]
 
     fig, ax = plt.subplots(figsize=(3.5, 2.8))
     y_pos = np.arange(n)
 
     # Reversed so #1 at top
-    colors = [COLOR_TOP if configs_ranked[n - 1 - i] in top3
+    colors = [COLOR_TOP if configs_ranked[n - 1 - i] in top5
               else COLOR_EDAP for i in range(n)]
     bars = ax.barh(y_pos, gm_vals[::-1], 0.55, color=colors, alpha=0.85)
 
@@ -136,12 +136,9 @@ def plot_ranking(ranked, top_k=5):
     for i in range(n):
         cfg = configs_ranked[n - 1 - i]
         rank = n - i
-        is_top3 = cfg in top3
-        weight = "bold" if is_top3 else "normal"
-        marker = "  *" if is_top3 else ""
-        if cfg in ("1024x256", "512x256"):
-            marker = " *"
-            weight = "bold"
+        is_top5 = cfg in top5
+        weight = "bold" if is_top5 else "normal"
+        marker = " *" if is_top5 else ""
         label = f"#{rank}  {cfg}{marker}"
         ax.text(-0.02, i, label, ha="right", va="center", fontsize=7,
                 fontweight=weight, transform=ax.get_yaxis_transform())

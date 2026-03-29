@@ -485,7 +485,7 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"                    end")
     lines.append(f"                end")
     lines.append(f"                SM_NORMALIZE: begin")
-    lines.append(f"                    // CLB multiply: exp_val × inv_sum (normalization, not Taylor)")
+    lines.append(f"                    // CLB multiply: exp_val × inv_sum")
     lines.append(f"                    exp_read_addr <= sm_count;")
     lines.append(f"                    norm_product <= exp_sram_out * inv_sum;")
     lines.append(f"                    norm_val <= norm_product[2*DATA_WIDTH-1:DATA_WIDTH];")
