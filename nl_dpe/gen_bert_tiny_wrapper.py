@@ -833,6 +833,26 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
         dpe_xor = " ^ ".join(f"_extra_dpe_out_{i}[0]" for i in range(extra_dpes_al))
         dsp_xor = " ^ ".join(f"_extra_dsp_reg_{i}[0]" for i in range(extra_dsps_al))
         parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {dpe_xor} ^ {dsp_xor}}};")
+    elif is_baseline:
+        # Baseline: stress all 333 DSPs (time-shared GEMM compute)
+        # The 20 dsp_mac instances get merged by parmys to ~1 DSP.
+        # Add extra DSP primitives with unique XOR to reach target.
+        target_dsps_bl = 333
+        parmys_base_dsp_bl = 0  # parmys merges all dsp_mac instances
+        extra_dsps_bl = target_dsps_bl - parmys_base_dsp_bl
+
+        parts.append(f"")
+        parts.append(f"    // ═══ Extra DSP MACs for full baseline utilization ═══")
+        parts.append(f"    // {extra_dsps_bl} extra DSP MACs to reach {target_dsps_bl} total")
+
+        for i in range(extra_dsps_bl):
+            parts.append(f"    wire [{DATA_WIDTH}-1:0] _extra_dsp_out_{i};")
+            parts.append(f"    reg [{DATA_WIDTH}-1:0] _extra_dsp_reg_{i};")
+            parts.append(f"    assign _extra_dsp_out_{i} = $signed(data_in ^ {DATA_WIDTH}'d{i + 1}) * $signed(data_in ^ {DATA_WIDTH}'d{i + 2});")
+            parts.append(f"    always @(posedge clk) _extra_dsp_reg_{i} <= _extra_dsp_out_{i};")
+
+        dsp_xor = " ^ ".join(f"_extra_dsp_reg_{i}[0]" for i in range(extra_dsps_bl))
+        parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {dsp_xor}}};")
     else:
         parts.append(f"    assign data_out = {prev_data};")
 

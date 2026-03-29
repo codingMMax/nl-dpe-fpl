@@ -28,10 +28,10 @@
 | | Baseline | Proposed | AL-like | Azure-Lily |
 |---|---|---|---|---|
 | DPEs used | 0 | **274** (93%) | **78** (87%) | **252** (97%) |
-| DSPs used | 0 | 4 (2%) | 4 (2%) | **333** (100%) |
+| DSPs used | **333** (100%) | 4 (2%) | 4 (2%) | **333** (100%) |
 | BRAMs used | 0 | 172 (33%) | 172 (39%) | 16 (2%) |
-| CLBs used | 100 | 453 (3%) | 441 (3%) | 193 (2%) |
-| Fmax (MHz) | 368.1 | **133.4** | **139.7** | **127.5** |
+| CLBs used | 122 | 453 (3%) | 441 (3%) | 193 (2%) |
+| Fmax (MHz) | **359.6** | **133.4** | **139.7** | **127.5** |
 
 ### Memory Bandwidth
 - NL-DPE (Proposed/AL-like): **40-bit** BRAM width, each DPE has dedicated BRAM
@@ -214,7 +214,7 @@
 | total_dsp (available) | 333 | 222 | 222 | 333 |
 | total_clb (available) | 19,092 | 13,806 | 16,528 | 11,262 |
 | total_mem (available) | 740 | 518 | 444 | 740 |
-| freq (VTR Fmax, MHz) | 368.1 | 133.4 | 139.7 | 127.5 |
+| freq (VTR Fmax, MHz) | 359.6 | 133.4 | 139.7 | 127.5 |
 | Linear layers route to | gemm_dsp | DPE VMM | DPE VMM | DPE VMM |
 | DIMM layers route to | gemm_dsp | gemm_log (K-identity) | gemm_log (K-identity) | gemm_dsp (333 DSPs) |
 | Softmax | CLB+DSP | DPE+CLB (fusion) | DPE+CLB (fusion) | CLB+DSP |
