@@ -48,9 +48,17 @@ ARCHS = {
 
 DISPLAY = {"proposed": "Proposed", "al_like": "AL-like"}
 
-D_HEADS = [64, 96, 128]
-LINE_STYLES = {64: "-", 96: "--", 128: ":"}
-MARKERS = {64: "o", 96: "s", 128: "D"}
+D_HEADS = [64, 128]
+LINE_STYLES = {64: "-", 128: "--"}
+MARKERS = {64: "o", 128: "D"}
+MARKER_SIZES = {64: 4, 128: 5}
+LINE_WIDTHS = {64: 2, 128: 1.5}
+
+# Colors: violet (Proposed), pink (AL-like) — matches dual_identity style
+PLOT_COLORS = {
+    "proposed": "#8B5CF6",   # vivid violet
+    "al_like":  "#EC4899",   # hot pink
+}
 
 
 def _functional_dpes(rows, cols):
@@ -120,7 +128,7 @@ for d in D_HEADS:
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=FIG_DUAL)
 fig.subplots_adjust(wspace=0.32, top=0.85, bottom=0.18)
 
-TICK_LENS = [512, 2048, 4096, 6144, 8192]
+TICK_LENS = [1024, 2048, 4096, 6144, 8192]
 
 for ax, get_ratio, ylabel, panel_label in [
     (ax1,
@@ -135,16 +143,16 @@ for ax, get_ratio, ylabel, panel_label in [
     for arch in ["proposed", "al_like"]:
         cname = DISPLAY[arch]
         C = ARCHS[arch][2]
-        base_color = ARCH_COLORS[cname]
 
         for d in D_HEADS:
             K_id = C // d
             ys = [get_ratio(N, arch, d) for N in SEQ_LENS]
+            color = PLOT_COLORS[arch]
 
-            ax.plot(SEQ_LENS, ys, color=base_color, linewidth=1.5,
+            ax.plot(SEQ_LENS, ys, color=color, linewidth=LINE_WIDTHS[d],
                     linestyle=LINE_STYLES[d],
-                    marker=MARKERS[d], markersize=3.5,
-                    markeredgecolor="white", markeredgewidth=0.5,
+                    marker=MARKERS[d], markersize=MARKER_SIZES[d],
+                    markeredgecolor="white", markeredgewidth=0.8,
                     label=f"{cname} d={d} (K$_{{id}}$={K_id})")
 
     ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
