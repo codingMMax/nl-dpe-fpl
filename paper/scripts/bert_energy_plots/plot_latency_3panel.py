@@ -130,12 +130,9 @@ ax2.grid(True, alpha=0.1)
 ax3.plot(SEQ_LENS, latency_ratio, color='#2E86AB', linewidth=2,
          marker='o', markersize=4, markeredgecolor='white', markeredgewidth=0.8,
          label='Overall (AL/K=2)', zorder=4)
-ax3.plot(SEQ_LENS, dimm_lat_ratio, color='#E05263', linewidth=2, linestyle='--',
-         marker='s', markersize=3, markeredgecolor='white', markeredgewidth=0.8,
-         label='DIMM only (AL/K=2)', zorder=4)
 
-# Single asymptotic line (overall and DIMM converge close together)
-asymp = (latency_ratio[-1] + dimm_lat_ratio[-1]) / 2
+# Asymptotic line
+asymp = latency_ratio[-1]
 ax3.axhline(y=asymp, color='#666', linewidth=1, linestyle=':', alpha=0.7, zorder=2)
 ax3.annotate(f'{asymp:.1f}\u00d7', xy=(SEQ_LENS[-1], asymp),
              xytext=(-4, 5), textcoords='offset points', ha='right', va='bottom',
@@ -148,9 +145,8 @@ ax3.set_xticklabels([str(n) for n in TICK_LENS], fontsize=7)
 ax3.set_xlim(SEQ_LENS[0] * 0.85, SEQ_LENS[-1] * 1.1)
 ax3.set_xlabel('Sequence Length (N)')
 ax3.set_ylabel('Latency Ratio (AL / Proposed)')
-all_ratios = latency_ratio + dimm_lat_ratio
-ax3.set_ylim(min(all_ratios) * 0.7, max(all_ratios) * 1.15)
-ax3.legend(fontsize=5.5, loc='upper right', frameon=True)
+ax3.set_ylim(min(latency_ratio) * 0.85, max(latency_ratio) * 1.15)
+ax3.legend(fontsize=5.5, loc='lower right', frameon=True)
 ax3.grid(True, alpha=0.1)
 
 fig.savefig(OUT_PATH)
