@@ -143,7 +143,7 @@ for arch in ["baseline", "proposed", "al_like", "azurelily"]:
 print()
 
 # Collect data for all seq_lens
-SEQ_LENS = [256, 512, 1024, 1536, 2048, 3072, 4096, 5120, 6144, 8192]
+SEQ_LENS = [1024, 2048, 4096, 6144, 8192]
 PLOT_ARCHS = ["proposed", "al_like", "azurelily"]
 
 data = {}
@@ -216,44 +216,33 @@ for ax, metric_fn, ylabel in [
                 marker=ARCH_MARKERS[cname], markersize=4,
                 markeredgecolor="white", markeredgewidth=0.8, label=cname)
 
-        # Store ys for cross-arch annotation placement
+        # Store final values for asymptotic lines
         if arch == "proposed":
             _proposed_ys = ys
         elif arch == "al_like":
             _al_like_ys = ys
 
-    # Annotate after both lines are plotted, choosing positions with maximum gap
-    for arch, ys_ref in [("proposed", _proposed_ys), ("al_like", _al_like_ys)]:
-        cname = DISPLAY_NAMES[arch]
-        if arch == "proposed":
-            # Last point, below marker (lines diverge at high N)
-            r = ys_ref[-1]
-            ax.annotate(f"{r:.2f}\u00d7", xy=(SEQ_LENS[-1], r),
-                        xytext=(-6, -8), textcoords='offset points',
-                        ha='right', va='top',
-                        fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
-                        color=ARCH_COLORS[cname])
-        elif arch == "al_like":
-            # Pick the point with largest gap from proposed line
-            gaps = [abs(a - p) for a, p in zip(_al_like_ys, _proposed_ys)]
-            best_i = max(range(len(gaps)), key=lambda i: gaps[i])
-            r = ys_ref[best_i]
-            # Place above if AL-like > Proposed, below otherwise
-            above = (r > _proposed_ys[best_i])
-            dy = 7 if above else -7
-            va = 'bottom' if above else 'top'
-            ax.annotate(f"{r:.1f}\u00d7", xy=(SEQ_LENS[best_i], r),
-                        xytext=(0, dy), textcoords='offset points',
-                        ha='center', va=va,
-                        fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
-                        color=ARCH_COLORS[cname])
-
-    # Asymptotic lines for Proposed and AL-like (use last point as estimate)
-    for arch in ["proposed", "al_like"]:
-        cname = DISPLAY_NAMES[arch]
-        last_val = metric_fn(SEQ_LENS[-1], arch) / metric_fn(SEQ_LENS[-1], "azurelily")
-        ax.axhline(y=last_val, color=ARCH_COLORS[cname], linewidth=0.8,
-                    linestyle=':', alpha=0.5, zorder=2)
+    # Asymptotic lines at convergence values
+    mid_x = SEQ_LENS[len(SEQ_LENS) // 2]
+    if ax == ax1:
+        # Left panel: 2 asymptotic lines (Proposed + AL-like)
+        for arch, ys_ref in [("proposed", _proposed_ys), ("al_like", _al_like_ys)]:
+            cname = DISPLAY_NAMES[arch]
+            asymp = ys_ref[-1]
+            ax.axhline(y=asymp, color="black", linewidth=0.8,
+                       linestyle=":", alpha=0.4)
+            dy = 0.08 if arch == "proposed" else -0.08
+            ax.text(mid_x, asymp + dy, f"{asymp:.2f}\u00d7",
+                    ha="center", va="bottom" if arch == "proposed" else "top",
+                    fontsize=10, color="black", fontstyle="italic")
+    else:
+        # Right panel: 1 asymptotic line (Proposed only)
+        asymp = _proposed_ys[-1]
+        ax.axhline(y=asymp, color="black", linewidth=0.8,
+                   linestyle=":", alpha=0.4)
+        ax.text(mid_x, asymp - 0.08, f"{asymp:.2f}\u00d7",
+                ha="center", va="top",
+                fontsize=10, color="black", fontstyle="italic")
 
     ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
                alpha=BASELINE_ALPHA)
@@ -261,7 +250,7 @@ for ax, metric_fn, ylabel in [
     ax.set_ylabel(ylabel)
     TICK_LENS = [512, 2048, 4096, 6144, 8192]
     ax.set_xticks(TICK_LENS)
-    ax.set_xticklabels([str(n) for n in TICK_LENS], fontsize=7)
+    ax.set_xticklabels([str(n) for n in TICK_LENS], fontsize=9)
     all_vals = []
     for arch in PLOT_ARCHS:
         for N in SEQ_LENS:
@@ -276,7 +265,7 @@ from matplotlib.patches import Patch
 handles = [Patch(facecolor=ARCH_COLORS[DISPLAY_NAMES[a]], label=DISPLAY_NAMES[a])
            for a in PLOT_ARCHS]
 fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=12,
-           bbox_to_anchor=(0.5, 1), frameon=False)
+           bbox_to_anchor=(0.5, 1.01), frameon=False)
 
 fig.savefig(OUT_PATH)
 print(f"\nSaved: {OUT_PATH}")

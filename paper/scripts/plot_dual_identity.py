@@ -29,7 +29,7 @@ C = 128; d_head = 64
 ep_nl = k_vmm * e_analoge + e_digital * C   # 53.1 pJ per NL-DPE pass
 ep_al = k_vmm * 2.33 * C                     # 2385.9 pJ per Azure-Lily pass
 
-seq_lens = [256, 512, 1024, 1536, 2048]
+seq_lens = [1024, 2048, 4096, 6144, 8192]
 
 ratios_dual = []
 ratios_regular = []

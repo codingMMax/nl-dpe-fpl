@@ -38,7 +38,7 @@ from models.attention import attention_model
 from models.bert_tiny import bert_tiny_model
 
 d_head = 64
-seq_lens = [256, 512, 1024, 1536, 2048]
+seq_lens = [1024, 2048, 4096, 6144, 8192]
 
 # VTR ground truth resources
 VTR_AVAILABLE = {
@@ -140,7 +140,7 @@ for label, cfg_file, R, C, fmax, avail_key in BERT_CONFIGS:
         bert_data[(N, label)] = run_bert_breakdown(cfg_file, R, C, fmax, N, avail_key)
 
 dimm_data = {}
-dimm_seq_lens = [256, 512, 1024, 1536, 2048]
+dimm_seq_lens = [1024, 2048, 4096, 6144, 8192]
 for label, cfg_file, R, C, avail_key in DIMM_CONFIGS:
     for N in dimm_seq_lens:
         dimm_data[(N, label)] = run_dimm_total(cfg_file, R, C, N, avail_key)

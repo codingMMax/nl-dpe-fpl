@@ -37,7 +37,7 @@ with open(CSV_PATH) as f:
         key = (row["arch"], int(row["seq_len"]))
         data[key] = {k: float(v) for k, v in row.items() if k not in ("arch", "seq_len")}
 
-SEQ_LENS = [512, 2048, 4096, 6144, 8192]
+SEQ_LENS = [1024, 2048, 4096, 6144, 8192]
 n_groups = len(SEQ_LENS)
 x = np.arange(n_groups)
 

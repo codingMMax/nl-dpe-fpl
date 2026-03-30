@@ -173,7 +173,7 @@ def main():
              fontweight='bold', va='top')
 
     # ── Left: DPE energy contribution vs seq_len ──
-    seq_lens = [256, 512, 1024, 1536, 2048]
+    seq_lens = [1024, 2048, 4096, 6144, 8192]
     attn_configs = [
         ("Proposed", "nl_dpe", 1024, 128),
         ("Azure-Lily", "azure_lily", 512, 128),

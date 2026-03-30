@@ -50,7 +50,7 @@ CONFIGS = [
     ("Azure-Lily", "azure_lily.json",  512, 128,  45.3, "azurelily"),
 ]
 
-SEQ_LENS = [256, 512, 1024, 1536, 2048, 3072, 4096, 5120, 6144, 8192]
+SEQ_LENS = [1024, 2048, 4096, 6144, 8192]
 
 
 def run_breakdown(cfg_file, R, C, fmax, N, avail_key):
