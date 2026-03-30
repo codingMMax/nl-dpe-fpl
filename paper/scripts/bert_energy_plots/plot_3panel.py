@@ -37,7 +37,7 @@ with open(CSV_PATH) as f:
         key = (row["arch"], int(row["seq_len"]))
         data[key] = {k: float(v) for k, v in row.items() if k not in ("arch", "seq_len")}
 
-SEQ_LENS = [256, 512, 1024, 1536, 2048]
+SEQ_LENS = [512, 2048, 4096, 6144, 8192]
 n_groups = len(SEQ_LENS)
 x = np.arange(n_groups)
 
@@ -93,7 +93,7 @@ for ai, arch in enumerate(["Proposed", "Azure-Lily"]):
             ax1.bar(x[i] + offset, val, bar_w, bottom=bottom,
                     color=cat_colors[ci], edgecolor='white', linewidth=0.5,
                     hatch=hatch, zorder=3)
-            if val > 10:
+            if val > 10 and i == 0:
                 ax1.text(x[i] + offset, bottom + val / 2, f'{val:.0f}%',
                          ha='center', va='center', fontsize=4.5,
                          fontweight='bold', color='black', zorder=5)
@@ -172,18 +172,12 @@ ax3.plot(x, dimm_ratio, color='#E05263', linewidth=2, linestyle='--',
          marker='s', markersize=4, markeredgecolor='white', markeredgewidth=0.8,
          label='DIMM only (AL/K=2)', zorder=4)
 
-# Annotate all points
-for i, (er, dr) in enumerate(zip(energy_ratio, dimm_ratio)):
-    ax3.annotate(f'{er:.2f}\u00d7', xy=(x[i], er), xytext=(0, 8),
-                 textcoords='offset points', ha='center', va='bottom',
-                 fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
-                 color='#2E86AB')
-    y_off = -10 if i > 0 else 8
-    va = 'top' if y_off < 0 else 'bottom'
-    ax3.annotate(f'{dr:.2f}\u00d7', xy=(x[i], dr), xytext=(0, y_off),
-                 textcoords='offset points', ha='center', va=va,
-                 fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT,
-                 color='#E05263')
+# Single asymptotic line (overall and DIMM converge to nearly the same value)
+asymp = (energy_ratio[-1] + dimm_ratio[-1]) / 2
+ax3.axhline(y=asymp, color='#666', linewidth=1, linestyle=':', alpha=0.7, zorder=2)
+ax3.annotate(f'{asymp:.2f}\u00d7', xy=(x[-1], asymp),
+             xytext=(-4, 5), textcoords='offset points', ha='right', va='bottom',
+             fontsize=ANNOT_FONTSIZE, fontweight=ANNOT_FONTWEIGHT, color='#444')
 
 ax3.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
             alpha=BASELINE_ALPHA)
@@ -191,7 +185,7 @@ ax3.set_xticks(x)
 ax3.set_xticklabels([str(N) for N in SEQ_LENS])
 ax3.set_xlabel('Sequence Length (N)')
 ax3.set_ylabel('Energy Ratio (AL / Proposed)')
-ax3.set_ylim(0.9, 1.85)
+ax3.set_ylim(0.9, 1.65)
 ax3.legend(fontsize=5.5, loc='upper right', frameon=True)
 ax3.grid(True, alpha=0.1)
 

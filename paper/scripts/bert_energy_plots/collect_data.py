@@ -50,7 +50,7 @@ CONFIGS = [
     ("Azure-Lily", "azure_lily.json",  512, 128,  45.3, "azurelily"),
 ]
 
-SEQ_LENS = [256, 512, 1024, 1536, 2048]
+SEQ_LENS = [256, 512, 1024, 1536, 2048, 3072, 4096, 5120, 6144, 8192]
 
 
 def run_breakdown(cfg_file, R, C, fmax, N, avail_key):
@@ -69,27 +69,33 @@ def run_breakdown(cfg_file, R, C, fmax, N, avail_key):
     sched = Scheduler(cfg, stats, imc, fpga)
 
     md, _ = bert_tiny_model(1, 1, N, 128, False, False)
-    groups = defaultdict(float)
+    e_groups = defaultdict(float)
+    l_groups = defaultdict(float)
     dimm_dpe = 0.0
     dimm_fabric = 0.0
 
-    def snap():
+    def snap_e():
         return dict(stats.energy_breakdown)
+
+    def snap_l():
+        return dict(stats.latency_raw)
 
     def run_group(layers, group_name):
         nonlocal dimm_dpe, dimm_fabric
-        before = snap()
+        eb = snap_e(); lb = snap_l()
         for layer in layers:
             sched.run_layer(layer)
-        after = snap()
-        delta = {k: after.get(k, 0) - before.get(k, 0)
-                 for k in set(before) | set(after)}
-        total = sum(delta.values())
-        groups[group_name] += total
+        ea = snap_e(); la = snap_l()
+        e_delta = {k: ea.get(k, 0) - eb.get(k, 0) for k in set(eb) | set(ea)}
+        l_delta = {k: la.get(k, 0) - lb.get(k, 0) for k in set(lb) | set(la)}
+        e_total = sum(e_delta.values())
+        l_total = sum(l_delta.values())
+        e_groups[group_name] += e_total
+        l_groups[group_name] += l_total
         if group_name == "DIMM":
-            dpe_e = sum(delta.get(k, 0) for k in DPE_KEYS)
+            dpe_e = sum(e_delta.get(k, 0) for k in DPE_KEYS)
             dimm_dpe += dpe_e
-            dimm_fabric += (total - dpe_e)
+            dimm_fabric += (e_total - dpe_e)
 
     run_group(md["embedding"], "Other")
     for block in md["blocks"]:
@@ -102,13 +108,18 @@ def run_breakdown(cfg_file, R, C, fmax, N, avail_key):
         run_group(block["ffn"][2:], "Other")
 
     return {
-        "DIMM": groups["DIMM"],
-        "Proj": groups["Proj"],
-        "FFN": groups["FFN"],
-        "Other": groups["Other"],
+        "DIMM": e_groups["DIMM"],
+        "Proj": e_groups["Proj"],
+        "FFN": e_groups["FFN"],
+        "Other": e_groups["Other"],
         "DIMM_DPE": dimm_dpe,
         "DIMM_Fabric": dimm_fabric,
-        "Total": sum(groups.values()),
+        "Total": sum(e_groups.values()),
+        "lat_DIMM": l_groups["DIMM"],
+        "lat_Proj": l_groups["Proj"],
+        "lat_FFN": l_groups["FFN"],
+        "lat_Other": l_groups["Other"],
+        "lat_Total": sum(l_groups.values()),
     }
 
 
@@ -128,6 +139,11 @@ def main():
                 "other_pj": d["Other"],
                 "dimm_dpe_pj": d["DIMM_DPE"],
                 "dimm_fabric_pj": d["DIMM_Fabric"],
+                "total_ns": d["lat_Total"],
+                "dimm_ns": d["lat_DIMM"],
+                "proj_ns": d["lat_Proj"],
+                "ffn_ns": d["lat_FFN"],
+                "other_ns": d["lat_Other"],
             })
 
     fieldnames = list(rows[0].keys())
