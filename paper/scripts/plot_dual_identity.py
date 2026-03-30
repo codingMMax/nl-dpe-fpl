@@ -29,7 +29,7 @@ C = 128; d_head = 64
 ep_nl = k_vmm * e_analoge + e_digital * C   # 53.1 pJ per NL-DPE pass
 ep_al = k_vmm * 2.33 * C                     # 2385.9 pJ per Azure-Lily pass
 
-seq_lens = [64, 128, 256, 512, 1024, 2048]
+seq_lens = [256, 512, 1024, 1536, 2048]
 
 ratios_dual = []
 ratios_regular = []
@@ -91,11 +91,10 @@ for i, N in enumerate(seq_lens):
 
 ax.set_xlabel("Sequence Length (N)")
 ax.set_ylabel("Energy Efficiency\n(norm. to Azure-Lily = 1.0\u00d7)")
-ax.set_xscale("log", base=2)
 ax.set_xticks(seq_lens)
 ax.set_xticklabels([str(n) for n in seq_lens])
 ax.set_ylim(bottom=0.9, top=max(ratios_dual) + 0.2)
-ax.set_xlim(50, 2500)
+ax.set_xlim(seq_lens[0] * 0.9, seq_lens[-1] * 1.05)
 ax.legend(fontsize=7, loc="upper right")
 ax.grid(True, alpha=0.1)
 

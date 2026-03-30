@@ -39,15 +39,14 @@ CLB_TILE_UM2 = 2239  # includes routing
 # ── Load VTR results ─────────────────────────────────────────────────────
 VTR_CSV = DATA_DIR / "bert_tiny_final_results.csv"
 
-# Config mapping: arch_name → (config_json, rows, cols, dpe_tile_w, dpe_tile_h, dimm_width)
+# Config mapping: arch_name → (config_json, rows, cols, dpe_tile_w, dpe_tile_h)
 ARCH_MAP = {
-    "proposed":  ("nl_dpe.json",      1024, 128, 3, 7, 16),
-    "al_like":   ("nl_dpe.json",      1024, 256, 5, 8, 4),
-    "azurelily": ("azure_lily.json",   512, 128, 6, 5, 0),
-    "baseline":  ("baseline.json",       1,   1, 0, 0, 0),
+    "proposed":  ("nl_dpe.json",      1024, 128, 3, 7),
+    "al_like":   ("nl_dpe.json",      1024, 256, 5, 8),
+    "azurelily": ("azure_lily.json",   512, 128, 6, 5),
+    "baseline":  ("baseline.json",       1,   1, 0, 0),
 }
 
-# Display names
 DISPLAY_NAMES = {
     "proposed": "Proposed",
     "al_like": "AL-like",
@@ -55,13 +54,15 @@ DISPLAY_NAMES = {
     "baseline": "Baseline",
 }
 
-# VTR ground truth: AVAILABLE resources per arch (from count_resources.py)
-VTR_AVAILABLE = {
-    "baseline":  {"DSPs": 333, "CLBs": 19092, "BRAMs": 740},
-    "proposed":  {"DSPs": 222, "CLBs": 13806, "BRAMs": 518},
-    "al_like":   {"DSPs": 222, "CLBs": 16528, "BRAMs": 444},
-    "azurelily": {"DSPs": 333, "CLBs": 11262, "BRAMs": 740},
-}
+
+def _functional_dpes(rows, cols):
+    """Non-DIMM DPEs: Q/K/V/O + FFN1 + FFN2, × 2 blocks."""
+    import math as _m
+    D_MODEL, D_FF = 128, 512
+    per_block = (4 * _m.ceil(D_MODEL/rows) * _m.ceil(D_MODEL/cols)
+                 + _m.ceil(D_MODEL/rows) * _m.ceil(D_FF/cols)
+                 + _m.ceil(D_FF/rows) * _m.ceil(D_MODEL/cols))
+    return per_block * 2
 
 
 def load_vtr_results():
@@ -82,15 +83,15 @@ def load_vtr_results():
 
 def run_bert(arch_name, vtr, N):
     """Run IMC simulator for one (arch, seq_len) point."""
-    cfg_file, R, C, tw, th, dimm_w = ARCH_MAP[arch_name]
+    cfg_file, R, C, tw, th = ARCH_MAP[arch_name]
     v = vtr[arch_name]
 
     cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = v["fmax"]
-    cfg.dimm_width = dimm_w
-    cfg.total_dsp = VTR_AVAILABLE.get(arch_name, {}).get("DSPs", v["dsp_used"])
-    cfg.total_clb = VTR_AVAILABLE.get(arch_name, {}).get("CLBs", v["clb_used"])
-    cfg.total_mem = VTR_AVAILABLE.get(arch_name, {}).get("BRAMs", v["bram_used"])
+    cfg.total_dsp = v["dsp_used"]
+    cfg.total_clb = v["clb_used"]
+    cfg.total_mem = v["bram_used"]
+    cfg.total_dimm_dpes = max(0, v["dpe_used"] - _functional_dpes(R, C))
 
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats)
@@ -117,7 +118,7 @@ def run_bert(arch_name, vtr, N):
 def compute_used_area(arch_name, vtr):
     """Compute area from USED resources."""
     v = vtr[arch_name]
-    _, _, _, tw, th, _ = ARCH_MAP[arch_name]
+    _, _, _, tw, th = ARCH_MAP[arch_name]
     dpe_cells = v["dpe_used"] * tw * th
     dsp_cells = v["dsp_used"] * 1 * 4
     bram_cells = v["bram_used"] * 1 * 2
@@ -142,7 +143,7 @@ for arch in ["baseline", "proposed", "al_like", "azurelily"]:
 print()
 
 # Collect data for all seq_lens
-SEQ_LENS = [128, 256, 512, 1024]
+SEQ_LENS = [256, 512, 1024, 1536, 2048, 3072, 4096, 5120, 6144, 8192]
 PLOT_ARCHS = ["proposed", "al_like", "azurelily"]
 
 data = {}
@@ -215,28 +216,52 @@ for ax, metric_fn, ylabel in [
                 marker=ARCH_MARKERS[cname], markersize=4,
                 markeredgecolor="white", markeredgewidth=0.8, label=cname)
 
+        # Store ys for cross-arch annotation placement
         if arch == "proposed":
-            for i, (N, r) in enumerate(zip(SEQ_LENS, ys)):
-                ax.annotate(f"{r:.2f}\u00d7", xy=(N, r),
-                            xytext=(0, 8), textcoords='offset points',
-                            ha='center', va='bottom',
-                            fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
-                            color=ARCH_COLORS[cname])
+            _proposed_ys = ys
+        elif arch == "al_like":
+            _al_like_ys = ys
+
+    # Annotate after both lines are plotted, choosing positions with maximum gap
+    for arch, ys_ref in [("proposed", _proposed_ys), ("al_like", _al_like_ys)]:
+        cname = DISPLAY_NAMES[arch]
+        if arch == "proposed":
+            # Last point, below marker (lines diverge at high N)
+            r = ys_ref[-1]
+            ax.annotate(f"{r:.2f}\u00d7", xy=(SEQ_LENS[-1], r),
+                        xytext=(-6, -8), textcoords='offset points',
+                        ha='right', va='top',
+                        fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
+                        color=ARCH_COLORS[cname])
+        elif arch == "al_like":
+            # Pick the point with largest gap from proposed line
+            gaps = [abs(a - p) for a, p in zip(_al_like_ys, _proposed_ys)]
+            best_i = max(range(len(gaps)), key=lambda i: gaps[i])
+            r = ys_ref[best_i]
+            # Place above if AL-like > Proposed, below otherwise
+            above = (r > _proposed_ys[best_i])
+            dy = 7 if above else -7
+            va = 'bottom' if above else 'top'
+            ax.annotate(f"{r:.1f}\u00d7", xy=(SEQ_LENS[best_i], r),
+                        xytext=(0, dy), textcoords='offset points',
+                        ha='center', va=va,
+                        fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
+                        color=ARCH_COLORS[cname])
 
     ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
                alpha=BASELINE_ALPHA)
     ax.set_xlabel("Sequence Length (N)")
     ax.set_ylabel(ylabel)
-    ax.set_xscale("log", base=2)
-    ax.set_xticks(SEQ_LENS)
-    ax.set_xticklabels([str(n) for n in SEQ_LENS])
+    TICK_LENS = [512, 2048, 4096, 6144, 8192]
+    ax.set_xticks(TICK_LENS)
+    ax.set_xticklabels([str(n) for n in TICK_LENS], fontsize=7)
     all_vals = []
     for arch in PLOT_ARCHS:
         for N in SEQ_LENS:
             v = metric_fn(N, arch) / metric_fn(N, "azurelily")
             all_vals.append(v)
     ax.set_ylim(bottom=min(all_vals) * 0.85, top=max(all_vals) * 1.15)
-    ax.set_xlim(105, 1250)
+    ax.set_xlim(SEQ_LENS[0] * 0.85, SEQ_LENS[-1] * 1.1)
     ax.grid(True, alpha=0.1)
 
 # Shared legend

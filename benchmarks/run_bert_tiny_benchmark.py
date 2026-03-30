@@ -31,14 +31,26 @@ from models.bert_tiny import bert_tiny_model
 
 CLB_TILE_UM2 = 2239  # includes routing
 
-# Architecture configs: (config_json, rows, cols, dpe_tile_w, dpe_tile_h, dimm_width)
-# dimm_width: W parallel DIMM lanes (NL-DPE) or 0 (Azure-Lily/Baseline uses DSPs)
+# Architecture configs: (config_json, rows, cols, dpe_tile_w, dpe_tile_h)
 ARCH_CONFIGS = {
-    "baseline":   ("baseline.json",    1,    1,   0, 0, 0),
-    "proposed":   ("nl_dpe.json",      1024, 128, 3, 7, 16),
-    "al_like":    ("nl_dpe.json",      1024, 256, 5, 8, 4),
-    "azurelily":  ("azure_lily.json",  512,  128, 6, 5, 0),
+    "baseline":   ("baseline.json",    1,    1,   0, 0),
+    "proposed":   ("nl_dpe.json",      1024, 128, 3, 7),
+    "al_like":    ("nl_dpe.json",      1024, 256, 5, 8),
+    "azurelily":  ("azure_lily.json",  512,  128, 6, 5),
 }
+
+
+def _functional_dpes(rows, cols):
+    """Non-DIMM DPEs: Q/K/V/O projections + FFN1 + FFN2, × 2 blocks."""
+    D_MODEL, D_FF, NUM_BLOCKS = 128, 512, 2
+    V_proj = math.ceil(D_MODEL / rows)
+    H_proj = math.ceil(D_MODEL / cols)
+    V_ffn1 = math.ceil(D_MODEL / rows)
+    H_ffn1 = math.ceil(D_FF / cols)
+    V_ffn2 = math.ceil(D_FF / rows)
+    H_ffn2 = math.ceil(D_MODEL / cols)
+    per_block = 4 * V_proj * H_proj + V_ffn1 * H_ffn1 + V_ffn2 * H_ffn2
+    return per_block * NUM_BLOCKS
 
 # VTR ground truth resources (available, from count_resources.py)
 VTR_AVAILABLE = {
@@ -95,20 +107,22 @@ def parse_vtr_results(vtr_dir, arch_name):
 
 def run_bert_sim(arch_name, fmax, resources_used):
     """Run IMC simulator for BERT-Tiny and return energy/latency."""
-    cfg_file, R, C, tw, th, dimm_w = ARCH_CONFIGS[arch_name]
+    cfg_file, R, C, tw, th = ARCH_CONFIGS[arch_name]
     cfg_path = str(PROJECT_DIR / "azurelily" / "IMC" / "configs" / cfg_file)
 
     cfg = Config(cfg_path)
     cfg.rows = R
     cfg.cols = C
     cfg.freq = fmax
-    cfg.dimm_width = dimm_w  # W parallel DIMM lanes
 
-    # Patch resource counts from VTR
-    avail = VTR_AVAILABLE[arch_name]
-    cfg.total_dsp = avail["DSPs"]
-    cfg.total_clb = avail["CLBs"]
-    cfg.total_mem = avail["BRAMs"]
+    # Use EXACT resources reported by VTR (used, not available)
+    cfg.total_dsp = resources_used.get("DSPs", 0)
+    cfg.total_clb = resources_used.get("CLBs", 0)
+    cfg.total_mem = resources_used.get("BRAMs", 0)
+
+    # DIMM DPE pool = VTR used DPEs - functional (projection/FFN) DPEs
+    dpe_used = resources_used.get("DPEs", 0)
+    cfg.total_dimm_dpes = max(0, dpe_used - _functional_dpes(R, C))
 
     stats = Stats()
     mem = MemoryModel(cfg, stats)
@@ -140,7 +154,7 @@ def compute_used_area(arch_name, resources_used):
 
     Each resource tile occupies grid cells × CLB_TILE_UM2 (includes routing).
     """
-    _, _, _, tw, th, _ = ARCH_CONFIGS[arch_name]
+    _, _, _, tw, th = ARCH_CONFIGS[arch_name]
 
     dpe_cells = resources_used.get("DPEs", 0) * tw * th
     dsp_cells = resources_used.get("DSPs", 0) * 1 * 4   # DSP tile: 1×4

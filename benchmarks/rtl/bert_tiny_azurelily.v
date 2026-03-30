@@ -383,5498 +383,1267 @@ module bert_tiny_azurelily (
     );
     assign valid_n = valid_b1_ln_ffn;
 
-    // ═══ Extra instances for full Azure-Lily utilization ═══
-    // 234 extra DPEs (projection replicas)
-    // 319 extra DSP MACs (DIMM parallelism)
-    wire [40-1:0] _extra_dpe_out_0;
-    wire _extra_msbsa_0;
-    dpe _extra_dpe_0 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd1),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_0),
-        .data_out(_extra_dpe_out_0),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_1;
-    wire _extra_msbsa_1;
-    dpe _extra_dpe_1 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd2),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_1),
-        .data_out(_extra_dpe_out_1),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_2;
-    wire _extra_msbsa_2;
-    dpe _extra_dpe_2 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd3),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_2),
-        .data_out(_extra_dpe_out_2),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_3;
-    wire _extra_msbsa_3;
-    dpe _extra_dpe_3 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd4),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_3),
-        .data_out(_extra_dpe_out_3),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_4;
-    wire _extra_msbsa_4;
-    dpe _extra_dpe_4 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd5),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_4),
-        .data_out(_extra_dpe_out_4),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_5;
-    wire _extra_msbsa_5;
-    dpe _extra_dpe_5 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd6),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_5),
-        .data_out(_extra_dpe_out_5),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_6;
-    wire _extra_msbsa_6;
-    dpe _extra_dpe_6 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd7),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_6),
-        .data_out(_extra_dpe_out_6),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_7;
-    wire _extra_msbsa_7;
-    dpe _extra_dpe_7 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd8),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_7),
-        .data_out(_extra_dpe_out_7),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_8;
-    wire _extra_msbsa_8;
-    dpe _extra_dpe_8 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd9),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_8),
-        .data_out(_extra_dpe_out_8),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_9;
-    wire _extra_msbsa_9;
-    dpe _extra_dpe_9 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd10),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_9),
-        .data_out(_extra_dpe_out_9),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_10;
-    wire _extra_msbsa_10;
-    dpe _extra_dpe_10 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd11),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_10),
-        .data_out(_extra_dpe_out_10),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_11;
-    wire _extra_msbsa_11;
-    dpe _extra_dpe_11 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd12),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_11),
-        .data_out(_extra_dpe_out_11),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_12;
-    wire _extra_msbsa_12;
-    dpe _extra_dpe_12 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd13),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_12),
-        .data_out(_extra_dpe_out_12),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_13;
-    wire _extra_msbsa_13;
-    dpe _extra_dpe_13 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd14),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_13),
-        .data_out(_extra_dpe_out_13),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_14;
-    wire _extra_msbsa_14;
-    dpe _extra_dpe_14 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd15),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_14),
-        .data_out(_extra_dpe_out_14),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_15;
-    wire _extra_msbsa_15;
-    dpe _extra_dpe_15 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd16),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_15),
-        .data_out(_extra_dpe_out_15),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_16;
-    wire _extra_msbsa_16;
-    dpe _extra_dpe_16 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd17),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_16),
-        .data_out(_extra_dpe_out_16),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_17;
-    wire _extra_msbsa_17;
-    dpe _extra_dpe_17 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd18),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_17),
-        .data_out(_extra_dpe_out_17),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_18;
-    wire _extra_msbsa_18;
-    dpe _extra_dpe_18 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd19),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_18),
-        .data_out(_extra_dpe_out_18),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_19;
-    wire _extra_msbsa_19;
-    dpe _extra_dpe_19 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd20),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_19),
-        .data_out(_extra_dpe_out_19),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_20;
-    wire _extra_msbsa_20;
-    dpe _extra_dpe_20 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd21),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_20),
-        .data_out(_extra_dpe_out_20),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_21;
-    wire _extra_msbsa_21;
-    dpe _extra_dpe_21 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd22),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_21),
-        .data_out(_extra_dpe_out_21),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_22;
-    wire _extra_msbsa_22;
-    dpe _extra_dpe_22 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd23),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_22),
-        .data_out(_extra_dpe_out_22),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_23;
-    wire _extra_msbsa_23;
-    dpe _extra_dpe_23 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd24),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_23),
-        .data_out(_extra_dpe_out_23),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_24;
-    wire _extra_msbsa_24;
-    dpe _extra_dpe_24 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd25),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_24),
-        .data_out(_extra_dpe_out_24),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_25;
-    wire _extra_msbsa_25;
-    dpe _extra_dpe_25 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd26),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_25),
-        .data_out(_extra_dpe_out_25),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_26;
-    wire _extra_msbsa_26;
-    dpe _extra_dpe_26 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd27),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_26),
-        .data_out(_extra_dpe_out_26),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_27;
-    wire _extra_msbsa_27;
-    dpe _extra_dpe_27 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd28),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_27),
-        .data_out(_extra_dpe_out_27),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_28;
-    wire _extra_msbsa_28;
-    dpe _extra_dpe_28 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd29),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_28),
-        .data_out(_extra_dpe_out_28),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_29;
-    wire _extra_msbsa_29;
-    dpe _extra_dpe_29 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd30),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_29),
-        .data_out(_extra_dpe_out_29),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_30;
-    wire _extra_msbsa_30;
-    dpe _extra_dpe_30 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd31),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_30),
-        .data_out(_extra_dpe_out_30),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_31;
-    wire _extra_msbsa_31;
-    dpe _extra_dpe_31 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd32),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_31),
-        .data_out(_extra_dpe_out_31),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_32;
-    wire _extra_msbsa_32;
-    dpe _extra_dpe_32 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd33),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_32),
-        .data_out(_extra_dpe_out_32),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_33;
-    wire _extra_msbsa_33;
-    dpe _extra_dpe_33 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd34),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_33),
-        .data_out(_extra_dpe_out_33),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_34;
-    wire _extra_msbsa_34;
-    dpe _extra_dpe_34 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd35),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_34),
-        .data_out(_extra_dpe_out_34),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_35;
-    wire _extra_msbsa_35;
-    dpe _extra_dpe_35 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd36),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_35),
-        .data_out(_extra_dpe_out_35),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_36;
-    wire _extra_msbsa_36;
-    dpe _extra_dpe_36 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd37),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_36),
-        .data_out(_extra_dpe_out_36),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_37;
-    wire _extra_msbsa_37;
-    dpe _extra_dpe_37 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd38),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_37),
-        .data_out(_extra_dpe_out_37),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_38;
-    wire _extra_msbsa_38;
-    dpe _extra_dpe_38 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd39),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_38),
-        .data_out(_extra_dpe_out_38),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_39;
-    wire _extra_msbsa_39;
-    dpe _extra_dpe_39 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd40),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_39),
-        .data_out(_extra_dpe_out_39),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_40;
-    wire _extra_msbsa_40;
-    dpe _extra_dpe_40 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd41),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_40),
-        .data_out(_extra_dpe_out_40),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_41;
-    wire _extra_msbsa_41;
-    dpe _extra_dpe_41 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd42),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_41),
-        .data_out(_extra_dpe_out_41),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_42;
-    wire _extra_msbsa_42;
-    dpe _extra_dpe_42 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd43),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_42),
-        .data_out(_extra_dpe_out_42),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_43;
-    wire _extra_msbsa_43;
-    dpe _extra_dpe_43 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd44),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_43),
-        .data_out(_extra_dpe_out_43),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_44;
-    wire _extra_msbsa_44;
-    dpe _extra_dpe_44 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd45),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_44),
-        .data_out(_extra_dpe_out_44),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_45;
-    wire _extra_msbsa_45;
-    dpe _extra_dpe_45 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd46),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_45),
-        .data_out(_extra_dpe_out_45),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_46;
-    wire _extra_msbsa_46;
-    dpe _extra_dpe_46 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd47),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_46),
-        .data_out(_extra_dpe_out_46),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_47;
-    wire _extra_msbsa_47;
-    dpe _extra_dpe_47 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd48),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_47),
-        .data_out(_extra_dpe_out_47),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_48;
-    wire _extra_msbsa_48;
-    dpe _extra_dpe_48 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd49),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_48),
-        .data_out(_extra_dpe_out_48),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_49;
-    wire _extra_msbsa_49;
-    dpe _extra_dpe_49 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd50),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_49),
-        .data_out(_extra_dpe_out_49),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_50;
-    wire _extra_msbsa_50;
-    dpe _extra_dpe_50 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd51),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_50),
-        .data_out(_extra_dpe_out_50),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_51;
-    wire _extra_msbsa_51;
-    dpe _extra_dpe_51 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd52),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_51),
-        .data_out(_extra_dpe_out_51),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_52;
-    wire _extra_msbsa_52;
-    dpe _extra_dpe_52 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd53),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_52),
-        .data_out(_extra_dpe_out_52),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_53;
-    wire _extra_msbsa_53;
-    dpe _extra_dpe_53 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd54),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_53),
-        .data_out(_extra_dpe_out_53),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_54;
-    wire _extra_msbsa_54;
-    dpe _extra_dpe_54 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd55),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_54),
-        .data_out(_extra_dpe_out_54),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_55;
-    wire _extra_msbsa_55;
-    dpe _extra_dpe_55 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd56),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_55),
-        .data_out(_extra_dpe_out_55),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_56;
-    wire _extra_msbsa_56;
-    dpe _extra_dpe_56 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd57),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_56),
-        .data_out(_extra_dpe_out_56),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_57;
-    wire _extra_msbsa_57;
-    dpe _extra_dpe_57 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd58),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_57),
-        .data_out(_extra_dpe_out_57),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_58;
-    wire _extra_msbsa_58;
-    dpe _extra_dpe_58 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd59),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_58),
-        .data_out(_extra_dpe_out_58),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_59;
-    wire _extra_msbsa_59;
-    dpe _extra_dpe_59 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd60),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_59),
-        .data_out(_extra_dpe_out_59),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_60;
-    wire _extra_msbsa_60;
-    dpe _extra_dpe_60 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd61),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_60),
-        .data_out(_extra_dpe_out_60),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_61;
-    wire _extra_msbsa_61;
-    dpe _extra_dpe_61 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd62),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_61),
-        .data_out(_extra_dpe_out_61),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_62;
-    wire _extra_msbsa_62;
-    dpe _extra_dpe_62 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd63),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_62),
-        .data_out(_extra_dpe_out_62),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_63;
-    wire _extra_msbsa_63;
-    dpe _extra_dpe_63 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd64),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_63),
-        .data_out(_extra_dpe_out_63),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_64;
-    wire _extra_msbsa_64;
-    dpe _extra_dpe_64 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd65),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_64),
-        .data_out(_extra_dpe_out_64),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_65;
-    wire _extra_msbsa_65;
-    dpe _extra_dpe_65 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd66),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_65),
-        .data_out(_extra_dpe_out_65),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_66;
-    wire _extra_msbsa_66;
-    dpe _extra_dpe_66 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd67),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_66),
-        .data_out(_extra_dpe_out_66),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_67;
-    wire _extra_msbsa_67;
-    dpe _extra_dpe_67 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd68),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_67),
-        .data_out(_extra_dpe_out_67),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_68;
-    wire _extra_msbsa_68;
-    dpe _extra_dpe_68 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd69),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_68),
-        .data_out(_extra_dpe_out_68),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_69;
-    wire _extra_msbsa_69;
-    dpe _extra_dpe_69 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd70),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_69),
-        .data_out(_extra_dpe_out_69),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_70;
-    wire _extra_msbsa_70;
-    dpe _extra_dpe_70 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd71),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_70),
-        .data_out(_extra_dpe_out_70),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_71;
-    wire _extra_msbsa_71;
-    dpe _extra_dpe_71 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd72),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_71),
-        .data_out(_extra_dpe_out_71),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_72;
-    wire _extra_msbsa_72;
-    dpe _extra_dpe_72 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd73),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_72),
-        .data_out(_extra_dpe_out_72),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_73;
-    wire _extra_msbsa_73;
-    dpe _extra_dpe_73 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd74),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_73),
-        .data_out(_extra_dpe_out_73),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_74;
-    wire _extra_msbsa_74;
-    dpe _extra_dpe_74 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd75),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_74),
-        .data_out(_extra_dpe_out_74),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_75;
-    wire _extra_msbsa_75;
-    dpe _extra_dpe_75 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd76),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_75),
-        .data_out(_extra_dpe_out_75),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_76;
-    wire _extra_msbsa_76;
-    dpe _extra_dpe_76 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd77),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_76),
-        .data_out(_extra_dpe_out_76),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_77;
-    wire _extra_msbsa_77;
-    dpe _extra_dpe_77 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd78),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_77),
-        .data_out(_extra_dpe_out_77),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_78;
-    wire _extra_msbsa_78;
-    dpe _extra_dpe_78 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd79),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_78),
-        .data_out(_extra_dpe_out_78),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_79;
-    wire _extra_msbsa_79;
-    dpe _extra_dpe_79 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd80),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_79),
-        .data_out(_extra_dpe_out_79),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_80;
-    wire _extra_msbsa_80;
-    dpe _extra_dpe_80 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd81),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_80),
-        .data_out(_extra_dpe_out_80),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_81;
-    wire _extra_msbsa_81;
-    dpe _extra_dpe_81 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd82),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_81),
-        .data_out(_extra_dpe_out_81),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_82;
-    wire _extra_msbsa_82;
-    dpe _extra_dpe_82 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd83),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_82),
-        .data_out(_extra_dpe_out_82),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_83;
-    wire _extra_msbsa_83;
-    dpe _extra_dpe_83 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd84),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_83),
-        .data_out(_extra_dpe_out_83),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_84;
-    wire _extra_msbsa_84;
-    dpe _extra_dpe_84 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd85),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_84),
-        .data_out(_extra_dpe_out_84),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_85;
-    wire _extra_msbsa_85;
-    dpe _extra_dpe_85 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd86),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_85),
-        .data_out(_extra_dpe_out_85),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_86;
-    wire _extra_msbsa_86;
-    dpe _extra_dpe_86 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd87),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_86),
-        .data_out(_extra_dpe_out_86),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_87;
-    wire _extra_msbsa_87;
-    dpe _extra_dpe_87 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd88),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_87),
-        .data_out(_extra_dpe_out_87),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_88;
-    wire _extra_msbsa_88;
-    dpe _extra_dpe_88 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd89),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_88),
-        .data_out(_extra_dpe_out_88),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_89;
-    wire _extra_msbsa_89;
-    dpe _extra_dpe_89 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd90),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_89),
-        .data_out(_extra_dpe_out_89),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_90;
-    wire _extra_msbsa_90;
-    dpe _extra_dpe_90 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd91),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_90),
-        .data_out(_extra_dpe_out_90),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_91;
-    wire _extra_msbsa_91;
-    dpe _extra_dpe_91 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd92),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_91),
-        .data_out(_extra_dpe_out_91),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_92;
-    wire _extra_msbsa_92;
-    dpe _extra_dpe_92 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd93),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_92),
-        .data_out(_extra_dpe_out_92),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_93;
-    wire _extra_msbsa_93;
-    dpe _extra_dpe_93 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd94),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_93),
-        .data_out(_extra_dpe_out_93),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_94;
-    wire _extra_msbsa_94;
-    dpe _extra_dpe_94 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd95),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_94),
-        .data_out(_extra_dpe_out_94),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_95;
-    wire _extra_msbsa_95;
-    dpe _extra_dpe_95 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd96),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_95),
-        .data_out(_extra_dpe_out_95),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_96;
-    wire _extra_msbsa_96;
-    dpe _extra_dpe_96 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd97),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_96),
-        .data_out(_extra_dpe_out_96),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_97;
-    wire _extra_msbsa_97;
-    dpe _extra_dpe_97 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd98),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_97),
-        .data_out(_extra_dpe_out_97),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_98;
-    wire _extra_msbsa_98;
-    dpe _extra_dpe_98 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd99),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_98),
-        .data_out(_extra_dpe_out_98),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_99;
-    wire _extra_msbsa_99;
-    dpe _extra_dpe_99 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd100),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_99),
-        .data_out(_extra_dpe_out_99),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_100;
-    wire _extra_msbsa_100;
-    dpe _extra_dpe_100 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd101),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_100),
-        .data_out(_extra_dpe_out_100),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_101;
-    wire _extra_msbsa_101;
-    dpe _extra_dpe_101 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd102),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_101),
-        .data_out(_extra_dpe_out_101),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_102;
-    wire _extra_msbsa_102;
-    dpe _extra_dpe_102 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd103),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_102),
-        .data_out(_extra_dpe_out_102),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_103;
-    wire _extra_msbsa_103;
-    dpe _extra_dpe_103 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd104),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_103),
-        .data_out(_extra_dpe_out_103),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_104;
-    wire _extra_msbsa_104;
-    dpe _extra_dpe_104 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd105),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_104),
-        .data_out(_extra_dpe_out_104),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_105;
-    wire _extra_msbsa_105;
-    dpe _extra_dpe_105 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd106),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_105),
-        .data_out(_extra_dpe_out_105),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_106;
-    wire _extra_msbsa_106;
-    dpe _extra_dpe_106 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd107),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_106),
-        .data_out(_extra_dpe_out_106),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_107;
-    wire _extra_msbsa_107;
-    dpe _extra_dpe_107 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd108),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_107),
-        .data_out(_extra_dpe_out_107),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_108;
-    wire _extra_msbsa_108;
-    dpe _extra_dpe_108 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd109),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_108),
-        .data_out(_extra_dpe_out_108),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_109;
-    wire _extra_msbsa_109;
-    dpe _extra_dpe_109 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd110),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_109),
-        .data_out(_extra_dpe_out_109),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_110;
-    wire _extra_msbsa_110;
-    dpe _extra_dpe_110 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd111),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_110),
-        .data_out(_extra_dpe_out_110),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_111;
-    wire _extra_msbsa_111;
-    dpe _extra_dpe_111 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd112),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_111),
-        .data_out(_extra_dpe_out_111),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_112;
-    wire _extra_msbsa_112;
-    dpe _extra_dpe_112 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd113),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_112),
-        .data_out(_extra_dpe_out_112),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_113;
-    wire _extra_msbsa_113;
-    dpe _extra_dpe_113 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd114),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_113),
-        .data_out(_extra_dpe_out_113),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_114;
-    wire _extra_msbsa_114;
-    dpe _extra_dpe_114 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd115),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_114),
-        .data_out(_extra_dpe_out_114),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_115;
-    wire _extra_msbsa_115;
-    dpe _extra_dpe_115 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd116),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_115),
-        .data_out(_extra_dpe_out_115),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_116;
-    wire _extra_msbsa_116;
-    dpe _extra_dpe_116 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd117),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_116),
-        .data_out(_extra_dpe_out_116),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_117;
-    wire _extra_msbsa_117;
-    dpe _extra_dpe_117 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd118),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_117),
-        .data_out(_extra_dpe_out_117),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_118;
-    wire _extra_msbsa_118;
-    dpe _extra_dpe_118 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd119),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_118),
-        .data_out(_extra_dpe_out_118),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_119;
-    wire _extra_msbsa_119;
-    dpe _extra_dpe_119 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd120),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_119),
-        .data_out(_extra_dpe_out_119),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_120;
-    wire _extra_msbsa_120;
-    dpe _extra_dpe_120 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd121),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_120),
-        .data_out(_extra_dpe_out_120),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_121;
-    wire _extra_msbsa_121;
-    dpe _extra_dpe_121 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd122),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_121),
-        .data_out(_extra_dpe_out_121),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_122;
-    wire _extra_msbsa_122;
-    dpe _extra_dpe_122 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd123),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_122),
-        .data_out(_extra_dpe_out_122),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_123;
-    wire _extra_msbsa_123;
-    dpe _extra_dpe_123 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd124),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_123),
-        .data_out(_extra_dpe_out_123),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_124;
-    wire _extra_msbsa_124;
-    dpe _extra_dpe_124 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd125),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_124),
-        .data_out(_extra_dpe_out_124),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_125;
-    wire _extra_msbsa_125;
-    dpe _extra_dpe_125 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd126),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_125),
-        .data_out(_extra_dpe_out_125),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_126;
-    wire _extra_msbsa_126;
-    dpe _extra_dpe_126 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd127),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_126),
-        .data_out(_extra_dpe_out_126),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_127;
-    wire _extra_msbsa_127;
-    dpe _extra_dpe_127 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd128),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_127),
-        .data_out(_extra_dpe_out_127),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_128;
-    wire _extra_msbsa_128;
-    dpe _extra_dpe_128 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd129),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_128),
-        .data_out(_extra_dpe_out_128),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_129;
-    wire _extra_msbsa_129;
-    dpe _extra_dpe_129 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd130),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_129),
-        .data_out(_extra_dpe_out_129),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_130;
-    wire _extra_msbsa_130;
-    dpe _extra_dpe_130 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd131),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_130),
-        .data_out(_extra_dpe_out_130),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_131;
-    wire _extra_msbsa_131;
-    dpe _extra_dpe_131 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd132),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_131),
-        .data_out(_extra_dpe_out_131),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_132;
-    wire _extra_msbsa_132;
-    dpe _extra_dpe_132 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd133),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_132),
-        .data_out(_extra_dpe_out_132),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_133;
-    wire _extra_msbsa_133;
-    dpe _extra_dpe_133 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd134),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_133),
-        .data_out(_extra_dpe_out_133),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_134;
-    wire _extra_msbsa_134;
-    dpe _extra_dpe_134 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd135),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_134),
-        .data_out(_extra_dpe_out_134),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_135;
-    wire _extra_msbsa_135;
-    dpe _extra_dpe_135 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd136),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_135),
-        .data_out(_extra_dpe_out_135),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_136;
-    wire _extra_msbsa_136;
-    dpe _extra_dpe_136 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd137),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_136),
-        .data_out(_extra_dpe_out_136),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_137;
-    wire _extra_msbsa_137;
-    dpe _extra_dpe_137 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd138),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_137),
-        .data_out(_extra_dpe_out_137),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_138;
-    wire _extra_msbsa_138;
-    dpe _extra_dpe_138 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd139),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_138),
-        .data_out(_extra_dpe_out_138),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_139;
-    wire _extra_msbsa_139;
-    dpe _extra_dpe_139 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd140),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_139),
-        .data_out(_extra_dpe_out_139),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_140;
-    wire _extra_msbsa_140;
-    dpe _extra_dpe_140 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd141),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_140),
-        .data_out(_extra_dpe_out_140),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_141;
-    wire _extra_msbsa_141;
-    dpe _extra_dpe_141 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd142),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_141),
-        .data_out(_extra_dpe_out_141),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_142;
-    wire _extra_msbsa_142;
-    dpe _extra_dpe_142 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd143),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_142),
-        .data_out(_extra_dpe_out_142),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_143;
-    wire _extra_msbsa_143;
-    dpe _extra_dpe_143 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd144),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_143),
-        .data_out(_extra_dpe_out_143),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_144;
-    wire _extra_msbsa_144;
-    dpe _extra_dpe_144 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd145),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_144),
-        .data_out(_extra_dpe_out_144),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_145;
-    wire _extra_msbsa_145;
-    dpe _extra_dpe_145 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd146),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_145),
-        .data_out(_extra_dpe_out_145),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_146;
-    wire _extra_msbsa_146;
-    dpe _extra_dpe_146 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd147),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_146),
-        .data_out(_extra_dpe_out_146),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_147;
-    wire _extra_msbsa_147;
-    dpe _extra_dpe_147 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd148),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_147),
-        .data_out(_extra_dpe_out_147),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_148;
-    wire _extra_msbsa_148;
-    dpe _extra_dpe_148 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd149),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_148),
-        .data_out(_extra_dpe_out_148),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_149;
-    wire _extra_msbsa_149;
-    dpe _extra_dpe_149 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd150),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_149),
-        .data_out(_extra_dpe_out_149),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_150;
-    wire _extra_msbsa_150;
-    dpe _extra_dpe_150 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd151),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_150),
-        .data_out(_extra_dpe_out_150),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_151;
-    wire _extra_msbsa_151;
-    dpe _extra_dpe_151 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd152),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_151),
-        .data_out(_extra_dpe_out_151),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_152;
-    wire _extra_msbsa_152;
-    dpe _extra_dpe_152 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd153),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_152),
-        .data_out(_extra_dpe_out_152),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_153;
-    wire _extra_msbsa_153;
-    dpe _extra_dpe_153 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd154),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_153),
-        .data_out(_extra_dpe_out_153),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_154;
-    wire _extra_msbsa_154;
-    dpe _extra_dpe_154 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd155),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_154),
-        .data_out(_extra_dpe_out_154),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_155;
-    wire _extra_msbsa_155;
-    dpe _extra_dpe_155 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd156),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_155),
-        .data_out(_extra_dpe_out_155),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_156;
-    wire _extra_msbsa_156;
-    dpe _extra_dpe_156 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd157),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_156),
-        .data_out(_extra_dpe_out_156),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_157;
-    wire _extra_msbsa_157;
-    dpe _extra_dpe_157 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd158),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_157),
-        .data_out(_extra_dpe_out_157),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_158;
-    wire _extra_msbsa_158;
-    dpe _extra_dpe_158 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd159),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_158),
-        .data_out(_extra_dpe_out_158),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_159;
-    wire _extra_msbsa_159;
-    dpe _extra_dpe_159 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd160),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_159),
-        .data_out(_extra_dpe_out_159),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_160;
-    wire _extra_msbsa_160;
-    dpe _extra_dpe_160 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd161),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_160),
-        .data_out(_extra_dpe_out_160),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_161;
-    wire _extra_msbsa_161;
-    dpe _extra_dpe_161 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd162),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_161),
-        .data_out(_extra_dpe_out_161),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_162;
-    wire _extra_msbsa_162;
-    dpe _extra_dpe_162 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd163),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_162),
-        .data_out(_extra_dpe_out_162),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_163;
-    wire _extra_msbsa_163;
-    dpe _extra_dpe_163 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd164),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_163),
-        .data_out(_extra_dpe_out_163),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_164;
-    wire _extra_msbsa_164;
-    dpe _extra_dpe_164 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd165),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_164),
-        .data_out(_extra_dpe_out_164),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_165;
-    wire _extra_msbsa_165;
-    dpe _extra_dpe_165 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd166),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_165),
-        .data_out(_extra_dpe_out_165),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_166;
-    wire _extra_msbsa_166;
-    dpe _extra_dpe_166 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd167),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_166),
-        .data_out(_extra_dpe_out_166),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_167;
-    wire _extra_msbsa_167;
-    dpe _extra_dpe_167 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd168),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_167),
-        .data_out(_extra_dpe_out_167),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_168;
-    wire _extra_msbsa_168;
-    dpe _extra_dpe_168 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd169),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_168),
-        .data_out(_extra_dpe_out_168),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_169;
-    wire _extra_msbsa_169;
-    dpe _extra_dpe_169 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd170),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_169),
-        .data_out(_extra_dpe_out_169),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_170;
-    wire _extra_msbsa_170;
-    dpe _extra_dpe_170 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd171),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_170),
-        .data_out(_extra_dpe_out_170),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_171;
-    wire _extra_msbsa_171;
-    dpe _extra_dpe_171 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd172),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_171),
-        .data_out(_extra_dpe_out_171),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_172;
-    wire _extra_msbsa_172;
-    dpe _extra_dpe_172 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd173),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_172),
-        .data_out(_extra_dpe_out_172),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_173;
-    wire _extra_msbsa_173;
-    dpe _extra_dpe_173 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd174),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_173),
-        .data_out(_extra_dpe_out_173),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_174;
-    wire _extra_msbsa_174;
-    dpe _extra_dpe_174 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd175),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_174),
-        .data_out(_extra_dpe_out_174),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_175;
-    wire _extra_msbsa_175;
-    dpe _extra_dpe_175 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd176),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_175),
-        .data_out(_extra_dpe_out_175),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_176;
-    wire _extra_msbsa_176;
-    dpe _extra_dpe_176 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd177),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_176),
-        .data_out(_extra_dpe_out_176),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_177;
-    wire _extra_msbsa_177;
-    dpe _extra_dpe_177 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd178),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_177),
-        .data_out(_extra_dpe_out_177),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_178;
-    wire _extra_msbsa_178;
-    dpe _extra_dpe_178 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd179),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_178),
-        .data_out(_extra_dpe_out_178),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_179;
-    wire _extra_msbsa_179;
-    dpe _extra_dpe_179 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd180),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_179),
-        .data_out(_extra_dpe_out_179),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_180;
-    wire _extra_msbsa_180;
-    dpe _extra_dpe_180 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd181),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_180),
-        .data_out(_extra_dpe_out_180),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_181;
-    wire _extra_msbsa_181;
-    dpe _extra_dpe_181 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd182),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_181),
-        .data_out(_extra_dpe_out_181),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_182;
-    wire _extra_msbsa_182;
-    dpe _extra_dpe_182 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd183),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_182),
-        .data_out(_extra_dpe_out_182),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_183;
-    wire _extra_msbsa_183;
-    dpe _extra_dpe_183 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd184),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_183),
-        .data_out(_extra_dpe_out_183),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_184;
-    wire _extra_msbsa_184;
-    dpe _extra_dpe_184 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd185),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_184),
-        .data_out(_extra_dpe_out_184),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_185;
-    wire _extra_msbsa_185;
-    dpe _extra_dpe_185 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd186),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_185),
-        .data_out(_extra_dpe_out_185),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_186;
-    wire _extra_msbsa_186;
-    dpe _extra_dpe_186 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd187),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_186),
-        .data_out(_extra_dpe_out_186),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_187;
-    wire _extra_msbsa_187;
-    dpe _extra_dpe_187 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd188),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_187),
-        .data_out(_extra_dpe_out_187),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_188;
-    wire _extra_msbsa_188;
-    dpe _extra_dpe_188 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd189),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_188),
-        .data_out(_extra_dpe_out_188),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_189;
-    wire _extra_msbsa_189;
-    dpe _extra_dpe_189 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd190),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_189),
-        .data_out(_extra_dpe_out_189),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_190;
-    wire _extra_msbsa_190;
-    dpe _extra_dpe_190 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd191),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_190),
-        .data_out(_extra_dpe_out_190),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_191;
-    wire _extra_msbsa_191;
-    dpe _extra_dpe_191 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd192),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_191),
-        .data_out(_extra_dpe_out_191),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_192;
-    wire _extra_msbsa_192;
-    dpe _extra_dpe_192 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd193),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_192),
-        .data_out(_extra_dpe_out_192),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_193;
-    wire _extra_msbsa_193;
-    dpe _extra_dpe_193 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd194),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_193),
-        .data_out(_extra_dpe_out_193),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_194;
-    wire _extra_msbsa_194;
-    dpe _extra_dpe_194 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd195),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_194),
-        .data_out(_extra_dpe_out_194),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_195;
-    wire _extra_msbsa_195;
-    dpe _extra_dpe_195 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd196),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_195),
-        .data_out(_extra_dpe_out_195),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_196;
-    wire _extra_msbsa_196;
-    dpe _extra_dpe_196 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd197),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_196),
-        .data_out(_extra_dpe_out_196),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_197;
-    wire _extra_msbsa_197;
-    dpe _extra_dpe_197 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd198),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_197),
-        .data_out(_extra_dpe_out_197),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_198;
-    wire _extra_msbsa_198;
-    dpe _extra_dpe_198 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd199),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_198),
-        .data_out(_extra_dpe_out_198),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_199;
-    wire _extra_msbsa_199;
-    dpe _extra_dpe_199 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd200),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_199),
-        .data_out(_extra_dpe_out_199),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_200;
-    wire _extra_msbsa_200;
-    dpe _extra_dpe_200 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd201),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_200),
-        .data_out(_extra_dpe_out_200),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_201;
-    wire _extra_msbsa_201;
-    dpe _extra_dpe_201 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd202),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_201),
-        .data_out(_extra_dpe_out_201),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_202;
-    wire _extra_msbsa_202;
-    dpe _extra_dpe_202 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd203),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_202),
-        .data_out(_extra_dpe_out_202),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_203;
-    wire _extra_msbsa_203;
-    dpe _extra_dpe_203 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd204),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_203),
-        .data_out(_extra_dpe_out_203),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_204;
-    wire _extra_msbsa_204;
-    dpe _extra_dpe_204 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd205),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_204),
-        .data_out(_extra_dpe_out_204),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_205;
-    wire _extra_msbsa_205;
-    dpe _extra_dpe_205 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd206),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_205),
-        .data_out(_extra_dpe_out_205),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_206;
-    wire _extra_msbsa_206;
-    dpe _extra_dpe_206 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd207),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_206),
-        .data_out(_extra_dpe_out_206),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_207;
-    wire _extra_msbsa_207;
-    dpe _extra_dpe_207 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd208),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_207),
-        .data_out(_extra_dpe_out_207),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_208;
-    wire _extra_msbsa_208;
-    dpe _extra_dpe_208 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd209),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_208),
-        .data_out(_extra_dpe_out_208),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_209;
-    wire _extra_msbsa_209;
-    dpe _extra_dpe_209 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd210),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_209),
-        .data_out(_extra_dpe_out_209),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_210;
-    wire _extra_msbsa_210;
-    dpe _extra_dpe_210 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd211),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_210),
-        .data_out(_extra_dpe_out_210),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_211;
-    wire _extra_msbsa_211;
-    dpe _extra_dpe_211 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd212),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_211),
-        .data_out(_extra_dpe_out_211),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_212;
-    wire _extra_msbsa_212;
-    dpe _extra_dpe_212 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd213),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_212),
-        .data_out(_extra_dpe_out_212),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_213;
-    wire _extra_msbsa_213;
-    dpe _extra_dpe_213 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd214),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_213),
-        .data_out(_extra_dpe_out_213),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_214;
-    wire _extra_msbsa_214;
-    dpe _extra_dpe_214 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd215),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_214),
-        .data_out(_extra_dpe_out_214),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_215;
-    wire _extra_msbsa_215;
-    dpe _extra_dpe_215 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd216),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_215),
-        .data_out(_extra_dpe_out_215),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_216;
-    wire _extra_msbsa_216;
-    dpe _extra_dpe_216 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd217),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_216),
-        .data_out(_extra_dpe_out_216),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_217;
-    wire _extra_msbsa_217;
-    dpe _extra_dpe_217 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd218),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_217),
-        .data_out(_extra_dpe_out_217),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_218;
-    wire _extra_msbsa_218;
-    dpe _extra_dpe_218 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd219),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_218),
-        .data_out(_extra_dpe_out_218),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_219;
-    wire _extra_msbsa_219;
-    dpe _extra_dpe_219 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd220),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_219),
-        .data_out(_extra_dpe_out_219),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_220;
-    wire _extra_msbsa_220;
-    dpe _extra_dpe_220 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd221),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_220),
-        .data_out(_extra_dpe_out_220),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_221;
-    wire _extra_msbsa_221;
-    dpe _extra_dpe_221 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd222),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_221),
-        .data_out(_extra_dpe_out_221),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_222;
-    wire _extra_msbsa_222;
-    dpe _extra_dpe_222 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd223),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_222),
-        .data_out(_extra_dpe_out_222),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_223;
-    wire _extra_msbsa_223;
-    dpe _extra_dpe_223 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd224),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_223),
-        .data_out(_extra_dpe_out_223),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_224;
-    wire _extra_msbsa_224;
-    dpe _extra_dpe_224 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd225),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_224),
-        .data_out(_extra_dpe_out_224),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_225;
-    wire _extra_msbsa_225;
-    dpe _extra_dpe_225 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd226),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_225),
-        .data_out(_extra_dpe_out_225),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_226;
-    wire _extra_msbsa_226;
-    dpe _extra_dpe_226 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd227),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_226),
-        .data_out(_extra_dpe_out_226),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_227;
-    wire _extra_msbsa_227;
-    dpe _extra_dpe_227 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd228),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_227),
-        .data_out(_extra_dpe_out_227),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_228;
-    wire _extra_msbsa_228;
-    dpe _extra_dpe_228 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd229),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_228),
-        .data_out(_extra_dpe_out_228),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_229;
-    wire _extra_msbsa_229;
-    dpe _extra_dpe_229 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd230),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_229),
-        .data_out(_extra_dpe_out_229),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_230;
-    wire _extra_msbsa_230;
-    dpe _extra_dpe_230 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd231),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_230),
-        .data_out(_extra_dpe_out_230),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_231;
-    wire _extra_msbsa_231;
-    dpe _extra_dpe_231 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd232),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_231),
-        .data_out(_extra_dpe_out_231),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_232;
-    wire _extra_msbsa_232;
-    dpe _extra_dpe_232 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd233),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_232),
-        .data_out(_extra_dpe_out_232),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dpe_out_233;
-    wire _extra_msbsa_233;
-    dpe _extra_dpe_233 (
-        .clk(clk), .reset(rst),
-        .data_in(data_in ^ 40'd234),
-        .nl_dpe_control(2'b00),
-        .w_buf_en(1'b0),
-        .shift_add_control(1'b0),
-        .shift_add_bypass(1'b0),
-        .load_output_reg(1'b0),
-        .load_input_reg(1'b0),
-        .MSB_SA_Ready(_extra_msbsa_233),
-        .data_out(_extra_dpe_out_233),
-        .dpe_done(),
-        .reg_full(),
-        .shift_add_done(),
-        .shift_add_bypass_ctrl()
-    );
-    wire [40-1:0] _extra_dsp_out_0;
-    reg [40-1:0] _extra_dsp_reg_0;
-    assign _extra_dsp_out_0 = $signed(data_in ^ 40'd1) * $signed(data_in ^ 40'd2);
-    always @(posedge clk) _extra_dsp_reg_0 <= _extra_dsp_out_0;
-    wire [40-1:0] _extra_dsp_out_1;
-    reg [40-1:0] _extra_dsp_reg_1;
-    assign _extra_dsp_out_1 = $signed(data_in ^ 40'd2) * $signed(data_in ^ 40'd3);
-    always @(posedge clk) _extra_dsp_reg_1 <= _extra_dsp_out_1;
-    wire [40-1:0] _extra_dsp_out_2;
-    reg [40-1:0] _extra_dsp_reg_2;
-    assign _extra_dsp_out_2 = $signed(data_in ^ 40'd3) * $signed(data_in ^ 40'd4);
-    always @(posedge clk) _extra_dsp_reg_2 <= _extra_dsp_out_2;
-    wire [40-1:0] _extra_dsp_out_3;
-    reg [40-1:0] _extra_dsp_reg_3;
-    assign _extra_dsp_out_3 = $signed(data_in ^ 40'd4) * $signed(data_in ^ 40'd5);
-    always @(posedge clk) _extra_dsp_reg_3 <= _extra_dsp_out_3;
-    wire [40-1:0] _extra_dsp_out_4;
-    reg [40-1:0] _extra_dsp_reg_4;
-    assign _extra_dsp_out_4 = $signed(data_in ^ 40'd5) * $signed(data_in ^ 40'd6);
-    always @(posedge clk) _extra_dsp_reg_4 <= _extra_dsp_out_4;
-    wire [40-1:0] _extra_dsp_out_5;
-    reg [40-1:0] _extra_dsp_reg_5;
-    assign _extra_dsp_out_5 = $signed(data_in ^ 40'd6) * $signed(data_in ^ 40'd7);
-    always @(posedge clk) _extra_dsp_reg_5 <= _extra_dsp_out_5;
-    wire [40-1:0] _extra_dsp_out_6;
-    reg [40-1:0] _extra_dsp_reg_6;
-    assign _extra_dsp_out_6 = $signed(data_in ^ 40'd7) * $signed(data_in ^ 40'd8);
-    always @(posedge clk) _extra_dsp_reg_6 <= _extra_dsp_out_6;
-    wire [40-1:0] _extra_dsp_out_7;
-    reg [40-1:0] _extra_dsp_reg_7;
-    assign _extra_dsp_out_7 = $signed(data_in ^ 40'd8) * $signed(data_in ^ 40'd9);
-    always @(posedge clk) _extra_dsp_reg_7 <= _extra_dsp_out_7;
-    wire [40-1:0] _extra_dsp_out_8;
-    reg [40-1:0] _extra_dsp_reg_8;
-    assign _extra_dsp_out_8 = $signed(data_in ^ 40'd9) * $signed(data_in ^ 40'd10);
-    always @(posedge clk) _extra_dsp_reg_8 <= _extra_dsp_out_8;
-    wire [40-1:0] _extra_dsp_out_9;
-    reg [40-1:0] _extra_dsp_reg_9;
-    assign _extra_dsp_out_9 = $signed(data_in ^ 40'd10) * $signed(data_in ^ 40'd11);
-    always @(posedge clk) _extra_dsp_reg_9 <= _extra_dsp_out_9;
-    wire [40-1:0] _extra_dsp_out_10;
-    reg [40-1:0] _extra_dsp_reg_10;
-    assign _extra_dsp_out_10 = $signed(data_in ^ 40'd11) * $signed(data_in ^ 40'd12);
-    always @(posedge clk) _extra_dsp_reg_10 <= _extra_dsp_out_10;
-    wire [40-1:0] _extra_dsp_out_11;
-    reg [40-1:0] _extra_dsp_reg_11;
-    assign _extra_dsp_out_11 = $signed(data_in ^ 40'd12) * $signed(data_in ^ 40'd13);
-    always @(posedge clk) _extra_dsp_reg_11 <= _extra_dsp_out_11;
-    wire [40-1:0] _extra_dsp_out_12;
-    reg [40-1:0] _extra_dsp_reg_12;
-    assign _extra_dsp_out_12 = $signed(data_in ^ 40'd13) * $signed(data_in ^ 40'd14);
-    always @(posedge clk) _extra_dsp_reg_12 <= _extra_dsp_out_12;
-    wire [40-1:0] _extra_dsp_out_13;
-    reg [40-1:0] _extra_dsp_reg_13;
-    assign _extra_dsp_out_13 = $signed(data_in ^ 40'd14) * $signed(data_in ^ 40'd15);
-    always @(posedge clk) _extra_dsp_reg_13 <= _extra_dsp_out_13;
-    wire [40-1:0] _extra_dsp_out_14;
-    reg [40-1:0] _extra_dsp_reg_14;
-    assign _extra_dsp_out_14 = $signed(data_in ^ 40'd15) * $signed(data_in ^ 40'd16);
-    always @(posedge clk) _extra_dsp_reg_14 <= _extra_dsp_out_14;
-    wire [40-1:0] _extra_dsp_out_15;
-    reg [40-1:0] _extra_dsp_reg_15;
-    assign _extra_dsp_out_15 = $signed(data_in ^ 40'd16) * $signed(data_in ^ 40'd17);
-    always @(posedge clk) _extra_dsp_reg_15 <= _extra_dsp_out_15;
-    wire [40-1:0] _extra_dsp_out_16;
-    reg [40-1:0] _extra_dsp_reg_16;
-    assign _extra_dsp_out_16 = $signed(data_in ^ 40'd17) * $signed(data_in ^ 40'd18);
-    always @(posedge clk) _extra_dsp_reg_16 <= _extra_dsp_out_16;
-    wire [40-1:0] _extra_dsp_out_17;
-    reg [40-1:0] _extra_dsp_reg_17;
-    assign _extra_dsp_out_17 = $signed(data_in ^ 40'd18) * $signed(data_in ^ 40'd19);
-    always @(posedge clk) _extra_dsp_reg_17 <= _extra_dsp_out_17;
-    wire [40-1:0] _extra_dsp_out_18;
-    reg [40-1:0] _extra_dsp_reg_18;
-    assign _extra_dsp_out_18 = $signed(data_in ^ 40'd19) * $signed(data_in ^ 40'd20);
-    always @(posedge clk) _extra_dsp_reg_18 <= _extra_dsp_out_18;
-    wire [40-1:0] _extra_dsp_out_19;
-    reg [40-1:0] _extra_dsp_reg_19;
-    assign _extra_dsp_out_19 = $signed(data_in ^ 40'd20) * $signed(data_in ^ 40'd21);
-    always @(posedge clk) _extra_dsp_reg_19 <= _extra_dsp_out_19;
-    wire [40-1:0] _extra_dsp_out_20;
-    reg [40-1:0] _extra_dsp_reg_20;
-    assign _extra_dsp_out_20 = $signed(data_in ^ 40'd21) * $signed(data_in ^ 40'd22);
-    always @(posedge clk) _extra_dsp_reg_20 <= _extra_dsp_out_20;
-    wire [40-1:0] _extra_dsp_out_21;
-    reg [40-1:0] _extra_dsp_reg_21;
-    assign _extra_dsp_out_21 = $signed(data_in ^ 40'd22) * $signed(data_in ^ 40'd23);
-    always @(posedge clk) _extra_dsp_reg_21 <= _extra_dsp_out_21;
-    wire [40-1:0] _extra_dsp_out_22;
-    reg [40-1:0] _extra_dsp_reg_22;
-    assign _extra_dsp_out_22 = $signed(data_in ^ 40'd23) * $signed(data_in ^ 40'd24);
-    always @(posedge clk) _extra_dsp_reg_22 <= _extra_dsp_out_22;
-    wire [40-1:0] _extra_dsp_out_23;
-    reg [40-1:0] _extra_dsp_reg_23;
-    assign _extra_dsp_out_23 = $signed(data_in ^ 40'd24) * $signed(data_in ^ 40'd25);
-    always @(posedge clk) _extra_dsp_reg_23 <= _extra_dsp_out_23;
-    wire [40-1:0] _extra_dsp_out_24;
-    reg [40-1:0] _extra_dsp_reg_24;
-    assign _extra_dsp_out_24 = $signed(data_in ^ 40'd25) * $signed(data_in ^ 40'd26);
-    always @(posedge clk) _extra_dsp_reg_24 <= _extra_dsp_out_24;
-    wire [40-1:0] _extra_dsp_out_25;
-    reg [40-1:0] _extra_dsp_reg_25;
-    assign _extra_dsp_out_25 = $signed(data_in ^ 40'd26) * $signed(data_in ^ 40'd27);
-    always @(posedge clk) _extra_dsp_reg_25 <= _extra_dsp_out_25;
-    wire [40-1:0] _extra_dsp_out_26;
-    reg [40-1:0] _extra_dsp_reg_26;
-    assign _extra_dsp_out_26 = $signed(data_in ^ 40'd27) * $signed(data_in ^ 40'd28);
-    always @(posedge clk) _extra_dsp_reg_26 <= _extra_dsp_out_26;
-    wire [40-1:0] _extra_dsp_out_27;
-    reg [40-1:0] _extra_dsp_reg_27;
-    assign _extra_dsp_out_27 = $signed(data_in ^ 40'd28) * $signed(data_in ^ 40'd29);
-    always @(posedge clk) _extra_dsp_reg_27 <= _extra_dsp_out_27;
-    wire [40-1:0] _extra_dsp_out_28;
-    reg [40-1:0] _extra_dsp_reg_28;
-    assign _extra_dsp_out_28 = $signed(data_in ^ 40'd29) * $signed(data_in ^ 40'd30);
-    always @(posedge clk) _extra_dsp_reg_28 <= _extra_dsp_out_28;
-    wire [40-1:0] _extra_dsp_out_29;
-    reg [40-1:0] _extra_dsp_reg_29;
-    assign _extra_dsp_out_29 = $signed(data_in ^ 40'd30) * $signed(data_in ^ 40'd31);
-    always @(posedge clk) _extra_dsp_reg_29 <= _extra_dsp_out_29;
-    wire [40-1:0] _extra_dsp_out_30;
-    reg [40-1:0] _extra_dsp_reg_30;
-    assign _extra_dsp_out_30 = $signed(data_in ^ 40'd31) * $signed(data_in ^ 40'd32);
-    always @(posedge clk) _extra_dsp_reg_30 <= _extra_dsp_out_30;
-    wire [40-1:0] _extra_dsp_out_31;
-    reg [40-1:0] _extra_dsp_reg_31;
-    assign _extra_dsp_out_31 = $signed(data_in ^ 40'd32) * $signed(data_in ^ 40'd33);
-    always @(posedge clk) _extra_dsp_reg_31 <= _extra_dsp_out_31;
-    wire [40-1:0] _extra_dsp_out_32;
-    reg [40-1:0] _extra_dsp_reg_32;
-    assign _extra_dsp_out_32 = $signed(data_in ^ 40'd33) * $signed(data_in ^ 40'd34);
-    always @(posedge clk) _extra_dsp_reg_32 <= _extra_dsp_out_32;
-    wire [40-1:0] _extra_dsp_out_33;
-    reg [40-1:0] _extra_dsp_reg_33;
-    assign _extra_dsp_out_33 = $signed(data_in ^ 40'd34) * $signed(data_in ^ 40'd35);
-    always @(posedge clk) _extra_dsp_reg_33 <= _extra_dsp_out_33;
-    wire [40-1:0] _extra_dsp_out_34;
-    reg [40-1:0] _extra_dsp_reg_34;
-    assign _extra_dsp_out_34 = $signed(data_in ^ 40'd35) * $signed(data_in ^ 40'd36);
-    always @(posedge clk) _extra_dsp_reg_34 <= _extra_dsp_out_34;
-    wire [40-1:0] _extra_dsp_out_35;
-    reg [40-1:0] _extra_dsp_reg_35;
-    assign _extra_dsp_out_35 = $signed(data_in ^ 40'd36) * $signed(data_in ^ 40'd37);
-    always @(posedge clk) _extra_dsp_reg_35 <= _extra_dsp_out_35;
-    wire [40-1:0] _extra_dsp_out_36;
-    reg [40-1:0] _extra_dsp_reg_36;
-    assign _extra_dsp_out_36 = $signed(data_in ^ 40'd37) * $signed(data_in ^ 40'd38);
-    always @(posedge clk) _extra_dsp_reg_36 <= _extra_dsp_out_36;
-    wire [40-1:0] _extra_dsp_out_37;
-    reg [40-1:0] _extra_dsp_reg_37;
-    assign _extra_dsp_out_37 = $signed(data_in ^ 40'd38) * $signed(data_in ^ 40'd39);
-    always @(posedge clk) _extra_dsp_reg_37 <= _extra_dsp_out_37;
-    wire [40-1:0] _extra_dsp_out_38;
-    reg [40-1:0] _extra_dsp_reg_38;
-    assign _extra_dsp_out_38 = $signed(data_in ^ 40'd39) * $signed(data_in ^ 40'd40);
-    always @(posedge clk) _extra_dsp_reg_38 <= _extra_dsp_out_38;
-    wire [40-1:0] _extra_dsp_out_39;
-    reg [40-1:0] _extra_dsp_reg_39;
-    assign _extra_dsp_out_39 = $signed(data_in ^ 40'd40) * $signed(data_in ^ 40'd41);
-    always @(posedge clk) _extra_dsp_reg_39 <= _extra_dsp_out_39;
-    wire [40-1:0] _extra_dsp_out_40;
-    reg [40-1:0] _extra_dsp_reg_40;
-    assign _extra_dsp_out_40 = $signed(data_in ^ 40'd41) * $signed(data_in ^ 40'd42);
-    always @(posedge clk) _extra_dsp_reg_40 <= _extra_dsp_out_40;
-    wire [40-1:0] _extra_dsp_out_41;
-    reg [40-1:0] _extra_dsp_reg_41;
-    assign _extra_dsp_out_41 = $signed(data_in ^ 40'd42) * $signed(data_in ^ 40'd43);
-    always @(posedge clk) _extra_dsp_reg_41 <= _extra_dsp_out_41;
-    wire [40-1:0] _extra_dsp_out_42;
-    reg [40-1:0] _extra_dsp_reg_42;
-    assign _extra_dsp_out_42 = $signed(data_in ^ 40'd43) * $signed(data_in ^ 40'd44);
-    always @(posedge clk) _extra_dsp_reg_42 <= _extra_dsp_out_42;
-    wire [40-1:0] _extra_dsp_out_43;
-    reg [40-1:0] _extra_dsp_reg_43;
-    assign _extra_dsp_out_43 = $signed(data_in ^ 40'd44) * $signed(data_in ^ 40'd45);
-    always @(posedge clk) _extra_dsp_reg_43 <= _extra_dsp_out_43;
-    wire [40-1:0] _extra_dsp_out_44;
-    reg [40-1:0] _extra_dsp_reg_44;
-    assign _extra_dsp_out_44 = $signed(data_in ^ 40'd45) * $signed(data_in ^ 40'd46);
-    always @(posedge clk) _extra_dsp_reg_44 <= _extra_dsp_out_44;
-    wire [40-1:0] _extra_dsp_out_45;
-    reg [40-1:0] _extra_dsp_reg_45;
-    assign _extra_dsp_out_45 = $signed(data_in ^ 40'd46) * $signed(data_in ^ 40'd47);
-    always @(posedge clk) _extra_dsp_reg_45 <= _extra_dsp_out_45;
-    wire [40-1:0] _extra_dsp_out_46;
-    reg [40-1:0] _extra_dsp_reg_46;
-    assign _extra_dsp_out_46 = $signed(data_in ^ 40'd47) * $signed(data_in ^ 40'd48);
-    always @(posedge clk) _extra_dsp_reg_46 <= _extra_dsp_out_46;
-    wire [40-1:0] _extra_dsp_out_47;
-    reg [40-1:0] _extra_dsp_reg_47;
-    assign _extra_dsp_out_47 = $signed(data_in ^ 40'd48) * $signed(data_in ^ 40'd49);
-    always @(posedge clk) _extra_dsp_reg_47 <= _extra_dsp_out_47;
-    wire [40-1:0] _extra_dsp_out_48;
-    reg [40-1:0] _extra_dsp_reg_48;
-    assign _extra_dsp_out_48 = $signed(data_in ^ 40'd49) * $signed(data_in ^ 40'd50);
-    always @(posedge clk) _extra_dsp_reg_48 <= _extra_dsp_out_48;
-    wire [40-1:0] _extra_dsp_out_49;
-    reg [40-1:0] _extra_dsp_reg_49;
-    assign _extra_dsp_out_49 = $signed(data_in ^ 40'd50) * $signed(data_in ^ 40'd51);
-    always @(posedge clk) _extra_dsp_reg_49 <= _extra_dsp_out_49;
-    wire [40-1:0] _extra_dsp_out_50;
-    reg [40-1:0] _extra_dsp_reg_50;
-    assign _extra_dsp_out_50 = $signed(data_in ^ 40'd51) * $signed(data_in ^ 40'd52);
-    always @(posedge clk) _extra_dsp_reg_50 <= _extra_dsp_out_50;
-    wire [40-1:0] _extra_dsp_out_51;
-    reg [40-1:0] _extra_dsp_reg_51;
-    assign _extra_dsp_out_51 = $signed(data_in ^ 40'd52) * $signed(data_in ^ 40'd53);
-    always @(posedge clk) _extra_dsp_reg_51 <= _extra_dsp_out_51;
-    wire [40-1:0] _extra_dsp_out_52;
-    reg [40-1:0] _extra_dsp_reg_52;
-    assign _extra_dsp_out_52 = $signed(data_in ^ 40'd53) * $signed(data_in ^ 40'd54);
-    always @(posedge clk) _extra_dsp_reg_52 <= _extra_dsp_out_52;
-    wire [40-1:0] _extra_dsp_out_53;
-    reg [40-1:0] _extra_dsp_reg_53;
-    assign _extra_dsp_out_53 = $signed(data_in ^ 40'd54) * $signed(data_in ^ 40'd55);
-    always @(posedge clk) _extra_dsp_reg_53 <= _extra_dsp_out_53;
-    wire [40-1:0] _extra_dsp_out_54;
-    reg [40-1:0] _extra_dsp_reg_54;
-    assign _extra_dsp_out_54 = $signed(data_in ^ 40'd55) * $signed(data_in ^ 40'd56);
-    always @(posedge clk) _extra_dsp_reg_54 <= _extra_dsp_out_54;
-    wire [40-1:0] _extra_dsp_out_55;
-    reg [40-1:0] _extra_dsp_reg_55;
-    assign _extra_dsp_out_55 = $signed(data_in ^ 40'd56) * $signed(data_in ^ 40'd57);
-    always @(posedge clk) _extra_dsp_reg_55 <= _extra_dsp_out_55;
-    wire [40-1:0] _extra_dsp_out_56;
-    reg [40-1:0] _extra_dsp_reg_56;
-    assign _extra_dsp_out_56 = $signed(data_in ^ 40'd57) * $signed(data_in ^ 40'd58);
-    always @(posedge clk) _extra_dsp_reg_56 <= _extra_dsp_out_56;
-    wire [40-1:0] _extra_dsp_out_57;
-    reg [40-1:0] _extra_dsp_reg_57;
-    assign _extra_dsp_out_57 = $signed(data_in ^ 40'd58) * $signed(data_in ^ 40'd59);
-    always @(posedge clk) _extra_dsp_reg_57 <= _extra_dsp_out_57;
-    wire [40-1:0] _extra_dsp_out_58;
-    reg [40-1:0] _extra_dsp_reg_58;
-    assign _extra_dsp_out_58 = $signed(data_in ^ 40'd59) * $signed(data_in ^ 40'd60);
-    always @(posedge clk) _extra_dsp_reg_58 <= _extra_dsp_out_58;
-    wire [40-1:0] _extra_dsp_out_59;
-    reg [40-1:0] _extra_dsp_reg_59;
-    assign _extra_dsp_out_59 = $signed(data_in ^ 40'd60) * $signed(data_in ^ 40'd61);
-    always @(posedge clk) _extra_dsp_reg_59 <= _extra_dsp_out_59;
-    wire [40-1:0] _extra_dsp_out_60;
-    reg [40-1:0] _extra_dsp_reg_60;
-    assign _extra_dsp_out_60 = $signed(data_in ^ 40'd61) * $signed(data_in ^ 40'd62);
-    always @(posedge clk) _extra_dsp_reg_60 <= _extra_dsp_out_60;
-    wire [40-1:0] _extra_dsp_out_61;
-    reg [40-1:0] _extra_dsp_reg_61;
-    assign _extra_dsp_out_61 = $signed(data_in ^ 40'd62) * $signed(data_in ^ 40'd63);
-    always @(posedge clk) _extra_dsp_reg_61 <= _extra_dsp_out_61;
-    wire [40-1:0] _extra_dsp_out_62;
-    reg [40-1:0] _extra_dsp_reg_62;
-    assign _extra_dsp_out_62 = $signed(data_in ^ 40'd63) * $signed(data_in ^ 40'd64);
-    always @(posedge clk) _extra_dsp_reg_62 <= _extra_dsp_out_62;
-    wire [40-1:0] _extra_dsp_out_63;
-    reg [40-1:0] _extra_dsp_reg_63;
-    assign _extra_dsp_out_63 = $signed(data_in ^ 40'd64) * $signed(data_in ^ 40'd65);
-    always @(posedge clk) _extra_dsp_reg_63 <= _extra_dsp_out_63;
-    wire [40-1:0] _extra_dsp_out_64;
-    reg [40-1:0] _extra_dsp_reg_64;
-    assign _extra_dsp_out_64 = $signed(data_in ^ 40'd65) * $signed(data_in ^ 40'd66);
-    always @(posedge clk) _extra_dsp_reg_64 <= _extra_dsp_out_64;
-    wire [40-1:0] _extra_dsp_out_65;
-    reg [40-1:0] _extra_dsp_reg_65;
-    assign _extra_dsp_out_65 = $signed(data_in ^ 40'd66) * $signed(data_in ^ 40'd67);
-    always @(posedge clk) _extra_dsp_reg_65 <= _extra_dsp_out_65;
-    wire [40-1:0] _extra_dsp_out_66;
-    reg [40-1:0] _extra_dsp_reg_66;
-    assign _extra_dsp_out_66 = $signed(data_in ^ 40'd67) * $signed(data_in ^ 40'd68);
-    always @(posedge clk) _extra_dsp_reg_66 <= _extra_dsp_out_66;
-    wire [40-1:0] _extra_dsp_out_67;
-    reg [40-1:0] _extra_dsp_reg_67;
-    assign _extra_dsp_out_67 = $signed(data_in ^ 40'd68) * $signed(data_in ^ 40'd69);
-    always @(posedge clk) _extra_dsp_reg_67 <= _extra_dsp_out_67;
-    wire [40-1:0] _extra_dsp_out_68;
-    reg [40-1:0] _extra_dsp_reg_68;
-    assign _extra_dsp_out_68 = $signed(data_in ^ 40'd69) * $signed(data_in ^ 40'd70);
-    always @(posedge clk) _extra_dsp_reg_68 <= _extra_dsp_out_68;
-    wire [40-1:0] _extra_dsp_out_69;
-    reg [40-1:0] _extra_dsp_reg_69;
-    assign _extra_dsp_out_69 = $signed(data_in ^ 40'd70) * $signed(data_in ^ 40'd71);
-    always @(posedge clk) _extra_dsp_reg_69 <= _extra_dsp_out_69;
-    wire [40-1:0] _extra_dsp_out_70;
-    reg [40-1:0] _extra_dsp_reg_70;
-    assign _extra_dsp_out_70 = $signed(data_in ^ 40'd71) * $signed(data_in ^ 40'd72);
-    always @(posedge clk) _extra_dsp_reg_70 <= _extra_dsp_out_70;
-    wire [40-1:0] _extra_dsp_out_71;
-    reg [40-1:0] _extra_dsp_reg_71;
-    assign _extra_dsp_out_71 = $signed(data_in ^ 40'd72) * $signed(data_in ^ 40'd73);
-    always @(posedge clk) _extra_dsp_reg_71 <= _extra_dsp_out_71;
-    wire [40-1:0] _extra_dsp_out_72;
-    reg [40-1:0] _extra_dsp_reg_72;
-    assign _extra_dsp_out_72 = $signed(data_in ^ 40'd73) * $signed(data_in ^ 40'd74);
-    always @(posedge clk) _extra_dsp_reg_72 <= _extra_dsp_out_72;
-    wire [40-1:0] _extra_dsp_out_73;
-    reg [40-1:0] _extra_dsp_reg_73;
-    assign _extra_dsp_out_73 = $signed(data_in ^ 40'd74) * $signed(data_in ^ 40'd75);
-    always @(posedge clk) _extra_dsp_reg_73 <= _extra_dsp_out_73;
-    wire [40-1:0] _extra_dsp_out_74;
-    reg [40-1:0] _extra_dsp_reg_74;
-    assign _extra_dsp_out_74 = $signed(data_in ^ 40'd75) * $signed(data_in ^ 40'd76);
-    always @(posedge clk) _extra_dsp_reg_74 <= _extra_dsp_out_74;
-    wire [40-1:0] _extra_dsp_out_75;
-    reg [40-1:0] _extra_dsp_reg_75;
-    assign _extra_dsp_out_75 = $signed(data_in ^ 40'd76) * $signed(data_in ^ 40'd77);
-    always @(posedge clk) _extra_dsp_reg_75 <= _extra_dsp_out_75;
-    wire [40-1:0] _extra_dsp_out_76;
-    reg [40-1:0] _extra_dsp_reg_76;
-    assign _extra_dsp_out_76 = $signed(data_in ^ 40'd77) * $signed(data_in ^ 40'd78);
-    always @(posedge clk) _extra_dsp_reg_76 <= _extra_dsp_out_76;
-    wire [40-1:0] _extra_dsp_out_77;
-    reg [40-1:0] _extra_dsp_reg_77;
-    assign _extra_dsp_out_77 = $signed(data_in ^ 40'd78) * $signed(data_in ^ 40'd79);
-    always @(posedge clk) _extra_dsp_reg_77 <= _extra_dsp_out_77;
-    wire [40-1:0] _extra_dsp_out_78;
-    reg [40-1:0] _extra_dsp_reg_78;
-    assign _extra_dsp_out_78 = $signed(data_in ^ 40'd79) * $signed(data_in ^ 40'd80);
-    always @(posedge clk) _extra_dsp_reg_78 <= _extra_dsp_out_78;
-    wire [40-1:0] _extra_dsp_out_79;
-    reg [40-1:0] _extra_dsp_reg_79;
-    assign _extra_dsp_out_79 = $signed(data_in ^ 40'd80) * $signed(data_in ^ 40'd81);
-    always @(posedge clk) _extra_dsp_reg_79 <= _extra_dsp_out_79;
-    wire [40-1:0] _extra_dsp_out_80;
-    reg [40-1:0] _extra_dsp_reg_80;
-    assign _extra_dsp_out_80 = $signed(data_in ^ 40'd81) * $signed(data_in ^ 40'd82);
-    always @(posedge clk) _extra_dsp_reg_80 <= _extra_dsp_out_80;
-    wire [40-1:0] _extra_dsp_out_81;
-    reg [40-1:0] _extra_dsp_reg_81;
-    assign _extra_dsp_out_81 = $signed(data_in ^ 40'd82) * $signed(data_in ^ 40'd83);
-    always @(posedge clk) _extra_dsp_reg_81 <= _extra_dsp_out_81;
-    wire [40-1:0] _extra_dsp_out_82;
-    reg [40-1:0] _extra_dsp_reg_82;
-    assign _extra_dsp_out_82 = $signed(data_in ^ 40'd83) * $signed(data_in ^ 40'd84);
-    always @(posedge clk) _extra_dsp_reg_82 <= _extra_dsp_out_82;
-    wire [40-1:0] _extra_dsp_out_83;
-    reg [40-1:0] _extra_dsp_reg_83;
-    assign _extra_dsp_out_83 = $signed(data_in ^ 40'd84) * $signed(data_in ^ 40'd85);
-    always @(posedge clk) _extra_dsp_reg_83 <= _extra_dsp_out_83;
-    wire [40-1:0] _extra_dsp_out_84;
-    reg [40-1:0] _extra_dsp_reg_84;
-    assign _extra_dsp_out_84 = $signed(data_in ^ 40'd85) * $signed(data_in ^ 40'd86);
-    always @(posedge clk) _extra_dsp_reg_84 <= _extra_dsp_out_84;
-    wire [40-1:0] _extra_dsp_out_85;
-    reg [40-1:0] _extra_dsp_reg_85;
-    assign _extra_dsp_out_85 = $signed(data_in ^ 40'd86) * $signed(data_in ^ 40'd87);
-    always @(posedge clk) _extra_dsp_reg_85 <= _extra_dsp_out_85;
-    wire [40-1:0] _extra_dsp_out_86;
-    reg [40-1:0] _extra_dsp_reg_86;
-    assign _extra_dsp_out_86 = $signed(data_in ^ 40'd87) * $signed(data_in ^ 40'd88);
-    always @(posedge clk) _extra_dsp_reg_86 <= _extra_dsp_out_86;
-    wire [40-1:0] _extra_dsp_out_87;
-    reg [40-1:0] _extra_dsp_reg_87;
-    assign _extra_dsp_out_87 = $signed(data_in ^ 40'd88) * $signed(data_in ^ 40'd89);
-    always @(posedge clk) _extra_dsp_reg_87 <= _extra_dsp_out_87;
-    wire [40-1:0] _extra_dsp_out_88;
-    reg [40-1:0] _extra_dsp_reg_88;
-    assign _extra_dsp_out_88 = $signed(data_in ^ 40'd89) * $signed(data_in ^ 40'd90);
-    always @(posedge clk) _extra_dsp_reg_88 <= _extra_dsp_out_88;
-    wire [40-1:0] _extra_dsp_out_89;
-    reg [40-1:0] _extra_dsp_reg_89;
-    assign _extra_dsp_out_89 = $signed(data_in ^ 40'd90) * $signed(data_in ^ 40'd91);
-    always @(posedge clk) _extra_dsp_reg_89 <= _extra_dsp_out_89;
-    wire [40-1:0] _extra_dsp_out_90;
-    reg [40-1:0] _extra_dsp_reg_90;
-    assign _extra_dsp_out_90 = $signed(data_in ^ 40'd91) * $signed(data_in ^ 40'd92);
-    always @(posedge clk) _extra_dsp_reg_90 <= _extra_dsp_out_90;
-    wire [40-1:0] _extra_dsp_out_91;
-    reg [40-1:0] _extra_dsp_reg_91;
-    assign _extra_dsp_out_91 = $signed(data_in ^ 40'd92) * $signed(data_in ^ 40'd93);
-    always @(posedge clk) _extra_dsp_reg_91 <= _extra_dsp_out_91;
-    wire [40-1:0] _extra_dsp_out_92;
-    reg [40-1:0] _extra_dsp_reg_92;
-    assign _extra_dsp_out_92 = $signed(data_in ^ 40'd93) * $signed(data_in ^ 40'd94);
-    always @(posedge clk) _extra_dsp_reg_92 <= _extra_dsp_out_92;
-    wire [40-1:0] _extra_dsp_out_93;
-    reg [40-1:0] _extra_dsp_reg_93;
-    assign _extra_dsp_out_93 = $signed(data_in ^ 40'd94) * $signed(data_in ^ 40'd95);
-    always @(posedge clk) _extra_dsp_reg_93 <= _extra_dsp_out_93;
-    wire [40-1:0] _extra_dsp_out_94;
-    reg [40-1:0] _extra_dsp_reg_94;
-    assign _extra_dsp_out_94 = $signed(data_in ^ 40'd95) * $signed(data_in ^ 40'd96);
-    always @(posedge clk) _extra_dsp_reg_94 <= _extra_dsp_out_94;
-    wire [40-1:0] _extra_dsp_out_95;
-    reg [40-1:0] _extra_dsp_reg_95;
-    assign _extra_dsp_out_95 = $signed(data_in ^ 40'd96) * $signed(data_in ^ 40'd97);
-    always @(posedge clk) _extra_dsp_reg_95 <= _extra_dsp_out_95;
-    wire [40-1:0] _extra_dsp_out_96;
-    reg [40-1:0] _extra_dsp_reg_96;
-    assign _extra_dsp_out_96 = $signed(data_in ^ 40'd97) * $signed(data_in ^ 40'd98);
-    always @(posedge clk) _extra_dsp_reg_96 <= _extra_dsp_out_96;
-    wire [40-1:0] _extra_dsp_out_97;
-    reg [40-1:0] _extra_dsp_reg_97;
-    assign _extra_dsp_out_97 = $signed(data_in ^ 40'd98) * $signed(data_in ^ 40'd99);
-    always @(posedge clk) _extra_dsp_reg_97 <= _extra_dsp_out_97;
-    wire [40-1:0] _extra_dsp_out_98;
-    reg [40-1:0] _extra_dsp_reg_98;
-    assign _extra_dsp_out_98 = $signed(data_in ^ 40'd99) * $signed(data_in ^ 40'd100);
-    always @(posedge clk) _extra_dsp_reg_98 <= _extra_dsp_out_98;
-    wire [40-1:0] _extra_dsp_out_99;
-    reg [40-1:0] _extra_dsp_reg_99;
-    assign _extra_dsp_out_99 = $signed(data_in ^ 40'd100) * $signed(data_in ^ 40'd101);
-    always @(posedge clk) _extra_dsp_reg_99 <= _extra_dsp_out_99;
-    wire [40-1:0] _extra_dsp_out_100;
-    reg [40-1:0] _extra_dsp_reg_100;
-    assign _extra_dsp_out_100 = $signed(data_in ^ 40'd101) * $signed(data_in ^ 40'd102);
-    always @(posedge clk) _extra_dsp_reg_100 <= _extra_dsp_out_100;
-    wire [40-1:0] _extra_dsp_out_101;
-    reg [40-1:0] _extra_dsp_reg_101;
-    assign _extra_dsp_out_101 = $signed(data_in ^ 40'd102) * $signed(data_in ^ 40'd103);
-    always @(posedge clk) _extra_dsp_reg_101 <= _extra_dsp_out_101;
-    wire [40-1:0] _extra_dsp_out_102;
-    reg [40-1:0] _extra_dsp_reg_102;
-    assign _extra_dsp_out_102 = $signed(data_in ^ 40'd103) * $signed(data_in ^ 40'd104);
-    always @(posedge clk) _extra_dsp_reg_102 <= _extra_dsp_out_102;
-    wire [40-1:0] _extra_dsp_out_103;
-    reg [40-1:0] _extra_dsp_reg_103;
-    assign _extra_dsp_out_103 = $signed(data_in ^ 40'd104) * $signed(data_in ^ 40'd105);
-    always @(posedge clk) _extra_dsp_reg_103 <= _extra_dsp_out_103;
-    wire [40-1:0] _extra_dsp_out_104;
-    reg [40-1:0] _extra_dsp_reg_104;
-    assign _extra_dsp_out_104 = $signed(data_in ^ 40'd105) * $signed(data_in ^ 40'd106);
-    always @(posedge clk) _extra_dsp_reg_104 <= _extra_dsp_out_104;
-    wire [40-1:0] _extra_dsp_out_105;
-    reg [40-1:0] _extra_dsp_reg_105;
-    assign _extra_dsp_out_105 = $signed(data_in ^ 40'd106) * $signed(data_in ^ 40'd107);
-    always @(posedge clk) _extra_dsp_reg_105 <= _extra_dsp_out_105;
-    wire [40-1:0] _extra_dsp_out_106;
-    reg [40-1:0] _extra_dsp_reg_106;
-    assign _extra_dsp_out_106 = $signed(data_in ^ 40'd107) * $signed(data_in ^ 40'd108);
-    always @(posedge clk) _extra_dsp_reg_106 <= _extra_dsp_out_106;
-    wire [40-1:0] _extra_dsp_out_107;
-    reg [40-1:0] _extra_dsp_reg_107;
-    assign _extra_dsp_out_107 = $signed(data_in ^ 40'd108) * $signed(data_in ^ 40'd109);
-    always @(posedge clk) _extra_dsp_reg_107 <= _extra_dsp_out_107;
-    wire [40-1:0] _extra_dsp_out_108;
-    reg [40-1:0] _extra_dsp_reg_108;
-    assign _extra_dsp_out_108 = $signed(data_in ^ 40'd109) * $signed(data_in ^ 40'd110);
-    always @(posedge clk) _extra_dsp_reg_108 <= _extra_dsp_out_108;
-    wire [40-1:0] _extra_dsp_out_109;
-    reg [40-1:0] _extra_dsp_reg_109;
-    assign _extra_dsp_out_109 = $signed(data_in ^ 40'd110) * $signed(data_in ^ 40'd111);
-    always @(posedge clk) _extra_dsp_reg_109 <= _extra_dsp_out_109;
-    wire [40-1:0] _extra_dsp_out_110;
-    reg [40-1:0] _extra_dsp_reg_110;
-    assign _extra_dsp_out_110 = $signed(data_in ^ 40'd111) * $signed(data_in ^ 40'd112);
-    always @(posedge clk) _extra_dsp_reg_110 <= _extra_dsp_out_110;
-    wire [40-1:0] _extra_dsp_out_111;
-    reg [40-1:0] _extra_dsp_reg_111;
-    assign _extra_dsp_out_111 = $signed(data_in ^ 40'd112) * $signed(data_in ^ 40'd113);
-    always @(posedge clk) _extra_dsp_reg_111 <= _extra_dsp_out_111;
-    wire [40-1:0] _extra_dsp_out_112;
-    reg [40-1:0] _extra_dsp_reg_112;
-    assign _extra_dsp_out_112 = $signed(data_in ^ 40'd113) * $signed(data_in ^ 40'd114);
-    always @(posedge clk) _extra_dsp_reg_112 <= _extra_dsp_out_112;
-    wire [40-1:0] _extra_dsp_out_113;
-    reg [40-1:0] _extra_dsp_reg_113;
-    assign _extra_dsp_out_113 = $signed(data_in ^ 40'd114) * $signed(data_in ^ 40'd115);
-    always @(posedge clk) _extra_dsp_reg_113 <= _extra_dsp_out_113;
-    wire [40-1:0] _extra_dsp_out_114;
-    reg [40-1:0] _extra_dsp_reg_114;
-    assign _extra_dsp_out_114 = $signed(data_in ^ 40'd115) * $signed(data_in ^ 40'd116);
-    always @(posedge clk) _extra_dsp_reg_114 <= _extra_dsp_out_114;
-    wire [40-1:0] _extra_dsp_out_115;
-    reg [40-1:0] _extra_dsp_reg_115;
-    assign _extra_dsp_out_115 = $signed(data_in ^ 40'd116) * $signed(data_in ^ 40'd117);
-    always @(posedge clk) _extra_dsp_reg_115 <= _extra_dsp_out_115;
-    wire [40-1:0] _extra_dsp_out_116;
-    reg [40-1:0] _extra_dsp_reg_116;
-    assign _extra_dsp_out_116 = $signed(data_in ^ 40'd117) * $signed(data_in ^ 40'd118);
-    always @(posedge clk) _extra_dsp_reg_116 <= _extra_dsp_out_116;
-    wire [40-1:0] _extra_dsp_out_117;
-    reg [40-1:0] _extra_dsp_reg_117;
-    assign _extra_dsp_out_117 = $signed(data_in ^ 40'd118) * $signed(data_in ^ 40'd119);
-    always @(posedge clk) _extra_dsp_reg_117 <= _extra_dsp_out_117;
-    wire [40-1:0] _extra_dsp_out_118;
-    reg [40-1:0] _extra_dsp_reg_118;
-    assign _extra_dsp_out_118 = $signed(data_in ^ 40'd119) * $signed(data_in ^ 40'd120);
-    always @(posedge clk) _extra_dsp_reg_118 <= _extra_dsp_out_118;
-    wire [40-1:0] _extra_dsp_out_119;
-    reg [40-1:0] _extra_dsp_reg_119;
-    assign _extra_dsp_out_119 = $signed(data_in ^ 40'd120) * $signed(data_in ^ 40'd121);
-    always @(posedge clk) _extra_dsp_reg_119 <= _extra_dsp_out_119;
-    wire [40-1:0] _extra_dsp_out_120;
-    reg [40-1:0] _extra_dsp_reg_120;
-    assign _extra_dsp_out_120 = $signed(data_in ^ 40'd121) * $signed(data_in ^ 40'd122);
-    always @(posedge clk) _extra_dsp_reg_120 <= _extra_dsp_out_120;
-    wire [40-1:0] _extra_dsp_out_121;
-    reg [40-1:0] _extra_dsp_reg_121;
-    assign _extra_dsp_out_121 = $signed(data_in ^ 40'd122) * $signed(data_in ^ 40'd123);
-    always @(posedge clk) _extra_dsp_reg_121 <= _extra_dsp_out_121;
-    wire [40-1:0] _extra_dsp_out_122;
-    reg [40-1:0] _extra_dsp_reg_122;
-    assign _extra_dsp_out_122 = $signed(data_in ^ 40'd123) * $signed(data_in ^ 40'd124);
-    always @(posedge clk) _extra_dsp_reg_122 <= _extra_dsp_out_122;
-    wire [40-1:0] _extra_dsp_out_123;
-    reg [40-1:0] _extra_dsp_reg_123;
-    assign _extra_dsp_out_123 = $signed(data_in ^ 40'd124) * $signed(data_in ^ 40'd125);
-    always @(posedge clk) _extra_dsp_reg_123 <= _extra_dsp_out_123;
-    wire [40-1:0] _extra_dsp_out_124;
-    reg [40-1:0] _extra_dsp_reg_124;
-    assign _extra_dsp_out_124 = $signed(data_in ^ 40'd125) * $signed(data_in ^ 40'd126);
-    always @(posedge clk) _extra_dsp_reg_124 <= _extra_dsp_out_124;
-    wire [40-1:0] _extra_dsp_out_125;
-    reg [40-1:0] _extra_dsp_reg_125;
-    assign _extra_dsp_out_125 = $signed(data_in ^ 40'd126) * $signed(data_in ^ 40'd127);
-    always @(posedge clk) _extra_dsp_reg_125 <= _extra_dsp_out_125;
-    wire [40-1:0] _extra_dsp_out_126;
-    reg [40-1:0] _extra_dsp_reg_126;
-    assign _extra_dsp_out_126 = $signed(data_in ^ 40'd127) * $signed(data_in ^ 40'd128);
-    always @(posedge clk) _extra_dsp_reg_126 <= _extra_dsp_out_126;
-    wire [40-1:0] _extra_dsp_out_127;
-    reg [40-1:0] _extra_dsp_reg_127;
-    assign _extra_dsp_out_127 = $signed(data_in ^ 40'd128) * $signed(data_in ^ 40'd129);
-    always @(posedge clk) _extra_dsp_reg_127 <= _extra_dsp_out_127;
-    wire [40-1:0] _extra_dsp_out_128;
-    reg [40-1:0] _extra_dsp_reg_128;
-    assign _extra_dsp_out_128 = $signed(data_in ^ 40'd129) * $signed(data_in ^ 40'd130);
-    always @(posedge clk) _extra_dsp_reg_128 <= _extra_dsp_out_128;
-    wire [40-1:0] _extra_dsp_out_129;
-    reg [40-1:0] _extra_dsp_reg_129;
-    assign _extra_dsp_out_129 = $signed(data_in ^ 40'd130) * $signed(data_in ^ 40'd131);
-    always @(posedge clk) _extra_dsp_reg_129 <= _extra_dsp_out_129;
-    wire [40-1:0] _extra_dsp_out_130;
-    reg [40-1:0] _extra_dsp_reg_130;
-    assign _extra_dsp_out_130 = $signed(data_in ^ 40'd131) * $signed(data_in ^ 40'd132);
-    always @(posedge clk) _extra_dsp_reg_130 <= _extra_dsp_out_130;
-    wire [40-1:0] _extra_dsp_out_131;
-    reg [40-1:0] _extra_dsp_reg_131;
-    assign _extra_dsp_out_131 = $signed(data_in ^ 40'd132) * $signed(data_in ^ 40'd133);
-    always @(posedge clk) _extra_dsp_reg_131 <= _extra_dsp_out_131;
-    wire [40-1:0] _extra_dsp_out_132;
-    reg [40-1:0] _extra_dsp_reg_132;
-    assign _extra_dsp_out_132 = $signed(data_in ^ 40'd133) * $signed(data_in ^ 40'd134);
-    always @(posedge clk) _extra_dsp_reg_132 <= _extra_dsp_out_132;
-    wire [40-1:0] _extra_dsp_out_133;
-    reg [40-1:0] _extra_dsp_reg_133;
-    assign _extra_dsp_out_133 = $signed(data_in ^ 40'd134) * $signed(data_in ^ 40'd135);
-    always @(posedge clk) _extra_dsp_reg_133 <= _extra_dsp_out_133;
-    wire [40-1:0] _extra_dsp_out_134;
-    reg [40-1:0] _extra_dsp_reg_134;
-    assign _extra_dsp_out_134 = $signed(data_in ^ 40'd135) * $signed(data_in ^ 40'd136);
-    always @(posedge clk) _extra_dsp_reg_134 <= _extra_dsp_out_134;
-    wire [40-1:0] _extra_dsp_out_135;
-    reg [40-1:0] _extra_dsp_reg_135;
-    assign _extra_dsp_out_135 = $signed(data_in ^ 40'd136) * $signed(data_in ^ 40'd137);
-    always @(posedge clk) _extra_dsp_reg_135 <= _extra_dsp_out_135;
-    wire [40-1:0] _extra_dsp_out_136;
-    reg [40-1:0] _extra_dsp_reg_136;
-    assign _extra_dsp_out_136 = $signed(data_in ^ 40'd137) * $signed(data_in ^ 40'd138);
-    always @(posedge clk) _extra_dsp_reg_136 <= _extra_dsp_out_136;
-    wire [40-1:0] _extra_dsp_out_137;
-    reg [40-1:0] _extra_dsp_reg_137;
-    assign _extra_dsp_out_137 = $signed(data_in ^ 40'd138) * $signed(data_in ^ 40'd139);
-    always @(posedge clk) _extra_dsp_reg_137 <= _extra_dsp_out_137;
-    wire [40-1:0] _extra_dsp_out_138;
-    reg [40-1:0] _extra_dsp_reg_138;
-    assign _extra_dsp_out_138 = $signed(data_in ^ 40'd139) * $signed(data_in ^ 40'd140);
-    always @(posedge clk) _extra_dsp_reg_138 <= _extra_dsp_out_138;
-    wire [40-1:0] _extra_dsp_out_139;
-    reg [40-1:0] _extra_dsp_reg_139;
-    assign _extra_dsp_out_139 = $signed(data_in ^ 40'd140) * $signed(data_in ^ 40'd141);
-    always @(posedge clk) _extra_dsp_reg_139 <= _extra_dsp_out_139;
-    wire [40-1:0] _extra_dsp_out_140;
-    reg [40-1:0] _extra_dsp_reg_140;
-    assign _extra_dsp_out_140 = $signed(data_in ^ 40'd141) * $signed(data_in ^ 40'd142);
-    always @(posedge clk) _extra_dsp_reg_140 <= _extra_dsp_out_140;
-    wire [40-1:0] _extra_dsp_out_141;
-    reg [40-1:0] _extra_dsp_reg_141;
-    assign _extra_dsp_out_141 = $signed(data_in ^ 40'd142) * $signed(data_in ^ 40'd143);
-    always @(posedge clk) _extra_dsp_reg_141 <= _extra_dsp_out_141;
-    wire [40-1:0] _extra_dsp_out_142;
-    reg [40-1:0] _extra_dsp_reg_142;
-    assign _extra_dsp_out_142 = $signed(data_in ^ 40'd143) * $signed(data_in ^ 40'd144);
-    always @(posedge clk) _extra_dsp_reg_142 <= _extra_dsp_out_142;
-    wire [40-1:0] _extra_dsp_out_143;
-    reg [40-1:0] _extra_dsp_reg_143;
-    assign _extra_dsp_out_143 = $signed(data_in ^ 40'd144) * $signed(data_in ^ 40'd145);
-    always @(posedge clk) _extra_dsp_reg_143 <= _extra_dsp_out_143;
-    wire [40-1:0] _extra_dsp_out_144;
-    reg [40-1:0] _extra_dsp_reg_144;
-    assign _extra_dsp_out_144 = $signed(data_in ^ 40'd145) * $signed(data_in ^ 40'd146);
-    always @(posedge clk) _extra_dsp_reg_144 <= _extra_dsp_out_144;
-    wire [40-1:0] _extra_dsp_out_145;
-    reg [40-1:0] _extra_dsp_reg_145;
-    assign _extra_dsp_out_145 = $signed(data_in ^ 40'd146) * $signed(data_in ^ 40'd147);
-    always @(posedge clk) _extra_dsp_reg_145 <= _extra_dsp_out_145;
-    wire [40-1:0] _extra_dsp_out_146;
-    reg [40-1:0] _extra_dsp_reg_146;
-    assign _extra_dsp_out_146 = $signed(data_in ^ 40'd147) * $signed(data_in ^ 40'd148);
-    always @(posedge clk) _extra_dsp_reg_146 <= _extra_dsp_out_146;
-    wire [40-1:0] _extra_dsp_out_147;
-    reg [40-1:0] _extra_dsp_reg_147;
-    assign _extra_dsp_out_147 = $signed(data_in ^ 40'd148) * $signed(data_in ^ 40'd149);
-    always @(posedge clk) _extra_dsp_reg_147 <= _extra_dsp_out_147;
-    wire [40-1:0] _extra_dsp_out_148;
-    reg [40-1:0] _extra_dsp_reg_148;
-    assign _extra_dsp_out_148 = $signed(data_in ^ 40'd149) * $signed(data_in ^ 40'd150);
-    always @(posedge clk) _extra_dsp_reg_148 <= _extra_dsp_out_148;
-    wire [40-1:0] _extra_dsp_out_149;
-    reg [40-1:0] _extra_dsp_reg_149;
-    assign _extra_dsp_out_149 = $signed(data_in ^ 40'd150) * $signed(data_in ^ 40'd151);
-    always @(posedge clk) _extra_dsp_reg_149 <= _extra_dsp_out_149;
-    wire [40-1:0] _extra_dsp_out_150;
-    reg [40-1:0] _extra_dsp_reg_150;
-    assign _extra_dsp_out_150 = $signed(data_in ^ 40'd151) * $signed(data_in ^ 40'd152);
-    always @(posedge clk) _extra_dsp_reg_150 <= _extra_dsp_out_150;
-    wire [40-1:0] _extra_dsp_out_151;
-    reg [40-1:0] _extra_dsp_reg_151;
-    assign _extra_dsp_out_151 = $signed(data_in ^ 40'd152) * $signed(data_in ^ 40'd153);
-    always @(posedge clk) _extra_dsp_reg_151 <= _extra_dsp_out_151;
-    wire [40-1:0] _extra_dsp_out_152;
-    reg [40-1:0] _extra_dsp_reg_152;
-    assign _extra_dsp_out_152 = $signed(data_in ^ 40'd153) * $signed(data_in ^ 40'd154);
-    always @(posedge clk) _extra_dsp_reg_152 <= _extra_dsp_out_152;
-    wire [40-1:0] _extra_dsp_out_153;
-    reg [40-1:0] _extra_dsp_reg_153;
-    assign _extra_dsp_out_153 = $signed(data_in ^ 40'd154) * $signed(data_in ^ 40'd155);
-    always @(posedge clk) _extra_dsp_reg_153 <= _extra_dsp_out_153;
-    wire [40-1:0] _extra_dsp_out_154;
-    reg [40-1:0] _extra_dsp_reg_154;
-    assign _extra_dsp_out_154 = $signed(data_in ^ 40'd155) * $signed(data_in ^ 40'd156);
-    always @(posedge clk) _extra_dsp_reg_154 <= _extra_dsp_out_154;
-    wire [40-1:0] _extra_dsp_out_155;
-    reg [40-1:0] _extra_dsp_reg_155;
-    assign _extra_dsp_out_155 = $signed(data_in ^ 40'd156) * $signed(data_in ^ 40'd157);
-    always @(posedge clk) _extra_dsp_reg_155 <= _extra_dsp_out_155;
-    wire [40-1:0] _extra_dsp_out_156;
-    reg [40-1:0] _extra_dsp_reg_156;
-    assign _extra_dsp_out_156 = $signed(data_in ^ 40'd157) * $signed(data_in ^ 40'd158);
-    always @(posedge clk) _extra_dsp_reg_156 <= _extra_dsp_out_156;
-    wire [40-1:0] _extra_dsp_out_157;
-    reg [40-1:0] _extra_dsp_reg_157;
-    assign _extra_dsp_out_157 = $signed(data_in ^ 40'd158) * $signed(data_in ^ 40'd159);
-    always @(posedge clk) _extra_dsp_reg_157 <= _extra_dsp_out_157;
-    wire [40-1:0] _extra_dsp_out_158;
-    reg [40-1:0] _extra_dsp_reg_158;
-    assign _extra_dsp_out_158 = $signed(data_in ^ 40'd159) * $signed(data_in ^ 40'd160);
-    always @(posedge clk) _extra_dsp_reg_158 <= _extra_dsp_out_158;
-    wire [40-1:0] _extra_dsp_out_159;
-    reg [40-1:0] _extra_dsp_reg_159;
-    assign _extra_dsp_out_159 = $signed(data_in ^ 40'd160) * $signed(data_in ^ 40'd161);
-    always @(posedge clk) _extra_dsp_reg_159 <= _extra_dsp_out_159;
-    wire [40-1:0] _extra_dsp_out_160;
-    reg [40-1:0] _extra_dsp_reg_160;
-    assign _extra_dsp_out_160 = $signed(data_in ^ 40'd161) * $signed(data_in ^ 40'd162);
-    always @(posedge clk) _extra_dsp_reg_160 <= _extra_dsp_out_160;
-    wire [40-1:0] _extra_dsp_out_161;
-    reg [40-1:0] _extra_dsp_reg_161;
-    assign _extra_dsp_out_161 = $signed(data_in ^ 40'd162) * $signed(data_in ^ 40'd163);
-    always @(posedge clk) _extra_dsp_reg_161 <= _extra_dsp_out_161;
-    wire [40-1:0] _extra_dsp_out_162;
-    reg [40-1:0] _extra_dsp_reg_162;
-    assign _extra_dsp_out_162 = $signed(data_in ^ 40'd163) * $signed(data_in ^ 40'd164);
-    always @(posedge clk) _extra_dsp_reg_162 <= _extra_dsp_out_162;
-    wire [40-1:0] _extra_dsp_out_163;
-    reg [40-1:0] _extra_dsp_reg_163;
-    assign _extra_dsp_out_163 = $signed(data_in ^ 40'd164) * $signed(data_in ^ 40'd165);
-    always @(posedge clk) _extra_dsp_reg_163 <= _extra_dsp_out_163;
-    wire [40-1:0] _extra_dsp_out_164;
-    reg [40-1:0] _extra_dsp_reg_164;
-    assign _extra_dsp_out_164 = $signed(data_in ^ 40'd165) * $signed(data_in ^ 40'd166);
-    always @(posedge clk) _extra_dsp_reg_164 <= _extra_dsp_out_164;
-    wire [40-1:0] _extra_dsp_out_165;
-    reg [40-1:0] _extra_dsp_reg_165;
-    assign _extra_dsp_out_165 = $signed(data_in ^ 40'd166) * $signed(data_in ^ 40'd167);
-    always @(posedge clk) _extra_dsp_reg_165 <= _extra_dsp_out_165;
-    wire [40-1:0] _extra_dsp_out_166;
-    reg [40-1:0] _extra_dsp_reg_166;
-    assign _extra_dsp_out_166 = $signed(data_in ^ 40'd167) * $signed(data_in ^ 40'd168);
-    always @(posedge clk) _extra_dsp_reg_166 <= _extra_dsp_out_166;
-    wire [40-1:0] _extra_dsp_out_167;
-    reg [40-1:0] _extra_dsp_reg_167;
-    assign _extra_dsp_out_167 = $signed(data_in ^ 40'd168) * $signed(data_in ^ 40'd169);
-    always @(posedge clk) _extra_dsp_reg_167 <= _extra_dsp_out_167;
-    wire [40-1:0] _extra_dsp_out_168;
-    reg [40-1:0] _extra_dsp_reg_168;
-    assign _extra_dsp_out_168 = $signed(data_in ^ 40'd169) * $signed(data_in ^ 40'd170);
-    always @(posedge clk) _extra_dsp_reg_168 <= _extra_dsp_out_168;
-    wire [40-1:0] _extra_dsp_out_169;
-    reg [40-1:0] _extra_dsp_reg_169;
-    assign _extra_dsp_out_169 = $signed(data_in ^ 40'd170) * $signed(data_in ^ 40'd171);
-    always @(posedge clk) _extra_dsp_reg_169 <= _extra_dsp_out_169;
-    wire [40-1:0] _extra_dsp_out_170;
-    reg [40-1:0] _extra_dsp_reg_170;
-    assign _extra_dsp_out_170 = $signed(data_in ^ 40'd171) * $signed(data_in ^ 40'd172);
-    always @(posedge clk) _extra_dsp_reg_170 <= _extra_dsp_out_170;
-    wire [40-1:0] _extra_dsp_out_171;
-    reg [40-1:0] _extra_dsp_reg_171;
-    assign _extra_dsp_out_171 = $signed(data_in ^ 40'd172) * $signed(data_in ^ 40'd173);
-    always @(posedge clk) _extra_dsp_reg_171 <= _extra_dsp_out_171;
-    wire [40-1:0] _extra_dsp_out_172;
-    reg [40-1:0] _extra_dsp_reg_172;
-    assign _extra_dsp_out_172 = $signed(data_in ^ 40'd173) * $signed(data_in ^ 40'd174);
-    always @(posedge clk) _extra_dsp_reg_172 <= _extra_dsp_out_172;
-    wire [40-1:0] _extra_dsp_out_173;
-    reg [40-1:0] _extra_dsp_reg_173;
-    assign _extra_dsp_out_173 = $signed(data_in ^ 40'd174) * $signed(data_in ^ 40'd175);
-    always @(posedge clk) _extra_dsp_reg_173 <= _extra_dsp_out_173;
-    wire [40-1:0] _extra_dsp_out_174;
-    reg [40-1:0] _extra_dsp_reg_174;
-    assign _extra_dsp_out_174 = $signed(data_in ^ 40'd175) * $signed(data_in ^ 40'd176);
-    always @(posedge clk) _extra_dsp_reg_174 <= _extra_dsp_out_174;
-    wire [40-1:0] _extra_dsp_out_175;
-    reg [40-1:0] _extra_dsp_reg_175;
-    assign _extra_dsp_out_175 = $signed(data_in ^ 40'd176) * $signed(data_in ^ 40'd177);
-    always @(posedge clk) _extra_dsp_reg_175 <= _extra_dsp_out_175;
-    wire [40-1:0] _extra_dsp_out_176;
-    reg [40-1:0] _extra_dsp_reg_176;
-    assign _extra_dsp_out_176 = $signed(data_in ^ 40'd177) * $signed(data_in ^ 40'd178);
-    always @(posedge clk) _extra_dsp_reg_176 <= _extra_dsp_out_176;
-    wire [40-1:0] _extra_dsp_out_177;
-    reg [40-1:0] _extra_dsp_reg_177;
-    assign _extra_dsp_out_177 = $signed(data_in ^ 40'd178) * $signed(data_in ^ 40'd179);
-    always @(posedge clk) _extra_dsp_reg_177 <= _extra_dsp_out_177;
-    wire [40-1:0] _extra_dsp_out_178;
-    reg [40-1:0] _extra_dsp_reg_178;
-    assign _extra_dsp_out_178 = $signed(data_in ^ 40'd179) * $signed(data_in ^ 40'd180);
-    always @(posedge clk) _extra_dsp_reg_178 <= _extra_dsp_out_178;
-    wire [40-1:0] _extra_dsp_out_179;
-    reg [40-1:0] _extra_dsp_reg_179;
-    assign _extra_dsp_out_179 = $signed(data_in ^ 40'd180) * $signed(data_in ^ 40'd181);
-    always @(posedge clk) _extra_dsp_reg_179 <= _extra_dsp_out_179;
-    wire [40-1:0] _extra_dsp_out_180;
-    reg [40-1:0] _extra_dsp_reg_180;
-    assign _extra_dsp_out_180 = $signed(data_in ^ 40'd181) * $signed(data_in ^ 40'd182);
-    always @(posedge clk) _extra_dsp_reg_180 <= _extra_dsp_out_180;
-    wire [40-1:0] _extra_dsp_out_181;
-    reg [40-1:0] _extra_dsp_reg_181;
-    assign _extra_dsp_out_181 = $signed(data_in ^ 40'd182) * $signed(data_in ^ 40'd183);
-    always @(posedge clk) _extra_dsp_reg_181 <= _extra_dsp_out_181;
-    wire [40-1:0] _extra_dsp_out_182;
-    reg [40-1:0] _extra_dsp_reg_182;
-    assign _extra_dsp_out_182 = $signed(data_in ^ 40'd183) * $signed(data_in ^ 40'd184);
-    always @(posedge clk) _extra_dsp_reg_182 <= _extra_dsp_out_182;
-    wire [40-1:0] _extra_dsp_out_183;
-    reg [40-1:0] _extra_dsp_reg_183;
-    assign _extra_dsp_out_183 = $signed(data_in ^ 40'd184) * $signed(data_in ^ 40'd185);
-    always @(posedge clk) _extra_dsp_reg_183 <= _extra_dsp_out_183;
-    wire [40-1:0] _extra_dsp_out_184;
-    reg [40-1:0] _extra_dsp_reg_184;
-    assign _extra_dsp_out_184 = $signed(data_in ^ 40'd185) * $signed(data_in ^ 40'd186);
-    always @(posedge clk) _extra_dsp_reg_184 <= _extra_dsp_out_184;
-    wire [40-1:0] _extra_dsp_out_185;
-    reg [40-1:0] _extra_dsp_reg_185;
-    assign _extra_dsp_out_185 = $signed(data_in ^ 40'd186) * $signed(data_in ^ 40'd187);
-    always @(posedge clk) _extra_dsp_reg_185 <= _extra_dsp_out_185;
-    wire [40-1:0] _extra_dsp_out_186;
-    reg [40-1:0] _extra_dsp_reg_186;
-    assign _extra_dsp_out_186 = $signed(data_in ^ 40'd187) * $signed(data_in ^ 40'd188);
-    always @(posedge clk) _extra_dsp_reg_186 <= _extra_dsp_out_186;
-    wire [40-1:0] _extra_dsp_out_187;
-    reg [40-1:0] _extra_dsp_reg_187;
-    assign _extra_dsp_out_187 = $signed(data_in ^ 40'd188) * $signed(data_in ^ 40'd189);
-    always @(posedge clk) _extra_dsp_reg_187 <= _extra_dsp_out_187;
-    wire [40-1:0] _extra_dsp_out_188;
-    reg [40-1:0] _extra_dsp_reg_188;
-    assign _extra_dsp_out_188 = $signed(data_in ^ 40'd189) * $signed(data_in ^ 40'd190);
-    always @(posedge clk) _extra_dsp_reg_188 <= _extra_dsp_out_188;
-    wire [40-1:0] _extra_dsp_out_189;
-    reg [40-1:0] _extra_dsp_reg_189;
-    assign _extra_dsp_out_189 = $signed(data_in ^ 40'd190) * $signed(data_in ^ 40'd191);
-    always @(posedge clk) _extra_dsp_reg_189 <= _extra_dsp_out_189;
-    wire [40-1:0] _extra_dsp_out_190;
-    reg [40-1:0] _extra_dsp_reg_190;
-    assign _extra_dsp_out_190 = $signed(data_in ^ 40'd191) * $signed(data_in ^ 40'd192);
-    always @(posedge clk) _extra_dsp_reg_190 <= _extra_dsp_out_190;
-    wire [40-1:0] _extra_dsp_out_191;
-    reg [40-1:0] _extra_dsp_reg_191;
-    assign _extra_dsp_out_191 = $signed(data_in ^ 40'd192) * $signed(data_in ^ 40'd193);
-    always @(posedge clk) _extra_dsp_reg_191 <= _extra_dsp_out_191;
-    wire [40-1:0] _extra_dsp_out_192;
-    reg [40-1:0] _extra_dsp_reg_192;
-    assign _extra_dsp_out_192 = $signed(data_in ^ 40'd193) * $signed(data_in ^ 40'd194);
-    always @(posedge clk) _extra_dsp_reg_192 <= _extra_dsp_out_192;
-    wire [40-1:0] _extra_dsp_out_193;
-    reg [40-1:0] _extra_dsp_reg_193;
-    assign _extra_dsp_out_193 = $signed(data_in ^ 40'd194) * $signed(data_in ^ 40'd195);
-    always @(posedge clk) _extra_dsp_reg_193 <= _extra_dsp_out_193;
-    wire [40-1:0] _extra_dsp_out_194;
-    reg [40-1:0] _extra_dsp_reg_194;
-    assign _extra_dsp_out_194 = $signed(data_in ^ 40'd195) * $signed(data_in ^ 40'd196);
-    always @(posedge clk) _extra_dsp_reg_194 <= _extra_dsp_out_194;
-    wire [40-1:0] _extra_dsp_out_195;
-    reg [40-1:0] _extra_dsp_reg_195;
-    assign _extra_dsp_out_195 = $signed(data_in ^ 40'd196) * $signed(data_in ^ 40'd197);
-    always @(posedge clk) _extra_dsp_reg_195 <= _extra_dsp_out_195;
-    wire [40-1:0] _extra_dsp_out_196;
-    reg [40-1:0] _extra_dsp_reg_196;
-    assign _extra_dsp_out_196 = $signed(data_in ^ 40'd197) * $signed(data_in ^ 40'd198);
-    always @(posedge clk) _extra_dsp_reg_196 <= _extra_dsp_out_196;
-    wire [40-1:0] _extra_dsp_out_197;
-    reg [40-1:0] _extra_dsp_reg_197;
-    assign _extra_dsp_out_197 = $signed(data_in ^ 40'd198) * $signed(data_in ^ 40'd199);
-    always @(posedge clk) _extra_dsp_reg_197 <= _extra_dsp_out_197;
-    wire [40-1:0] _extra_dsp_out_198;
-    reg [40-1:0] _extra_dsp_reg_198;
-    assign _extra_dsp_out_198 = $signed(data_in ^ 40'd199) * $signed(data_in ^ 40'd200);
-    always @(posedge clk) _extra_dsp_reg_198 <= _extra_dsp_out_198;
-    wire [40-1:0] _extra_dsp_out_199;
-    reg [40-1:0] _extra_dsp_reg_199;
-    assign _extra_dsp_out_199 = $signed(data_in ^ 40'd200) * $signed(data_in ^ 40'd201);
-    always @(posedge clk) _extra_dsp_reg_199 <= _extra_dsp_out_199;
-    wire [40-1:0] _extra_dsp_out_200;
-    reg [40-1:0] _extra_dsp_reg_200;
-    assign _extra_dsp_out_200 = $signed(data_in ^ 40'd201) * $signed(data_in ^ 40'd202);
-    always @(posedge clk) _extra_dsp_reg_200 <= _extra_dsp_out_200;
-    wire [40-1:0] _extra_dsp_out_201;
-    reg [40-1:0] _extra_dsp_reg_201;
-    assign _extra_dsp_out_201 = $signed(data_in ^ 40'd202) * $signed(data_in ^ 40'd203);
-    always @(posedge clk) _extra_dsp_reg_201 <= _extra_dsp_out_201;
-    wire [40-1:0] _extra_dsp_out_202;
-    reg [40-1:0] _extra_dsp_reg_202;
-    assign _extra_dsp_out_202 = $signed(data_in ^ 40'd203) * $signed(data_in ^ 40'd204);
-    always @(posedge clk) _extra_dsp_reg_202 <= _extra_dsp_out_202;
-    wire [40-1:0] _extra_dsp_out_203;
-    reg [40-1:0] _extra_dsp_reg_203;
-    assign _extra_dsp_out_203 = $signed(data_in ^ 40'd204) * $signed(data_in ^ 40'd205);
-    always @(posedge clk) _extra_dsp_reg_203 <= _extra_dsp_out_203;
-    wire [40-1:0] _extra_dsp_out_204;
-    reg [40-1:0] _extra_dsp_reg_204;
-    assign _extra_dsp_out_204 = $signed(data_in ^ 40'd205) * $signed(data_in ^ 40'd206);
-    always @(posedge clk) _extra_dsp_reg_204 <= _extra_dsp_out_204;
-    wire [40-1:0] _extra_dsp_out_205;
-    reg [40-1:0] _extra_dsp_reg_205;
-    assign _extra_dsp_out_205 = $signed(data_in ^ 40'd206) * $signed(data_in ^ 40'd207);
-    always @(posedge clk) _extra_dsp_reg_205 <= _extra_dsp_out_205;
-    wire [40-1:0] _extra_dsp_out_206;
-    reg [40-1:0] _extra_dsp_reg_206;
-    assign _extra_dsp_out_206 = $signed(data_in ^ 40'd207) * $signed(data_in ^ 40'd208);
-    always @(posedge clk) _extra_dsp_reg_206 <= _extra_dsp_out_206;
-    wire [40-1:0] _extra_dsp_out_207;
-    reg [40-1:0] _extra_dsp_reg_207;
-    assign _extra_dsp_out_207 = $signed(data_in ^ 40'd208) * $signed(data_in ^ 40'd209);
-    always @(posedge clk) _extra_dsp_reg_207 <= _extra_dsp_out_207;
-    wire [40-1:0] _extra_dsp_out_208;
-    reg [40-1:0] _extra_dsp_reg_208;
-    assign _extra_dsp_out_208 = $signed(data_in ^ 40'd209) * $signed(data_in ^ 40'd210);
-    always @(posedge clk) _extra_dsp_reg_208 <= _extra_dsp_out_208;
-    wire [40-1:0] _extra_dsp_out_209;
-    reg [40-1:0] _extra_dsp_reg_209;
-    assign _extra_dsp_out_209 = $signed(data_in ^ 40'd210) * $signed(data_in ^ 40'd211);
-    always @(posedge clk) _extra_dsp_reg_209 <= _extra_dsp_out_209;
-    wire [40-1:0] _extra_dsp_out_210;
-    reg [40-1:0] _extra_dsp_reg_210;
-    assign _extra_dsp_out_210 = $signed(data_in ^ 40'd211) * $signed(data_in ^ 40'd212);
-    always @(posedge clk) _extra_dsp_reg_210 <= _extra_dsp_out_210;
-    wire [40-1:0] _extra_dsp_out_211;
-    reg [40-1:0] _extra_dsp_reg_211;
-    assign _extra_dsp_out_211 = $signed(data_in ^ 40'd212) * $signed(data_in ^ 40'd213);
-    always @(posedge clk) _extra_dsp_reg_211 <= _extra_dsp_out_211;
-    wire [40-1:0] _extra_dsp_out_212;
-    reg [40-1:0] _extra_dsp_reg_212;
-    assign _extra_dsp_out_212 = $signed(data_in ^ 40'd213) * $signed(data_in ^ 40'd214);
-    always @(posedge clk) _extra_dsp_reg_212 <= _extra_dsp_out_212;
-    wire [40-1:0] _extra_dsp_out_213;
-    reg [40-1:0] _extra_dsp_reg_213;
-    assign _extra_dsp_out_213 = $signed(data_in ^ 40'd214) * $signed(data_in ^ 40'd215);
-    always @(posedge clk) _extra_dsp_reg_213 <= _extra_dsp_out_213;
-    wire [40-1:0] _extra_dsp_out_214;
-    reg [40-1:0] _extra_dsp_reg_214;
-    assign _extra_dsp_out_214 = $signed(data_in ^ 40'd215) * $signed(data_in ^ 40'd216);
-    always @(posedge clk) _extra_dsp_reg_214 <= _extra_dsp_out_214;
-    wire [40-1:0] _extra_dsp_out_215;
-    reg [40-1:0] _extra_dsp_reg_215;
-    assign _extra_dsp_out_215 = $signed(data_in ^ 40'd216) * $signed(data_in ^ 40'd217);
-    always @(posedge clk) _extra_dsp_reg_215 <= _extra_dsp_out_215;
-    wire [40-1:0] _extra_dsp_out_216;
-    reg [40-1:0] _extra_dsp_reg_216;
-    assign _extra_dsp_out_216 = $signed(data_in ^ 40'd217) * $signed(data_in ^ 40'd218);
-    always @(posedge clk) _extra_dsp_reg_216 <= _extra_dsp_out_216;
-    wire [40-1:0] _extra_dsp_out_217;
-    reg [40-1:0] _extra_dsp_reg_217;
-    assign _extra_dsp_out_217 = $signed(data_in ^ 40'd218) * $signed(data_in ^ 40'd219);
-    always @(posedge clk) _extra_dsp_reg_217 <= _extra_dsp_out_217;
-    wire [40-1:0] _extra_dsp_out_218;
-    reg [40-1:0] _extra_dsp_reg_218;
-    assign _extra_dsp_out_218 = $signed(data_in ^ 40'd219) * $signed(data_in ^ 40'd220);
-    always @(posedge clk) _extra_dsp_reg_218 <= _extra_dsp_out_218;
-    wire [40-1:0] _extra_dsp_out_219;
-    reg [40-1:0] _extra_dsp_reg_219;
-    assign _extra_dsp_out_219 = $signed(data_in ^ 40'd220) * $signed(data_in ^ 40'd221);
-    always @(posedge clk) _extra_dsp_reg_219 <= _extra_dsp_out_219;
-    wire [40-1:0] _extra_dsp_out_220;
-    reg [40-1:0] _extra_dsp_reg_220;
-    assign _extra_dsp_out_220 = $signed(data_in ^ 40'd221) * $signed(data_in ^ 40'd222);
-    always @(posedge clk) _extra_dsp_reg_220 <= _extra_dsp_out_220;
-    wire [40-1:0] _extra_dsp_out_221;
-    reg [40-1:0] _extra_dsp_reg_221;
-    assign _extra_dsp_out_221 = $signed(data_in ^ 40'd222) * $signed(data_in ^ 40'd223);
-    always @(posedge clk) _extra_dsp_reg_221 <= _extra_dsp_out_221;
-    wire [40-1:0] _extra_dsp_out_222;
-    reg [40-1:0] _extra_dsp_reg_222;
-    assign _extra_dsp_out_222 = $signed(data_in ^ 40'd223) * $signed(data_in ^ 40'd224);
-    always @(posedge clk) _extra_dsp_reg_222 <= _extra_dsp_out_222;
-    wire [40-1:0] _extra_dsp_out_223;
-    reg [40-1:0] _extra_dsp_reg_223;
-    assign _extra_dsp_out_223 = $signed(data_in ^ 40'd224) * $signed(data_in ^ 40'd225);
-    always @(posedge clk) _extra_dsp_reg_223 <= _extra_dsp_out_223;
-    wire [40-1:0] _extra_dsp_out_224;
-    reg [40-1:0] _extra_dsp_reg_224;
-    assign _extra_dsp_out_224 = $signed(data_in ^ 40'd225) * $signed(data_in ^ 40'd226);
-    always @(posedge clk) _extra_dsp_reg_224 <= _extra_dsp_out_224;
-    wire [40-1:0] _extra_dsp_out_225;
-    reg [40-1:0] _extra_dsp_reg_225;
-    assign _extra_dsp_out_225 = $signed(data_in ^ 40'd226) * $signed(data_in ^ 40'd227);
-    always @(posedge clk) _extra_dsp_reg_225 <= _extra_dsp_out_225;
-    wire [40-1:0] _extra_dsp_out_226;
-    reg [40-1:0] _extra_dsp_reg_226;
-    assign _extra_dsp_out_226 = $signed(data_in ^ 40'd227) * $signed(data_in ^ 40'd228);
-    always @(posedge clk) _extra_dsp_reg_226 <= _extra_dsp_out_226;
-    wire [40-1:0] _extra_dsp_out_227;
-    reg [40-1:0] _extra_dsp_reg_227;
-    assign _extra_dsp_out_227 = $signed(data_in ^ 40'd228) * $signed(data_in ^ 40'd229);
-    always @(posedge clk) _extra_dsp_reg_227 <= _extra_dsp_out_227;
-    wire [40-1:0] _extra_dsp_out_228;
-    reg [40-1:0] _extra_dsp_reg_228;
-    assign _extra_dsp_out_228 = $signed(data_in ^ 40'd229) * $signed(data_in ^ 40'd230);
-    always @(posedge clk) _extra_dsp_reg_228 <= _extra_dsp_out_228;
-    wire [40-1:0] _extra_dsp_out_229;
-    reg [40-1:0] _extra_dsp_reg_229;
-    assign _extra_dsp_out_229 = $signed(data_in ^ 40'd230) * $signed(data_in ^ 40'd231);
-    always @(posedge clk) _extra_dsp_reg_229 <= _extra_dsp_out_229;
-    wire [40-1:0] _extra_dsp_out_230;
-    reg [40-1:0] _extra_dsp_reg_230;
-    assign _extra_dsp_out_230 = $signed(data_in ^ 40'd231) * $signed(data_in ^ 40'd232);
-    always @(posedge clk) _extra_dsp_reg_230 <= _extra_dsp_out_230;
-    wire [40-1:0] _extra_dsp_out_231;
-    reg [40-1:0] _extra_dsp_reg_231;
-    assign _extra_dsp_out_231 = $signed(data_in ^ 40'd232) * $signed(data_in ^ 40'd233);
-    always @(posedge clk) _extra_dsp_reg_231 <= _extra_dsp_out_231;
-    wire [40-1:0] _extra_dsp_out_232;
-    reg [40-1:0] _extra_dsp_reg_232;
-    assign _extra_dsp_out_232 = $signed(data_in ^ 40'd233) * $signed(data_in ^ 40'd234);
-    always @(posedge clk) _extra_dsp_reg_232 <= _extra_dsp_out_232;
-    wire [40-1:0] _extra_dsp_out_233;
-    reg [40-1:0] _extra_dsp_reg_233;
-    assign _extra_dsp_out_233 = $signed(data_in ^ 40'd234) * $signed(data_in ^ 40'd235);
-    always @(posedge clk) _extra_dsp_reg_233 <= _extra_dsp_out_233;
-    wire [40-1:0] _extra_dsp_out_234;
-    reg [40-1:0] _extra_dsp_reg_234;
-    assign _extra_dsp_out_234 = $signed(data_in ^ 40'd235) * $signed(data_in ^ 40'd236);
-    always @(posedge clk) _extra_dsp_reg_234 <= _extra_dsp_out_234;
-    wire [40-1:0] _extra_dsp_out_235;
-    reg [40-1:0] _extra_dsp_reg_235;
-    assign _extra_dsp_out_235 = $signed(data_in ^ 40'd236) * $signed(data_in ^ 40'd237);
-    always @(posedge clk) _extra_dsp_reg_235 <= _extra_dsp_out_235;
-    wire [40-1:0] _extra_dsp_out_236;
-    reg [40-1:0] _extra_dsp_reg_236;
-    assign _extra_dsp_out_236 = $signed(data_in ^ 40'd237) * $signed(data_in ^ 40'd238);
-    always @(posedge clk) _extra_dsp_reg_236 <= _extra_dsp_out_236;
-    wire [40-1:0] _extra_dsp_out_237;
-    reg [40-1:0] _extra_dsp_reg_237;
-    assign _extra_dsp_out_237 = $signed(data_in ^ 40'd238) * $signed(data_in ^ 40'd239);
-    always @(posedge clk) _extra_dsp_reg_237 <= _extra_dsp_out_237;
-    wire [40-1:0] _extra_dsp_out_238;
-    reg [40-1:0] _extra_dsp_reg_238;
-    assign _extra_dsp_out_238 = $signed(data_in ^ 40'd239) * $signed(data_in ^ 40'd240);
-    always @(posedge clk) _extra_dsp_reg_238 <= _extra_dsp_out_238;
-    wire [40-1:0] _extra_dsp_out_239;
-    reg [40-1:0] _extra_dsp_reg_239;
-    assign _extra_dsp_out_239 = $signed(data_in ^ 40'd240) * $signed(data_in ^ 40'd241);
-    always @(posedge clk) _extra_dsp_reg_239 <= _extra_dsp_out_239;
-    wire [40-1:0] _extra_dsp_out_240;
-    reg [40-1:0] _extra_dsp_reg_240;
-    assign _extra_dsp_out_240 = $signed(data_in ^ 40'd241) * $signed(data_in ^ 40'd242);
-    always @(posedge clk) _extra_dsp_reg_240 <= _extra_dsp_out_240;
-    wire [40-1:0] _extra_dsp_out_241;
-    reg [40-1:0] _extra_dsp_reg_241;
-    assign _extra_dsp_out_241 = $signed(data_in ^ 40'd242) * $signed(data_in ^ 40'd243);
-    always @(posedge clk) _extra_dsp_reg_241 <= _extra_dsp_out_241;
-    wire [40-1:0] _extra_dsp_out_242;
-    reg [40-1:0] _extra_dsp_reg_242;
-    assign _extra_dsp_out_242 = $signed(data_in ^ 40'd243) * $signed(data_in ^ 40'd244);
-    always @(posedge clk) _extra_dsp_reg_242 <= _extra_dsp_out_242;
-    wire [40-1:0] _extra_dsp_out_243;
-    reg [40-1:0] _extra_dsp_reg_243;
-    assign _extra_dsp_out_243 = $signed(data_in ^ 40'd244) * $signed(data_in ^ 40'd245);
-    always @(posedge clk) _extra_dsp_reg_243 <= _extra_dsp_out_243;
-    wire [40-1:0] _extra_dsp_out_244;
-    reg [40-1:0] _extra_dsp_reg_244;
-    assign _extra_dsp_out_244 = $signed(data_in ^ 40'd245) * $signed(data_in ^ 40'd246);
-    always @(posedge clk) _extra_dsp_reg_244 <= _extra_dsp_out_244;
-    wire [40-1:0] _extra_dsp_out_245;
-    reg [40-1:0] _extra_dsp_reg_245;
-    assign _extra_dsp_out_245 = $signed(data_in ^ 40'd246) * $signed(data_in ^ 40'd247);
-    always @(posedge clk) _extra_dsp_reg_245 <= _extra_dsp_out_245;
-    wire [40-1:0] _extra_dsp_out_246;
-    reg [40-1:0] _extra_dsp_reg_246;
-    assign _extra_dsp_out_246 = $signed(data_in ^ 40'd247) * $signed(data_in ^ 40'd248);
-    always @(posedge clk) _extra_dsp_reg_246 <= _extra_dsp_out_246;
-    wire [40-1:0] _extra_dsp_out_247;
-    reg [40-1:0] _extra_dsp_reg_247;
-    assign _extra_dsp_out_247 = $signed(data_in ^ 40'd248) * $signed(data_in ^ 40'd249);
-    always @(posedge clk) _extra_dsp_reg_247 <= _extra_dsp_out_247;
-    wire [40-1:0] _extra_dsp_out_248;
-    reg [40-1:0] _extra_dsp_reg_248;
-    assign _extra_dsp_out_248 = $signed(data_in ^ 40'd249) * $signed(data_in ^ 40'd250);
-    always @(posedge clk) _extra_dsp_reg_248 <= _extra_dsp_out_248;
-    wire [40-1:0] _extra_dsp_out_249;
-    reg [40-1:0] _extra_dsp_reg_249;
-    assign _extra_dsp_out_249 = $signed(data_in ^ 40'd250) * $signed(data_in ^ 40'd251);
-    always @(posedge clk) _extra_dsp_reg_249 <= _extra_dsp_out_249;
-    wire [40-1:0] _extra_dsp_out_250;
-    reg [40-1:0] _extra_dsp_reg_250;
-    assign _extra_dsp_out_250 = $signed(data_in ^ 40'd251) * $signed(data_in ^ 40'd252);
-    always @(posedge clk) _extra_dsp_reg_250 <= _extra_dsp_out_250;
-    wire [40-1:0] _extra_dsp_out_251;
-    reg [40-1:0] _extra_dsp_reg_251;
-    assign _extra_dsp_out_251 = $signed(data_in ^ 40'd252) * $signed(data_in ^ 40'd253);
-    always @(posedge clk) _extra_dsp_reg_251 <= _extra_dsp_out_251;
-    wire [40-1:0] _extra_dsp_out_252;
-    reg [40-1:0] _extra_dsp_reg_252;
-    assign _extra_dsp_out_252 = $signed(data_in ^ 40'd253) * $signed(data_in ^ 40'd254);
-    always @(posedge clk) _extra_dsp_reg_252 <= _extra_dsp_out_252;
-    wire [40-1:0] _extra_dsp_out_253;
-    reg [40-1:0] _extra_dsp_reg_253;
-    assign _extra_dsp_out_253 = $signed(data_in ^ 40'd254) * $signed(data_in ^ 40'd255);
-    always @(posedge clk) _extra_dsp_reg_253 <= _extra_dsp_out_253;
-    wire [40-1:0] _extra_dsp_out_254;
-    reg [40-1:0] _extra_dsp_reg_254;
-    assign _extra_dsp_out_254 = $signed(data_in ^ 40'd255) * $signed(data_in ^ 40'd256);
-    always @(posedge clk) _extra_dsp_reg_254 <= _extra_dsp_out_254;
-    wire [40-1:0] _extra_dsp_out_255;
-    reg [40-1:0] _extra_dsp_reg_255;
-    assign _extra_dsp_out_255 = $signed(data_in ^ 40'd256) * $signed(data_in ^ 40'd257);
-    always @(posedge clk) _extra_dsp_reg_255 <= _extra_dsp_out_255;
-    wire [40-1:0] _extra_dsp_out_256;
-    reg [40-1:0] _extra_dsp_reg_256;
-    assign _extra_dsp_out_256 = $signed(data_in ^ 40'd257) * $signed(data_in ^ 40'd258);
-    always @(posedge clk) _extra_dsp_reg_256 <= _extra_dsp_out_256;
-    wire [40-1:0] _extra_dsp_out_257;
-    reg [40-1:0] _extra_dsp_reg_257;
-    assign _extra_dsp_out_257 = $signed(data_in ^ 40'd258) * $signed(data_in ^ 40'd259);
-    always @(posedge clk) _extra_dsp_reg_257 <= _extra_dsp_out_257;
-    wire [40-1:0] _extra_dsp_out_258;
-    reg [40-1:0] _extra_dsp_reg_258;
-    assign _extra_dsp_out_258 = $signed(data_in ^ 40'd259) * $signed(data_in ^ 40'd260);
-    always @(posedge clk) _extra_dsp_reg_258 <= _extra_dsp_out_258;
-    wire [40-1:0] _extra_dsp_out_259;
-    reg [40-1:0] _extra_dsp_reg_259;
-    assign _extra_dsp_out_259 = $signed(data_in ^ 40'd260) * $signed(data_in ^ 40'd261);
-    always @(posedge clk) _extra_dsp_reg_259 <= _extra_dsp_out_259;
-    wire [40-1:0] _extra_dsp_out_260;
-    reg [40-1:0] _extra_dsp_reg_260;
-    assign _extra_dsp_out_260 = $signed(data_in ^ 40'd261) * $signed(data_in ^ 40'd262);
-    always @(posedge clk) _extra_dsp_reg_260 <= _extra_dsp_out_260;
-    wire [40-1:0] _extra_dsp_out_261;
-    reg [40-1:0] _extra_dsp_reg_261;
-    assign _extra_dsp_out_261 = $signed(data_in ^ 40'd262) * $signed(data_in ^ 40'd263);
-    always @(posedge clk) _extra_dsp_reg_261 <= _extra_dsp_out_261;
-    wire [40-1:0] _extra_dsp_out_262;
-    reg [40-1:0] _extra_dsp_reg_262;
-    assign _extra_dsp_out_262 = $signed(data_in ^ 40'd263) * $signed(data_in ^ 40'd264);
-    always @(posedge clk) _extra_dsp_reg_262 <= _extra_dsp_out_262;
-    wire [40-1:0] _extra_dsp_out_263;
-    reg [40-1:0] _extra_dsp_reg_263;
-    assign _extra_dsp_out_263 = $signed(data_in ^ 40'd264) * $signed(data_in ^ 40'd265);
-    always @(posedge clk) _extra_dsp_reg_263 <= _extra_dsp_out_263;
-    wire [40-1:0] _extra_dsp_out_264;
-    reg [40-1:0] _extra_dsp_reg_264;
-    assign _extra_dsp_out_264 = $signed(data_in ^ 40'd265) * $signed(data_in ^ 40'd266);
-    always @(posedge clk) _extra_dsp_reg_264 <= _extra_dsp_out_264;
-    wire [40-1:0] _extra_dsp_out_265;
-    reg [40-1:0] _extra_dsp_reg_265;
-    assign _extra_dsp_out_265 = $signed(data_in ^ 40'd266) * $signed(data_in ^ 40'd267);
-    always @(posedge clk) _extra_dsp_reg_265 <= _extra_dsp_out_265;
-    wire [40-1:0] _extra_dsp_out_266;
-    reg [40-1:0] _extra_dsp_reg_266;
-    assign _extra_dsp_out_266 = $signed(data_in ^ 40'd267) * $signed(data_in ^ 40'd268);
-    always @(posedge clk) _extra_dsp_reg_266 <= _extra_dsp_out_266;
-    wire [40-1:0] _extra_dsp_out_267;
-    reg [40-1:0] _extra_dsp_reg_267;
-    assign _extra_dsp_out_267 = $signed(data_in ^ 40'd268) * $signed(data_in ^ 40'd269);
-    always @(posedge clk) _extra_dsp_reg_267 <= _extra_dsp_out_267;
-    wire [40-1:0] _extra_dsp_out_268;
-    reg [40-1:0] _extra_dsp_reg_268;
-    assign _extra_dsp_out_268 = $signed(data_in ^ 40'd269) * $signed(data_in ^ 40'd270);
-    always @(posedge clk) _extra_dsp_reg_268 <= _extra_dsp_out_268;
-    wire [40-1:0] _extra_dsp_out_269;
-    reg [40-1:0] _extra_dsp_reg_269;
-    assign _extra_dsp_out_269 = $signed(data_in ^ 40'd270) * $signed(data_in ^ 40'd271);
-    always @(posedge clk) _extra_dsp_reg_269 <= _extra_dsp_out_269;
-    wire [40-1:0] _extra_dsp_out_270;
-    reg [40-1:0] _extra_dsp_reg_270;
-    assign _extra_dsp_out_270 = $signed(data_in ^ 40'd271) * $signed(data_in ^ 40'd272);
-    always @(posedge clk) _extra_dsp_reg_270 <= _extra_dsp_out_270;
-    wire [40-1:0] _extra_dsp_out_271;
-    reg [40-1:0] _extra_dsp_reg_271;
-    assign _extra_dsp_out_271 = $signed(data_in ^ 40'd272) * $signed(data_in ^ 40'd273);
-    always @(posedge clk) _extra_dsp_reg_271 <= _extra_dsp_out_271;
-    wire [40-1:0] _extra_dsp_out_272;
-    reg [40-1:0] _extra_dsp_reg_272;
-    assign _extra_dsp_out_272 = $signed(data_in ^ 40'd273) * $signed(data_in ^ 40'd274);
-    always @(posedge clk) _extra_dsp_reg_272 <= _extra_dsp_out_272;
-    wire [40-1:0] _extra_dsp_out_273;
-    reg [40-1:0] _extra_dsp_reg_273;
-    assign _extra_dsp_out_273 = $signed(data_in ^ 40'd274) * $signed(data_in ^ 40'd275);
-    always @(posedge clk) _extra_dsp_reg_273 <= _extra_dsp_out_273;
-    wire [40-1:0] _extra_dsp_out_274;
-    reg [40-1:0] _extra_dsp_reg_274;
-    assign _extra_dsp_out_274 = $signed(data_in ^ 40'd275) * $signed(data_in ^ 40'd276);
-    always @(posedge clk) _extra_dsp_reg_274 <= _extra_dsp_out_274;
-    wire [40-1:0] _extra_dsp_out_275;
-    reg [40-1:0] _extra_dsp_reg_275;
-    assign _extra_dsp_out_275 = $signed(data_in ^ 40'd276) * $signed(data_in ^ 40'd277);
-    always @(posedge clk) _extra_dsp_reg_275 <= _extra_dsp_out_275;
-    wire [40-1:0] _extra_dsp_out_276;
-    reg [40-1:0] _extra_dsp_reg_276;
-    assign _extra_dsp_out_276 = $signed(data_in ^ 40'd277) * $signed(data_in ^ 40'd278);
-    always @(posedge clk) _extra_dsp_reg_276 <= _extra_dsp_out_276;
-    wire [40-1:0] _extra_dsp_out_277;
-    reg [40-1:0] _extra_dsp_reg_277;
-    assign _extra_dsp_out_277 = $signed(data_in ^ 40'd278) * $signed(data_in ^ 40'd279);
-    always @(posedge clk) _extra_dsp_reg_277 <= _extra_dsp_out_277;
-    wire [40-1:0] _extra_dsp_out_278;
-    reg [40-1:0] _extra_dsp_reg_278;
-    assign _extra_dsp_out_278 = $signed(data_in ^ 40'd279) * $signed(data_in ^ 40'd280);
-    always @(posedge clk) _extra_dsp_reg_278 <= _extra_dsp_out_278;
-    wire [40-1:0] _extra_dsp_out_279;
-    reg [40-1:0] _extra_dsp_reg_279;
-    assign _extra_dsp_out_279 = $signed(data_in ^ 40'd280) * $signed(data_in ^ 40'd281);
-    always @(posedge clk) _extra_dsp_reg_279 <= _extra_dsp_out_279;
-    wire [40-1:0] _extra_dsp_out_280;
-    reg [40-1:0] _extra_dsp_reg_280;
-    assign _extra_dsp_out_280 = $signed(data_in ^ 40'd281) * $signed(data_in ^ 40'd282);
-    always @(posedge clk) _extra_dsp_reg_280 <= _extra_dsp_out_280;
-    wire [40-1:0] _extra_dsp_out_281;
-    reg [40-1:0] _extra_dsp_reg_281;
-    assign _extra_dsp_out_281 = $signed(data_in ^ 40'd282) * $signed(data_in ^ 40'd283);
-    always @(posedge clk) _extra_dsp_reg_281 <= _extra_dsp_out_281;
-    wire [40-1:0] _extra_dsp_out_282;
-    reg [40-1:0] _extra_dsp_reg_282;
-    assign _extra_dsp_out_282 = $signed(data_in ^ 40'd283) * $signed(data_in ^ 40'd284);
-    always @(posedge clk) _extra_dsp_reg_282 <= _extra_dsp_out_282;
-    wire [40-1:0] _extra_dsp_out_283;
-    reg [40-1:0] _extra_dsp_reg_283;
-    assign _extra_dsp_out_283 = $signed(data_in ^ 40'd284) * $signed(data_in ^ 40'd285);
-    always @(posedge clk) _extra_dsp_reg_283 <= _extra_dsp_out_283;
-    wire [40-1:0] _extra_dsp_out_284;
-    reg [40-1:0] _extra_dsp_reg_284;
-    assign _extra_dsp_out_284 = $signed(data_in ^ 40'd285) * $signed(data_in ^ 40'd286);
-    always @(posedge clk) _extra_dsp_reg_284 <= _extra_dsp_out_284;
-    wire [40-1:0] _extra_dsp_out_285;
-    reg [40-1:0] _extra_dsp_reg_285;
-    assign _extra_dsp_out_285 = $signed(data_in ^ 40'd286) * $signed(data_in ^ 40'd287);
-    always @(posedge clk) _extra_dsp_reg_285 <= _extra_dsp_out_285;
-    wire [40-1:0] _extra_dsp_out_286;
-    reg [40-1:0] _extra_dsp_reg_286;
-    assign _extra_dsp_out_286 = $signed(data_in ^ 40'd287) * $signed(data_in ^ 40'd288);
-    always @(posedge clk) _extra_dsp_reg_286 <= _extra_dsp_out_286;
-    wire [40-1:0] _extra_dsp_out_287;
-    reg [40-1:0] _extra_dsp_reg_287;
-    assign _extra_dsp_out_287 = $signed(data_in ^ 40'd288) * $signed(data_in ^ 40'd289);
-    always @(posedge clk) _extra_dsp_reg_287 <= _extra_dsp_out_287;
-    wire [40-1:0] _extra_dsp_out_288;
-    reg [40-1:0] _extra_dsp_reg_288;
-    assign _extra_dsp_out_288 = $signed(data_in ^ 40'd289) * $signed(data_in ^ 40'd290);
-    always @(posedge clk) _extra_dsp_reg_288 <= _extra_dsp_out_288;
-    wire [40-1:0] _extra_dsp_out_289;
-    reg [40-1:0] _extra_dsp_reg_289;
-    assign _extra_dsp_out_289 = $signed(data_in ^ 40'd290) * $signed(data_in ^ 40'd291);
-    always @(posedge clk) _extra_dsp_reg_289 <= _extra_dsp_out_289;
-    wire [40-1:0] _extra_dsp_out_290;
-    reg [40-1:0] _extra_dsp_reg_290;
-    assign _extra_dsp_out_290 = $signed(data_in ^ 40'd291) * $signed(data_in ^ 40'd292);
-    always @(posedge clk) _extra_dsp_reg_290 <= _extra_dsp_out_290;
-    wire [40-1:0] _extra_dsp_out_291;
-    reg [40-1:0] _extra_dsp_reg_291;
-    assign _extra_dsp_out_291 = $signed(data_in ^ 40'd292) * $signed(data_in ^ 40'd293);
-    always @(posedge clk) _extra_dsp_reg_291 <= _extra_dsp_out_291;
-    wire [40-1:0] _extra_dsp_out_292;
-    reg [40-1:0] _extra_dsp_reg_292;
-    assign _extra_dsp_out_292 = $signed(data_in ^ 40'd293) * $signed(data_in ^ 40'd294);
-    always @(posedge clk) _extra_dsp_reg_292 <= _extra_dsp_out_292;
-    wire [40-1:0] _extra_dsp_out_293;
-    reg [40-1:0] _extra_dsp_reg_293;
-    assign _extra_dsp_out_293 = $signed(data_in ^ 40'd294) * $signed(data_in ^ 40'd295);
-    always @(posedge clk) _extra_dsp_reg_293 <= _extra_dsp_out_293;
-    wire [40-1:0] _extra_dsp_out_294;
-    reg [40-1:0] _extra_dsp_reg_294;
-    assign _extra_dsp_out_294 = $signed(data_in ^ 40'd295) * $signed(data_in ^ 40'd296);
-    always @(posedge clk) _extra_dsp_reg_294 <= _extra_dsp_out_294;
-    wire [40-1:0] _extra_dsp_out_295;
-    reg [40-1:0] _extra_dsp_reg_295;
-    assign _extra_dsp_out_295 = $signed(data_in ^ 40'd296) * $signed(data_in ^ 40'd297);
-    always @(posedge clk) _extra_dsp_reg_295 <= _extra_dsp_out_295;
-    wire [40-1:0] _extra_dsp_out_296;
-    reg [40-1:0] _extra_dsp_reg_296;
-    assign _extra_dsp_out_296 = $signed(data_in ^ 40'd297) * $signed(data_in ^ 40'd298);
-    always @(posedge clk) _extra_dsp_reg_296 <= _extra_dsp_out_296;
-    wire [40-1:0] _extra_dsp_out_297;
-    reg [40-1:0] _extra_dsp_reg_297;
-    assign _extra_dsp_out_297 = $signed(data_in ^ 40'd298) * $signed(data_in ^ 40'd299);
-    always @(posedge clk) _extra_dsp_reg_297 <= _extra_dsp_out_297;
-    wire [40-1:0] _extra_dsp_out_298;
-    reg [40-1:0] _extra_dsp_reg_298;
-    assign _extra_dsp_out_298 = $signed(data_in ^ 40'd299) * $signed(data_in ^ 40'd300);
-    always @(posedge clk) _extra_dsp_reg_298 <= _extra_dsp_out_298;
-    wire [40-1:0] _extra_dsp_out_299;
-    reg [40-1:0] _extra_dsp_reg_299;
-    assign _extra_dsp_out_299 = $signed(data_in ^ 40'd300) * $signed(data_in ^ 40'd301);
-    always @(posedge clk) _extra_dsp_reg_299 <= _extra_dsp_out_299;
-    wire [40-1:0] _extra_dsp_out_300;
-    reg [40-1:0] _extra_dsp_reg_300;
-    assign _extra_dsp_out_300 = $signed(data_in ^ 40'd301) * $signed(data_in ^ 40'd302);
-    always @(posedge clk) _extra_dsp_reg_300 <= _extra_dsp_out_300;
-    wire [40-1:0] _extra_dsp_out_301;
-    reg [40-1:0] _extra_dsp_reg_301;
-    assign _extra_dsp_out_301 = $signed(data_in ^ 40'd302) * $signed(data_in ^ 40'd303);
-    always @(posedge clk) _extra_dsp_reg_301 <= _extra_dsp_out_301;
-    wire [40-1:0] _extra_dsp_out_302;
-    reg [40-1:0] _extra_dsp_reg_302;
-    assign _extra_dsp_out_302 = $signed(data_in ^ 40'd303) * $signed(data_in ^ 40'd304);
-    always @(posedge clk) _extra_dsp_reg_302 <= _extra_dsp_out_302;
-    wire [40-1:0] _extra_dsp_out_303;
-    reg [40-1:0] _extra_dsp_reg_303;
-    assign _extra_dsp_out_303 = $signed(data_in ^ 40'd304) * $signed(data_in ^ 40'd305);
-    always @(posedge clk) _extra_dsp_reg_303 <= _extra_dsp_out_303;
-    wire [40-1:0] _extra_dsp_out_304;
-    reg [40-1:0] _extra_dsp_reg_304;
-    assign _extra_dsp_out_304 = $signed(data_in ^ 40'd305) * $signed(data_in ^ 40'd306);
-    always @(posedge clk) _extra_dsp_reg_304 <= _extra_dsp_out_304;
-    wire [40-1:0] _extra_dsp_out_305;
-    reg [40-1:0] _extra_dsp_reg_305;
-    assign _extra_dsp_out_305 = $signed(data_in ^ 40'd306) * $signed(data_in ^ 40'd307);
-    always @(posedge clk) _extra_dsp_reg_305 <= _extra_dsp_out_305;
-    wire [40-1:0] _extra_dsp_out_306;
-    reg [40-1:0] _extra_dsp_reg_306;
-    assign _extra_dsp_out_306 = $signed(data_in ^ 40'd307) * $signed(data_in ^ 40'd308);
-    always @(posedge clk) _extra_dsp_reg_306 <= _extra_dsp_out_306;
-    wire [40-1:0] _extra_dsp_out_307;
-    reg [40-1:0] _extra_dsp_reg_307;
-    assign _extra_dsp_out_307 = $signed(data_in ^ 40'd308) * $signed(data_in ^ 40'd309);
-    always @(posedge clk) _extra_dsp_reg_307 <= _extra_dsp_out_307;
-    wire [40-1:0] _extra_dsp_out_308;
-    reg [40-1:0] _extra_dsp_reg_308;
-    assign _extra_dsp_out_308 = $signed(data_in ^ 40'd309) * $signed(data_in ^ 40'd310);
-    always @(posedge clk) _extra_dsp_reg_308 <= _extra_dsp_out_308;
-    wire [40-1:0] _extra_dsp_out_309;
-    reg [40-1:0] _extra_dsp_reg_309;
-    assign _extra_dsp_out_309 = $signed(data_in ^ 40'd310) * $signed(data_in ^ 40'd311);
-    always @(posedge clk) _extra_dsp_reg_309 <= _extra_dsp_out_309;
-    wire [40-1:0] _extra_dsp_out_310;
-    reg [40-1:0] _extra_dsp_reg_310;
-    assign _extra_dsp_out_310 = $signed(data_in ^ 40'd311) * $signed(data_in ^ 40'd312);
-    always @(posedge clk) _extra_dsp_reg_310 <= _extra_dsp_out_310;
-    wire [40-1:0] _extra_dsp_out_311;
-    reg [40-1:0] _extra_dsp_reg_311;
-    assign _extra_dsp_out_311 = $signed(data_in ^ 40'd312) * $signed(data_in ^ 40'd313);
-    always @(posedge clk) _extra_dsp_reg_311 <= _extra_dsp_out_311;
-    wire [40-1:0] _extra_dsp_out_312;
-    reg [40-1:0] _extra_dsp_reg_312;
-    assign _extra_dsp_out_312 = $signed(data_in ^ 40'd313) * $signed(data_in ^ 40'd314);
-    always @(posedge clk) _extra_dsp_reg_312 <= _extra_dsp_out_312;
-    wire [40-1:0] _extra_dsp_out_313;
-    reg [40-1:0] _extra_dsp_reg_313;
-    assign _extra_dsp_out_313 = $signed(data_in ^ 40'd314) * $signed(data_in ^ 40'd315);
-    always @(posedge clk) _extra_dsp_reg_313 <= _extra_dsp_out_313;
-    wire [40-1:0] _extra_dsp_out_314;
-    reg [40-1:0] _extra_dsp_reg_314;
-    assign _extra_dsp_out_314 = $signed(data_in ^ 40'd315) * $signed(data_in ^ 40'd316);
-    always @(posedge clk) _extra_dsp_reg_314 <= _extra_dsp_out_314;
-    wire [40-1:0] _extra_dsp_out_315;
-    reg [40-1:0] _extra_dsp_reg_315;
-    assign _extra_dsp_out_315 = $signed(data_in ^ 40'd316) * $signed(data_in ^ 40'd317);
-    always @(posedge clk) _extra_dsp_reg_315 <= _extra_dsp_out_315;
-    wire [40-1:0] _extra_dsp_out_316;
-    reg [40-1:0] _extra_dsp_reg_316;
-    assign _extra_dsp_out_316 = $signed(data_in ^ 40'd317) * $signed(data_in ^ 40'd318);
-    always @(posedge clk) _extra_dsp_reg_316 <= _extra_dsp_out_316;
-    wire [40-1:0] _extra_dsp_out_317;
-    reg [40-1:0] _extra_dsp_reg_317;
-    assign _extra_dsp_out_317 = $signed(data_in ^ 40'd318) * $signed(data_in ^ 40'd319);
-    always @(posedge clk) _extra_dsp_reg_317 <= _extra_dsp_out_317;
-    wire [40-1:0] _extra_dsp_out_318;
-    reg [40-1:0] _extra_dsp_reg_318;
-    assign _extra_dsp_out_318 = $signed(data_in ^ 40'd319) * $signed(data_in ^ 40'd320);
-    always @(posedge clk) _extra_dsp_reg_318 <= _extra_dsp_out_318;
-    assign data_out = data_b1_ln_ffn ^ {39'b0, _extra_dpe_out_0[0] ^ _extra_dpe_out_1[0] ^ _extra_dpe_out_2[0] ^ _extra_dpe_out_3[0] ^ _extra_dpe_out_4[0] ^ _extra_dpe_out_5[0] ^ _extra_dpe_out_6[0] ^ _extra_dpe_out_7[0] ^ _extra_dpe_out_8[0] ^ _extra_dpe_out_9[0] ^ _extra_dpe_out_10[0] ^ _extra_dpe_out_11[0] ^ _extra_dpe_out_12[0] ^ _extra_dpe_out_13[0] ^ _extra_dpe_out_14[0] ^ _extra_dpe_out_15[0] ^ _extra_dpe_out_16[0] ^ _extra_dpe_out_17[0] ^ _extra_dpe_out_18[0] ^ _extra_dpe_out_19[0] ^ _extra_dpe_out_20[0] ^ _extra_dpe_out_21[0] ^ _extra_dpe_out_22[0] ^ _extra_dpe_out_23[0] ^ _extra_dpe_out_24[0] ^ _extra_dpe_out_25[0] ^ _extra_dpe_out_26[0] ^ _extra_dpe_out_27[0] ^ _extra_dpe_out_28[0] ^ _extra_dpe_out_29[0] ^ _extra_dpe_out_30[0] ^ _extra_dpe_out_31[0] ^ _extra_dpe_out_32[0] ^ _extra_dpe_out_33[0] ^ _extra_dpe_out_34[0] ^ _extra_dpe_out_35[0] ^ _extra_dpe_out_36[0] ^ _extra_dpe_out_37[0] ^ _extra_dpe_out_38[0] ^ _extra_dpe_out_39[0] ^ _extra_dpe_out_40[0] ^ _extra_dpe_out_41[0] ^ _extra_dpe_out_42[0] ^ _extra_dpe_out_43[0] ^ _extra_dpe_out_44[0] ^ _extra_dpe_out_45[0] ^ _extra_dpe_out_46[0] ^ _extra_dpe_out_47[0] ^ _extra_dpe_out_48[0] ^ _extra_dpe_out_49[0] ^ _extra_dpe_out_50[0] ^ _extra_dpe_out_51[0] ^ _extra_dpe_out_52[0] ^ _extra_dpe_out_53[0] ^ _extra_dpe_out_54[0] ^ _extra_dpe_out_55[0] ^ _extra_dpe_out_56[0] ^ _extra_dpe_out_57[0] ^ _extra_dpe_out_58[0] ^ _extra_dpe_out_59[0] ^ _extra_dpe_out_60[0] ^ _extra_dpe_out_61[0] ^ _extra_dpe_out_62[0] ^ _extra_dpe_out_63[0] ^ _extra_dpe_out_64[0] ^ _extra_dpe_out_65[0] ^ _extra_dpe_out_66[0] ^ _extra_dpe_out_67[0] ^ _extra_dpe_out_68[0] ^ _extra_dpe_out_69[0] ^ _extra_dpe_out_70[0] ^ _extra_dpe_out_71[0] ^ _extra_dpe_out_72[0] ^ _extra_dpe_out_73[0] ^ _extra_dpe_out_74[0] ^ _extra_dpe_out_75[0] ^ _extra_dpe_out_76[0] ^ _extra_dpe_out_77[0] ^ _extra_dpe_out_78[0] ^ _extra_dpe_out_79[0] ^ _extra_dpe_out_80[0] ^ _extra_dpe_out_81[0] ^ _extra_dpe_out_82[0] ^ _extra_dpe_out_83[0] ^ _extra_dpe_out_84[0] ^ _extra_dpe_out_85[0] ^ _extra_dpe_out_86[0] ^ _extra_dpe_out_87[0] ^ _extra_dpe_out_88[0] ^ _extra_dpe_out_89[0] ^ _extra_dpe_out_90[0] ^ _extra_dpe_out_91[0] ^ _extra_dpe_out_92[0] ^ _extra_dpe_out_93[0] ^ _extra_dpe_out_94[0] ^ _extra_dpe_out_95[0] ^ _extra_dpe_out_96[0] ^ _extra_dpe_out_97[0] ^ _extra_dpe_out_98[0] ^ _extra_dpe_out_99[0] ^ _extra_dpe_out_100[0] ^ _extra_dpe_out_101[0] ^ _extra_dpe_out_102[0] ^ _extra_dpe_out_103[0] ^ _extra_dpe_out_104[0] ^ _extra_dpe_out_105[0] ^ _extra_dpe_out_106[0] ^ _extra_dpe_out_107[0] ^ _extra_dpe_out_108[0] ^ _extra_dpe_out_109[0] ^ _extra_dpe_out_110[0] ^ _extra_dpe_out_111[0] ^ _extra_dpe_out_112[0] ^ _extra_dpe_out_113[0] ^ _extra_dpe_out_114[0] ^ _extra_dpe_out_115[0] ^ _extra_dpe_out_116[0] ^ _extra_dpe_out_117[0] ^ _extra_dpe_out_118[0] ^ _extra_dpe_out_119[0] ^ _extra_dpe_out_120[0] ^ _extra_dpe_out_121[0] ^ _extra_dpe_out_122[0] ^ _extra_dpe_out_123[0] ^ _extra_dpe_out_124[0] ^ _extra_dpe_out_125[0] ^ _extra_dpe_out_126[0] ^ _extra_dpe_out_127[0] ^ _extra_dpe_out_128[0] ^ _extra_dpe_out_129[0] ^ _extra_dpe_out_130[0] ^ _extra_dpe_out_131[0] ^ _extra_dpe_out_132[0] ^ _extra_dpe_out_133[0] ^ _extra_dpe_out_134[0] ^ _extra_dpe_out_135[0] ^ _extra_dpe_out_136[0] ^ _extra_dpe_out_137[0] ^ _extra_dpe_out_138[0] ^ _extra_dpe_out_139[0] ^ _extra_dpe_out_140[0] ^ _extra_dpe_out_141[0] ^ _extra_dpe_out_142[0] ^ _extra_dpe_out_143[0] ^ _extra_dpe_out_144[0] ^ _extra_dpe_out_145[0] ^ _extra_dpe_out_146[0] ^ _extra_dpe_out_147[0] ^ _extra_dpe_out_148[0] ^ _extra_dpe_out_149[0] ^ _extra_dpe_out_150[0] ^ _extra_dpe_out_151[0] ^ _extra_dpe_out_152[0] ^ _extra_dpe_out_153[0] ^ _extra_dpe_out_154[0] ^ _extra_dpe_out_155[0] ^ _extra_dpe_out_156[0] ^ _extra_dpe_out_157[0] ^ _extra_dpe_out_158[0] ^ _extra_dpe_out_159[0] ^ _extra_dpe_out_160[0] ^ _extra_dpe_out_161[0] ^ _extra_dpe_out_162[0] ^ _extra_dpe_out_163[0] ^ _extra_dpe_out_164[0] ^ _extra_dpe_out_165[0] ^ _extra_dpe_out_166[0] ^ _extra_dpe_out_167[0] ^ _extra_dpe_out_168[0] ^ _extra_dpe_out_169[0] ^ _extra_dpe_out_170[0] ^ _extra_dpe_out_171[0] ^ _extra_dpe_out_172[0] ^ _extra_dpe_out_173[0] ^ _extra_dpe_out_174[0] ^ _extra_dpe_out_175[0] ^ _extra_dpe_out_176[0] ^ _extra_dpe_out_177[0] ^ _extra_dpe_out_178[0] ^ _extra_dpe_out_179[0] ^ _extra_dpe_out_180[0] ^ _extra_dpe_out_181[0] ^ _extra_dpe_out_182[0] ^ _extra_dpe_out_183[0] ^ _extra_dpe_out_184[0] ^ _extra_dpe_out_185[0] ^ _extra_dpe_out_186[0] ^ _extra_dpe_out_187[0] ^ _extra_dpe_out_188[0] ^ _extra_dpe_out_189[0] ^ _extra_dpe_out_190[0] ^ _extra_dpe_out_191[0] ^ _extra_dpe_out_192[0] ^ _extra_dpe_out_193[0] ^ _extra_dpe_out_194[0] ^ _extra_dpe_out_195[0] ^ _extra_dpe_out_196[0] ^ _extra_dpe_out_197[0] ^ _extra_dpe_out_198[0] ^ _extra_dpe_out_199[0] ^ _extra_dpe_out_200[0] ^ _extra_dpe_out_201[0] ^ _extra_dpe_out_202[0] ^ _extra_dpe_out_203[0] ^ _extra_dpe_out_204[0] ^ _extra_dpe_out_205[0] ^ _extra_dpe_out_206[0] ^ _extra_dpe_out_207[0] ^ _extra_dpe_out_208[0] ^ _extra_dpe_out_209[0] ^ _extra_dpe_out_210[0] ^ _extra_dpe_out_211[0] ^ _extra_dpe_out_212[0] ^ _extra_dpe_out_213[0] ^ _extra_dpe_out_214[0] ^ _extra_dpe_out_215[0] ^ _extra_dpe_out_216[0] ^ _extra_dpe_out_217[0] ^ _extra_dpe_out_218[0] ^ _extra_dpe_out_219[0] ^ _extra_dpe_out_220[0] ^ _extra_dpe_out_221[0] ^ _extra_dpe_out_222[0] ^ _extra_dpe_out_223[0] ^ _extra_dpe_out_224[0] ^ _extra_dpe_out_225[0] ^ _extra_dpe_out_226[0] ^ _extra_dpe_out_227[0] ^ _extra_dpe_out_228[0] ^ _extra_dpe_out_229[0] ^ _extra_dpe_out_230[0] ^ _extra_dpe_out_231[0] ^ _extra_dpe_out_232[0] ^ _extra_dpe_out_233[0] ^ _extra_dsp_reg_0[0] ^ _extra_dsp_reg_1[0] ^ _extra_dsp_reg_2[0] ^ _extra_dsp_reg_3[0] ^ _extra_dsp_reg_4[0] ^ _extra_dsp_reg_5[0] ^ _extra_dsp_reg_6[0] ^ _extra_dsp_reg_7[0] ^ _extra_dsp_reg_8[0] ^ _extra_dsp_reg_9[0] ^ _extra_dsp_reg_10[0] ^ _extra_dsp_reg_11[0] ^ _extra_dsp_reg_12[0] ^ _extra_dsp_reg_13[0] ^ _extra_dsp_reg_14[0] ^ _extra_dsp_reg_15[0] ^ _extra_dsp_reg_16[0] ^ _extra_dsp_reg_17[0] ^ _extra_dsp_reg_18[0] ^ _extra_dsp_reg_19[0] ^ _extra_dsp_reg_20[0] ^ _extra_dsp_reg_21[0] ^ _extra_dsp_reg_22[0] ^ _extra_dsp_reg_23[0] ^ _extra_dsp_reg_24[0] ^ _extra_dsp_reg_25[0] ^ _extra_dsp_reg_26[0] ^ _extra_dsp_reg_27[0] ^ _extra_dsp_reg_28[0] ^ _extra_dsp_reg_29[0] ^ _extra_dsp_reg_30[0] ^ _extra_dsp_reg_31[0] ^ _extra_dsp_reg_32[0] ^ _extra_dsp_reg_33[0] ^ _extra_dsp_reg_34[0] ^ _extra_dsp_reg_35[0] ^ _extra_dsp_reg_36[0] ^ _extra_dsp_reg_37[0] ^ _extra_dsp_reg_38[0] ^ _extra_dsp_reg_39[0] ^ _extra_dsp_reg_40[0] ^ _extra_dsp_reg_41[0] ^ _extra_dsp_reg_42[0] ^ _extra_dsp_reg_43[0] ^ _extra_dsp_reg_44[0] ^ _extra_dsp_reg_45[0] ^ _extra_dsp_reg_46[0] ^ _extra_dsp_reg_47[0] ^ _extra_dsp_reg_48[0] ^ _extra_dsp_reg_49[0] ^ _extra_dsp_reg_50[0] ^ _extra_dsp_reg_51[0] ^ _extra_dsp_reg_52[0] ^ _extra_dsp_reg_53[0] ^ _extra_dsp_reg_54[0] ^ _extra_dsp_reg_55[0] ^ _extra_dsp_reg_56[0] ^ _extra_dsp_reg_57[0] ^ _extra_dsp_reg_58[0] ^ _extra_dsp_reg_59[0] ^ _extra_dsp_reg_60[0] ^ _extra_dsp_reg_61[0] ^ _extra_dsp_reg_62[0] ^ _extra_dsp_reg_63[0] ^ _extra_dsp_reg_64[0] ^ _extra_dsp_reg_65[0] ^ _extra_dsp_reg_66[0] ^ _extra_dsp_reg_67[0] ^ _extra_dsp_reg_68[0] ^ _extra_dsp_reg_69[0] ^ _extra_dsp_reg_70[0] ^ _extra_dsp_reg_71[0] ^ _extra_dsp_reg_72[0] ^ _extra_dsp_reg_73[0] ^ _extra_dsp_reg_74[0] ^ _extra_dsp_reg_75[0] ^ _extra_dsp_reg_76[0] ^ _extra_dsp_reg_77[0] ^ _extra_dsp_reg_78[0] ^ _extra_dsp_reg_79[0] ^ _extra_dsp_reg_80[0] ^ _extra_dsp_reg_81[0] ^ _extra_dsp_reg_82[0] ^ _extra_dsp_reg_83[0] ^ _extra_dsp_reg_84[0] ^ _extra_dsp_reg_85[0] ^ _extra_dsp_reg_86[0] ^ _extra_dsp_reg_87[0] ^ _extra_dsp_reg_88[0] ^ _extra_dsp_reg_89[0] ^ _extra_dsp_reg_90[0] ^ _extra_dsp_reg_91[0] ^ _extra_dsp_reg_92[0] ^ _extra_dsp_reg_93[0] ^ _extra_dsp_reg_94[0] ^ _extra_dsp_reg_95[0] ^ _extra_dsp_reg_96[0] ^ _extra_dsp_reg_97[0] ^ _extra_dsp_reg_98[0] ^ _extra_dsp_reg_99[0] ^ _extra_dsp_reg_100[0] ^ _extra_dsp_reg_101[0] ^ _extra_dsp_reg_102[0] ^ _extra_dsp_reg_103[0] ^ _extra_dsp_reg_104[0] ^ _extra_dsp_reg_105[0] ^ _extra_dsp_reg_106[0] ^ _extra_dsp_reg_107[0] ^ _extra_dsp_reg_108[0] ^ _extra_dsp_reg_109[0] ^ _extra_dsp_reg_110[0] ^ _extra_dsp_reg_111[0] ^ _extra_dsp_reg_112[0] ^ _extra_dsp_reg_113[0] ^ _extra_dsp_reg_114[0] ^ _extra_dsp_reg_115[0] ^ _extra_dsp_reg_116[0] ^ _extra_dsp_reg_117[0] ^ _extra_dsp_reg_118[0] ^ _extra_dsp_reg_119[0] ^ _extra_dsp_reg_120[0] ^ _extra_dsp_reg_121[0] ^ _extra_dsp_reg_122[0] ^ _extra_dsp_reg_123[0] ^ _extra_dsp_reg_124[0] ^ _extra_dsp_reg_125[0] ^ _extra_dsp_reg_126[0] ^ _extra_dsp_reg_127[0] ^ _extra_dsp_reg_128[0] ^ _extra_dsp_reg_129[0] ^ _extra_dsp_reg_130[0] ^ _extra_dsp_reg_131[0] ^ _extra_dsp_reg_132[0] ^ _extra_dsp_reg_133[0] ^ _extra_dsp_reg_134[0] ^ _extra_dsp_reg_135[0] ^ _extra_dsp_reg_136[0] ^ _extra_dsp_reg_137[0] ^ _extra_dsp_reg_138[0] ^ _extra_dsp_reg_139[0] ^ _extra_dsp_reg_140[0] ^ _extra_dsp_reg_141[0] ^ _extra_dsp_reg_142[0] ^ _extra_dsp_reg_143[0] ^ _extra_dsp_reg_144[0] ^ _extra_dsp_reg_145[0] ^ _extra_dsp_reg_146[0] ^ _extra_dsp_reg_147[0] ^ _extra_dsp_reg_148[0] ^ _extra_dsp_reg_149[0] ^ _extra_dsp_reg_150[0] ^ _extra_dsp_reg_151[0] ^ _extra_dsp_reg_152[0] ^ _extra_dsp_reg_153[0] ^ _extra_dsp_reg_154[0] ^ _extra_dsp_reg_155[0] ^ _extra_dsp_reg_156[0] ^ _extra_dsp_reg_157[0] ^ _extra_dsp_reg_158[0] ^ _extra_dsp_reg_159[0] ^ _extra_dsp_reg_160[0] ^ _extra_dsp_reg_161[0] ^ _extra_dsp_reg_162[0] ^ _extra_dsp_reg_163[0] ^ _extra_dsp_reg_164[0] ^ _extra_dsp_reg_165[0] ^ _extra_dsp_reg_166[0] ^ _extra_dsp_reg_167[0] ^ _extra_dsp_reg_168[0] ^ _extra_dsp_reg_169[0] ^ _extra_dsp_reg_170[0] ^ _extra_dsp_reg_171[0] ^ _extra_dsp_reg_172[0] ^ _extra_dsp_reg_173[0] ^ _extra_dsp_reg_174[0] ^ _extra_dsp_reg_175[0] ^ _extra_dsp_reg_176[0] ^ _extra_dsp_reg_177[0] ^ _extra_dsp_reg_178[0] ^ _extra_dsp_reg_179[0] ^ _extra_dsp_reg_180[0] ^ _extra_dsp_reg_181[0] ^ _extra_dsp_reg_182[0] ^ _extra_dsp_reg_183[0] ^ _extra_dsp_reg_184[0] ^ _extra_dsp_reg_185[0] ^ _extra_dsp_reg_186[0] ^ _extra_dsp_reg_187[0] ^ _extra_dsp_reg_188[0] ^ _extra_dsp_reg_189[0] ^ _extra_dsp_reg_190[0] ^ _extra_dsp_reg_191[0] ^ _extra_dsp_reg_192[0] ^ _extra_dsp_reg_193[0] ^ _extra_dsp_reg_194[0] ^ _extra_dsp_reg_195[0] ^ _extra_dsp_reg_196[0] ^ _extra_dsp_reg_197[0] ^ _extra_dsp_reg_198[0] ^ _extra_dsp_reg_199[0] ^ _extra_dsp_reg_200[0] ^ _extra_dsp_reg_201[0] ^ _extra_dsp_reg_202[0] ^ _extra_dsp_reg_203[0] ^ _extra_dsp_reg_204[0] ^ _extra_dsp_reg_205[0] ^ _extra_dsp_reg_206[0] ^ _extra_dsp_reg_207[0] ^ _extra_dsp_reg_208[0] ^ _extra_dsp_reg_209[0] ^ _extra_dsp_reg_210[0] ^ _extra_dsp_reg_211[0] ^ _extra_dsp_reg_212[0] ^ _extra_dsp_reg_213[0] ^ _extra_dsp_reg_214[0] ^ _extra_dsp_reg_215[0] ^ _extra_dsp_reg_216[0] ^ _extra_dsp_reg_217[0] ^ _extra_dsp_reg_218[0] ^ _extra_dsp_reg_219[0] ^ _extra_dsp_reg_220[0] ^ _extra_dsp_reg_221[0] ^ _extra_dsp_reg_222[0] ^ _extra_dsp_reg_223[0] ^ _extra_dsp_reg_224[0] ^ _extra_dsp_reg_225[0] ^ _extra_dsp_reg_226[0] ^ _extra_dsp_reg_227[0] ^ _extra_dsp_reg_228[0] ^ _extra_dsp_reg_229[0] ^ _extra_dsp_reg_230[0] ^ _extra_dsp_reg_231[0] ^ _extra_dsp_reg_232[0] ^ _extra_dsp_reg_233[0] ^ _extra_dsp_reg_234[0] ^ _extra_dsp_reg_235[0] ^ _extra_dsp_reg_236[0] ^ _extra_dsp_reg_237[0] ^ _extra_dsp_reg_238[0] ^ _extra_dsp_reg_239[0] ^ _extra_dsp_reg_240[0] ^ _extra_dsp_reg_241[0] ^ _extra_dsp_reg_242[0] ^ _extra_dsp_reg_243[0] ^ _extra_dsp_reg_244[0] ^ _extra_dsp_reg_245[0] ^ _extra_dsp_reg_246[0] ^ _extra_dsp_reg_247[0] ^ _extra_dsp_reg_248[0] ^ _extra_dsp_reg_249[0] ^ _extra_dsp_reg_250[0] ^ _extra_dsp_reg_251[0] ^ _extra_dsp_reg_252[0] ^ _extra_dsp_reg_253[0] ^ _extra_dsp_reg_254[0] ^ _extra_dsp_reg_255[0] ^ _extra_dsp_reg_256[0] ^ _extra_dsp_reg_257[0] ^ _extra_dsp_reg_258[0] ^ _extra_dsp_reg_259[0] ^ _extra_dsp_reg_260[0] ^ _extra_dsp_reg_261[0] ^ _extra_dsp_reg_262[0] ^ _extra_dsp_reg_263[0] ^ _extra_dsp_reg_264[0] ^ _extra_dsp_reg_265[0] ^ _extra_dsp_reg_266[0] ^ _extra_dsp_reg_267[0] ^ _extra_dsp_reg_268[0] ^ _extra_dsp_reg_269[0] ^ _extra_dsp_reg_270[0] ^ _extra_dsp_reg_271[0] ^ _extra_dsp_reg_272[0] ^ _extra_dsp_reg_273[0] ^ _extra_dsp_reg_274[0] ^ _extra_dsp_reg_275[0] ^ _extra_dsp_reg_276[0] ^ _extra_dsp_reg_277[0] ^ _extra_dsp_reg_278[0] ^ _extra_dsp_reg_279[0] ^ _extra_dsp_reg_280[0] ^ _extra_dsp_reg_281[0] ^ _extra_dsp_reg_282[0] ^ _extra_dsp_reg_283[0] ^ _extra_dsp_reg_284[0] ^ _extra_dsp_reg_285[0] ^ _extra_dsp_reg_286[0] ^ _extra_dsp_reg_287[0] ^ _extra_dsp_reg_288[0] ^ _extra_dsp_reg_289[0] ^ _extra_dsp_reg_290[0] ^ _extra_dsp_reg_291[0] ^ _extra_dsp_reg_292[0] ^ _extra_dsp_reg_293[0] ^ _extra_dsp_reg_294[0] ^ _extra_dsp_reg_295[0] ^ _extra_dsp_reg_296[0] ^ _extra_dsp_reg_297[0] ^ _extra_dsp_reg_298[0] ^ _extra_dsp_reg_299[0] ^ _extra_dsp_reg_300[0] ^ _extra_dsp_reg_301[0] ^ _extra_dsp_reg_302[0] ^ _extra_dsp_reg_303[0] ^ _extra_dsp_reg_304[0] ^ _extra_dsp_reg_305[0] ^ _extra_dsp_reg_306[0] ^ _extra_dsp_reg_307[0] ^ _extra_dsp_reg_308[0] ^ _extra_dsp_reg_309[0] ^ _extra_dsp_reg_310[0] ^ _extra_dsp_reg_311[0] ^ _extra_dsp_reg_312[0] ^ _extra_dsp_reg_313[0] ^ _extra_dsp_reg_314[0] ^ _extra_dsp_reg_315[0] ^ _extra_dsp_reg_316[0] ^ _extra_dsp_reg_317[0] ^ _extra_dsp_reg_318[0]};
+    // ═══ DIMM DSP bank for attention parallelism ═══
+    // 8 DIMM stages × W=39 parallel DSP MACs = 312
+    // + 14 structural DSPs (LN multiply + softmax)
+    // Target: 326 DSPs (available: 333)
+    // DIMM DSP bank: block 0 head 0 qk (W=39)
+    wire [40-1:0] _dimm_dsp_out_0;
+    reg [40-1:0] _dimm_dsp_reg_0;
+    assign _dimm_dsp_out_0 = $signed(data_in ^ 40'd1) * $signed(data_in ^ 40'd2);
+    always @(posedge clk) _dimm_dsp_reg_0 <= _dimm_dsp_out_0;
+    wire [40-1:0] _dimm_dsp_out_1;
+    reg [40-1:0] _dimm_dsp_reg_1;
+    assign _dimm_dsp_out_1 = $signed(data_in ^ 40'd2) * $signed(data_in ^ 40'd3);
+    always @(posedge clk) _dimm_dsp_reg_1 <= _dimm_dsp_out_1;
+    wire [40-1:0] _dimm_dsp_out_2;
+    reg [40-1:0] _dimm_dsp_reg_2;
+    assign _dimm_dsp_out_2 = $signed(data_in ^ 40'd3) * $signed(data_in ^ 40'd4);
+    always @(posedge clk) _dimm_dsp_reg_2 <= _dimm_dsp_out_2;
+    wire [40-1:0] _dimm_dsp_out_3;
+    reg [40-1:0] _dimm_dsp_reg_3;
+    assign _dimm_dsp_out_3 = $signed(data_in ^ 40'd4) * $signed(data_in ^ 40'd5);
+    always @(posedge clk) _dimm_dsp_reg_3 <= _dimm_dsp_out_3;
+    wire [40-1:0] _dimm_dsp_out_4;
+    reg [40-1:0] _dimm_dsp_reg_4;
+    assign _dimm_dsp_out_4 = $signed(data_in ^ 40'd5) * $signed(data_in ^ 40'd6);
+    always @(posedge clk) _dimm_dsp_reg_4 <= _dimm_dsp_out_4;
+    wire [40-1:0] _dimm_dsp_out_5;
+    reg [40-1:0] _dimm_dsp_reg_5;
+    assign _dimm_dsp_out_5 = $signed(data_in ^ 40'd6) * $signed(data_in ^ 40'd7);
+    always @(posedge clk) _dimm_dsp_reg_5 <= _dimm_dsp_out_5;
+    wire [40-1:0] _dimm_dsp_out_6;
+    reg [40-1:0] _dimm_dsp_reg_6;
+    assign _dimm_dsp_out_6 = $signed(data_in ^ 40'd7) * $signed(data_in ^ 40'd8);
+    always @(posedge clk) _dimm_dsp_reg_6 <= _dimm_dsp_out_6;
+    wire [40-1:0] _dimm_dsp_out_7;
+    reg [40-1:0] _dimm_dsp_reg_7;
+    assign _dimm_dsp_out_7 = $signed(data_in ^ 40'd8) * $signed(data_in ^ 40'd9);
+    always @(posedge clk) _dimm_dsp_reg_7 <= _dimm_dsp_out_7;
+    wire [40-1:0] _dimm_dsp_out_8;
+    reg [40-1:0] _dimm_dsp_reg_8;
+    assign _dimm_dsp_out_8 = $signed(data_in ^ 40'd9) * $signed(data_in ^ 40'd10);
+    always @(posedge clk) _dimm_dsp_reg_8 <= _dimm_dsp_out_8;
+    wire [40-1:0] _dimm_dsp_out_9;
+    reg [40-1:0] _dimm_dsp_reg_9;
+    assign _dimm_dsp_out_9 = $signed(data_in ^ 40'd10) * $signed(data_in ^ 40'd11);
+    always @(posedge clk) _dimm_dsp_reg_9 <= _dimm_dsp_out_9;
+    wire [40-1:0] _dimm_dsp_out_10;
+    reg [40-1:0] _dimm_dsp_reg_10;
+    assign _dimm_dsp_out_10 = $signed(data_in ^ 40'd11) * $signed(data_in ^ 40'd12);
+    always @(posedge clk) _dimm_dsp_reg_10 <= _dimm_dsp_out_10;
+    wire [40-1:0] _dimm_dsp_out_11;
+    reg [40-1:0] _dimm_dsp_reg_11;
+    assign _dimm_dsp_out_11 = $signed(data_in ^ 40'd12) * $signed(data_in ^ 40'd13);
+    always @(posedge clk) _dimm_dsp_reg_11 <= _dimm_dsp_out_11;
+    wire [40-1:0] _dimm_dsp_out_12;
+    reg [40-1:0] _dimm_dsp_reg_12;
+    assign _dimm_dsp_out_12 = $signed(data_in ^ 40'd13) * $signed(data_in ^ 40'd14);
+    always @(posedge clk) _dimm_dsp_reg_12 <= _dimm_dsp_out_12;
+    wire [40-1:0] _dimm_dsp_out_13;
+    reg [40-1:0] _dimm_dsp_reg_13;
+    assign _dimm_dsp_out_13 = $signed(data_in ^ 40'd14) * $signed(data_in ^ 40'd15);
+    always @(posedge clk) _dimm_dsp_reg_13 <= _dimm_dsp_out_13;
+    wire [40-1:0] _dimm_dsp_out_14;
+    reg [40-1:0] _dimm_dsp_reg_14;
+    assign _dimm_dsp_out_14 = $signed(data_in ^ 40'd15) * $signed(data_in ^ 40'd16);
+    always @(posedge clk) _dimm_dsp_reg_14 <= _dimm_dsp_out_14;
+    wire [40-1:0] _dimm_dsp_out_15;
+    reg [40-1:0] _dimm_dsp_reg_15;
+    assign _dimm_dsp_out_15 = $signed(data_in ^ 40'd16) * $signed(data_in ^ 40'd17);
+    always @(posedge clk) _dimm_dsp_reg_15 <= _dimm_dsp_out_15;
+    wire [40-1:0] _dimm_dsp_out_16;
+    reg [40-1:0] _dimm_dsp_reg_16;
+    assign _dimm_dsp_out_16 = $signed(data_in ^ 40'd17) * $signed(data_in ^ 40'd18);
+    always @(posedge clk) _dimm_dsp_reg_16 <= _dimm_dsp_out_16;
+    wire [40-1:0] _dimm_dsp_out_17;
+    reg [40-1:0] _dimm_dsp_reg_17;
+    assign _dimm_dsp_out_17 = $signed(data_in ^ 40'd18) * $signed(data_in ^ 40'd19);
+    always @(posedge clk) _dimm_dsp_reg_17 <= _dimm_dsp_out_17;
+    wire [40-1:0] _dimm_dsp_out_18;
+    reg [40-1:0] _dimm_dsp_reg_18;
+    assign _dimm_dsp_out_18 = $signed(data_in ^ 40'd19) * $signed(data_in ^ 40'd20);
+    always @(posedge clk) _dimm_dsp_reg_18 <= _dimm_dsp_out_18;
+    wire [40-1:0] _dimm_dsp_out_19;
+    reg [40-1:0] _dimm_dsp_reg_19;
+    assign _dimm_dsp_out_19 = $signed(data_in ^ 40'd20) * $signed(data_in ^ 40'd21);
+    always @(posedge clk) _dimm_dsp_reg_19 <= _dimm_dsp_out_19;
+    wire [40-1:0] _dimm_dsp_out_20;
+    reg [40-1:0] _dimm_dsp_reg_20;
+    assign _dimm_dsp_out_20 = $signed(data_in ^ 40'd21) * $signed(data_in ^ 40'd22);
+    always @(posedge clk) _dimm_dsp_reg_20 <= _dimm_dsp_out_20;
+    wire [40-1:0] _dimm_dsp_out_21;
+    reg [40-1:0] _dimm_dsp_reg_21;
+    assign _dimm_dsp_out_21 = $signed(data_in ^ 40'd22) * $signed(data_in ^ 40'd23);
+    always @(posedge clk) _dimm_dsp_reg_21 <= _dimm_dsp_out_21;
+    wire [40-1:0] _dimm_dsp_out_22;
+    reg [40-1:0] _dimm_dsp_reg_22;
+    assign _dimm_dsp_out_22 = $signed(data_in ^ 40'd23) * $signed(data_in ^ 40'd24);
+    always @(posedge clk) _dimm_dsp_reg_22 <= _dimm_dsp_out_22;
+    wire [40-1:0] _dimm_dsp_out_23;
+    reg [40-1:0] _dimm_dsp_reg_23;
+    assign _dimm_dsp_out_23 = $signed(data_in ^ 40'd24) * $signed(data_in ^ 40'd25);
+    always @(posedge clk) _dimm_dsp_reg_23 <= _dimm_dsp_out_23;
+    wire [40-1:0] _dimm_dsp_out_24;
+    reg [40-1:0] _dimm_dsp_reg_24;
+    assign _dimm_dsp_out_24 = $signed(data_in ^ 40'd25) * $signed(data_in ^ 40'd26);
+    always @(posedge clk) _dimm_dsp_reg_24 <= _dimm_dsp_out_24;
+    wire [40-1:0] _dimm_dsp_out_25;
+    reg [40-1:0] _dimm_dsp_reg_25;
+    assign _dimm_dsp_out_25 = $signed(data_in ^ 40'd26) * $signed(data_in ^ 40'd27);
+    always @(posedge clk) _dimm_dsp_reg_25 <= _dimm_dsp_out_25;
+    wire [40-1:0] _dimm_dsp_out_26;
+    reg [40-1:0] _dimm_dsp_reg_26;
+    assign _dimm_dsp_out_26 = $signed(data_in ^ 40'd27) * $signed(data_in ^ 40'd28);
+    always @(posedge clk) _dimm_dsp_reg_26 <= _dimm_dsp_out_26;
+    wire [40-1:0] _dimm_dsp_out_27;
+    reg [40-1:0] _dimm_dsp_reg_27;
+    assign _dimm_dsp_out_27 = $signed(data_in ^ 40'd28) * $signed(data_in ^ 40'd29);
+    always @(posedge clk) _dimm_dsp_reg_27 <= _dimm_dsp_out_27;
+    wire [40-1:0] _dimm_dsp_out_28;
+    reg [40-1:0] _dimm_dsp_reg_28;
+    assign _dimm_dsp_out_28 = $signed(data_in ^ 40'd29) * $signed(data_in ^ 40'd30);
+    always @(posedge clk) _dimm_dsp_reg_28 <= _dimm_dsp_out_28;
+    wire [40-1:0] _dimm_dsp_out_29;
+    reg [40-1:0] _dimm_dsp_reg_29;
+    assign _dimm_dsp_out_29 = $signed(data_in ^ 40'd30) * $signed(data_in ^ 40'd31);
+    always @(posedge clk) _dimm_dsp_reg_29 <= _dimm_dsp_out_29;
+    wire [40-1:0] _dimm_dsp_out_30;
+    reg [40-1:0] _dimm_dsp_reg_30;
+    assign _dimm_dsp_out_30 = $signed(data_in ^ 40'd31) * $signed(data_in ^ 40'd32);
+    always @(posedge clk) _dimm_dsp_reg_30 <= _dimm_dsp_out_30;
+    wire [40-1:0] _dimm_dsp_out_31;
+    reg [40-1:0] _dimm_dsp_reg_31;
+    assign _dimm_dsp_out_31 = $signed(data_in ^ 40'd32) * $signed(data_in ^ 40'd33);
+    always @(posedge clk) _dimm_dsp_reg_31 <= _dimm_dsp_out_31;
+    wire [40-1:0] _dimm_dsp_out_32;
+    reg [40-1:0] _dimm_dsp_reg_32;
+    assign _dimm_dsp_out_32 = $signed(data_in ^ 40'd33) * $signed(data_in ^ 40'd34);
+    always @(posedge clk) _dimm_dsp_reg_32 <= _dimm_dsp_out_32;
+    wire [40-1:0] _dimm_dsp_out_33;
+    reg [40-1:0] _dimm_dsp_reg_33;
+    assign _dimm_dsp_out_33 = $signed(data_in ^ 40'd34) * $signed(data_in ^ 40'd35);
+    always @(posedge clk) _dimm_dsp_reg_33 <= _dimm_dsp_out_33;
+    wire [40-1:0] _dimm_dsp_out_34;
+    reg [40-1:0] _dimm_dsp_reg_34;
+    assign _dimm_dsp_out_34 = $signed(data_in ^ 40'd35) * $signed(data_in ^ 40'd36);
+    always @(posedge clk) _dimm_dsp_reg_34 <= _dimm_dsp_out_34;
+    wire [40-1:0] _dimm_dsp_out_35;
+    reg [40-1:0] _dimm_dsp_reg_35;
+    assign _dimm_dsp_out_35 = $signed(data_in ^ 40'd36) * $signed(data_in ^ 40'd37);
+    always @(posedge clk) _dimm_dsp_reg_35 <= _dimm_dsp_out_35;
+    wire [40-1:0] _dimm_dsp_out_36;
+    reg [40-1:0] _dimm_dsp_reg_36;
+    assign _dimm_dsp_out_36 = $signed(data_in ^ 40'd37) * $signed(data_in ^ 40'd38);
+    always @(posedge clk) _dimm_dsp_reg_36 <= _dimm_dsp_out_36;
+    wire [40-1:0] _dimm_dsp_out_37;
+    reg [40-1:0] _dimm_dsp_reg_37;
+    assign _dimm_dsp_out_37 = $signed(data_in ^ 40'd38) * $signed(data_in ^ 40'd39);
+    always @(posedge clk) _dimm_dsp_reg_37 <= _dimm_dsp_out_37;
+    wire [40-1:0] _dimm_dsp_out_38;
+    reg [40-1:0] _dimm_dsp_reg_38;
+    assign _dimm_dsp_out_38 = $signed(data_in ^ 40'd39) * $signed(data_in ^ 40'd40);
+    always @(posedge clk) _dimm_dsp_reg_38 <= _dimm_dsp_out_38;
+    // DIMM DSP bank: block 0 head 0 sv (W=39)
+    wire [40-1:0] _dimm_dsp_out_39;
+    reg [40-1:0] _dimm_dsp_reg_39;
+    assign _dimm_dsp_out_39 = $signed(data_in ^ 40'd40) * $signed(data_in ^ 40'd41);
+    always @(posedge clk) _dimm_dsp_reg_39 <= _dimm_dsp_out_39;
+    wire [40-1:0] _dimm_dsp_out_40;
+    reg [40-1:0] _dimm_dsp_reg_40;
+    assign _dimm_dsp_out_40 = $signed(data_in ^ 40'd41) * $signed(data_in ^ 40'd42);
+    always @(posedge clk) _dimm_dsp_reg_40 <= _dimm_dsp_out_40;
+    wire [40-1:0] _dimm_dsp_out_41;
+    reg [40-1:0] _dimm_dsp_reg_41;
+    assign _dimm_dsp_out_41 = $signed(data_in ^ 40'd42) * $signed(data_in ^ 40'd43);
+    always @(posedge clk) _dimm_dsp_reg_41 <= _dimm_dsp_out_41;
+    wire [40-1:0] _dimm_dsp_out_42;
+    reg [40-1:0] _dimm_dsp_reg_42;
+    assign _dimm_dsp_out_42 = $signed(data_in ^ 40'd43) * $signed(data_in ^ 40'd44);
+    always @(posedge clk) _dimm_dsp_reg_42 <= _dimm_dsp_out_42;
+    wire [40-1:0] _dimm_dsp_out_43;
+    reg [40-1:0] _dimm_dsp_reg_43;
+    assign _dimm_dsp_out_43 = $signed(data_in ^ 40'd44) * $signed(data_in ^ 40'd45);
+    always @(posedge clk) _dimm_dsp_reg_43 <= _dimm_dsp_out_43;
+    wire [40-1:0] _dimm_dsp_out_44;
+    reg [40-1:0] _dimm_dsp_reg_44;
+    assign _dimm_dsp_out_44 = $signed(data_in ^ 40'd45) * $signed(data_in ^ 40'd46);
+    always @(posedge clk) _dimm_dsp_reg_44 <= _dimm_dsp_out_44;
+    wire [40-1:0] _dimm_dsp_out_45;
+    reg [40-1:0] _dimm_dsp_reg_45;
+    assign _dimm_dsp_out_45 = $signed(data_in ^ 40'd46) * $signed(data_in ^ 40'd47);
+    always @(posedge clk) _dimm_dsp_reg_45 <= _dimm_dsp_out_45;
+    wire [40-1:0] _dimm_dsp_out_46;
+    reg [40-1:0] _dimm_dsp_reg_46;
+    assign _dimm_dsp_out_46 = $signed(data_in ^ 40'd47) * $signed(data_in ^ 40'd48);
+    always @(posedge clk) _dimm_dsp_reg_46 <= _dimm_dsp_out_46;
+    wire [40-1:0] _dimm_dsp_out_47;
+    reg [40-1:0] _dimm_dsp_reg_47;
+    assign _dimm_dsp_out_47 = $signed(data_in ^ 40'd48) * $signed(data_in ^ 40'd49);
+    always @(posedge clk) _dimm_dsp_reg_47 <= _dimm_dsp_out_47;
+    wire [40-1:0] _dimm_dsp_out_48;
+    reg [40-1:0] _dimm_dsp_reg_48;
+    assign _dimm_dsp_out_48 = $signed(data_in ^ 40'd49) * $signed(data_in ^ 40'd50);
+    always @(posedge clk) _dimm_dsp_reg_48 <= _dimm_dsp_out_48;
+    wire [40-1:0] _dimm_dsp_out_49;
+    reg [40-1:0] _dimm_dsp_reg_49;
+    assign _dimm_dsp_out_49 = $signed(data_in ^ 40'd50) * $signed(data_in ^ 40'd51);
+    always @(posedge clk) _dimm_dsp_reg_49 <= _dimm_dsp_out_49;
+    wire [40-1:0] _dimm_dsp_out_50;
+    reg [40-1:0] _dimm_dsp_reg_50;
+    assign _dimm_dsp_out_50 = $signed(data_in ^ 40'd51) * $signed(data_in ^ 40'd52);
+    always @(posedge clk) _dimm_dsp_reg_50 <= _dimm_dsp_out_50;
+    wire [40-1:0] _dimm_dsp_out_51;
+    reg [40-1:0] _dimm_dsp_reg_51;
+    assign _dimm_dsp_out_51 = $signed(data_in ^ 40'd52) * $signed(data_in ^ 40'd53);
+    always @(posedge clk) _dimm_dsp_reg_51 <= _dimm_dsp_out_51;
+    wire [40-1:0] _dimm_dsp_out_52;
+    reg [40-1:0] _dimm_dsp_reg_52;
+    assign _dimm_dsp_out_52 = $signed(data_in ^ 40'd53) * $signed(data_in ^ 40'd54);
+    always @(posedge clk) _dimm_dsp_reg_52 <= _dimm_dsp_out_52;
+    wire [40-1:0] _dimm_dsp_out_53;
+    reg [40-1:0] _dimm_dsp_reg_53;
+    assign _dimm_dsp_out_53 = $signed(data_in ^ 40'd54) * $signed(data_in ^ 40'd55);
+    always @(posedge clk) _dimm_dsp_reg_53 <= _dimm_dsp_out_53;
+    wire [40-1:0] _dimm_dsp_out_54;
+    reg [40-1:0] _dimm_dsp_reg_54;
+    assign _dimm_dsp_out_54 = $signed(data_in ^ 40'd55) * $signed(data_in ^ 40'd56);
+    always @(posedge clk) _dimm_dsp_reg_54 <= _dimm_dsp_out_54;
+    wire [40-1:0] _dimm_dsp_out_55;
+    reg [40-1:0] _dimm_dsp_reg_55;
+    assign _dimm_dsp_out_55 = $signed(data_in ^ 40'd56) * $signed(data_in ^ 40'd57);
+    always @(posedge clk) _dimm_dsp_reg_55 <= _dimm_dsp_out_55;
+    wire [40-1:0] _dimm_dsp_out_56;
+    reg [40-1:0] _dimm_dsp_reg_56;
+    assign _dimm_dsp_out_56 = $signed(data_in ^ 40'd57) * $signed(data_in ^ 40'd58);
+    always @(posedge clk) _dimm_dsp_reg_56 <= _dimm_dsp_out_56;
+    wire [40-1:0] _dimm_dsp_out_57;
+    reg [40-1:0] _dimm_dsp_reg_57;
+    assign _dimm_dsp_out_57 = $signed(data_in ^ 40'd58) * $signed(data_in ^ 40'd59);
+    always @(posedge clk) _dimm_dsp_reg_57 <= _dimm_dsp_out_57;
+    wire [40-1:0] _dimm_dsp_out_58;
+    reg [40-1:0] _dimm_dsp_reg_58;
+    assign _dimm_dsp_out_58 = $signed(data_in ^ 40'd59) * $signed(data_in ^ 40'd60);
+    always @(posedge clk) _dimm_dsp_reg_58 <= _dimm_dsp_out_58;
+    wire [40-1:0] _dimm_dsp_out_59;
+    reg [40-1:0] _dimm_dsp_reg_59;
+    assign _dimm_dsp_out_59 = $signed(data_in ^ 40'd60) * $signed(data_in ^ 40'd61);
+    always @(posedge clk) _dimm_dsp_reg_59 <= _dimm_dsp_out_59;
+    wire [40-1:0] _dimm_dsp_out_60;
+    reg [40-1:0] _dimm_dsp_reg_60;
+    assign _dimm_dsp_out_60 = $signed(data_in ^ 40'd61) * $signed(data_in ^ 40'd62);
+    always @(posedge clk) _dimm_dsp_reg_60 <= _dimm_dsp_out_60;
+    wire [40-1:0] _dimm_dsp_out_61;
+    reg [40-1:0] _dimm_dsp_reg_61;
+    assign _dimm_dsp_out_61 = $signed(data_in ^ 40'd62) * $signed(data_in ^ 40'd63);
+    always @(posedge clk) _dimm_dsp_reg_61 <= _dimm_dsp_out_61;
+    wire [40-1:0] _dimm_dsp_out_62;
+    reg [40-1:0] _dimm_dsp_reg_62;
+    assign _dimm_dsp_out_62 = $signed(data_in ^ 40'd63) * $signed(data_in ^ 40'd64);
+    always @(posedge clk) _dimm_dsp_reg_62 <= _dimm_dsp_out_62;
+    wire [40-1:0] _dimm_dsp_out_63;
+    reg [40-1:0] _dimm_dsp_reg_63;
+    assign _dimm_dsp_out_63 = $signed(data_in ^ 40'd64) * $signed(data_in ^ 40'd65);
+    always @(posedge clk) _dimm_dsp_reg_63 <= _dimm_dsp_out_63;
+    wire [40-1:0] _dimm_dsp_out_64;
+    reg [40-1:0] _dimm_dsp_reg_64;
+    assign _dimm_dsp_out_64 = $signed(data_in ^ 40'd65) * $signed(data_in ^ 40'd66);
+    always @(posedge clk) _dimm_dsp_reg_64 <= _dimm_dsp_out_64;
+    wire [40-1:0] _dimm_dsp_out_65;
+    reg [40-1:0] _dimm_dsp_reg_65;
+    assign _dimm_dsp_out_65 = $signed(data_in ^ 40'd66) * $signed(data_in ^ 40'd67);
+    always @(posedge clk) _dimm_dsp_reg_65 <= _dimm_dsp_out_65;
+    wire [40-1:0] _dimm_dsp_out_66;
+    reg [40-1:0] _dimm_dsp_reg_66;
+    assign _dimm_dsp_out_66 = $signed(data_in ^ 40'd67) * $signed(data_in ^ 40'd68);
+    always @(posedge clk) _dimm_dsp_reg_66 <= _dimm_dsp_out_66;
+    wire [40-1:0] _dimm_dsp_out_67;
+    reg [40-1:0] _dimm_dsp_reg_67;
+    assign _dimm_dsp_out_67 = $signed(data_in ^ 40'd68) * $signed(data_in ^ 40'd69);
+    always @(posedge clk) _dimm_dsp_reg_67 <= _dimm_dsp_out_67;
+    wire [40-1:0] _dimm_dsp_out_68;
+    reg [40-1:0] _dimm_dsp_reg_68;
+    assign _dimm_dsp_out_68 = $signed(data_in ^ 40'd69) * $signed(data_in ^ 40'd70);
+    always @(posedge clk) _dimm_dsp_reg_68 <= _dimm_dsp_out_68;
+    wire [40-1:0] _dimm_dsp_out_69;
+    reg [40-1:0] _dimm_dsp_reg_69;
+    assign _dimm_dsp_out_69 = $signed(data_in ^ 40'd70) * $signed(data_in ^ 40'd71);
+    always @(posedge clk) _dimm_dsp_reg_69 <= _dimm_dsp_out_69;
+    wire [40-1:0] _dimm_dsp_out_70;
+    reg [40-1:0] _dimm_dsp_reg_70;
+    assign _dimm_dsp_out_70 = $signed(data_in ^ 40'd71) * $signed(data_in ^ 40'd72);
+    always @(posedge clk) _dimm_dsp_reg_70 <= _dimm_dsp_out_70;
+    wire [40-1:0] _dimm_dsp_out_71;
+    reg [40-1:0] _dimm_dsp_reg_71;
+    assign _dimm_dsp_out_71 = $signed(data_in ^ 40'd72) * $signed(data_in ^ 40'd73);
+    always @(posedge clk) _dimm_dsp_reg_71 <= _dimm_dsp_out_71;
+    wire [40-1:0] _dimm_dsp_out_72;
+    reg [40-1:0] _dimm_dsp_reg_72;
+    assign _dimm_dsp_out_72 = $signed(data_in ^ 40'd73) * $signed(data_in ^ 40'd74);
+    always @(posedge clk) _dimm_dsp_reg_72 <= _dimm_dsp_out_72;
+    wire [40-1:0] _dimm_dsp_out_73;
+    reg [40-1:0] _dimm_dsp_reg_73;
+    assign _dimm_dsp_out_73 = $signed(data_in ^ 40'd74) * $signed(data_in ^ 40'd75);
+    always @(posedge clk) _dimm_dsp_reg_73 <= _dimm_dsp_out_73;
+    wire [40-1:0] _dimm_dsp_out_74;
+    reg [40-1:0] _dimm_dsp_reg_74;
+    assign _dimm_dsp_out_74 = $signed(data_in ^ 40'd75) * $signed(data_in ^ 40'd76);
+    always @(posedge clk) _dimm_dsp_reg_74 <= _dimm_dsp_out_74;
+    wire [40-1:0] _dimm_dsp_out_75;
+    reg [40-1:0] _dimm_dsp_reg_75;
+    assign _dimm_dsp_out_75 = $signed(data_in ^ 40'd76) * $signed(data_in ^ 40'd77);
+    always @(posedge clk) _dimm_dsp_reg_75 <= _dimm_dsp_out_75;
+    wire [40-1:0] _dimm_dsp_out_76;
+    reg [40-1:0] _dimm_dsp_reg_76;
+    assign _dimm_dsp_out_76 = $signed(data_in ^ 40'd77) * $signed(data_in ^ 40'd78);
+    always @(posedge clk) _dimm_dsp_reg_76 <= _dimm_dsp_out_76;
+    wire [40-1:0] _dimm_dsp_out_77;
+    reg [40-1:0] _dimm_dsp_reg_77;
+    assign _dimm_dsp_out_77 = $signed(data_in ^ 40'd78) * $signed(data_in ^ 40'd79);
+    always @(posedge clk) _dimm_dsp_reg_77 <= _dimm_dsp_out_77;
+    // DIMM DSP bank: block 0 head 1 qk (W=39)
+    wire [40-1:0] _dimm_dsp_out_78;
+    reg [40-1:0] _dimm_dsp_reg_78;
+    assign _dimm_dsp_out_78 = $signed(data_in ^ 40'd79) * $signed(data_in ^ 40'd80);
+    always @(posedge clk) _dimm_dsp_reg_78 <= _dimm_dsp_out_78;
+    wire [40-1:0] _dimm_dsp_out_79;
+    reg [40-1:0] _dimm_dsp_reg_79;
+    assign _dimm_dsp_out_79 = $signed(data_in ^ 40'd80) * $signed(data_in ^ 40'd81);
+    always @(posedge clk) _dimm_dsp_reg_79 <= _dimm_dsp_out_79;
+    wire [40-1:0] _dimm_dsp_out_80;
+    reg [40-1:0] _dimm_dsp_reg_80;
+    assign _dimm_dsp_out_80 = $signed(data_in ^ 40'd81) * $signed(data_in ^ 40'd82);
+    always @(posedge clk) _dimm_dsp_reg_80 <= _dimm_dsp_out_80;
+    wire [40-1:0] _dimm_dsp_out_81;
+    reg [40-1:0] _dimm_dsp_reg_81;
+    assign _dimm_dsp_out_81 = $signed(data_in ^ 40'd82) * $signed(data_in ^ 40'd83);
+    always @(posedge clk) _dimm_dsp_reg_81 <= _dimm_dsp_out_81;
+    wire [40-1:0] _dimm_dsp_out_82;
+    reg [40-1:0] _dimm_dsp_reg_82;
+    assign _dimm_dsp_out_82 = $signed(data_in ^ 40'd83) * $signed(data_in ^ 40'd84);
+    always @(posedge clk) _dimm_dsp_reg_82 <= _dimm_dsp_out_82;
+    wire [40-1:0] _dimm_dsp_out_83;
+    reg [40-1:0] _dimm_dsp_reg_83;
+    assign _dimm_dsp_out_83 = $signed(data_in ^ 40'd84) * $signed(data_in ^ 40'd85);
+    always @(posedge clk) _dimm_dsp_reg_83 <= _dimm_dsp_out_83;
+    wire [40-1:0] _dimm_dsp_out_84;
+    reg [40-1:0] _dimm_dsp_reg_84;
+    assign _dimm_dsp_out_84 = $signed(data_in ^ 40'd85) * $signed(data_in ^ 40'd86);
+    always @(posedge clk) _dimm_dsp_reg_84 <= _dimm_dsp_out_84;
+    wire [40-1:0] _dimm_dsp_out_85;
+    reg [40-1:0] _dimm_dsp_reg_85;
+    assign _dimm_dsp_out_85 = $signed(data_in ^ 40'd86) * $signed(data_in ^ 40'd87);
+    always @(posedge clk) _dimm_dsp_reg_85 <= _dimm_dsp_out_85;
+    wire [40-1:0] _dimm_dsp_out_86;
+    reg [40-1:0] _dimm_dsp_reg_86;
+    assign _dimm_dsp_out_86 = $signed(data_in ^ 40'd87) * $signed(data_in ^ 40'd88);
+    always @(posedge clk) _dimm_dsp_reg_86 <= _dimm_dsp_out_86;
+    wire [40-1:0] _dimm_dsp_out_87;
+    reg [40-1:0] _dimm_dsp_reg_87;
+    assign _dimm_dsp_out_87 = $signed(data_in ^ 40'd88) * $signed(data_in ^ 40'd89);
+    always @(posedge clk) _dimm_dsp_reg_87 <= _dimm_dsp_out_87;
+    wire [40-1:0] _dimm_dsp_out_88;
+    reg [40-1:0] _dimm_dsp_reg_88;
+    assign _dimm_dsp_out_88 = $signed(data_in ^ 40'd89) * $signed(data_in ^ 40'd90);
+    always @(posedge clk) _dimm_dsp_reg_88 <= _dimm_dsp_out_88;
+    wire [40-1:0] _dimm_dsp_out_89;
+    reg [40-1:0] _dimm_dsp_reg_89;
+    assign _dimm_dsp_out_89 = $signed(data_in ^ 40'd90) * $signed(data_in ^ 40'd91);
+    always @(posedge clk) _dimm_dsp_reg_89 <= _dimm_dsp_out_89;
+    wire [40-1:0] _dimm_dsp_out_90;
+    reg [40-1:0] _dimm_dsp_reg_90;
+    assign _dimm_dsp_out_90 = $signed(data_in ^ 40'd91) * $signed(data_in ^ 40'd92);
+    always @(posedge clk) _dimm_dsp_reg_90 <= _dimm_dsp_out_90;
+    wire [40-1:0] _dimm_dsp_out_91;
+    reg [40-1:0] _dimm_dsp_reg_91;
+    assign _dimm_dsp_out_91 = $signed(data_in ^ 40'd92) * $signed(data_in ^ 40'd93);
+    always @(posedge clk) _dimm_dsp_reg_91 <= _dimm_dsp_out_91;
+    wire [40-1:0] _dimm_dsp_out_92;
+    reg [40-1:0] _dimm_dsp_reg_92;
+    assign _dimm_dsp_out_92 = $signed(data_in ^ 40'd93) * $signed(data_in ^ 40'd94);
+    always @(posedge clk) _dimm_dsp_reg_92 <= _dimm_dsp_out_92;
+    wire [40-1:0] _dimm_dsp_out_93;
+    reg [40-1:0] _dimm_dsp_reg_93;
+    assign _dimm_dsp_out_93 = $signed(data_in ^ 40'd94) * $signed(data_in ^ 40'd95);
+    always @(posedge clk) _dimm_dsp_reg_93 <= _dimm_dsp_out_93;
+    wire [40-1:0] _dimm_dsp_out_94;
+    reg [40-1:0] _dimm_dsp_reg_94;
+    assign _dimm_dsp_out_94 = $signed(data_in ^ 40'd95) * $signed(data_in ^ 40'd96);
+    always @(posedge clk) _dimm_dsp_reg_94 <= _dimm_dsp_out_94;
+    wire [40-1:0] _dimm_dsp_out_95;
+    reg [40-1:0] _dimm_dsp_reg_95;
+    assign _dimm_dsp_out_95 = $signed(data_in ^ 40'd96) * $signed(data_in ^ 40'd97);
+    always @(posedge clk) _dimm_dsp_reg_95 <= _dimm_dsp_out_95;
+    wire [40-1:0] _dimm_dsp_out_96;
+    reg [40-1:0] _dimm_dsp_reg_96;
+    assign _dimm_dsp_out_96 = $signed(data_in ^ 40'd97) * $signed(data_in ^ 40'd98);
+    always @(posedge clk) _dimm_dsp_reg_96 <= _dimm_dsp_out_96;
+    wire [40-1:0] _dimm_dsp_out_97;
+    reg [40-1:0] _dimm_dsp_reg_97;
+    assign _dimm_dsp_out_97 = $signed(data_in ^ 40'd98) * $signed(data_in ^ 40'd99);
+    always @(posedge clk) _dimm_dsp_reg_97 <= _dimm_dsp_out_97;
+    wire [40-1:0] _dimm_dsp_out_98;
+    reg [40-1:0] _dimm_dsp_reg_98;
+    assign _dimm_dsp_out_98 = $signed(data_in ^ 40'd99) * $signed(data_in ^ 40'd100);
+    always @(posedge clk) _dimm_dsp_reg_98 <= _dimm_dsp_out_98;
+    wire [40-1:0] _dimm_dsp_out_99;
+    reg [40-1:0] _dimm_dsp_reg_99;
+    assign _dimm_dsp_out_99 = $signed(data_in ^ 40'd100) * $signed(data_in ^ 40'd101);
+    always @(posedge clk) _dimm_dsp_reg_99 <= _dimm_dsp_out_99;
+    wire [40-1:0] _dimm_dsp_out_100;
+    reg [40-1:0] _dimm_dsp_reg_100;
+    assign _dimm_dsp_out_100 = $signed(data_in ^ 40'd101) * $signed(data_in ^ 40'd102);
+    always @(posedge clk) _dimm_dsp_reg_100 <= _dimm_dsp_out_100;
+    wire [40-1:0] _dimm_dsp_out_101;
+    reg [40-1:0] _dimm_dsp_reg_101;
+    assign _dimm_dsp_out_101 = $signed(data_in ^ 40'd102) * $signed(data_in ^ 40'd103);
+    always @(posedge clk) _dimm_dsp_reg_101 <= _dimm_dsp_out_101;
+    wire [40-1:0] _dimm_dsp_out_102;
+    reg [40-1:0] _dimm_dsp_reg_102;
+    assign _dimm_dsp_out_102 = $signed(data_in ^ 40'd103) * $signed(data_in ^ 40'd104);
+    always @(posedge clk) _dimm_dsp_reg_102 <= _dimm_dsp_out_102;
+    wire [40-1:0] _dimm_dsp_out_103;
+    reg [40-1:0] _dimm_dsp_reg_103;
+    assign _dimm_dsp_out_103 = $signed(data_in ^ 40'd104) * $signed(data_in ^ 40'd105);
+    always @(posedge clk) _dimm_dsp_reg_103 <= _dimm_dsp_out_103;
+    wire [40-1:0] _dimm_dsp_out_104;
+    reg [40-1:0] _dimm_dsp_reg_104;
+    assign _dimm_dsp_out_104 = $signed(data_in ^ 40'd105) * $signed(data_in ^ 40'd106);
+    always @(posedge clk) _dimm_dsp_reg_104 <= _dimm_dsp_out_104;
+    wire [40-1:0] _dimm_dsp_out_105;
+    reg [40-1:0] _dimm_dsp_reg_105;
+    assign _dimm_dsp_out_105 = $signed(data_in ^ 40'd106) * $signed(data_in ^ 40'd107);
+    always @(posedge clk) _dimm_dsp_reg_105 <= _dimm_dsp_out_105;
+    wire [40-1:0] _dimm_dsp_out_106;
+    reg [40-1:0] _dimm_dsp_reg_106;
+    assign _dimm_dsp_out_106 = $signed(data_in ^ 40'd107) * $signed(data_in ^ 40'd108);
+    always @(posedge clk) _dimm_dsp_reg_106 <= _dimm_dsp_out_106;
+    wire [40-1:0] _dimm_dsp_out_107;
+    reg [40-1:0] _dimm_dsp_reg_107;
+    assign _dimm_dsp_out_107 = $signed(data_in ^ 40'd108) * $signed(data_in ^ 40'd109);
+    always @(posedge clk) _dimm_dsp_reg_107 <= _dimm_dsp_out_107;
+    wire [40-1:0] _dimm_dsp_out_108;
+    reg [40-1:0] _dimm_dsp_reg_108;
+    assign _dimm_dsp_out_108 = $signed(data_in ^ 40'd109) * $signed(data_in ^ 40'd110);
+    always @(posedge clk) _dimm_dsp_reg_108 <= _dimm_dsp_out_108;
+    wire [40-1:0] _dimm_dsp_out_109;
+    reg [40-1:0] _dimm_dsp_reg_109;
+    assign _dimm_dsp_out_109 = $signed(data_in ^ 40'd110) * $signed(data_in ^ 40'd111);
+    always @(posedge clk) _dimm_dsp_reg_109 <= _dimm_dsp_out_109;
+    wire [40-1:0] _dimm_dsp_out_110;
+    reg [40-1:0] _dimm_dsp_reg_110;
+    assign _dimm_dsp_out_110 = $signed(data_in ^ 40'd111) * $signed(data_in ^ 40'd112);
+    always @(posedge clk) _dimm_dsp_reg_110 <= _dimm_dsp_out_110;
+    wire [40-1:0] _dimm_dsp_out_111;
+    reg [40-1:0] _dimm_dsp_reg_111;
+    assign _dimm_dsp_out_111 = $signed(data_in ^ 40'd112) * $signed(data_in ^ 40'd113);
+    always @(posedge clk) _dimm_dsp_reg_111 <= _dimm_dsp_out_111;
+    wire [40-1:0] _dimm_dsp_out_112;
+    reg [40-1:0] _dimm_dsp_reg_112;
+    assign _dimm_dsp_out_112 = $signed(data_in ^ 40'd113) * $signed(data_in ^ 40'd114);
+    always @(posedge clk) _dimm_dsp_reg_112 <= _dimm_dsp_out_112;
+    wire [40-1:0] _dimm_dsp_out_113;
+    reg [40-1:0] _dimm_dsp_reg_113;
+    assign _dimm_dsp_out_113 = $signed(data_in ^ 40'd114) * $signed(data_in ^ 40'd115);
+    always @(posedge clk) _dimm_dsp_reg_113 <= _dimm_dsp_out_113;
+    wire [40-1:0] _dimm_dsp_out_114;
+    reg [40-1:0] _dimm_dsp_reg_114;
+    assign _dimm_dsp_out_114 = $signed(data_in ^ 40'd115) * $signed(data_in ^ 40'd116);
+    always @(posedge clk) _dimm_dsp_reg_114 <= _dimm_dsp_out_114;
+    wire [40-1:0] _dimm_dsp_out_115;
+    reg [40-1:0] _dimm_dsp_reg_115;
+    assign _dimm_dsp_out_115 = $signed(data_in ^ 40'd116) * $signed(data_in ^ 40'd117);
+    always @(posedge clk) _dimm_dsp_reg_115 <= _dimm_dsp_out_115;
+    wire [40-1:0] _dimm_dsp_out_116;
+    reg [40-1:0] _dimm_dsp_reg_116;
+    assign _dimm_dsp_out_116 = $signed(data_in ^ 40'd117) * $signed(data_in ^ 40'd118);
+    always @(posedge clk) _dimm_dsp_reg_116 <= _dimm_dsp_out_116;
+    // DIMM DSP bank: block 0 head 1 sv (W=39)
+    wire [40-1:0] _dimm_dsp_out_117;
+    reg [40-1:0] _dimm_dsp_reg_117;
+    assign _dimm_dsp_out_117 = $signed(data_in ^ 40'd118) * $signed(data_in ^ 40'd119);
+    always @(posedge clk) _dimm_dsp_reg_117 <= _dimm_dsp_out_117;
+    wire [40-1:0] _dimm_dsp_out_118;
+    reg [40-1:0] _dimm_dsp_reg_118;
+    assign _dimm_dsp_out_118 = $signed(data_in ^ 40'd119) * $signed(data_in ^ 40'd120);
+    always @(posedge clk) _dimm_dsp_reg_118 <= _dimm_dsp_out_118;
+    wire [40-1:0] _dimm_dsp_out_119;
+    reg [40-1:0] _dimm_dsp_reg_119;
+    assign _dimm_dsp_out_119 = $signed(data_in ^ 40'd120) * $signed(data_in ^ 40'd121);
+    always @(posedge clk) _dimm_dsp_reg_119 <= _dimm_dsp_out_119;
+    wire [40-1:0] _dimm_dsp_out_120;
+    reg [40-1:0] _dimm_dsp_reg_120;
+    assign _dimm_dsp_out_120 = $signed(data_in ^ 40'd121) * $signed(data_in ^ 40'd122);
+    always @(posedge clk) _dimm_dsp_reg_120 <= _dimm_dsp_out_120;
+    wire [40-1:0] _dimm_dsp_out_121;
+    reg [40-1:0] _dimm_dsp_reg_121;
+    assign _dimm_dsp_out_121 = $signed(data_in ^ 40'd122) * $signed(data_in ^ 40'd123);
+    always @(posedge clk) _dimm_dsp_reg_121 <= _dimm_dsp_out_121;
+    wire [40-1:0] _dimm_dsp_out_122;
+    reg [40-1:0] _dimm_dsp_reg_122;
+    assign _dimm_dsp_out_122 = $signed(data_in ^ 40'd123) * $signed(data_in ^ 40'd124);
+    always @(posedge clk) _dimm_dsp_reg_122 <= _dimm_dsp_out_122;
+    wire [40-1:0] _dimm_dsp_out_123;
+    reg [40-1:0] _dimm_dsp_reg_123;
+    assign _dimm_dsp_out_123 = $signed(data_in ^ 40'd124) * $signed(data_in ^ 40'd125);
+    always @(posedge clk) _dimm_dsp_reg_123 <= _dimm_dsp_out_123;
+    wire [40-1:0] _dimm_dsp_out_124;
+    reg [40-1:0] _dimm_dsp_reg_124;
+    assign _dimm_dsp_out_124 = $signed(data_in ^ 40'd125) * $signed(data_in ^ 40'd126);
+    always @(posedge clk) _dimm_dsp_reg_124 <= _dimm_dsp_out_124;
+    wire [40-1:0] _dimm_dsp_out_125;
+    reg [40-1:0] _dimm_dsp_reg_125;
+    assign _dimm_dsp_out_125 = $signed(data_in ^ 40'd126) * $signed(data_in ^ 40'd127);
+    always @(posedge clk) _dimm_dsp_reg_125 <= _dimm_dsp_out_125;
+    wire [40-1:0] _dimm_dsp_out_126;
+    reg [40-1:0] _dimm_dsp_reg_126;
+    assign _dimm_dsp_out_126 = $signed(data_in ^ 40'd127) * $signed(data_in ^ 40'd128);
+    always @(posedge clk) _dimm_dsp_reg_126 <= _dimm_dsp_out_126;
+    wire [40-1:0] _dimm_dsp_out_127;
+    reg [40-1:0] _dimm_dsp_reg_127;
+    assign _dimm_dsp_out_127 = $signed(data_in ^ 40'd128) * $signed(data_in ^ 40'd129);
+    always @(posedge clk) _dimm_dsp_reg_127 <= _dimm_dsp_out_127;
+    wire [40-1:0] _dimm_dsp_out_128;
+    reg [40-1:0] _dimm_dsp_reg_128;
+    assign _dimm_dsp_out_128 = $signed(data_in ^ 40'd129) * $signed(data_in ^ 40'd130);
+    always @(posedge clk) _dimm_dsp_reg_128 <= _dimm_dsp_out_128;
+    wire [40-1:0] _dimm_dsp_out_129;
+    reg [40-1:0] _dimm_dsp_reg_129;
+    assign _dimm_dsp_out_129 = $signed(data_in ^ 40'd130) * $signed(data_in ^ 40'd131);
+    always @(posedge clk) _dimm_dsp_reg_129 <= _dimm_dsp_out_129;
+    wire [40-1:0] _dimm_dsp_out_130;
+    reg [40-1:0] _dimm_dsp_reg_130;
+    assign _dimm_dsp_out_130 = $signed(data_in ^ 40'd131) * $signed(data_in ^ 40'd132);
+    always @(posedge clk) _dimm_dsp_reg_130 <= _dimm_dsp_out_130;
+    wire [40-1:0] _dimm_dsp_out_131;
+    reg [40-1:0] _dimm_dsp_reg_131;
+    assign _dimm_dsp_out_131 = $signed(data_in ^ 40'd132) * $signed(data_in ^ 40'd133);
+    always @(posedge clk) _dimm_dsp_reg_131 <= _dimm_dsp_out_131;
+    wire [40-1:0] _dimm_dsp_out_132;
+    reg [40-1:0] _dimm_dsp_reg_132;
+    assign _dimm_dsp_out_132 = $signed(data_in ^ 40'd133) * $signed(data_in ^ 40'd134);
+    always @(posedge clk) _dimm_dsp_reg_132 <= _dimm_dsp_out_132;
+    wire [40-1:0] _dimm_dsp_out_133;
+    reg [40-1:0] _dimm_dsp_reg_133;
+    assign _dimm_dsp_out_133 = $signed(data_in ^ 40'd134) * $signed(data_in ^ 40'd135);
+    always @(posedge clk) _dimm_dsp_reg_133 <= _dimm_dsp_out_133;
+    wire [40-1:0] _dimm_dsp_out_134;
+    reg [40-1:0] _dimm_dsp_reg_134;
+    assign _dimm_dsp_out_134 = $signed(data_in ^ 40'd135) * $signed(data_in ^ 40'd136);
+    always @(posedge clk) _dimm_dsp_reg_134 <= _dimm_dsp_out_134;
+    wire [40-1:0] _dimm_dsp_out_135;
+    reg [40-1:0] _dimm_dsp_reg_135;
+    assign _dimm_dsp_out_135 = $signed(data_in ^ 40'd136) * $signed(data_in ^ 40'd137);
+    always @(posedge clk) _dimm_dsp_reg_135 <= _dimm_dsp_out_135;
+    wire [40-1:0] _dimm_dsp_out_136;
+    reg [40-1:0] _dimm_dsp_reg_136;
+    assign _dimm_dsp_out_136 = $signed(data_in ^ 40'd137) * $signed(data_in ^ 40'd138);
+    always @(posedge clk) _dimm_dsp_reg_136 <= _dimm_dsp_out_136;
+    wire [40-1:0] _dimm_dsp_out_137;
+    reg [40-1:0] _dimm_dsp_reg_137;
+    assign _dimm_dsp_out_137 = $signed(data_in ^ 40'd138) * $signed(data_in ^ 40'd139);
+    always @(posedge clk) _dimm_dsp_reg_137 <= _dimm_dsp_out_137;
+    wire [40-1:0] _dimm_dsp_out_138;
+    reg [40-1:0] _dimm_dsp_reg_138;
+    assign _dimm_dsp_out_138 = $signed(data_in ^ 40'd139) * $signed(data_in ^ 40'd140);
+    always @(posedge clk) _dimm_dsp_reg_138 <= _dimm_dsp_out_138;
+    wire [40-1:0] _dimm_dsp_out_139;
+    reg [40-1:0] _dimm_dsp_reg_139;
+    assign _dimm_dsp_out_139 = $signed(data_in ^ 40'd140) * $signed(data_in ^ 40'd141);
+    always @(posedge clk) _dimm_dsp_reg_139 <= _dimm_dsp_out_139;
+    wire [40-1:0] _dimm_dsp_out_140;
+    reg [40-1:0] _dimm_dsp_reg_140;
+    assign _dimm_dsp_out_140 = $signed(data_in ^ 40'd141) * $signed(data_in ^ 40'd142);
+    always @(posedge clk) _dimm_dsp_reg_140 <= _dimm_dsp_out_140;
+    wire [40-1:0] _dimm_dsp_out_141;
+    reg [40-1:0] _dimm_dsp_reg_141;
+    assign _dimm_dsp_out_141 = $signed(data_in ^ 40'd142) * $signed(data_in ^ 40'd143);
+    always @(posedge clk) _dimm_dsp_reg_141 <= _dimm_dsp_out_141;
+    wire [40-1:0] _dimm_dsp_out_142;
+    reg [40-1:0] _dimm_dsp_reg_142;
+    assign _dimm_dsp_out_142 = $signed(data_in ^ 40'd143) * $signed(data_in ^ 40'd144);
+    always @(posedge clk) _dimm_dsp_reg_142 <= _dimm_dsp_out_142;
+    wire [40-1:0] _dimm_dsp_out_143;
+    reg [40-1:0] _dimm_dsp_reg_143;
+    assign _dimm_dsp_out_143 = $signed(data_in ^ 40'd144) * $signed(data_in ^ 40'd145);
+    always @(posedge clk) _dimm_dsp_reg_143 <= _dimm_dsp_out_143;
+    wire [40-1:0] _dimm_dsp_out_144;
+    reg [40-1:0] _dimm_dsp_reg_144;
+    assign _dimm_dsp_out_144 = $signed(data_in ^ 40'd145) * $signed(data_in ^ 40'd146);
+    always @(posedge clk) _dimm_dsp_reg_144 <= _dimm_dsp_out_144;
+    wire [40-1:0] _dimm_dsp_out_145;
+    reg [40-1:0] _dimm_dsp_reg_145;
+    assign _dimm_dsp_out_145 = $signed(data_in ^ 40'd146) * $signed(data_in ^ 40'd147);
+    always @(posedge clk) _dimm_dsp_reg_145 <= _dimm_dsp_out_145;
+    wire [40-1:0] _dimm_dsp_out_146;
+    reg [40-1:0] _dimm_dsp_reg_146;
+    assign _dimm_dsp_out_146 = $signed(data_in ^ 40'd147) * $signed(data_in ^ 40'd148);
+    always @(posedge clk) _dimm_dsp_reg_146 <= _dimm_dsp_out_146;
+    wire [40-1:0] _dimm_dsp_out_147;
+    reg [40-1:0] _dimm_dsp_reg_147;
+    assign _dimm_dsp_out_147 = $signed(data_in ^ 40'd148) * $signed(data_in ^ 40'd149);
+    always @(posedge clk) _dimm_dsp_reg_147 <= _dimm_dsp_out_147;
+    wire [40-1:0] _dimm_dsp_out_148;
+    reg [40-1:0] _dimm_dsp_reg_148;
+    assign _dimm_dsp_out_148 = $signed(data_in ^ 40'd149) * $signed(data_in ^ 40'd150);
+    always @(posedge clk) _dimm_dsp_reg_148 <= _dimm_dsp_out_148;
+    wire [40-1:0] _dimm_dsp_out_149;
+    reg [40-1:0] _dimm_dsp_reg_149;
+    assign _dimm_dsp_out_149 = $signed(data_in ^ 40'd150) * $signed(data_in ^ 40'd151);
+    always @(posedge clk) _dimm_dsp_reg_149 <= _dimm_dsp_out_149;
+    wire [40-1:0] _dimm_dsp_out_150;
+    reg [40-1:0] _dimm_dsp_reg_150;
+    assign _dimm_dsp_out_150 = $signed(data_in ^ 40'd151) * $signed(data_in ^ 40'd152);
+    always @(posedge clk) _dimm_dsp_reg_150 <= _dimm_dsp_out_150;
+    wire [40-1:0] _dimm_dsp_out_151;
+    reg [40-1:0] _dimm_dsp_reg_151;
+    assign _dimm_dsp_out_151 = $signed(data_in ^ 40'd152) * $signed(data_in ^ 40'd153);
+    always @(posedge clk) _dimm_dsp_reg_151 <= _dimm_dsp_out_151;
+    wire [40-1:0] _dimm_dsp_out_152;
+    reg [40-1:0] _dimm_dsp_reg_152;
+    assign _dimm_dsp_out_152 = $signed(data_in ^ 40'd153) * $signed(data_in ^ 40'd154);
+    always @(posedge clk) _dimm_dsp_reg_152 <= _dimm_dsp_out_152;
+    wire [40-1:0] _dimm_dsp_out_153;
+    reg [40-1:0] _dimm_dsp_reg_153;
+    assign _dimm_dsp_out_153 = $signed(data_in ^ 40'd154) * $signed(data_in ^ 40'd155);
+    always @(posedge clk) _dimm_dsp_reg_153 <= _dimm_dsp_out_153;
+    wire [40-1:0] _dimm_dsp_out_154;
+    reg [40-1:0] _dimm_dsp_reg_154;
+    assign _dimm_dsp_out_154 = $signed(data_in ^ 40'd155) * $signed(data_in ^ 40'd156);
+    always @(posedge clk) _dimm_dsp_reg_154 <= _dimm_dsp_out_154;
+    wire [40-1:0] _dimm_dsp_out_155;
+    reg [40-1:0] _dimm_dsp_reg_155;
+    assign _dimm_dsp_out_155 = $signed(data_in ^ 40'd156) * $signed(data_in ^ 40'd157);
+    always @(posedge clk) _dimm_dsp_reg_155 <= _dimm_dsp_out_155;
+    // DIMM DSP bank: block 1 head 0 qk (W=39)
+    wire [40-1:0] _dimm_dsp_out_156;
+    reg [40-1:0] _dimm_dsp_reg_156;
+    assign _dimm_dsp_out_156 = $signed(data_in ^ 40'd157) * $signed(data_in ^ 40'd158);
+    always @(posedge clk) _dimm_dsp_reg_156 <= _dimm_dsp_out_156;
+    wire [40-1:0] _dimm_dsp_out_157;
+    reg [40-1:0] _dimm_dsp_reg_157;
+    assign _dimm_dsp_out_157 = $signed(data_in ^ 40'd158) * $signed(data_in ^ 40'd159);
+    always @(posedge clk) _dimm_dsp_reg_157 <= _dimm_dsp_out_157;
+    wire [40-1:0] _dimm_dsp_out_158;
+    reg [40-1:0] _dimm_dsp_reg_158;
+    assign _dimm_dsp_out_158 = $signed(data_in ^ 40'd159) * $signed(data_in ^ 40'd160);
+    always @(posedge clk) _dimm_dsp_reg_158 <= _dimm_dsp_out_158;
+    wire [40-1:0] _dimm_dsp_out_159;
+    reg [40-1:0] _dimm_dsp_reg_159;
+    assign _dimm_dsp_out_159 = $signed(data_in ^ 40'd160) * $signed(data_in ^ 40'd161);
+    always @(posedge clk) _dimm_dsp_reg_159 <= _dimm_dsp_out_159;
+    wire [40-1:0] _dimm_dsp_out_160;
+    reg [40-1:0] _dimm_dsp_reg_160;
+    assign _dimm_dsp_out_160 = $signed(data_in ^ 40'd161) * $signed(data_in ^ 40'd162);
+    always @(posedge clk) _dimm_dsp_reg_160 <= _dimm_dsp_out_160;
+    wire [40-1:0] _dimm_dsp_out_161;
+    reg [40-1:0] _dimm_dsp_reg_161;
+    assign _dimm_dsp_out_161 = $signed(data_in ^ 40'd162) * $signed(data_in ^ 40'd163);
+    always @(posedge clk) _dimm_dsp_reg_161 <= _dimm_dsp_out_161;
+    wire [40-1:0] _dimm_dsp_out_162;
+    reg [40-1:0] _dimm_dsp_reg_162;
+    assign _dimm_dsp_out_162 = $signed(data_in ^ 40'd163) * $signed(data_in ^ 40'd164);
+    always @(posedge clk) _dimm_dsp_reg_162 <= _dimm_dsp_out_162;
+    wire [40-1:0] _dimm_dsp_out_163;
+    reg [40-1:0] _dimm_dsp_reg_163;
+    assign _dimm_dsp_out_163 = $signed(data_in ^ 40'd164) * $signed(data_in ^ 40'd165);
+    always @(posedge clk) _dimm_dsp_reg_163 <= _dimm_dsp_out_163;
+    wire [40-1:0] _dimm_dsp_out_164;
+    reg [40-1:0] _dimm_dsp_reg_164;
+    assign _dimm_dsp_out_164 = $signed(data_in ^ 40'd165) * $signed(data_in ^ 40'd166);
+    always @(posedge clk) _dimm_dsp_reg_164 <= _dimm_dsp_out_164;
+    wire [40-1:0] _dimm_dsp_out_165;
+    reg [40-1:0] _dimm_dsp_reg_165;
+    assign _dimm_dsp_out_165 = $signed(data_in ^ 40'd166) * $signed(data_in ^ 40'd167);
+    always @(posedge clk) _dimm_dsp_reg_165 <= _dimm_dsp_out_165;
+    wire [40-1:0] _dimm_dsp_out_166;
+    reg [40-1:0] _dimm_dsp_reg_166;
+    assign _dimm_dsp_out_166 = $signed(data_in ^ 40'd167) * $signed(data_in ^ 40'd168);
+    always @(posedge clk) _dimm_dsp_reg_166 <= _dimm_dsp_out_166;
+    wire [40-1:0] _dimm_dsp_out_167;
+    reg [40-1:0] _dimm_dsp_reg_167;
+    assign _dimm_dsp_out_167 = $signed(data_in ^ 40'd168) * $signed(data_in ^ 40'd169);
+    always @(posedge clk) _dimm_dsp_reg_167 <= _dimm_dsp_out_167;
+    wire [40-1:0] _dimm_dsp_out_168;
+    reg [40-1:0] _dimm_dsp_reg_168;
+    assign _dimm_dsp_out_168 = $signed(data_in ^ 40'd169) * $signed(data_in ^ 40'd170);
+    always @(posedge clk) _dimm_dsp_reg_168 <= _dimm_dsp_out_168;
+    wire [40-1:0] _dimm_dsp_out_169;
+    reg [40-1:0] _dimm_dsp_reg_169;
+    assign _dimm_dsp_out_169 = $signed(data_in ^ 40'd170) * $signed(data_in ^ 40'd171);
+    always @(posedge clk) _dimm_dsp_reg_169 <= _dimm_dsp_out_169;
+    wire [40-1:0] _dimm_dsp_out_170;
+    reg [40-1:0] _dimm_dsp_reg_170;
+    assign _dimm_dsp_out_170 = $signed(data_in ^ 40'd171) * $signed(data_in ^ 40'd172);
+    always @(posedge clk) _dimm_dsp_reg_170 <= _dimm_dsp_out_170;
+    wire [40-1:0] _dimm_dsp_out_171;
+    reg [40-1:0] _dimm_dsp_reg_171;
+    assign _dimm_dsp_out_171 = $signed(data_in ^ 40'd172) * $signed(data_in ^ 40'd173);
+    always @(posedge clk) _dimm_dsp_reg_171 <= _dimm_dsp_out_171;
+    wire [40-1:0] _dimm_dsp_out_172;
+    reg [40-1:0] _dimm_dsp_reg_172;
+    assign _dimm_dsp_out_172 = $signed(data_in ^ 40'd173) * $signed(data_in ^ 40'd174);
+    always @(posedge clk) _dimm_dsp_reg_172 <= _dimm_dsp_out_172;
+    wire [40-1:0] _dimm_dsp_out_173;
+    reg [40-1:0] _dimm_dsp_reg_173;
+    assign _dimm_dsp_out_173 = $signed(data_in ^ 40'd174) * $signed(data_in ^ 40'd175);
+    always @(posedge clk) _dimm_dsp_reg_173 <= _dimm_dsp_out_173;
+    wire [40-1:0] _dimm_dsp_out_174;
+    reg [40-1:0] _dimm_dsp_reg_174;
+    assign _dimm_dsp_out_174 = $signed(data_in ^ 40'd175) * $signed(data_in ^ 40'd176);
+    always @(posedge clk) _dimm_dsp_reg_174 <= _dimm_dsp_out_174;
+    wire [40-1:0] _dimm_dsp_out_175;
+    reg [40-1:0] _dimm_dsp_reg_175;
+    assign _dimm_dsp_out_175 = $signed(data_in ^ 40'd176) * $signed(data_in ^ 40'd177);
+    always @(posedge clk) _dimm_dsp_reg_175 <= _dimm_dsp_out_175;
+    wire [40-1:0] _dimm_dsp_out_176;
+    reg [40-1:0] _dimm_dsp_reg_176;
+    assign _dimm_dsp_out_176 = $signed(data_in ^ 40'd177) * $signed(data_in ^ 40'd178);
+    always @(posedge clk) _dimm_dsp_reg_176 <= _dimm_dsp_out_176;
+    wire [40-1:0] _dimm_dsp_out_177;
+    reg [40-1:0] _dimm_dsp_reg_177;
+    assign _dimm_dsp_out_177 = $signed(data_in ^ 40'd178) * $signed(data_in ^ 40'd179);
+    always @(posedge clk) _dimm_dsp_reg_177 <= _dimm_dsp_out_177;
+    wire [40-1:0] _dimm_dsp_out_178;
+    reg [40-1:0] _dimm_dsp_reg_178;
+    assign _dimm_dsp_out_178 = $signed(data_in ^ 40'd179) * $signed(data_in ^ 40'd180);
+    always @(posedge clk) _dimm_dsp_reg_178 <= _dimm_dsp_out_178;
+    wire [40-1:0] _dimm_dsp_out_179;
+    reg [40-1:0] _dimm_dsp_reg_179;
+    assign _dimm_dsp_out_179 = $signed(data_in ^ 40'd180) * $signed(data_in ^ 40'd181);
+    always @(posedge clk) _dimm_dsp_reg_179 <= _dimm_dsp_out_179;
+    wire [40-1:0] _dimm_dsp_out_180;
+    reg [40-1:0] _dimm_dsp_reg_180;
+    assign _dimm_dsp_out_180 = $signed(data_in ^ 40'd181) * $signed(data_in ^ 40'd182);
+    always @(posedge clk) _dimm_dsp_reg_180 <= _dimm_dsp_out_180;
+    wire [40-1:0] _dimm_dsp_out_181;
+    reg [40-1:0] _dimm_dsp_reg_181;
+    assign _dimm_dsp_out_181 = $signed(data_in ^ 40'd182) * $signed(data_in ^ 40'd183);
+    always @(posedge clk) _dimm_dsp_reg_181 <= _dimm_dsp_out_181;
+    wire [40-1:0] _dimm_dsp_out_182;
+    reg [40-1:0] _dimm_dsp_reg_182;
+    assign _dimm_dsp_out_182 = $signed(data_in ^ 40'd183) * $signed(data_in ^ 40'd184);
+    always @(posedge clk) _dimm_dsp_reg_182 <= _dimm_dsp_out_182;
+    wire [40-1:0] _dimm_dsp_out_183;
+    reg [40-1:0] _dimm_dsp_reg_183;
+    assign _dimm_dsp_out_183 = $signed(data_in ^ 40'd184) * $signed(data_in ^ 40'd185);
+    always @(posedge clk) _dimm_dsp_reg_183 <= _dimm_dsp_out_183;
+    wire [40-1:0] _dimm_dsp_out_184;
+    reg [40-1:0] _dimm_dsp_reg_184;
+    assign _dimm_dsp_out_184 = $signed(data_in ^ 40'd185) * $signed(data_in ^ 40'd186);
+    always @(posedge clk) _dimm_dsp_reg_184 <= _dimm_dsp_out_184;
+    wire [40-1:0] _dimm_dsp_out_185;
+    reg [40-1:0] _dimm_dsp_reg_185;
+    assign _dimm_dsp_out_185 = $signed(data_in ^ 40'd186) * $signed(data_in ^ 40'd187);
+    always @(posedge clk) _dimm_dsp_reg_185 <= _dimm_dsp_out_185;
+    wire [40-1:0] _dimm_dsp_out_186;
+    reg [40-1:0] _dimm_dsp_reg_186;
+    assign _dimm_dsp_out_186 = $signed(data_in ^ 40'd187) * $signed(data_in ^ 40'd188);
+    always @(posedge clk) _dimm_dsp_reg_186 <= _dimm_dsp_out_186;
+    wire [40-1:0] _dimm_dsp_out_187;
+    reg [40-1:0] _dimm_dsp_reg_187;
+    assign _dimm_dsp_out_187 = $signed(data_in ^ 40'd188) * $signed(data_in ^ 40'd189);
+    always @(posedge clk) _dimm_dsp_reg_187 <= _dimm_dsp_out_187;
+    wire [40-1:0] _dimm_dsp_out_188;
+    reg [40-1:0] _dimm_dsp_reg_188;
+    assign _dimm_dsp_out_188 = $signed(data_in ^ 40'd189) * $signed(data_in ^ 40'd190);
+    always @(posedge clk) _dimm_dsp_reg_188 <= _dimm_dsp_out_188;
+    wire [40-1:0] _dimm_dsp_out_189;
+    reg [40-1:0] _dimm_dsp_reg_189;
+    assign _dimm_dsp_out_189 = $signed(data_in ^ 40'd190) * $signed(data_in ^ 40'd191);
+    always @(posedge clk) _dimm_dsp_reg_189 <= _dimm_dsp_out_189;
+    wire [40-1:0] _dimm_dsp_out_190;
+    reg [40-1:0] _dimm_dsp_reg_190;
+    assign _dimm_dsp_out_190 = $signed(data_in ^ 40'd191) * $signed(data_in ^ 40'd192);
+    always @(posedge clk) _dimm_dsp_reg_190 <= _dimm_dsp_out_190;
+    wire [40-1:0] _dimm_dsp_out_191;
+    reg [40-1:0] _dimm_dsp_reg_191;
+    assign _dimm_dsp_out_191 = $signed(data_in ^ 40'd192) * $signed(data_in ^ 40'd193);
+    always @(posedge clk) _dimm_dsp_reg_191 <= _dimm_dsp_out_191;
+    wire [40-1:0] _dimm_dsp_out_192;
+    reg [40-1:0] _dimm_dsp_reg_192;
+    assign _dimm_dsp_out_192 = $signed(data_in ^ 40'd193) * $signed(data_in ^ 40'd194);
+    always @(posedge clk) _dimm_dsp_reg_192 <= _dimm_dsp_out_192;
+    wire [40-1:0] _dimm_dsp_out_193;
+    reg [40-1:0] _dimm_dsp_reg_193;
+    assign _dimm_dsp_out_193 = $signed(data_in ^ 40'd194) * $signed(data_in ^ 40'd195);
+    always @(posedge clk) _dimm_dsp_reg_193 <= _dimm_dsp_out_193;
+    wire [40-1:0] _dimm_dsp_out_194;
+    reg [40-1:0] _dimm_dsp_reg_194;
+    assign _dimm_dsp_out_194 = $signed(data_in ^ 40'd195) * $signed(data_in ^ 40'd196);
+    always @(posedge clk) _dimm_dsp_reg_194 <= _dimm_dsp_out_194;
+    // DIMM DSP bank: block 1 head 0 sv (W=39)
+    wire [40-1:0] _dimm_dsp_out_195;
+    reg [40-1:0] _dimm_dsp_reg_195;
+    assign _dimm_dsp_out_195 = $signed(data_in ^ 40'd196) * $signed(data_in ^ 40'd197);
+    always @(posedge clk) _dimm_dsp_reg_195 <= _dimm_dsp_out_195;
+    wire [40-1:0] _dimm_dsp_out_196;
+    reg [40-1:0] _dimm_dsp_reg_196;
+    assign _dimm_dsp_out_196 = $signed(data_in ^ 40'd197) * $signed(data_in ^ 40'd198);
+    always @(posedge clk) _dimm_dsp_reg_196 <= _dimm_dsp_out_196;
+    wire [40-1:0] _dimm_dsp_out_197;
+    reg [40-1:0] _dimm_dsp_reg_197;
+    assign _dimm_dsp_out_197 = $signed(data_in ^ 40'd198) * $signed(data_in ^ 40'd199);
+    always @(posedge clk) _dimm_dsp_reg_197 <= _dimm_dsp_out_197;
+    wire [40-1:0] _dimm_dsp_out_198;
+    reg [40-1:0] _dimm_dsp_reg_198;
+    assign _dimm_dsp_out_198 = $signed(data_in ^ 40'd199) * $signed(data_in ^ 40'd200);
+    always @(posedge clk) _dimm_dsp_reg_198 <= _dimm_dsp_out_198;
+    wire [40-1:0] _dimm_dsp_out_199;
+    reg [40-1:0] _dimm_dsp_reg_199;
+    assign _dimm_dsp_out_199 = $signed(data_in ^ 40'd200) * $signed(data_in ^ 40'd201);
+    always @(posedge clk) _dimm_dsp_reg_199 <= _dimm_dsp_out_199;
+    wire [40-1:0] _dimm_dsp_out_200;
+    reg [40-1:0] _dimm_dsp_reg_200;
+    assign _dimm_dsp_out_200 = $signed(data_in ^ 40'd201) * $signed(data_in ^ 40'd202);
+    always @(posedge clk) _dimm_dsp_reg_200 <= _dimm_dsp_out_200;
+    wire [40-1:0] _dimm_dsp_out_201;
+    reg [40-1:0] _dimm_dsp_reg_201;
+    assign _dimm_dsp_out_201 = $signed(data_in ^ 40'd202) * $signed(data_in ^ 40'd203);
+    always @(posedge clk) _dimm_dsp_reg_201 <= _dimm_dsp_out_201;
+    wire [40-1:0] _dimm_dsp_out_202;
+    reg [40-1:0] _dimm_dsp_reg_202;
+    assign _dimm_dsp_out_202 = $signed(data_in ^ 40'd203) * $signed(data_in ^ 40'd204);
+    always @(posedge clk) _dimm_dsp_reg_202 <= _dimm_dsp_out_202;
+    wire [40-1:0] _dimm_dsp_out_203;
+    reg [40-1:0] _dimm_dsp_reg_203;
+    assign _dimm_dsp_out_203 = $signed(data_in ^ 40'd204) * $signed(data_in ^ 40'd205);
+    always @(posedge clk) _dimm_dsp_reg_203 <= _dimm_dsp_out_203;
+    wire [40-1:0] _dimm_dsp_out_204;
+    reg [40-1:0] _dimm_dsp_reg_204;
+    assign _dimm_dsp_out_204 = $signed(data_in ^ 40'd205) * $signed(data_in ^ 40'd206);
+    always @(posedge clk) _dimm_dsp_reg_204 <= _dimm_dsp_out_204;
+    wire [40-1:0] _dimm_dsp_out_205;
+    reg [40-1:0] _dimm_dsp_reg_205;
+    assign _dimm_dsp_out_205 = $signed(data_in ^ 40'd206) * $signed(data_in ^ 40'd207);
+    always @(posedge clk) _dimm_dsp_reg_205 <= _dimm_dsp_out_205;
+    wire [40-1:0] _dimm_dsp_out_206;
+    reg [40-1:0] _dimm_dsp_reg_206;
+    assign _dimm_dsp_out_206 = $signed(data_in ^ 40'd207) * $signed(data_in ^ 40'd208);
+    always @(posedge clk) _dimm_dsp_reg_206 <= _dimm_dsp_out_206;
+    wire [40-1:0] _dimm_dsp_out_207;
+    reg [40-1:0] _dimm_dsp_reg_207;
+    assign _dimm_dsp_out_207 = $signed(data_in ^ 40'd208) * $signed(data_in ^ 40'd209);
+    always @(posedge clk) _dimm_dsp_reg_207 <= _dimm_dsp_out_207;
+    wire [40-1:0] _dimm_dsp_out_208;
+    reg [40-1:0] _dimm_dsp_reg_208;
+    assign _dimm_dsp_out_208 = $signed(data_in ^ 40'd209) * $signed(data_in ^ 40'd210);
+    always @(posedge clk) _dimm_dsp_reg_208 <= _dimm_dsp_out_208;
+    wire [40-1:0] _dimm_dsp_out_209;
+    reg [40-1:0] _dimm_dsp_reg_209;
+    assign _dimm_dsp_out_209 = $signed(data_in ^ 40'd210) * $signed(data_in ^ 40'd211);
+    always @(posedge clk) _dimm_dsp_reg_209 <= _dimm_dsp_out_209;
+    wire [40-1:0] _dimm_dsp_out_210;
+    reg [40-1:0] _dimm_dsp_reg_210;
+    assign _dimm_dsp_out_210 = $signed(data_in ^ 40'd211) * $signed(data_in ^ 40'd212);
+    always @(posedge clk) _dimm_dsp_reg_210 <= _dimm_dsp_out_210;
+    wire [40-1:0] _dimm_dsp_out_211;
+    reg [40-1:0] _dimm_dsp_reg_211;
+    assign _dimm_dsp_out_211 = $signed(data_in ^ 40'd212) * $signed(data_in ^ 40'd213);
+    always @(posedge clk) _dimm_dsp_reg_211 <= _dimm_dsp_out_211;
+    wire [40-1:0] _dimm_dsp_out_212;
+    reg [40-1:0] _dimm_dsp_reg_212;
+    assign _dimm_dsp_out_212 = $signed(data_in ^ 40'd213) * $signed(data_in ^ 40'd214);
+    always @(posedge clk) _dimm_dsp_reg_212 <= _dimm_dsp_out_212;
+    wire [40-1:0] _dimm_dsp_out_213;
+    reg [40-1:0] _dimm_dsp_reg_213;
+    assign _dimm_dsp_out_213 = $signed(data_in ^ 40'd214) * $signed(data_in ^ 40'd215);
+    always @(posedge clk) _dimm_dsp_reg_213 <= _dimm_dsp_out_213;
+    wire [40-1:0] _dimm_dsp_out_214;
+    reg [40-1:0] _dimm_dsp_reg_214;
+    assign _dimm_dsp_out_214 = $signed(data_in ^ 40'd215) * $signed(data_in ^ 40'd216);
+    always @(posedge clk) _dimm_dsp_reg_214 <= _dimm_dsp_out_214;
+    wire [40-1:0] _dimm_dsp_out_215;
+    reg [40-1:0] _dimm_dsp_reg_215;
+    assign _dimm_dsp_out_215 = $signed(data_in ^ 40'd216) * $signed(data_in ^ 40'd217);
+    always @(posedge clk) _dimm_dsp_reg_215 <= _dimm_dsp_out_215;
+    wire [40-1:0] _dimm_dsp_out_216;
+    reg [40-1:0] _dimm_dsp_reg_216;
+    assign _dimm_dsp_out_216 = $signed(data_in ^ 40'd217) * $signed(data_in ^ 40'd218);
+    always @(posedge clk) _dimm_dsp_reg_216 <= _dimm_dsp_out_216;
+    wire [40-1:0] _dimm_dsp_out_217;
+    reg [40-1:0] _dimm_dsp_reg_217;
+    assign _dimm_dsp_out_217 = $signed(data_in ^ 40'd218) * $signed(data_in ^ 40'd219);
+    always @(posedge clk) _dimm_dsp_reg_217 <= _dimm_dsp_out_217;
+    wire [40-1:0] _dimm_dsp_out_218;
+    reg [40-1:0] _dimm_dsp_reg_218;
+    assign _dimm_dsp_out_218 = $signed(data_in ^ 40'd219) * $signed(data_in ^ 40'd220);
+    always @(posedge clk) _dimm_dsp_reg_218 <= _dimm_dsp_out_218;
+    wire [40-1:0] _dimm_dsp_out_219;
+    reg [40-1:0] _dimm_dsp_reg_219;
+    assign _dimm_dsp_out_219 = $signed(data_in ^ 40'd220) * $signed(data_in ^ 40'd221);
+    always @(posedge clk) _dimm_dsp_reg_219 <= _dimm_dsp_out_219;
+    wire [40-1:0] _dimm_dsp_out_220;
+    reg [40-1:0] _dimm_dsp_reg_220;
+    assign _dimm_dsp_out_220 = $signed(data_in ^ 40'd221) * $signed(data_in ^ 40'd222);
+    always @(posedge clk) _dimm_dsp_reg_220 <= _dimm_dsp_out_220;
+    wire [40-1:0] _dimm_dsp_out_221;
+    reg [40-1:0] _dimm_dsp_reg_221;
+    assign _dimm_dsp_out_221 = $signed(data_in ^ 40'd222) * $signed(data_in ^ 40'd223);
+    always @(posedge clk) _dimm_dsp_reg_221 <= _dimm_dsp_out_221;
+    wire [40-1:0] _dimm_dsp_out_222;
+    reg [40-1:0] _dimm_dsp_reg_222;
+    assign _dimm_dsp_out_222 = $signed(data_in ^ 40'd223) * $signed(data_in ^ 40'd224);
+    always @(posedge clk) _dimm_dsp_reg_222 <= _dimm_dsp_out_222;
+    wire [40-1:0] _dimm_dsp_out_223;
+    reg [40-1:0] _dimm_dsp_reg_223;
+    assign _dimm_dsp_out_223 = $signed(data_in ^ 40'd224) * $signed(data_in ^ 40'd225);
+    always @(posedge clk) _dimm_dsp_reg_223 <= _dimm_dsp_out_223;
+    wire [40-1:0] _dimm_dsp_out_224;
+    reg [40-1:0] _dimm_dsp_reg_224;
+    assign _dimm_dsp_out_224 = $signed(data_in ^ 40'd225) * $signed(data_in ^ 40'd226);
+    always @(posedge clk) _dimm_dsp_reg_224 <= _dimm_dsp_out_224;
+    wire [40-1:0] _dimm_dsp_out_225;
+    reg [40-1:0] _dimm_dsp_reg_225;
+    assign _dimm_dsp_out_225 = $signed(data_in ^ 40'd226) * $signed(data_in ^ 40'd227);
+    always @(posedge clk) _dimm_dsp_reg_225 <= _dimm_dsp_out_225;
+    wire [40-1:0] _dimm_dsp_out_226;
+    reg [40-1:0] _dimm_dsp_reg_226;
+    assign _dimm_dsp_out_226 = $signed(data_in ^ 40'd227) * $signed(data_in ^ 40'd228);
+    always @(posedge clk) _dimm_dsp_reg_226 <= _dimm_dsp_out_226;
+    wire [40-1:0] _dimm_dsp_out_227;
+    reg [40-1:0] _dimm_dsp_reg_227;
+    assign _dimm_dsp_out_227 = $signed(data_in ^ 40'd228) * $signed(data_in ^ 40'd229);
+    always @(posedge clk) _dimm_dsp_reg_227 <= _dimm_dsp_out_227;
+    wire [40-1:0] _dimm_dsp_out_228;
+    reg [40-1:0] _dimm_dsp_reg_228;
+    assign _dimm_dsp_out_228 = $signed(data_in ^ 40'd229) * $signed(data_in ^ 40'd230);
+    always @(posedge clk) _dimm_dsp_reg_228 <= _dimm_dsp_out_228;
+    wire [40-1:0] _dimm_dsp_out_229;
+    reg [40-1:0] _dimm_dsp_reg_229;
+    assign _dimm_dsp_out_229 = $signed(data_in ^ 40'd230) * $signed(data_in ^ 40'd231);
+    always @(posedge clk) _dimm_dsp_reg_229 <= _dimm_dsp_out_229;
+    wire [40-1:0] _dimm_dsp_out_230;
+    reg [40-1:0] _dimm_dsp_reg_230;
+    assign _dimm_dsp_out_230 = $signed(data_in ^ 40'd231) * $signed(data_in ^ 40'd232);
+    always @(posedge clk) _dimm_dsp_reg_230 <= _dimm_dsp_out_230;
+    wire [40-1:0] _dimm_dsp_out_231;
+    reg [40-1:0] _dimm_dsp_reg_231;
+    assign _dimm_dsp_out_231 = $signed(data_in ^ 40'd232) * $signed(data_in ^ 40'd233);
+    always @(posedge clk) _dimm_dsp_reg_231 <= _dimm_dsp_out_231;
+    wire [40-1:0] _dimm_dsp_out_232;
+    reg [40-1:0] _dimm_dsp_reg_232;
+    assign _dimm_dsp_out_232 = $signed(data_in ^ 40'd233) * $signed(data_in ^ 40'd234);
+    always @(posedge clk) _dimm_dsp_reg_232 <= _dimm_dsp_out_232;
+    wire [40-1:0] _dimm_dsp_out_233;
+    reg [40-1:0] _dimm_dsp_reg_233;
+    assign _dimm_dsp_out_233 = $signed(data_in ^ 40'd234) * $signed(data_in ^ 40'd235);
+    always @(posedge clk) _dimm_dsp_reg_233 <= _dimm_dsp_out_233;
+    // DIMM DSP bank: block 1 head 1 qk (W=39)
+    wire [40-1:0] _dimm_dsp_out_234;
+    reg [40-1:0] _dimm_dsp_reg_234;
+    assign _dimm_dsp_out_234 = $signed(data_in ^ 40'd235) * $signed(data_in ^ 40'd236);
+    always @(posedge clk) _dimm_dsp_reg_234 <= _dimm_dsp_out_234;
+    wire [40-1:0] _dimm_dsp_out_235;
+    reg [40-1:0] _dimm_dsp_reg_235;
+    assign _dimm_dsp_out_235 = $signed(data_in ^ 40'd236) * $signed(data_in ^ 40'd237);
+    always @(posedge clk) _dimm_dsp_reg_235 <= _dimm_dsp_out_235;
+    wire [40-1:0] _dimm_dsp_out_236;
+    reg [40-1:0] _dimm_dsp_reg_236;
+    assign _dimm_dsp_out_236 = $signed(data_in ^ 40'd237) * $signed(data_in ^ 40'd238);
+    always @(posedge clk) _dimm_dsp_reg_236 <= _dimm_dsp_out_236;
+    wire [40-1:0] _dimm_dsp_out_237;
+    reg [40-1:0] _dimm_dsp_reg_237;
+    assign _dimm_dsp_out_237 = $signed(data_in ^ 40'd238) * $signed(data_in ^ 40'd239);
+    always @(posedge clk) _dimm_dsp_reg_237 <= _dimm_dsp_out_237;
+    wire [40-1:0] _dimm_dsp_out_238;
+    reg [40-1:0] _dimm_dsp_reg_238;
+    assign _dimm_dsp_out_238 = $signed(data_in ^ 40'd239) * $signed(data_in ^ 40'd240);
+    always @(posedge clk) _dimm_dsp_reg_238 <= _dimm_dsp_out_238;
+    wire [40-1:0] _dimm_dsp_out_239;
+    reg [40-1:0] _dimm_dsp_reg_239;
+    assign _dimm_dsp_out_239 = $signed(data_in ^ 40'd240) * $signed(data_in ^ 40'd241);
+    always @(posedge clk) _dimm_dsp_reg_239 <= _dimm_dsp_out_239;
+    wire [40-1:0] _dimm_dsp_out_240;
+    reg [40-1:0] _dimm_dsp_reg_240;
+    assign _dimm_dsp_out_240 = $signed(data_in ^ 40'd241) * $signed(data_in ^ 40'd242);
+    always @(posedge clk) _dimm_dsp_reg_240 <= _dimm_dsp_out_240;
+    wire [40-1:0] _dimm_dsp_out_241;
+    reg [40-1:0] _dimm_dsp_reg_241;
+    assign _dimm_dsp_out_241 = $signed(data_in ^ 40'd242) * $signed(data_in ^ 40'd243);
+    always @(posedge clk) _dimm_dsp_reg_241 <= _dimm_dsp_out_241;
+    wire [40-1:0] _dimm_dsp_out_242;
+    reg [40-1:0] _dimm_dsp_reg_242;
+    assign _dimm_dsp_out_242 = $signed(data_in ^ 40'd243) * $signed(data_in ^ 40'd244);
+    always @(posedge clk) _dimm_dsp_reg_242 <= _dimm_dsp_out_242;
+    wire [40-1:0] _dimm_dsp_out_243;
+    reg [40-1:0] _dimm_dsp_reg_243;
+    assign _dimm_dsp_out_243 = $signed(data_in ^ 40'd244) * $signed(data_in ^ 40'd245);
+    always @(posedge clk) _dimm_dsp_reg_243 <= _dimm_dsp_out_243;
+    wire [40-1:0] _dimm_dsp_out_244;
+    reg [40-1:0] _dimm_dsp_reg_244;
+    assign _dimm_dsp_out_244 = $signed(data_in ^ 40'd245) * $signed(data_in ^ 40'd246);
+    always @(posedge clk) _dimm_dsp_reg_244 <= _dimm_dsp_out_244;
+    wire [40-1:0] _dimm_dsp_out_245;
+    reg [40-1:0] _dimm_dsp_reg_245;
+    assign _dimm_dsp_out_245 = $signed(data_in ^ 40'd246) * $signed(data_in ^ 40'd247);
+    always @(posedge clk) _dimm_dsp_reg_245 <= _dimm_dsp_out_245;
+    wire [40-1:0] _dimm_dsp_out_246;
+    reg [40-1:0] _dimm_dsp_reg_246;
+    assign _dimm_dsp_out_246 = $signed(data_in ^ 40'd247) * $signed(data_in ^ 40'd248);
+    always @(posedge clk) _dimm_dsp_reg_246 <= _dimm_dsp_out_246;
+    wire [40-1:0] _dimm_dsp_out_247;
+    reg [40-1:0] _dimm_dsp_reg_247;
+    assign _dimm_dsp_out_247 = $signed(data_in ^ 40'd248) * $signed(data_in ^ 40'd249);
+    always @(posedge clk) _dimm_dsp_reg_247 <= _dimm_dsp_out_247;
+    wire [40-1:0] _dimm_dsp_out_248;
+    reg [40-1:0] _dimm_dsp_reg_248;
+    assign _dimm_dsp_out_248 = $signed(data_in ^ 40'd249) * $signed(data_in ^ 40'd250);
+    always @(posedge clk) _dimm_dsp_reg_248 <= _dimm_dsp_out_248;
+    wire [40-1:0] _dimm_dsp_out_249;
+    reg [40-1:0] _dimm_dsp_reg_249;
+    assign _dimm_dsp_out_249 = $signed(data_in ^ 40'd250) * $signed(data_in ^ 40'd251);
+    always @(posedge clk) _dimm_dsp_reg_249 <= _dimm_dsp_out_249;
+    wire [40-1:0] _dimm_dsp_out_250;
+    reg [40-1:0] _dimm_dsp_reg_250;
+    assign _dimm_dsp_out_250 = $signed(data_in ^ 40'd251) * $signed(data_in ^ 40'd252);
+    always @(posedge clk) _dimm_dsp_reg_250 <= _dimm_dsp_out_250;
+    wire [40-1:0] _dimm_dsp_out_251;
+    reg [40-1:0] _dimm_dsp_reg_251;
+    assign _dimm_dsp_out_251 = $signed(data_in ^ 40'd252) * $signed(data_in ^ 40'd253);
+    always @(posedge clk) _dimm_dsp_reg_251 <= _dimm_dsp_out_251;
+    wire [40-1:0] _dimm_dsp_out_252;
+    reg [40-1:0] _dimm_dsp_reg_252;
+    assign _dimm_dsp_out_252 = $signed(data_in ^ 40'd253) * $signed(data_in ^ 40'd254);
+    always @(posedge clk) _dimm_dsp_reg_252 <= _dimm_dsp_out_252;
+    wire [40-1:0] _dimm_dsp_out_253;
+    reg [40-1:0] _dimm_dsp_reg_253;
+    assign _dimm_dsp_out_253 = $signed(data_in ^ 40'd254) * $signed(data_in ^ 40'd255);
+    always @(posedge clk) _dimm_dsp_reg_253 <= _dimm_dsp_out_253;
+    wire [40-1:0] _dimm_dsp_out_254;
+    reg [40-1:0] _dimm_dsp_reg_254;
+    assign _dimm_dsp_out_254 = $signed(data_in ^ 40'd255) * $signed(data_in ^ 40'd256);
+    always @(posedge clk) _dimm_dsp_reg_254 <= _dimm_dsp_out_254;
+    wire [40-1:0] _dimm_dsp_out_255;
+    reg [40-1:0] _dimm_dsp_reg_255;
+    assign _dimm_dsp_out_255 = $signed(data_in ^ 40'd256) * $signed(data_in ^ 40'd257);
+    always @(posedge clk) _dimm_dsp_reg_255 <= _dimm_dsp_out_255;
+    wire [40-1:0] _dimm_dsp_out_256;
+    reg [40-1:0] _dimm_dsp_reg_256;
+    assign _dimm_dsp_out_256 = $signed(data_in ^ 40'd257) * $signed(data_in ^ 40'd258);
+    always @(posedge clk) _dimm_dsp_reg_256 <= _dimm_dsp_out_256;
+    wire [40-1:0] _dimm_dsp_out_257;
+    reg [40-1:0] _dimm_dsp_reg_257;
+    assign _dimm_dsp_out_257 = $signed(data_in ^ 40'd258) * $signed(data_in ^ 40'd259);
+    always @(posedge clk) _dimm_dsp_reg_257 <= _dimm_dsp_out_257;
+    wire [40-1:0] _dimm_dsp_out_258;
+    reg [40-1:0] _dimm_dsp_reg_258;
+    assign _dimm_dsp_out_258 = $signed(data_in ^ 40'd259) * $signed(data_in ^ 40'd260);
+    always @(posedge clk) _dimm_dsp_reg_258 <= _dimm_dsp_out_258;
+    wire [40-1:0] _dimm_dsp_out_259;
+    reg [40-1:0] _dimm_dsp_reg_259;
+    assign _dimm_dsp_out_259 = $signed(data_in ^ 40'd260) * $signed(data_in ^ 40'd261);
+    always @(posedge clk) _dimm_dsp_reg_259 <= _dimm_dsp_out_259;
+    wire [40-1:0] _dimm_dsp_out_260;
+    reg [40-1:0] _dimm_dsp_reg_260;
+    assign _dimm_dsp_out_260 = $signed(data_in ^ 40'd261) * $signed(data_in ^ 40'd262);
+    always @(posedge clk) _dimm_dsp_reg_260 <= _dimm_dsp_out_260;
+    wire [40-1:0] _dimm_dsp_out_261;
+    reg [40-1:0] _dimm_dsp_reg_261;
+    assign _dimm_dsp_out_261 = $signed(data_in ^ 40'd262) * $signed(data_in ^ 40'd263);
+    always @(posedge clk) _dimm_dsp_reg_261 <= _dimm_dsp_out_261;
+    wire [40-1:0] _dimm_dsp_out_262;
+    reg [40-1:0] _dimm_dsp_reg_262;
+    assign _dimm_dsp_out_262 = $signed(data_in ^ 40'd263) * $signed(data_in ^ 40'd264);
+    always @(posedge clk) _dimm_dsp_reg_262 <= _dimm_dsp_out_262;
+    wire [40-1:0] _dimm_dsp_out_263;
+    reg [40-1:0] _dimm_dsp_reg_263;
+    assign _dimm_dsp_out_263 = $signed(data_in ^ 40'd264) * $signed(data_in ^ 40'd265);
+    always @(posedge clk) _dimm_dsp_reg_263 <= _dimm_dsp_out_263;
+    wire [40-1:0] _dimm_dsp_out_264;
+    reg [40-1:0] _dimm_dsp_reg_264;
+    assign _dimm_dsp_out_264 = $signed(data_in ^ 40'd265) * $signed(data_in ^ 40'd266);
+    always @(posedge clk) _dimm_dsp_reg_264 <= _dimm_dsp_out_264;
+    wire [40-1:0] _dimm_dsp_out_265;
+    reg [40-1:0] _dimm_dsp_reg_265;
+    assign _dimm_dsp_out_265 = $signed(data_in ^ 40'd266) * $signed(data_in ^ 40'd267);
+    always @(posedge clk) _dimm_dsp_reg_265 <= _dimm_dsp_out_265;
+    wire [40-1:0] _dimm_dsp_out_266;
+    reg [40-1:0] _dimm_dsp_reg_266;
+    assign _dimm_dsp_out_266 = $signed(data_in ^ 40'd267) * $signed(data_in ^ 40'd268);
+    always @(posedge clk) _dimm_dsp_reg_266 <= _dimm_dsp_out_266;
+    wire [40-1:0] _dimm_dsp_out_267;
+    reg [40-1:0] _dimm_dsp_reg_267;
+    assign _dimm_dsp_out_267 = $signed(data_in ^ 40'd268) * $signed(data_in ^ 40'd269);
+    always @(posedge clk) _dimm_dsp_reg_267 <= _dimm_dsp_out_267;
+    wire [40-1:0] _dimm_dsp_out_268;
+    reg [40-1:0] _dimm_dsp_reg_268;
+    assign _dimm_dsp_out_268 = $signed(data_in ^ 40'd269) * $signed(data_in ^ 40'd270);
+    always @(posedge clk) _dimm_dsp_reg_268 <= _dimm_dsp_out_268;
+    wire [40-1:0] _dimm_dsp_out_269;
+    reg [40-1:0] _dimm_dsp_reg_269;
+    assign _dimm_dsp_out_269 = $signed(data_in ^ 40'd270) * $signed(data_in ^ 40'd271);
+    always @(posedge clk) _dimm_dsp_reg_269 <= _dimm_dsp_out_269;
+    wire [40-1:0] _dimm_dsp_out_270;
+    reg [40-1:0] _dimm_dsp_reg_270;
+    assign _dimm_dsp_out_270 = $signed(data_in ^ 40'd271) * $signed(data_in ^ 40'd272);
+    always @(posedge clk) _dimm_dsp_reg_270 <= _dimm_dsp_out_270;
+    wire [40-1:0] _dimm_dsp_out_271;
+    reg [40-1:0] _dimm_dsp_reg_271;
+    assign _dimm_dsp_out_271 = $signed(data_in ^ 40'd272) * $signed(data_in ^ 40'd273);
+    always @(posedge clk) _dimm_dsp_reg_271 <= _dimm_dsp_out_271;
+    wire [40-1:0] _dimm_dsp_out_272;
+    reg [40-1:0] _dimm_dsp_reg_272;
+    assign _dimm_dsp_out_272 = $signed(data_in ^ 40'd273) * $signed(data_in ^ 40'd274);
+    always @(posedge clk) _dimm_dsp_reg_272 <= _dimm_dsp_out_272;
+    // DIMM DSP bank: block 1 head 1 sv (W=39)
+    wire [40-1:0] _dimm_dsp_out_273;
+    reg [40-1:0] _dimm_dsp_reg_273;
+    assign _dimm_dsp_out_273 = $signed(data_in ^ 40'd274) * $signed(data_in ^ 40'd275);
+    always @(posedge clk) _dimm_dsp_reg_273 <= _dimm_dsp_out_273;
+    wire [40-1:0] _dimm_dsp_out_274;
+    reg [40-1:0] _dimm_dsp_reg_274;
+    assign _dimm_dsp_out_274 = $signed(data_in ^ 40'd275) * $signed(data_in ^ 40'd276);
+    always @(posedge clk) _dimm_dsp_reg_274 <= _dimm_dsp_out_274;
+    wire [40-1:0] _dimm_dsp_out_275;
+    reg [40-1:0] _dimm_dsp_reg_275;
+    assign _dimm_dsp_out_275 = $signed(data_in ^ 40'd276) * $signed(data_in ^ 40'd277);
+    always @(posedge clk) _dimm_dsp_reg_275 <= _dimm_dsp_out_275;
+    wire [40-1:0] _dimm_dsp_out_276;
+    reg [40-1:0] _dimm_dsp_reg_276;
+    assign _dimm_dsp_out_276 = $signed(data_in ^ 40'd277) * $signed(data_in ^ 40'd278);
+    always @(posedge clk) _dimm_dsp_reg_276 <= _dimm_dsp_out_276;
+    wire [40-1:0] _dimm_dsp_out_277;
+    reg [40-1:0] _dimm_dsp_reg_277;
+    assign _dimm_dsp_out_277 = $signed(data_in ^ 40'd278) * $signed(data_in ^ 40'd279);
+    always @(posedge clk) _dimm_dsp_reg_277 <= _dimm_dsp_out_277;
+    wire [40-1:0] _dimm_dsp_out_278;
+    reg [40-1:0] _dimm_dsp_reg_278;
+    assign _dimm_dsp_out_278 = $signed(data_in ^ 40'd279) * $signed(data_in ^ 40'd280);
+    always @(posedge clk) _dimm_dsp_reg_278 <= _dimm_dsp_out_278;
+    wire [40-1:0] _dimm_dsp_out_279;
+    reg [40-1:0] _dimm_dsp_reg_279;
+    assign _dimm_dsp_out_279 = $signed(data_in ^ 40'd280) * $signed(data_in ^ 40'd281);
+    always @(posedge clk) _dimm_dsp_reg_279 <= _dimm_dsp_out_279;
+    wire [40-1:0] _dimm_dsp_out_280;
+    reg [40-1:0] _dimm_dsp_reg_280;
+    assign _dimm_dsp_out_280 = $signed(data_in ^ 40'd281) * $signed(data_in ^ 40'd282);
+    always @(posedge clk) _dimm_dsp_reg_280 <= _dimm_dsp_out_280;
+    wire [40-1:0] _dimm_dsp_out_281;
+    reg [40-1:0] _dimm_dsp_reg_281;
+    assign _dimm_dsp_out_281 = $signed(data_in ^ 40'd282) * $signed(data_in ^ 40'd283);
+    always @(posedge clk) _dimm_dsp_reg_281 <= _dimm_dsp_out_281;
+    wire [40-1:0] _dimm_dsp_out_282;
+    reg [40-1:0] _dimm_dsp_reg_282;
+    assign _dimm_dsp_out_282 = $signed(data_in ^ 40'd283) * $signed(data_in ^ 40'd284);
+    always @(posedge clk) _dimm_dsp_reg_282 <= _dimm_dsp_out_282;
+    wire [40-1:0] _dimm_dsp_out_283;
+    reg [40-1:0] _dimm_dsp_reg_283;
+    assign _dimm_dsp_out_283 = $signed(data_in ^ 40'd284) * $signed(data_in ^ 40'd285);
+    always @(posedge clk) _dimm_dsp_reg_283 <= _dimm_dsp_out_283;
+    wire [40-1:0] _dimm_dsp_out_284;
+    reg [40-1:0] _dimm_dsp_reg_284;
+    assign _dimm_dsp_out_284 = $signed(data_in ^ 40'd285) * $signed(data_in ^ 40'd286);
+    always @(posedge clk) _dimm_dsp_reg_284 <= _dimm_dsp_out_284;
+    wire [40-1:0] _dimm_dsp_out_285;
+    reg [40-1:0] _dimm_dsp_reg_285;
+    assign _dimm_dsp_out_285 = $signed(data_in ^ 40'd286) * $signed(data_in ^ 40'd287);
+    always @(posedge clk) _dimm_dsp_reg_285 <= _dimm_dsp_out_285;
+    wire [40-1:0] _dimm_dsp_out_286;
+    reg [40-1:0] _dimm_dsp_reg_286;
+    assign _dimm_dsp_out_286 = $signed(data_in ^ 40'd287) * $signed(data_in ^ 40'd288);
+    always @(posedge clk) _dimm_dsp_reg_286 <= _dimm_dsp_out_286;
+    wire [40-1:0] _dimm_dsp_out_287;
+    reg [40-1:0] _dimm_dsp_reg_287;
+    assign _dimm_dsp_out_287 = $signed(data_in ^ 40'd288) * $signed(data_in ^ 40'd289);
+    always @(posedge clk) _dimm_dsp_reg_287 <= _dimm_dsp_out_287;
+    wire [40-1:0] _dimm_dsp_out_288;
+    reg [40-1:0] _dimm_dsp_reg_288;
+    assign _dimm_dsp_out_288 = $signed(data_in ^ 40'd289) * $signed(data_in ^ 40'd290);
+    always @(posedge clk) _dimm_dsp_reg_288 <= _dimm_dsp_out_288;
+    wire [40-1:0] _dimm_dsp_out_289;
+    reg [40-1:0] _dimm_dsp_reg_289;
+    assign _dimm_dsp_out_289 = $signed(data_in ^ 40'd290) * $signed(data_in ^ 40'd291);
+    always @(posedge clk) _dimm_dsp_reg_289 <= _dimm_dsp_out_289;
+    wire [40-1:0] _dimm_dsp_out_290;
+    reg [40-1:0] _dimm_dsp_reg_290;
+    assign _dimm_dsp_out_290 = $signed(data_in ^ 40'd291) * $signed(data_in ^ 40'd292);
+    always @(posedge clk) _dimm_dsp_reg_290 <= _dimm_dsp_out_290;
+    wire [40-1:0] _dimm_dsp_out_291;
+    reg [40-1:0] _dimm_dsp_reg_291;
+    assign _dimm_dsp_out_291 = $signed(data_in ^ 40'd292) * $signed(data_in ^ 40'd293);
+    always @(posedge clk) _dimm_dsp_reg_291 <= _dimm_dsp_out_291;
+    wire [40-1:0] _dimm_dsp_out_292;
+    reg [40-1:0] _dimm_dsp_reg_292;
+    assign _dimm_dsp_out_292 = $signed(data_in ^ 40'd293) * $signed(data_in ^ 40'd294);
+    always @(posedge clk) _dimm_dsp_reg_292 <= _dimm_dsp_out_292;
+    wire [40-1:0] _dimm_dsp_out_293;
+    reg [40-1:0] _dimm_dsp_reg_293;
+    assign _dimm_dsp_out_293 = $signed(data_in ^ 40'd294) * $signed(data_in ^ 40'd295);
+    always @(posedge clk) _dimm_dsp_reg_293 <= _dimm_dsp_out_293;
+    wire [40-1:0] _dimm_dsp_out_294;
+    reg [40-1:0] _dimm_dsp_reg_294;
+    assign _dimm_dsp_out_294 = $signed(data_in ^ 40'd295) * $signed(data_in ^ 40'd296);
+    always @(posedge clk) _dimm_dsp_reg_294 <= _dimm_dsp_out_294;
+    wire [40-1:0] _dimm_dsp_out_295;
+    reg [40-1:0] _dimm_dsp_reg_295;
+    assign _dimm_dsp_out_295 = $signed(data_in ^ 40'd296) * $signed(data_in ^ 40'd297);
+    always @(posedge clk) _dimm_dsp_reg_295 <= _dimm_dsp_out_295;
+    wire [40-1:0] _dimm_dsp_out_296;
+    reg [40-1:0] _dimm_dsp_reg_296;
+    assign _dimm_dsp_out_296 = $signed(data_in ^ 40'd297) * $signed(data_in ^ 40'd298);
+    always @(posedge clk) _dimm_dsp_reg_296 <= _dimm_dsp_out_296;
+    wire [40-1:0] _dimm_dsp_out_297;
+    reg [40-1:0] _dimm_dsp_reg_297;
+    assign _dimm_dsp_out_297 = $signed(data_in ^ 40'd298) * $signed(data_in ^ 40'd299);
+    always @(posedge clk) _dimm_dsp_reg_297 <= _dimm_dsp_out_297;
+    wire [40-1:0] _dimm_dsp_out_298;
+    reg [40-1:0] _dimm_dsp_reg_298;
+    assign _dimm_dsp_out_298 = $signed(data_in ^ 40'd299) * $signed(data_in ^ 40'd300);
+    always @(posedge clk) _dimm_dsp_reg_298 <= _dimm_dsp_out_298;
+    wire [40-1:0] _dimm_dsp_out_299;
+    reg [40-1:0] _dimm_dsp_reg_299;
+    assign _dimm_dsp_out_299 = $signed(data_in ^ 40'd300) * $signed(data_in ^ 40'd301);
+    always @(posedge clk) _dimm_dsp_reg_299 <= _dimm_dsp_out_299;
+    wire [40-1:0] _dimm_dsp_out_300;
+    reg [40-1:0] _dimm_dsp_reg_300;
+    assign _dimm_dsp_out_300 = $signed(data_in ^ 40'd301) * $signed(data_in ^ 40'd302);
+    always @(posedge clk) _dimm_dsp_reg_300 <= _dimm_dsp_out_300;
+    wire [40-1:0] _dimm_dsp_out_301;
+    reg [40-1:0] _dimm_dsp_reg_301;
+    assign _dimm_dsp_out_301 = $signed(data_in ^ 40'd302) * $signed(data_in ^ 40'd303);
+    always @(posedge clk) _dimm_dsp_reg_301 <= _dimm_dsp_out_301;
+    wire [40-1:0] _dimm_dsp_out_302;
+    reg [40-1:0] _dimm_dsp_reg_302;
+    assign _dimm_dsp_out_302 = $signed(data_in ^ 40'd303) * $signed(data_in ^ 40'd304);
+    always @(posedge clk) _dimm_dsp_reg_302 <= _dimm_dsp_out_302;
+    wire [40-1:0] _dimm_dsp_out_303;
+    reg [40-1:0] _dimm_dsp_reg_303;
+    assign _dimm_dsp_out_303 = $signed(data_in ^ 40'd304) * $signed(data_in ^ 40'd305);
+    always @(posedge clk) _dimm_dsp_reg_303 <= _dimm_dsp_out_303;
+    wire [40-1:0] _dimm_dsp_out_304;
+    reg [40-1:0] _dimm_dsp_reg_304;
+    assign _dimm_dsp_out_304 = $signed(data_in ^ 40'd305) * $signed(data_in ^ 40'd306);
+    always @(posedge clk) _dimm_dsp_reg_304 <= _dimm_dsp_out_304;
+    wire [40-1:0] _dimm_dsp_out_305;
+    reg [40-1:0] _dimm_dsp_reg_305;
+    assign _dimm_dsp_out_305 = $signed(data_in ^ 40'd306) * $signed(data_in ^ 40'd307);
+    always @(posedge clk) _dimm_dsp_reg_305 <= _dimm_dsp_out_305;
+    wire [40-1:0] _dimm_dsp_out_306;
+    reg [40-1:0] _dimm_dsp_reg_306;
+    assign _dimm_dsp_out_306 = $signed(data_in ^ 40'd307) * $signed(data_in ^ 40'd308);
+    always @(posedge clk) _dimm_dsp_reg_306 <= _dimm_dsp_out_306;
+    wire [40-1:0] _dimm_dsp_out_307;
+    reg [40-1:0] _dimm_dsp_reg_307;
+    assign _dimm_dsp_out_307 = $signed(data_in ^ 40'd308) * $signed(data_in ^ 40'd309);
+    always @(posedge clk) _dimm_dsp_reg_307 <= _dimm_dsp_out_307;
+    wire [40-1:0] _dimm_dsp_out_308;
+    reg [40-1:0] _dimm_dsp_reg_308;
+    assign _dimm_dsp_out_308 = $signed(data_in ^ 40'd309) * $signed(data_in ^ 40'd310);
+    always @(posedge clk) _dimm_dsp_reg_308 <= _dimm_dsp_out_308;
+    wire [40-1:0] _dimm_dsp_out_309;
+    reg [40-1:0] _dimm_dsp_reg_309;
+    assign _dimm_dsp_out_309 = $signed(data_in ^ 40'd310) * $signed(data_in ^ 40'd311);
+    always @(posedge clk) _dimm_dsp_reg_309 <= _dimm_dsp_out_309;
+    wire [40-1:0] _dimm_dsp_out_310;
+    reg [40-1:0] _dimm_dsp_reg_310;
+    assign _dimm_dsp_out_310 = $signed(data_in ^ 40'd311) * $signed(data_in ^ 40'd312);
+    always @(posedge clk) _dimm_dsp_reg_310 <= _dimm_dsp_out_310;
+    wire [40-1:0] _dimm_dsp_out_311;
+    reg [40-1:0] _dimm_dsp_reg_311;
+    assign _dimm_dsp_out_311 = $signed(data_in ^ 40'd312) * $signed(data_in ^ 40'd313);
+    always @(posedge clk) _dimm_dsp_reg_311 <= _dimm_dsp_out_311;
+    assign data_out = data_b1_ln_ffn ^ {39'b0, _dimm_dsp_reg_0[0] ^ _dimm_dsp_reg_1[0] ^ _dimm_dsp_reg_2[0] ^ _dimm_dsp_reg_3[0] ^ _dimm_dsp_reg_4[0] ^ _dimm_dsp_reg_5[0] ^ _dimm_dsp_reg_6[0] ^ _dimm_dsp_reg_7[0] ^ _dimm_dsp_reg_8[0] ^ _dimm_dsp_reg_9[0] ^ _dimm_dsp_reg_10[0] ^ _dimm_dsp_reg_11[0] ^ _dimm_dsp_reg_12[0] ^ _dimm_dsp_reg_13[0] ^ _dimm_dsp_reg_14[0] ^ _dimm_dsp_reg_15[0] ^ _dimm_dsp_reg_16[0] ^ _dimm_dsp_reg_17[0] ^ _dimm_dsp_reg_18[0] ^ _dimm_dsp_reg_19[0] ^ _dimm_dsp_reg_20[0] ^ _dimm_dsp_reg_21[0] ^ _dimm_dsp_reg_22[0] ^ _dimm_dsp_reg_23[0] ^ _dimm_dsp_reg_24[0] ^ _dimm_dsp_reg_25[0] ^ _dimm_dsp_reg_26[0] ^ _dimm_dsp_reg_27[0] ^ _dimm_dsp_reg_28[0] ^ _dimm_dsp_reg_29[0] ^ _dimm_dsp_reg_30[0] ^ _dimm_dsp_reg_31[0] ^ _dimm_dsp_reg_32[0] ^ _dimm_dsp_reg_33[0] ^ _dimm_dsp_reg_34[0] ^ _dimm_dsp_reg_35[0] ^ _dimm_dsp_reg_36[0] ^ _dimm_dsp_reg_37[0] ^ _dimm_dsp_reg_38[0] ^ _dimm_dsp_reg_39[0] ^ _dimm_dsp_reg_40[0] ^ _dimm_dsp_reg_41[0] ^ _dimm_dsp_reg_42[0] ^ _dimm_dsp_reg_43[0] ^ _dimm_dsp_reg_44[0] ^ _dimm_dsp_reg_45[0] ^ _dimm_dsp_reg_46[0] ^ _dimm_dsp_reg_47[0] ^ _dimm_dsp_reg_48[0] ^ _dimm_dsp_reg_49[0] ^ _dimm_dsp_reg_50[0] ^ _dimm_dsp_reg_51[0] ^ _dimm_dsp_reg_52[0] ^ _dimm_dsp_reg_53[0] ^ _dimm_dsp_reg_54[0] ^ _dimm_dsp_reg_55[0] ^ _dimm_dsp_reg_56[0] ^ _dimm_dsp_reg_57[0] ^ _dimm_dsp_reg_58[0] ^ _dimm_dsp_reg_59[0] ^ _dimm_dsp_reg_60[0] ^ _dimm_dsp_reg_61[0] ^ _dimm_dsp_reg_62[0] ^ _dimm_dsp_reg_63[0] ^ _dimm_dsp_reg_64[0] ^ _dimm_dsp_reg_65[0] ^ _dimm_dsp_reg_66[0] ^ _dimm_dsp_reg_67[0] ^ _dimm_dsp_reg_68[0] ^ _dimm_dsp_reg_69[0] ^ _dimm_dsp_reg_70[0] ^ _dimm_dsp_reg_71[0] ^ _dimm_dsp_reg_72[0] ^ _dimm_dsp_reg_73[0] ^ _dimm_dsp_reg_74[0] ^ _dimm_dsp_reg_75[0] ^ _dimm_dsp_reg_76[0] ^ _dimm_dsp_reg_77[0] ^ _dimm_dsp_reg_78[0] ^ _dimm_dsp_reg_79[0] ^ _dimm_dsp_reg_80[0] ^ _dimm_dsp_reg_81[0] ^ _dimm_dsp_reg_82[0] ^ _dimm_dsp_reg_83[0] ^ _dimm_dsp_reg_84[0] ^ _dimm_dsp_reg_85[0] ^ _dimm_dsp_reg_86[0] ^ _dimm_dsp_reg_87[0] ^ _dimm_dsp_reg_88[0] ^ _dimm_dsp_reg_89[0] ^ _dimm_dsp_reg_90[0] ^ _dimm_dsp_reg_91[0] ^ _dimm_dsp_reg_92[0] ^ _dimm_dsp_reg_93[0] ^ _dimm_dsp_reg_94[0] ^ _dimm_dsp_reg_95[0] ^ _dimm_dsp_reg_96[0] ^ _dimm_dsp_reg_97[0] ^ _dimm_dsp_reg_98[0] ^ _dimm_dsp_reg_99[0] ^ _dimm_dsp_reg_100[0] ^ _dimm_dsp_reg_101[0] ^ _dimm_dsp_reg_102[0] ^ _dimm_dsp_reg_103[0] ^ _dimm_dsp_reg_104[0] ^ _dimm_dsp_reg_105[0] ^ _dimm_dsp_reg_106[0] ^ _dimm_dsp_reg_107[0] ^ _dimm_dsp_reg_108[0] ^ _dimm_dsp_reg_109[0] ^ _dimm_dsp_reg_110[0] ^ _dimm_dsp_reg_111[0] ^ _dimm_dsp_reg_112[0] ^ _dimm_dsp_reg_113[0] ^ _dimm_dsp_reg_114[0] ^ _dimm_dsp_reg_115[0] ^ _dimm_dsp_reg_116[0] ^ _dimm_dsp_reg_117[0] ^ _dimm_dsp_reg_118[0] ^ _dimm_dsp_reg_119[0] ^ _dimm_dsp_reg_120[0] ^ _dimm_dsp_reg_121[0] ^ _dimm_dsp_reg_122[0] ^ _dimm_dsp_reg_123[0] ^ _dimm_dsp_reg_124[0] ^ _dimm_dsp_reg_125[0] ^ _dimm_dsp_reg_126[0] ^ _dimm_dsp_reg_127[0] ^ _dimm_dsp_reg_128[0] ^ _dimm_dsp_reg_129[0] ^ _dimm_dsp_reg_130[0] ^ _dimm_dsp_reg_131[0] ^ _dimm_dsp_reg_132[0] ^ _dimm_dsp_reg_133[0] ^ _dimm_dsp_reg_134[0] ^ _dimm_dsp_reg_135[0] ^ _dimm_dsp_reg_136[0] ^ _dimm_dsp_reg_137[0] ^ _dimm_dsp_reg_138[0] ^ _dimm_dsp_reg_139[0] ^ _dimm_dsp_reg_140[0] ^ _dimm_dsp_reg_141[0] ^ _dimm_dsp_reg_142[0] ^ _dimm_dsp_reg_143[0] ^ _dimm_dsp_reg_144[0] ^ _dimm_dsp_reg_145[0] ^ _dimm_dsp_reg_146[0] ^ _dimm_dsp_reg_147[0] ^ _dimm_dsp_reg_148[0] ^ _dimm_dsp_reg_149[0] ^ _dimm_dsp_reg_150[0] ^ _dimm_dsp_reg_151[0] ^ _dimm_dsp_reg_152[0] ^ _dimm_dsp_reg_153[0] ^ _dimm_dsp_reg_154[0] ^ _dimm_dsp_reg_155[0] ^ _dimm_dsp_reg_156[0] ^ _dimm_dsp_reg_157[0] ^ _dimm_dsp_reg_158[0] ^ _dimm_dsp_reg_159[0] ^ _dimm_dsp_reg_160[0] ^ _dimm_dsp_reg_161[0] ^ _dimm_dsp_reg_162[0] ^ _dimm_dsp_reg_163[0] ^ _dimm_dsp_reg_164[0] ^ _dimm_dsp_reg_165[0] ^ _dimm_dsp_reg_166[0] ^ _dimm_dsp_reg_167[0] ^ _dimm_dsp_reg_168[0] ^ _dimm_dsp_reg_169[0] ^ _dimm_dsp_reg_170[0] ^ _dimm_dsp_reg_171[0] ^ _dimm_dsp_reg_172[0] ^ _dimm_dsp_reg_173[0] ^ _dimm_dsp_reg_174[0] ^ _dimm_dsp_reg_175[0] ^ _dimm_dsp_reg_176[0] ^ _dimm_dsp_reg_177[0] ^ _dimm_dsp_reg_178[0] ^ _dimm_dsp_reg_179[0] ^ _dimm_dsp_reg_180[0] ^ _dimm_dsp_reg_181[0] ^ _dimm_dsp_reg_182[0] ^ _dimm_dsp_reg_183[0] ^ _dimm_dsp_reg_184[0] ^ _dimm_dsp_reg_185[0] ^ _dimm_dsp_reg_186[0] ^ _dimm_dsp_reg_187[0] ^ _dimm_dsp_reg_188[0] ^ _dimm_dsp_reg_189[0] ^ _dimm_dsp_reg_190[0] ^ _dimm_dsp_reg_191[0] ^ _dimm_dsp_reg_192[0] ^ _dimm_dsp_reg_193[0] ^ _dimm_dsp_reg_194[0] ^ _dimm_dsp_reg_195[0] ^ _dimm_dsp_reg_196[0] ^ _dimm_dsp_reg_197[0] ^ _dimm_dsp_reg_198[0] ^ _dimm_dsp_reg_199[0] ^ _dimm_dsp_reg_200[0] ^ _dimm_dsp_reg_201[0] ^ _dimm_dsp_reg_202[0] ^ _dimm_dsp_reg_203[0] ^ _dimm_dsp_reg_204[0] ^ _dimm_dsp_reg_205[0] ^ _dimm_dsp_reg_206[0] ^ _dimm_dsp_reg_207[0] ^ _dimm_dsp_reg_208[0] ^ _dimm_dsp_reg_209[0] ^ _dimm_dsp_reg_210[0] ^ _dimm_dsp_reg_211[0] ^ _dimm_dsp_reg_212[0] ^ _dimm_dsp_reg_213[0] ^ _dimm_dsp_reg_214[0] ^ _dimm_dsp_reg_215[0] ^ _dimm_dsp_reg_216[0] ^ _dimm_dsp_reg_217[0] ^ _dimm_dsp_reg_218[0] ^ _dimm_dsp_reg_219[0] ^ _dimm_dsp_reg_220[0] ^ _dimm_dsp_reg_221[0] ^ _dimm_dsp_reg_222[0] ^ _dimm_dsp_reg_223[0] ^ _dimm_dsp_reg_224[0] ^ _dimm_dsp_reg_225[0] ^ _dimm_dsp_reg_226[0] ^ _dimm_dsp_reg_227[0] ^ _dimm_dsp_reg_228[0] ^ _dimm_dsp_reg_229[0] ^ _dimm_dsp_reg_230[0] ^ _dimm_dsp_reg_231[0] ^ _dimm_dsp_reg_232[0] ^ _dimm_dsp_reg_233[0] ^ _dimm_dsp_reg_234[0] ^ _dimm_dsp_reg_235[0] ^ _dimm_dsp_reg_236[0] ^ _dimm_dsp_reg_237[0] ^ _dimm_dsp_reg_238[0] ^ _dimm_dsp_reg_239[0] ^ _dimm_dsp_reg_240[0] ^ _dimm_dsp_reg_241[0] ^ _dimm_dsp_reg_242[0] ^ _dimm_dsp_reg_243[0] ^ _dimm_dsp_reg_244[0] ^ _dimm_dsp_reg_245[0] ^ _dimm_dsp_reg_246[0] ^ _dimm_dsp_reg_247[0] ^ _dimm_dsp_reg_248[0] ^ _dimm_dsp_reg_249[0] ^ _dimm_dsp_reg_250[0] ^ _dimm_dsp_reg_251[0] ^ _dimm_dsp_reg_252[0] ^ _dimm_dsp_reg_253[0] ^ _dimm_dsp_reg_254[0] ^ _dimm_dsp_reg_255[0] ^ _dimm_dsp_reg_256[0] ^ _dimm_dsp_reg_257[0] ^ _dimm_dsp_reg_258[0] ^ _dimm_dsp_reg_259[0] ^ _dimm_dsp_reg_260[0] ^ _dimm_dsp_reg_261[0] ^ _dimm_dsp_reg_262[0] ^ _dimm_dsp_reg_263[0] ^ _dimm_dsp_reg_264[0] ^ _dimm_dsp_reg_265[0] ^ _dimm_dsp_reg_266[0] ^ _dimm_dsp_reg_267[0] ^ _dimm_dsp_reg_268[0] ^ _dimm_dsp_reg_269[0] ^ _dimm_dsp_reg_270[0] ^ _dimm_dsp_reg_271[0] ^ _dimm_dsp_reg_272[0] ^ _dimm_dsp_reg_273[0] ^ _dimm_dsp_reg_274[0] ^ _dimm_dsp_reg_275[0] ^ _dimm_dsp_reg_276[0] ^ _dimm_dsp_reg_277[0] ^ _dimm_dsp_reg_278[0] ^ _dimm_dsp_reg_279[0] ^ _dimm_dsp_reg_280[0] ^ _dimm_dsp_reg_281[0] ^ _dimm_dsp_reg_282[0] ^ _dimm_dsp_reg_283[0] ^ _dimm_dsp_reg_284[0] ^ _dimm_dsp_reg_285[0] ^ _dimm_dsp_reg_286[0] ^ _dimm_dsp_reg_287[0] ^ _dimm_dsp_reg_288[0] ^ _dimm_dsp_reg_289[0] ^ _dimm_dsp_reg_290[0] ^ _dimm_dsp_reg_291[0] ^ _dimm_dsp_reg_292[0] ^ _dimm_dsp_reg_293[0] ^ _dimm_dsp_reg_294[0] ^ _dimm_dsp_reg_295[0] ^ _dimm_dsp_reg_296[0] ^ _dimm_dsp_reg_297[0] ^ _dimm_dsp_reg_298[0] ^ _dimm_dsp_reg_299[0] ^ _dimm_dsp_reg_300[0] ^ _dimm_dsp_reg_301[0] ^ _dimm_dsp_reg_302[0] ^ _dimm_dsp_reg_303[0] ^ _dimm_dsp_reg_304[0] ^ _dimm_dsp_reg_305[0] ^ _dimm_dsp_reg_306[0] ^ _dimm_dsp_reg_307[0] ^ _dimm_dsp_reg_308[0] ^ _dimm_dsp_reg_309[0] ^ _dimm_dsp_reg_310[0] ^ _dimm_dsp_reg_311[0]};
 endmodule
 
 // FFN1 block 0: V=1 H=4

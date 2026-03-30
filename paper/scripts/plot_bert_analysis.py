@@ -4,6 +4,7 @@
 Input: IMC simulator (azurelily/)
 Output: paper/figures/benchmarks/bert_analysis.pdf
 """
+import math
 import sys
 from pathlib import Path
 from collections import defaultdict
@@ -34,12 +35,23 @@ from models.attention import attention_model
 OUT_PATH = SCRIPT_DIR.parent / "figures" / "benchmarks" / "bert_analysis.pdf"
 
 
-def _make_sim(cfile, R, C, fmax, total_dsp=None, total_clb=None, total_mem=None):
+def _functional_dpes(rows, cols):
+    """Non-DIMM DPEs: Q/K/V/O + FFN1 + FFN2, × 2 blocks."""
+    D_MODEL, D_FF = 128, 512
+    per_block = (4 * math.ceil(D_MODEL/rows) * math.ceil(D_MODEL/cols)
+                 + math.ceil(D_MODEL/rows) * math.ceil(D_FF/cols)
+                 + math.ceil(D_FF/rows) * math.ceil(D_MODEL/cols))
+    return per_block * 2
+
+
+def _make_sim(cfile, R, C, fmax, total_dsp=None, total_clb=None, total_mem=None,
+              total_dimm_dpes=None):
     cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / f"{cfile}.json"))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     if total_dsp is not None: cfg.total_dsp = total_dsp
     if total_clb is not None: cfg.total_clb = total_clb
     if total_mem is not None: cfg.total_mem = total_mem
+    if total_dimm_dpes is not None: cfg.total_dimm_dpes = total_dimm_dpes
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats); fpga = FPGAFabric(cfg, mem, stats, imc_core=imc)
     sched = Scheduler(cfg, stats, imc, fpga)
@@ -85,9 +97,9 @@ def run_bert_total(cfile, R, C, fmax, N):
 
 # VTR ground truth: AVAILABLE resources per arch
 VTR_AVAILABLE = {
-    "nl_dpe_1024x128": {"DSPs": 222, "CLBs": 13806, "BRAMs": 518},
-    "nl_dpe_1024x256": {"DSPs": 222, "CLBs": 16528, "BRAMs": 444},
-    "azure_lily":      {"DSPs": 333, "CLBs": 11262, "BRAMs": 740},
+    "nl_dpe_1024x128": {"DSPs": 4,   "CLBs": 453,  "BRAMs": 172, "DPEs": 274},
+    "nl_dpe_1024x256": {"DSPs": 4,   "CLBs": 441,  "BRAMs": 172, "DPEs": 78},
+    "azure_lily":      {"DSPs": 326, "CLBs": 188,  "BRAMs": 16,  "DPEs": 18},
 }
 
 
@@ -114,10 +126,13 @@ def run_bert_breakdown(cfile, R, C, fmax, N):
         groups[group_name] += (e_after - e_before)
 
     # Single simulator instance — accumulate energy deltas per group
+    dpe_used = avail.get("DPEs", 0)
+    dimm_dpes = max(0, dpe_used - _functional_dpes(R, C))
     _, stats, sched = _make_sim(cfile, R, C, fmax,
                                  total_dsp=avail.get("DSPs"),
                                  total_clb=avail.get("CLBs"),
-                                 total_mem=avail.get("BRAMs"))
+                                 total_mem=avail.get("BRAMs"),
+                                 total_dimm_dpes=dimm_dpes)
 
     # Embedding + LayerNorm → Other
     run_group(md["embedding"], "Other\n(LN+Res)", sched)
@@ -158,7 +173,7 @@ def main():
              fontweight='bold', va='top')
 
     # ── Left: DPE energy contribution vs seq_len ──
-    seq_lens = [64, 128, 256, 512, 1024, 2048]
+    seq_lens = [256, 512, 1024, 1536, 2048]
     attn_configs = [
         ("Proposed", "nl_dpe", 1024, 128),
         ("Azure-Lily", "azure_lily", 512, 128),
@@ -181,9 +196,9 @@ def main():
     ax1.axhline(y=50, color="#888", linewidth=0.8, linestyle=":", alpha=0.5)
     ax1.set_xlabel("Sequence Length (N)")
     ax1.set_ylabel("DPE Energy Contribution (%)")
-    ax1.set_xscale("log", base=2)
     ax1.set_xticks(seq_lens)
     ax1.set_xticklabels([str(n) for n in seq_lens])
+    ax1.set_xlim(seq_lens[0] * 0.9, seq_lens[-1] * 1.05)
     ax1.set_ylim(0, 100)
     ax1.legend(fontsize=8, loc="best")
     ax1.grid(True, alpha=0.1)

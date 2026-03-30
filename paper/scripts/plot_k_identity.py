@@ -7,6 +7,7 @@ Panel (b): Complete DIMM energy efficiency vs sequence length (K=2, K=4).
 
 Output: paper/figures/benchmarks/k_identity.pdf
 """
+import math
 import sys
 from pathlib import Path
 from collections import defaultdict
@@ -37,15 +38,23 @@ from models.attention import attention_model
 from models.bert_tiny import bert_tiny_model
 
 d_head = 64
-seq_lens = [128, 256, 512, 1024]
+seq_lens = [256, 512, 1024, 1536, 2048]
 
 # VTR ground truth resources
 VTR_AVAILABLE = {
-    "proposed":  {"DSPs": 222, "CLBs": 13806, "BRAMs": 518},
-    "al_like":   {"DSPs": 222, "CLBs": 16528, "BRAMs": 444},
-    "azurelily": {"DSPs": 333, "CLBs": 11262, "BRAMs": 740},
-    "baseline":  {"DSPs": 333, "CLBs": 19092, "BRAMs": 740},
+    "proposed":  {"DSPs": 4,   "CLBs": 453,  "BRAMs": 172, "DPEs": 274},
+    "al_like":   {"DSPs": 4,   "CLBs": 441,  "BRAMs": 172, "DPEs": 78},
+    "azurelily": {"DSPs": 326, "CLBs": 188,  "BRAMs": 16,  "DPEs": 18},
+    "baseline":  {"DSPs": 312, "CLBs": 121,  "BRAMs": 0,   "DPEs": 0},
 }
+
+
+def _functional_dpes(rows, cols):
+    D_MODEL, D_FF = 128, 512
+    per_block = (4 * math.ceil(D_MODEL/rows) * math.ceil(D_MODEL/cols)
+                 + math.ceil(D_MODEL/rows) * math.ceil(D_FF/cols)
+                 + math.ceil(D_FF/rows) * math.ceil(D_MODEL/cols))
+    return per_block * 2
 
 
 # ── BERT-Tiny breakdown (for panel a) ─────────────────────────────────────
@@ -58,6 +67,8 @@ def run_bert_breakdown(cfg_file, R, C, fmax, N, avail_key):
     if avail.get("DSPs") is not None: cfg.total_dsp = avail["DSPs"]
     if avail.get("CLBs") is not None: cfg.total_clb = avail["CLBs"]
     if avail.get("BRAMs") is not None: cfg.total_mem = avail["BRAMs"]
+    dpe_used = avail.get("DPEs", 0)
+    cfg.total_dimm_dpes = max(0, dpe_used - _functional_dpes(R, C))
 
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats)
@@ -95,6 +106,8 @@ def run_dimm_total(cfg_file, R, C, N, avail_key):
     avail = VTR_AVAILABLE.get(avail_key, {})
     if avail.get("DSPs") is not None: cfg.total_dsp = avail["DSPs"]
     if avail.get("CLBs") is not None: cfg.total_clb = avail["CLBs"]
+    dpe_used = avail.get("DPEs", 0)
+    cfg.total_dimm_dpes = max(0, dpe_used - _functional_dpes(R, C))
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats)
     fpga = FPGAFabric(cfg, mem, stats, imc_core=imc)
@@ -127,7 +140,7 @@ for label, cfg_file, R, C, fmax, avail_key in BERT_CONFIGS:
         bert_data[(N, label)] = run_bert_breakdown(cfg_file, R, C, fmax, N, avail_key)
 
 dimm_data = {}
-dimm_seq_lens = [64, 128, 256, 512, 1024]
+dimm_seq_lens = [256, 512, 1024, 1536, 2048]
 for label, cfg_file, R, C, avail_key in DIMM_CONFIGS:
     for N in dimm_seq_lens:
         dimm_data[(N, label)] = run_dimm_total(cfg_file, R, C, N, avail_key)
@@ -229,10 +242,9 @@ ax2.text(1100, 1.03, 'DSP baseline', fontsize=6, color='#666', ha='right',
 
 ax2.set_xlabel('Sequence Length (N)')
 ax2.set_ylabel('DIMM Energy Efficiency\n(norm. to DSP baseline)')
-ax2.set_xscale('log', base=2)
 ax2.set_xticks(dimm_seq_lens)
 ax2.set_xticklabels([str(n) for n in dimm_seq_lens])
-ax2.set_xlim(50, 1250)
+ax2.set_xlim(dimm_seq_lens[0] * 0.9, dimm_seq_lens[-1] * 1.05)
 ax2.set_ylim(bottom=0.9)
 ax2.legend(fontsize=7, loc='upper left')
 ax2.grid(True, alpha=0.1)
