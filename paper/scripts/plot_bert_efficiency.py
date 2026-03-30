@@ -248,6 +248,13 @@ for ax, metric_fn, ylabel in [
                         fontsize=ANNOT_FONTSIZE_SC, fontweight=ANNOT_FONTWEIGHT_SC,
                         color=ARCH_COLORS[cname])
 
+    # Asymptotic lines for Proposed and AL-like (use last point as estimate)
+    for arch in ["proposed", "al_like"]:
+        cname = DISPLAY_NAMES[arch]
+        last_val = metric_fn(SEQ_LENS[-1], arch) / metric_fn(SEQ_LENS[-1], "azurelily")
+        ax.axhline(y=last_val, color=ARCH_COLORS[cname], linewidth=0.8,
+                    linestyle=':', alpha=0.5, zorder=2)
+
     ax.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
                alpha=BASELINE_ALPHA)
     ax.set_xlabel("Sequence Length (N)")
