@@ -175,13 +175,13 @@ def main():
     # ── Left: DPE energy contribution vs seq_len ──
     seq_lens = [1024, 2048, 4096, 6144, 8192]
     attn_configs = [
-        ("Proposed", "nl_dpe", 1024, 128),
+        ("Proposed-1", "nl_dpe", 1024, 128),
         ("Azure-Lily", "azure_lily", 512, 128),
     ]
-    attn_colors = {"Proposed": ARCH_COLORS["Proposed"],
+    attn_colors = {"Proposed-1": ARCH_COLORS["Proposed-1"],
                    "Azure-Lily": ARCH_COLORS["Azure-Lily"]}
-    attn_markers = {"Proposed": "o", "Azure-Lily": "D"}
-    attn_styles = {"Proposed": "-", "Azure-Lily": "--"}
+    attn_markers = {"Proposed-1": "o", "Azure-Lily": "D"}
+    attn_styles = {"Proposed-1": "-", "Azure-Lily": "--"}
 
     for cname, cfile, R, C in attn_configs:
         dpe_pcts = []
@@ -243,7 +243,7 @@ def main():
     categories_merged = list(cat_keys.keys())
     bar_colors = [BREAKDOWN_COLORS["DIMM"], BREAKDOWN_COLORS["Proj_FFN"],
                   BREAKDOWN_COLORS["Other"]]
-    archs = ["Azure-Lily ", "Proposed "]
+    archs = ["Azure-Lily ", "Proposed-1 "]
 
     # Normalize all segments to NL-DPE total = 100
     arch_vals = [

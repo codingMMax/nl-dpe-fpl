@@ -49,8 +49,8 @@ CONFIG_MARKERS = {
 }
 DL_WORKLOADS = ["fc_512_128", "fc_512_512", "fc_2048_256"]
 GROUPS = [
-    ("Proposed", ["512x128", "1024x128", "512x64"]),
-    ("AL-like", ["512x256", "1024x256"]),
+    ("Proposed-1 Group", ["512x128", "1024x128", "512x64"]),
+    ("Proposed-2 Group", ["512x256", "1024x256"]),
 ]
 
 
@@ -189,7 +189,7 @@ def plot_broken_group(fig, gs_slot, group_name, cfgs, cfg_points, cmap_area, nor
     draw_break_marks(ax_left, ax_right)
 
     if show_ylabel:
-        ax_left.set_ylabel("Geomean Latency (ns/inf)")
+        ax_left.set_ylabel("DL Performance (ns/inf)")
     ax_left.set_title(group_name, fontweight="bold")
     ax_left.legend(fontsize=7, loc="upper right")
     ax_left.grid(True, alpha=0.15)

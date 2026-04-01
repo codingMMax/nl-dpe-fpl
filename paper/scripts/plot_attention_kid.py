@@ -46,7 +46,7 @@ ARCHS = {
     "azurelily": ("azure_lily.json", 512,  128, 127.9, 18,  326, 188, 16),
 }
 
-DISPLAY = {"proposed": "Proposed", "al_like": "AL-like"}
+DISPLAY = {"proposed": "Proposed-1", "al_like": "Proposed-2"}
 
 D_HEADS = [64, 128]
 LINE_STYLES = {64: "-", 128: "--"}

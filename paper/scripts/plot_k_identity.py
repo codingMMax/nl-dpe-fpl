@@ -121,8 +121,8 @@ def run_dimm_total(cfg_file, R, C, N, avail_key):
 # ── Configs ────────────────────────────────────────────────────────────────
 
 BERT_CONFIGS = [
-    ("K=2 (Proposed)", "nl_dpe.json",     1024, 128, 135.7, "proposed"),
-    ("Azure-Lily",     "azure_lily.json",  512, 128,  45.3, "azurelily"),
+    ("K=2 (Proposed-1)", "nl_dpe.json",     1024, 128, 135.7, "proposed"),
+    ("Azure-Lily",       "azure_lily.json",  512, 128,  45.3, "azurelily"),
 ]
 
 DIMM_CONFIGS = [

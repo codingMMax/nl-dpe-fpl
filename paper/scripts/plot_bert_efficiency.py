@@ -48,8 +48,8 @@ ARCH_MAP = {
 }
 
 DISPLAY_NAMES = {
-    "proposed": "Proposed",
-    "al_like": "AL-like",
+    "proposed": "Proposed-1",
+    "al_like": "Proposed-2",
     "azurelily": "Azure-Lily",
     "baseline": "Baseline",
 }
@@ -195,11 +195,11 @@ for N in SEQ_LENS:
 
 # ── Plot ──────────────────────────────────────────────────────────────────
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 2.8))
-fig.subplots_adjust(wspace=0.28)
+fig.subplots_adjust(wspace=0.22)
 
 for ax, metric_fn, ylabel in [
     (ax1, lambda N, a: (1e9 / data[(N, a)]["latency"]) / compute_used_area(a, vtr),
-     "Normalized Throughput/mm\u00b2"),
+     "Normalized Inference/s/mm\u00b2"),
     (ax2, lambda N, a: (1e9 / data[(N, a)]["latency"]) / (data[(N, a)]["energy"] / 1e12),
      "Normalized Inference/s/J"),
 ]:

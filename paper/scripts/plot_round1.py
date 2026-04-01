@@ -148,7 +148,7 @@ def plot_ranking(ranked, top_k=5):
         # Annotate worst peripheral overhead (smallest configs)
         if cfg_area[cfg] == min_area:
             ax.text(annot_x, i,
-                    f"{cfg_overhead[cfg]:.0f}% DPE logic area accounts for block peripheral",
+                    f"{cfg_overhead[cfg]:.0f}% DPE logic area accounts for routing",
                     ha="left", va="center", fontsize=6,
                     color=COLOR_AL)
 
@@ -163,10 +163,10 @@ def plot_ranking(ranked, top_k=5):
         #             ha="left", va="center", fontsize=6,
         #             color=COLOR_AL)
 
-        # AL comparison for remaining AL-like configs
+        # AL comparison for remaining   configs
         elif cfg in ("1024x256", "512x256"):
             ratio = area_ratio_to_al(cfg)
-            ax.text(annot_x, i, f"AL-Like:{ratio*100:.0f}% of Azure-Lily DPE area",
+            ax.text(annot_x, i, f" {ratio*100:.0f}% of Azure-Lily DPE area",
                     ha="left", va="center", fontsize=6,
                     fontweight="normal", color=COLOR_AL)
 

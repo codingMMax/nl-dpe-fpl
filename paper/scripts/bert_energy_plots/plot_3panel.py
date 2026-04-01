@@ -143,7 +143,7 @@ ax2.grid(True, alpha=0.08, axis='y', zorder=0)
 # Architecture handles
 a_handles = [
     mpatches.Patch(facecolor='#999', edgecolor='black', linewidth=0.5,
-                   label='K=2 (Proposed)'),
+                   label='Proposed-1'),
     mpatches.Patch(facecolor='#999', edgecolor='black', linewidth=0.5,
                    hatch='///', label='Azure-Lily'),
 ]
@@ -167,10 +167,10 @@ fig.legend(handles=all_handles, loc='upper center', ncol=4, fontsize=5.5,
 # ── Panel right: Energy ratio lines ──────────────────────────────────────
 ax3.plot(x, energy_ratio, color='#2E86AB', linewidth=2,
          marker='o', markersize=5, markeredgecolor='white', markeredgewidth=0.8,
-         label='Overall (AL/K=2)', zorder=4)
+         label='Overall (AL / Proposed-1)', zorder=4)
 ax3.plot(x, dimm_ratio, color='#E05263', linewidth=2, linestyle='--',
          marker='s', markersize=4, markeredgecolor='white', markeredgewidth=0.8,
-         label='DIMM only (AL/K=2)', zorder=4)
+         label='DIMM only (AL / Proposed-1)', zorder=4)
 
 # Single asymptotic line (overall and DIMM converge to nearly the same value)
 asymp = (energy_ratio[-1] + dimm_ratio[-1]) / 2
@@ -186,7 +186,12 @@ ax3.set_xticklabels([str(N) for N in SEQ_LENS])
 ax3.set_xlabel('Sequence Length (N)')
 ax3.set_ylabel('Energy Ratio (AL / Proposed)')
 ax3.set_ylim(0.9, 1.65)
-ax3.legend(fontsize=5.5, loc='upper right', frameon=True)
+# Right panel legend — aligned with shared legend at same Y level
+bbox_right = (ax3.get_position().x0 + ax3.get_position().width / 2, 0.97)
+ax3_handles, ax3_labels = ax3.get_legend_handles_labels()
+fig.legend(handles=ax3_handles, labels=ax3_labels, loc='upper center', ncol=1,
+           fontsize=5.5, frameon=True, framealpha=0.9, bbox_to_anchor=bbox_right,
+           handletextpad=0.3)
 ax3.grid(True, alpha=0.1)
 
 fig.savefig(OUT_PATH)

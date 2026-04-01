@@ -67,7 +67,8 @@ fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(7.16, 2.6),
 fig.subplots_adjust(wspace=0.45, top=0.78, bottom=0.18)
 
 # ── Panel left: DIMM % of latency — line plot for both archs ────────────
-cat_colors = {"Proposed": ARCH_COLORS["Proposed"], "Azure-Lily": ARCH_COLORS["Azure-Lily"]}
+DISPLAY_NAME = {"Proposed": "Proposed-1", "Azure-Lily": "Azure-Lily"}
+cat_colors = {"Proposed": ARCH_COLORS["Proposed-1"], "Azure-Lily": ARCH_COLORS["Azure-Lily"]}
 cat_markers = {"Proposed": "o", "Azure-Lily": "D"}
 cat_styles = {"Proposed": "-", "Azure-Lily": "--"}
 
@@ -75,7 +76,7 @@ for arch in ["Proposed", "Azure-Lily"]:
     dimm_pcts = pct[(arch, "dimm")]
     ax1.plot(SEQ_LENS, dimm_pcts, color=cat_colors[arch], linewidth=1.5,
              linestyle=cat_styles[arch], marker=cat_markers[arch], markersize=4,
-             markeredgecolor="white", markeredgewidth=0.5, label=arch)
+             markeredgecolor="white", markeredgewidth=0.5, label=DISPLAY_NAME[arch])
 
 # Annotate endpoints: Azure-Lily above (higher %), Proposed below
 for arch in ["Proposed", "Azure-Lily"]:
@@ -95,7 +96,7 @@ ax1.set_xlim(SEQ_LENS[0] * 0.85, SEQ_LENS[-1] * 1.1)
 ax1.set_xlabel('Sequence Length (N)')
 ax1.set_ylabel('DIMM Latency Proportion (%)')
 ax1.set_ylim(0, 100)
-ax1.legend(fontsize=6, loc='center right')
+# No per-panel legend — shared legend added at end
 ax1.grid(True, alpha=0.1)
 
 # ── Panel middle: Normalized throughput (1/latency, norm to Azure-Lily) ─
@@ -107,8 +108,8 @@ for arch in ["Proposed", "Azure-Lily"]:
         norm_tput.append(tput / tput_al)
     ax2.plot(SEQ_LENS, norm_tput, color=cat_colors[arch], linewidth=1.5,
              linestyle=cat_styles[arch], marker=cat_markers[arch], markersize=4,
-             markeredgecolor="white", markeredgewidth=0.5, label=arch)
-    # Annotate Proposed only (Azure-Lily is always 1.0×)
+             markeredgecolor="white", markeredgewidth=0.5, label=DISPLAY_NAME[arch])
+    # Annotate Proposed-1 only (Azure-Lily is always 1.0×)
     if arch == "Proposed":
         r = norm_tput[-1]
         ax2.annotate(f'{r:.1f}\u00d7', xy=(SEQ_LENS[-1], r),
@@ -122,17 +123,17 @@ ax2.set_xticks(TICK_LENS)
 ax2.set_xticklabels([str(n) for n in TICK_LENS], fontsize=7)
 ax2.set_xlim(SEQ_LENS[0] * 0.85, SEQ_LENS[-1] * 1.1)
 ax2.set_xlabel('Sequence Length (N)')
-ax2.set_ylabel('Norm. Throughput\n(vs Azure-Lily)')
-ax2.legend(fontsize=6, loc='upper left', frameon=True)
+ax2.set_ylabel('Normalized Inference/s')
+# No per-panel legend
 ax2.grid(True, alpha=0.1)
 
 # ── Panel right: Latency ratio lines ───────────────────────────────────
 ax3.plot(SEQ_LENS, latency_ratio, color='#2E86AB', linewidth=2,
          marker='o', markersize=4, markeredgecolor='white', markeredgewidth=0.8,
-         label='Overall (AL/K=2)', zorder=4)
-ax3.plot(SEQ_LENS, dimm_lat_ratio, color='#E05263', linewidth=2, linestyle='--',
+         label='Overall', zorder=4)
+ax3.plot(SEQ_LENS, dimm_lat_ratio, color='#F97316', linewidth=2, linestyle='--',
          marker='s', markersize=3, markeredgecolor='white', markeredgewidth=0.8,
-         label='DIMM only (AL/K=2)', zorder=4)
+         label='DIMM only', zorder=4)
 
 # Single asymptotic line (overall and DIMM converge close together)
 asymp = (latency_ratio[-1] + dimm_lat_ratio[-1]) / 2
@@ -147,11 +148,25 @@ ax3.set_xticks(TICK_LENS)
 ax3.set_xticklabels([str(n) for n in TICK_LENS], fontsize=7)
 ax3.set_xlim(SEQ_LENS[0] * 0.85, SEQ_LENS[-1] * 1.1)
 ax3.set_xlabel('Sequence Length (N)')
-ax3.set_ylabel('Latency Ratio (AL / Proposed)')
+ax3.set_ylabel('Speedup')
 all_ratios = latency_ratio + dimm_lat_ratio
 ax3.set_ylim(min(all_ratios) * 0.7, max(all_ratios) * 1.15)
-ax3.legend(fontsize=5.5, loc='upper right', frameon=True)
 ax3.grid(True, alpha=0.1)
+
+# Shared legend for left+middle panels (Proposed-1 vs Azure-Lily)
+from matplotlib.patches import Patch
+import matplotlib.lines as mlines
+h_proposed = mlines.Line2D([], [], color=cat_colors["Proposed"], marker=cat_markers["Proposed"],
+                            linestyle=cat_styles["Proposed"], linewidth=1.5, markersize=4,
+                            markeredgecolor="white", label="Proposed-1")
+h_azurelily = mlines.Line2D([], [], color=cat_colors["Azure-Lily"], marker=cat_markers["Azure-Lily"],
+                              linestyle=cat_styles["Azure-Lily"], linewidth=1.5, markersize=4,
+                              markeredgecolor="white", label="Azure-Lily")
+fig.legend(handles=[h_proposed, h_azurelily], loc='upper center', ncol=2, fontsize=7,
+           bbox_to_anchor=(0.35, 0.92), frameon=False)
+
+# Right panel legend (ratio lines)
+ax3.legend(fontsize=5.5, loc='lower right', bbox_to_anchor=(1.0, 0.02), frameon=True)
 
 fig.savefig(OUT_PATH)
 print(f"Saved: {OUT_PATH}")

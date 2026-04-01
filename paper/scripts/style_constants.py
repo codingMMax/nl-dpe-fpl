@@ -26,20 +26,20 @@ def apply_style():
 
 # ── Architecture colors (used in line plots, grouped bars) ──
 ARCH_COLORS = {
-    "Proposed": "#10B981",     # emerald
-    "AL-like": "#3B82F6",   # royal blue
-    "Azure-Lily": "#F97316",          # coral/orange
+    "Proposed-1": "#10B981",     # emerald
+    "Proposed-2": "#3B82F6",     # royal blue
+    "Azure-Lily": "#F97316",     # coral/orange
 }
 
 ARCH_MARKERS = {
-    "Proposed": "o",
-    "AL-like": "s",
+    "Proposed-1": "o",
+    "Proposed-2": "s",
     "Azure-Lily": "D",
 }
 
 ARCH_LINESTYLES = {
-    "Proposed": "-",
-    "AL-like": "--",
+    "Proposed-1": "-",
+    "Proposed-2": "--",
     "Azure-Lily": ":",
 }
 
