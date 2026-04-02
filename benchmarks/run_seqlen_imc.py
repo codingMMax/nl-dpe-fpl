@@ -151,9 +151,12 @@ def run_bert_sim(arch_name, fmax, vtr_resources, seq_len):
         # Q/K/V projections → Proj
         group_energy["proj_ffn"] += _run_group(block["qkv_proj"])
 
-        # Per-head attention: mac_qk, softmax_exp, softmax_norm, mac_sv → DIMM
+        # Per-head attention: streaming pipeline (QK^T → softmax → Score×V)
         for hi in range(block["num_heads"]):
-            group_energy["dimm"] += _run_group(block["head_attention"])
+            e0 = _snap()
+            pipeline_lat, pipeline_energy = sched.run_attention_head(
+                block["head_attention"], seq_len)
+            group_energy["dimm"] += _snap() - e0
 
         # O projection → Proj, residual+LN → Other
         group_energy["proj_ffn"] += _run_group([block["post_attn"][0]])
@@ -175,24 +178,42 @@ def run_bert_sim(arch_name, fmax, vtr_resources, seq_len):
         else:
             non_dimm_latency += lat
 
-    # Per-resource energy breakdown
-    DPE_KEYS = {"imc_vmm", "imc_conversion", "imc_digital_post",
-                "imc_dimm_exp", "imc_dimm_log"}
-    dpe_energy = sum(stats.energy_breakdown.get(k, 0) for k in DPE_KEYS)
-    dsp_energy = stats.energy_breakdown.get("dsp_gemm", 0) + stats.energy_breakdown.get("dsp_add", 0)
-    mem_energy = stats.energy_breakdown.get("sram_read", 0) + stats.energy_breakdown.get("sram_write", 0)
-    clb_energy = total_energy - dpe_energy - dsp_energy - mem_energy
+    # 5-category energy breakdown: Crossbar, ADC/ACAM, CLB, DSP, BRAM
+    bd = stats.energy_breakdown
+    CROSSBAR_KEYS = {"imc_vmm", "imc_dimm_exp_vmm", "imc_dimm_log_vmm"}
+    ADC_ACAM_KEYS = {"imc_conversion", "imc_digital_post",
+                     "imc_dimm_exp_conv", "imc_dimm_exp_digital",
+                     "imc_dimm_log_conv", "imc_dimm_log_digital"}
+    CLB_KEYS = {"clb_reduction", "clb_exp", "clb_norm_sum", "clb_norm_inv",
+                "clb_add", "clb_layernorm", "clb_embed_add", "fpga_activation",
+                "clb_compare", "clb_subtract"}
+    DSP_KEYS = {"dsp_gemm", "dsp_add", "mul"}
+    BRAM_KEYS = {"sram_read", "sram_write"}
+
+    crossbar_energy = sum(bd.get(k, 0) for k in CROSSBAR_KEYS)
+    adc_acam_energy = sum(bd.get(k, 0) for k in ADC_ACAM_KEYS)
+    clb_energy = sum(bd.get(k, 0) for k in CLB_KEYS)
+    dsp_energy = sum(bd.get(k, 0) for k in DSP_KEYS)
+    bram_energy = sum(bd.get(k, 0) for k in BRAM_KEYS)
+
+    # Legacy 4-category (for backwards compat)
+    dpe_energy = crossbar_energy + adc_acam_energy
+    mem_energy = bram_energy
 
     return {
         "energy_pj": total_energy,
         "latency_ns": total_latency,
         "latency_dimm_ns": dimm_latency,
         "latency_non_dimm_ns": non_dimm_latency,
-        # Per-resource breakdown
-        "energy_dpe_pj": dpe_energy,
-        "energy_dsp_pj": dsp_energy,
-        "energy_mem_pj": mem_energy,
+        # 5-category breakdown
+        "energy_crossbar_pj": crossbar_energy,
+        "energy_adc_acam_pj": adc_acam_energy,
         "energy_clb_pj": clb_energy,
+        "energy_dsp_pj": dsp_energy,
+        "energy_bram_pj": bram_energy,
+        # Legacy 4-category
+        "energy_dpe_pj": dpe_energy,
+        "energy_mem_pj": mem_energy,
         # Per-operation breakdown
         "energy_dimm_pj": group_energy["dimm"],
         "energy_proj_ffn_pj": group_energy["proj_ffn"],
@@ -262,10 +283,16 @@ def run_sweep(use_fixed_fmax=False):
                 "latency_dimm_ns": round(sim["latency_dimm_ns"], 2),
                 "latency_non_dimm_ns": round(sim["latency_non_dimm_ns"], 2),
                 "dimm_pct": round(dimm_pct, 1),
-                "energy_dpe_pj": round(sim["energy_dpe_pj"], 2),
-                "energy_dsp_pj": round(sim["energy_dsp_pj"], 2),
-                "energy_mem_pj": round(sim["energy_mem_pj"], 2),
+                # 5-category energy breakdown
+                "energy_crossbar_pj": round(sim["energy_crossbar_pj"], 2),
+                "energy_adc_acam_pj": round(sim["energy_adc_acam_pj"], 2),
                 "energy_clb_pj": round(sim["energy_clb_pj"], 2),
+                "energy_dsp_pj": round(sim["energy_dsp_pj"], 2),
+                "energy_bram_pj": round(sim["energy_bram_pj"], 2),
+                # Legacy 4-category
+                "energy_dpe_pj": round(sim["energy_dpe_pj"], 2),
+                "energy_mem_pj": round(sim["energy_mem_pj"], 2),
+                # Per-operation breakdown
                 "energy_dimm_pj": round(sim["energy_dimm_pj"], 2),
                 "energy_proj_ffn_pj": round(sim["energy_proj_ffn_pj"], 2),
                 "energy_other_pj": round(sim["energy_other_pj"], 2),

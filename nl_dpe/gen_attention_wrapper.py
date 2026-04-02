@@ -97,12 +97,18 @@ def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
 
 
 def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
-                            depth: int, addr_width: int,
+                            depth_q: int, depth_k: int, depth_score: int,
                             data_width: int = 40,
-                            dual_identity: bool = False) -> str:
+                            dual_identity: bool = False,
+                            uid: int = 0) -> str:
     """Generate dimm_score_matrix: CLB add + DPE(I|exp) + CLB reduce.
 
     S[i][j] = Σ_m exp(log_Q[i][m] + log_K[j][m])
+
+    Per-SRAM depths (packed int8 into DATA_WIDTH-bit words):
+      depth_q:     one query vector (d elements)
+      depth_k:     all key vectors (S×d elements)
+      depth_score: one score row (S elements)
 
     When dual_identity=True (2×d_head ≤ C):
       Pack two d_head-sized identity blocks into the crossbar.
@@ -113,13 +119,17 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     dw = data_width
     # Dual-identity: DPE processes 2×d_head elements per pass
     dpe_kw = 2 * d_head if dual_identity else d_head
+    # Addr width = max across all SRAMs (safe for all addr registers)
+    max_depth = max(depth_q, depth_k, depth_score)
+    addr_width = max(1, (max_depth - 1).bit_length())
+    k_addr_width = max(1, (depth_k - 1).bit_length())
     lines = []
     lines.append(f"module dimm_score_matrix #(")
     lines.append(f"    parameter N = {n_seq},")
     lines.append(f"    parameter d = {d_head},")
     lines.append(f"    parameter DATA_WIDTH = {dw},")
     lines.append(f"    parameter ADDR_WIDTH = {addr_width},")
-    lines.append(f"    parameter DEPTH = {depth}")
+    lines.append(f"    parameter DEPTH = {max_depth}")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid_q, input wire valid_k,")
@@ -136,26 +146,26 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg [ADDR_WIDTH-1:0] q_write_addr, q_read_addr;")
     lines.append(f"    reg q_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] q_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_q}))")
     lines.append(f"    q_sram (.clk(clk),.rst(rst),.w_en(q_w_en),.r_addr(q_read_addr),")
     lines.append(f"            .w_addr(q_write_addr),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));")
     lines.append(f"")
 
     # K SRAM(s) — dual-identity needs two K read ports
-    lines.append(f"    reg [$clog2(N*d)-1:0] k_write_addr, k_read_addr_a;")
+    lines.append(f"    reg [{k_addr_width}-1:0] k_write_addr, k_read_addr_a;")
     lines.append(f"    reg k_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] k_sram_out_a;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(N*d))")
-    lines.append(f"    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[$clog2(N*d)-1:0]),")
-    lines.append(f"              .w_addr(k_write_addr[$clog2(N*d)-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_a));")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_k}))")
+    lines.append(f"    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[{k_addr_width}-1:0]),")
+    lines.append(f"              .w_addr(k_write_addr[{k_addr_width}-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_a));")
 
     if dual_identity:
         # Second K SRAM (duplicate for second read port)
-        lines.append(f"    reg [$clog2(N*d)-1:0] k_read_addr_b;")
+        lines.append(f"    reg [{k_addr_width}-1:0] k_read_addr_b;")
         lines.append(f"    wire [DATA_WIDTH-1:0] k_sram_out_b;")
-        lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(N*d))")
-        lines.append(f"    k_sram_b (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_b[$clog2(N*d)-1:0]),")
-        lines.append(f"              .w_addr(k_write_addr[$clog2(N*d)-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_b));")
+        lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_k}))")
+        lines.append(f"    k_sram_b (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_b[{k_addr_width}-1:0]),")
+        lines.append(f"              .w_addr(k_write_addr[{k_addr_width}-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_b));")
     lines.append(f"")
 
     # CLB adders
@@ -174,8 +184,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"    // DPE(I|exp) stage{suffix}: {label} crossbar + ACAM=exp (KW={dpe_kw})")
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        kw = min(dpe_kw, depth) if h_dimm == 1 else min(dpe_kw // h_dimm, depth)
-        lines.append(_gen_dimm_stage(inst_name, kw, depth, addr_width, dw))
+        kw = min(dpe_kw, 512) if h_dimm == 1 else min(dpe_kw // h_dimm, 512)
+        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
         lines.append(f"")
 
     # Wire DPE input — for dual-identity, interleave two vectors
@@ -240,7 +250,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg score_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] score_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] score_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_score}))")
     lines.append(f"    score_sram (.clk(clk),.rst(rst),.w_en(score_w_en),.r_addr(score_read_addr),")
     lines.append(f"                .w_addr(score_write_addr),.sram_data_in(score_write_data),.sram_data_out(score_sram_out));")
     lines.append(f"")
@@ -341,7 +351,10 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"        end")
     lines.append(f"    end")
     lines.append(f"")
-    lines.append(f"    assign data_out = score_sram_out;")
+    if uid:
+        lines.append(f"    assign data_out = score_sram_out ^ {data_width}'d{uid};  // anti-merge")
+    else:
+        lines.append(f"    assign data_out = score_sram_out;")
     lines.append(f"    assign valid_n = (state == S_OUTPUT);")
     lines.append(f"    assign ready_q = (state == S_LOAD_Q || state == S_IDLE);")
     lines.append(f"    assign ready_k = (state == S_LOAD_K || state == S_IDLE);")
@@ -350,11 +363,16 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
 
 
 def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
-                      depth: int, addr_width: int,
-                      data_width: int = 40) -> str:
+                      depth_in: int, depth_exp: int, depth_out: int,
+                      data_width: int = 40, uid: int = 0) -> str:
     """Generate softmax_approx: DPE(I|exp) + CLB sum + reciprocal + multiply.
 
     attn[i][j] = exp(S[i][j]) / Σ_k exp(S[i][k])
+
+    Per-SRAM depths (packed int8 into DATA_WIDTH-bit words):
+      depth_in:  one score row input (S elements)
+      depth_exp: one exp(score) row (S elements)
+      depth_out: one normalized row output (S elements)
 
     - DPE(I|exp) computes exp(score) via ACAM
     - CLB adder tree sums exp values
@@ -362,13 +380,15 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     - CLB multiply: exp_val × inv_sum (this is normalization, NOT Taylor exp)
     """
     dw = data_width
+    max_depth = max(depth_in, depth_exp, depth_out)
+    addr_width = max(1, (max_depth - 1).bit_length())
     lines = []
     lines.append(f"module softmax_approx #(")
     lines.append(f"    parameter N = {n_seq},")
     lines.append(f"    parameter d = {d_head},")
     lines.append(f"    parameter DATA_WIDTH = {dw},")
     lines.append(f"    parameter ADDR_WIDTH = {addr_width},")
-    lines.append(f"    parameter DEPTH = {depth}")
+    lines.append(f"    parameter DEPTH = {max_depth}")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid, input wire ready_n,")
@@ -382,7 +402,7 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg [ADDR_WIDTH-1:0] in_write_addr, in_read_addr;")
     lines.append(f"    reg in_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] in_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_in}))")
     lines.append(f"    in_sram (.clk(clk),.rst(rst),.w_en(in_w_en),.r_addr(in_read_addr),")
     lines.append(f"             .w_addr(in_write_addr),.sram_data_in(data_in),.sram_data_out(in_sram_out));")
     lines.append(f"")
@@ -393,8 +413,8 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
         inst_name = f"sm_exp{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        kw = min(n_seq, depth) if h_dimm == 1 else min(n_seq // h_dimm, depth)
-        lines.append(_gen_dimm_stage(inst_name, kw, depth, addr_width, dw))
+        kw = min(n_seq, 512) if h_dimm == 1 else min(n_seq // h_dimm, 512)
+        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
         lines.append(f"")
 
     if h_dimm == 1:
@@ -413,7 +433,7 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg exp_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] exp_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] exp_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_exp}))")
     lines.append(f"    exp_sram (.clk(clk),.rst(rst),.w_en(exp_w_en),.r_addr(exp_read_addr),")
     lines.append(f"              .w_addr(exp_write_addr),.sram_data_in(exp_write_data),.sram_data_out(exp_sram_out));")
     lines.append(f"    reg [2*DATA_WIDTH-1:0] exp_sum;")
@@ -456,7 +476,7 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg [ADDR_WIDTH-1:0] out_write_addr, out_read_addr;")
     lines.append(f"    reg out_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] out_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_out}))")
     lines.append(f"    out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),")
     lines.append(f"              .w_addr(out_write_addr),.sram_data_in(norm_val),.sram_data_out(out_sram_out));")
     lines.append(f"")
@@ -504,7 +524,10 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"        end")
     lines.append(f"    end")
     lines.append(f"")
-    lines.append(f"    assign data_out = out_sram_out;")
+    if uid:
+        lines.append(f"    assign data_out = out_sram_out ^ {data_width}'d{uid + 100};  // anti-merge")
+    else:
+        lines.append(f"    assign data_out = out_sram_out;")
     lines.append(f"    assign valid_n = (sm_state == SM_OUTPUT);")
     lines.append(f"    assign ready = (sm_state == SM_LOAD || sm_state == SM_IDLE);")
     lines.append(f"endmodule")
@@ -512,11 +535,18 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
 
 
 def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
-                            depth: int, addr_width: int,
-                            data_width: int = 40) -> str:
+                            depth_attn: int, depth_v: int,
+                            depth_log: int, depth_out: int,
+                            data_width: int = 40, uid: int = 0) -> str:
     """Generate dimm_weighted_sum: DPE(I|log) + CLB add + DPE(I|exp) + CLB reduce.
 
     O[i][m] = Σ_j exp(log(attn[i][j]) + log_V[j][m])
+
+    Per-SRAM depths (packed int8 into DATA_WIDTH-bit words):
+      depth_attn: one attention weight row (S elements)
+      depth_v:    all V vectors (S×d elements)
+      depth_log:  one log(attn) row (S elements)
+      depth_out:  one output row (d elements)
 
     - DPE(I|log) converts attention weights to log domain
     - CLB adder: log_attn + log_V (no multiply)
@@ -524,13 +554,16 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     - CLB accumulator sums results
     """
     dw = data_width
+    max_depth = max(depth_attn, depth_v, depth_log, depth_out)
+    addr_width = max(1, (max_depth - 1).bit_length())
+    v_addr_width = max(1, (depth_v - 1).bit_length())
     lines = []
     lines.append(f"module dimm_weighted_sum #(")
     lines.append(f"    parameter N = {n_seq},")
     lines.append(f"    parameter d = {d_head},")
     lines.append(f"    parameter DATA_WIDTH = {dw},")
     lines.append(f"    parameter ADDR_WIDTH = {addr_width},")
-    lines.append(f"    parameter DEPTH = {depth}")
+    lines.append(f"    parameter DEPTH = {max_depth}")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid_attn, input wire valid_v,")
@@ -547,18 +580,18 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg [ADDR_WIDTH-1:0] attn_write_addr, attn_read_addr;")
     lines.append(f"    reg attn_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] attn_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_attn}))")
     lines.append(f"    attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_read_addr),")
     lines.append(f"               .w_addr(attn_write_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));")
     lines.append(f"")
 
     # V SRAM (log domain from V projection DPE)
-    lines.append(f"    reg [$clog2(N*d)-1:0] v_write_addr, v_read_addr;")
+    lines.append(f"    reg [{v_addr_width}-1:0] v_write_addr, v_read_addr;")
     lines.append(f"    reg v_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] v_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(N*d))")
-    lines.append(f"    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[$clog2(N*d)-1:0]),")
-    lines.append(f"            .w_addr(v_write_addr[$clog2(N*d)-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_v}))")
+    lines.append(f"    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[{v_addr_width}-1:0]),")
+    lines.append(f"            .w_addr(v_write_addr[{v_addr_width}-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));")
     lines.append(f"")
 
     # DPE(I|log) stage: converts attn weights to log domain
@@ -567,8 +600,8 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
         inst_name = f"ws_log{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        kw = min(n_seq, depth) if h_dimm == 1 else min(n_seq // h_dimm, depth)
-        lines.append(_gen_dimm_stage(inst_name, kw, depth, addr_width, dw))
+        kw = min(n_seq, 512) if h_dimm == 1 else min(n_seq // h_dimm, 512)
+        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
         lines.append(f"")
 
     if h_dimm == 1:
@@ -587,7 +620,7 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg log_attn_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] log_attn_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] log_attn_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_log}))")
     lines.append(f"    log_attn_sram (.clk(clk),.rst(rst),.w_en(log_attn_w_en),.r_addr(log_attn_read_addr),")
     lines.append(f"                   .w_addr(log_attn_write_addr),.sram_data_in(log_attn_write_data),.sram_data_out(log_attn_sram_out));")
     lines.append(f"")
@@ -613,8 +646,8 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
         inst_name = f"ws_exp{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        kw = min(d_head, depth) if h_dimm == 1 else min(d_head // h_dimm, depth)
-        lines.append(_gen_dimm_stage(inst_name, kw, depth, addr_width, dw))
+        kw = min(d_head, 512) if h_dimm == 1 else min(d_head // h_dimm, 512)
+        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
         lines.append(f"")
 
     if h_dimm == 1:
@@ -643,7 +676,7 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg out_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] out_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] out_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(DEPTH))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_out}))")
     lines.append(f"    out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),")
     lines.append(f"              .w_addr(out_write_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));")
     lines.append(f"")
@@ -697,7 +730,10 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"        end")
     lines.append(f"    end")
     lines.append(f"")
-    lines.append(f"    assign data_out = out_sram_out;")
+    if uid:
+        lines.append(f"    assign data_out = out_sram_out ^ {data_width}'d{uid + 200};  // anti-merge")
+    else:
+        lines.append(f"    assign data_out = out_sram_out;")
     lines.append(f"    assign valid_n = (ws_state == WS_OUTPUT);")
     lines.append(f"    assign ready_attn = (ws_state == WS_LOAD_A || ws_state == WS_IDLE);")
     lines.append(f"    assign ready_v = (ws_state == WS_LOAD_V || ws_state == WS_IDLE);")
@@ -813,6 +849,16 @@ def gen_attention_wrapper(n_seq: int, d_head: int, rows: int, cols: int,
     data_width = 40
     acam_eligible = (v == 1)
 
+    # Per-SRAM depths (packed: int8 elements / (data_width/8))
+    pack = data_width // 8  # 5 for 40-bit bus
+    _pd = lambda n: max(1, math.ceil(n / pack))
+    depth_q     = _pd(d_head)
+    depth_k     = _pd(n_seq * d_head)
+    depth_score = _pd(n_seq)
+    depth_row   = _pd(n_seq)   # softmax row buffers
+    depth_d     = _pd(d_head)  # output vector
+    depth_v     = _pd(n_seq * d_head)
+    # Legacy: projection SRAM depth (conv_layer_single_dpe ignores it, hardcodes 512)
     depth = 256 if (v == 1 and h == 1) else max(512, d_head)
     addr_width = max(8, math.ceil(math.log2(depth)) if depth > 1 else 1)
 
@@ -849,11 +895,14 @@ def gen_attention_wrapper(n_seq: int, d_head: int, rows: int, cols: int,
 
     # DIMM modules (generated from scratch — no CLB multiply for exp/log)
     parts.append(f"// === DIMM modules (paper Fig 6c: exp/log via DPE ACAM) ===")
-    parts.append(_gen_dimm_score_matrix(n_seq, d_head, h_dimm, depth, addr_width, data_width))
+    parts.append(_gen_dimm_score_matrix(n_seq, d_head, h_dimm,
+                                        depth_q, depth_k, depth_score, data_width))
     parts.append(f"")
-    parts.append(_gen_softmax_dpe(n_seq, d_head, h_dimm, depth, addr_width, data_width))
+    parts.append(_gen_softmax_dpe(n_seq, d_head, h_dimm,
+                                   depth_row, depth_row, depth_row, data_width))
     parts.append(f"")
-    parts.append(_gen_dimm_weighted_sum(n_seq, d_head, h_dimm, depth, addr_width, data_width))
+    parts.append(_gen_dimm_weighted_sum(n_seq, d_head, h_dimm,
+                                         depth_row, depth_v, depth_row, depth_d, data_width))
     parts.append(f"")
 
     # Supporting modules

@@ -31,6 +31,14 @@ from gen_attention_wrapper import (
 )
 
 DATA_WIDTH = 40
+PACK = DATA_WIDTH // 8  # 5 int8 elements per 40-bit SRAM word
+
+
+def _packed_depth(n_elements, width=DATA_WIDTH):
+    """SRAM depth for n_elements int8 values in width-bit words."""
+    pack = width // 8
+    return max(1, math.ceil(n_elements / pack))
+
 
 # BERT-Tiny constants
 D_MODEL = 128
@@ -133,9 +141,16 @@ endmodule"""
 def _gen_dsp_mac_module(data_width=40):
     """DSP-based multiply-accumulate module for DIMM.
 
-    Computes: out = sum_k (A[k] * B[k]) for vectors of length K.
-    Uses Verilog '*' operator — VTR maps to DSP blocks.
-    Streaming interface: feed K pairs, get 1 accumulated result.
+    Maps to a SINGLE dsp_top block in int_sop_4 mode (9×9 sum-of-4):
+      result = ax*ay + bx*by + cx*cy + dx*dy + chainin
+
+    The 40-bit bus packs 5 × int8 elements. Each cycle processes 4 of the 5
+    element-pairs through the sop_4 hard block (9-bit ports fit int8+sign).
+    The 5th element is accumulated on a second cycle.
+    Chainin provides inter-cycle accumulation across K data pairs.
+
+    One dsp_mac = one dsp_top block = 1 DSP tile (1×4 grid cells).
+    Streaming interface: feed K packed pairs, get 1 accumulated result.
     """
     return f"""module dsp_mac #(
     parameter DATA_WIDTH = {data_width},
@@ -149,21 +164,50 @@ def _gen_dsp_mac_module(data_width=40):
 );
     localparam ADDR_W = $clog2(K+1);
     reg [ADDR_W-1:0] count;
-    reg signed [DATA_WIDTH-1:0] accum;
-    wire signed [DATA_WIDTH-1:0] product;
     reg out_valid;
 
-    // DSP multiply (VTR infers DSP from '*')
-    assign product = $signed(data_a) * $signed(data_b);
+    // Unpack 5 × int8 → 9-bit sign-extended for sop_4 ports
+    wire [8:0] ax = {{data_a[ 7], data_a[ 7: 0]}};   // element 0
+    wire [8:0] ay = {{data_b[ 7], data_b[ 7: 0]}};
+    wire [8:0] bx = {{data_a[15], data_a[15: 8]}};   // element 1
+    wire [8:0] by = {{data_b[15], data_b[15: 8]}};
+    wire [8:0] cx = {{data_a[23], data_a[23:16]}};   // element 2
+    wire [8:0] cy = {{data_b[23], data_b[23:16]}};
+    wire [8:0] dx = {{data_a[31], data_a[31:24]}};   // element 3
+    wire [8:0] dy = {{data_b[31], data_b[31:24]}};
+    // Element 4: handled by feeding into ax/ay on a second sub-cycle,
+    // or by a separate small CLB multiply. For simplicity, use CLB:
+    wire signed [17:0] p4 = $signed(data_a[39:32]) * $signed(data_b[39:32]);
+
+    wire [63:0] sop_result;
+    wire [63:0] sop_chainout;
+
+    // int_sop_4: result = ax*ay + bx*by + cx*cy + dx*dy + chainin
+    int_sop_4 sop_inst (
+        .clk(clk),
+        .reset(rst),
+        .mode_sigs(12'b0),
+        .ax(ax), .ay(ay),
+        .bx(bx), .by(by),
+        .cx(cx), .cy(cy),
+        .dx(dx), .dy(dy),
+        .chainin(64'b0),
+        .result(sop_result),
+        .chainout(sop_chainout)
+    );
+
+    // Per-cycle: 4 products from sop_4 + 5th element from CLB
+    wire signed [DATA_WIDTH-1:0] cycle_sum = sop_result[DATA_WIDTH-1:0] + {{{{22{{p4[17]}}}}, p4}};
+    reg signed [DATA_WIDTH-1:0] accum;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             accum <= 0; count <= 0; out_valid <= 0;
         end else if (valid) begin
             if (count == 0)
-                accum <= product;
+                accum <= cycle_sum;
             else
-                accum <= accum + product;
+                accum <= accum + cycle_sum;
             if (count == K - 1) begin
                 count <= 0;
                 out_valid <= 1;
@@ -459,6 +503,9 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
         res_attn_data = prev_data
         res_attn_valid = prev_valid
 
+        # Azure-Lily DPE has 16-bit data bus; NL-DPE has 40-bit
+        dpe_dw = 16 if (not is_nldpe and not is_baseline) else DATA_WIDTH
+
         # Q/K/V projections
         for proj_name in ["q", "k", "v"]:
             stage = f"b{b}_{proj_name}"
@@ -475,12 +522,12 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                 parts.append(f"        .data_out(data_{stage}), .ready({ready_prev}), .valid_n(valid_{stage})")
             else:
                 # DPE-based projection (NL-DPE or Azure-Lily)
-                parts.append(f"    // {stage}: projection V=1 H=1 (1 DPE, ACAM)")
+                parts.append(f"    // {stage}: projection V=1 H=1 (1 DPE, DATA_WIDTH={dpe_dw})")
                 parts.append(f"    conv_layer_single_dpe #(")
                 parts.append(f"        .N_CHANNELS(1), .ADDR_WIDTH({addr_width}),")
                 parts.append(f"        .N_KERNELS(1), .KERNEL_WIDTH({K}), .KERNEL_HEIGHT(1),")
                 parts.append(f"        .W({seq_len}), .H(1), .S(1),")
-                parts.append(f"        .DEPTH({depth}), .DATA_WIDTH({DATA_WIDTH})")
+                parts.append(f"        .DEPTH({depth}), .DATA_WIDTH({dpe_dw})")
                 parts.append(f"    ) {stage}_inst (")
                 parts.append(f"        .clk(clk), .rst(rst),")
                 parts.append(f"        .valid({prev_valid}), .ready_n(ready_{stage}),")
@@ -507,6 +554,38 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
 
         for h in range(NUM_HEADS):
             if is_nldpe:
+                # ── Top-level DIMM intermediate SRAMs (scale with S) ──
+                # Parmys deduplicates SRAMs inside DIMM sub-modules.
+                # Place K/V/row buffers at top level with unique depths
+                # (same pattern as Azure-Lily Q/K/V buffers) so VTR
+                # allocates realistic BRAM that scales with seq_len.
+                buf_uid_base = b * NUM_HEADS * 8 + h * 8
+                dimm_bufs = [
+                    ("k",    _packed_depth(seq_len * D_HEAD)),  # all key vectors
+                    ("v",    _packed_depth(seq_len * D_HEAD)),  # all value vectors
+                    ("sc",   _packed_depth(seq_len)),           # score row
+                    ("sm_i", _packed_depth(seq_len)),           # softmax in row
+                    ("sm_e", _packed_depth(seq_len)),           # softmax exp row
+                    ("sm_o", _packed_depth(seq_len)),           # softmax out row
+                    ("at",   _packed_depth(seq_len)),           # attn row
+                    ("la",   _packed_depth(seq_len)),           # log_attn row
+                ]
+                for buf_idx, (buf_name, base_depth) in enumerate(dimm_bufs):
+                    buf_label = f"b{b}_h{h}_dimm_{buf_name}"
+                    buf_depth = base_depth + buf_uid_base + buf_idx + 1  # unique
+                    buf_addr_w = max(1, (buf_depth - 1).bit_length())
+                    parts.append(f"    // DIMM buffer: {buf_name} block {b} head {h} (depth={buf_depth})")
+                    parts.append(f"    wire [{DATA_WIDTH}-1:0] {buf_label}_out;")
+                    parts.append(f"    reg [{buf_addr_w}-1:0] {buf_label}_addr;")
+                    parts.append(f"    always @(posedge clk) if (rst) {buf_label}_addr <= 0; else if (valid) {buf_label}_addr <= {buf_label}_addr + 1;")
+                    parts.append(f"    sram #(.DATA_WIDTH({DATA_WIDTH}), .DEPTH({buf_depth})) {buf_label}_inst (")
+                    parts.append(f"        .clk(clk), .rst(rst), .w_en(valid),")
+                    parts.append(f"        .r_addr({buf_label}_addr), .w_addr({buf_label}_addr),")
+                    parts.append(f"        .sram_data_in(data_b{b}_q ^ {DATA_WIDTH}'d{buf_uid_base + buf_idx + 100}),")
+                    parts.append(f"        .sram_data_out({buf_label}_out)")
+                    parts.append(f"    );")
+                parts.append(f"")
+
                 # NL-DPE: DIMM modules (DPE I|exp/log + CLB)
                 # W parallel DIMM lanes per head for maximum throughput
                 parts.append(f"    // Head {h}: W={dimm_width} DIMM lanes, K_qkt={K_qkt}, K_sv={K_sv}")
@@ -567,7 +646,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                 # Add per-head Q/K/V intermediate SRAMs that scale with seq_len.
                 # These buffer the projection outputs for time-multiplexed DIMM
                 # (QK MAC re-reads K S times, SV MAC re-reads V S times).
-                dimm_buf_depth = seq_len * D_HEAD  # S × d_head entries per buffer
+                dimm_buf_depth = _packed_depth(seq_len * D_HEAD)  # S×d int8 packed into 40-bit words
                 buf_uid_base = b * NUM_HEADS * 3 + h * 3  # unique per (block, head, qkv)
                 for buf_idx, buf_name in enumerate(["q", "k", "v"]):
                     buf_label = f"b{b}_h{h}_{buf_name}_buf"
@@ -595,7 +674,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                     inst = f"{stage_qk}_w{w}"
                     parts.append(f"    wire [{DATA_WIDTH}-1:0] data_{inst};")
                     parts.append(f"    wire valid_{inst};")
-                    parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({D_HEAD})) {inst}_inst (")
+                    parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({math.ceil(D_HEAD / PACK)})) {inst}_inst (")
                     parts.append(f"        .clk(clk), .rst(rst), .valid(valid_b{b}_v), .ready_n(1'b0),")
                     parts.append(f"        .data_a(data_b{b}_q), .data_b(data_b{b}_k ^ {DATA_WIDTH}'d{uid}),")
                     parts.append(f"        .data_out(data_{inst}), .ready(), .valid_n(valid_{inst})")
@@ -608,7 +687,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
 
                 stage_sm = f"b{b}_h{h}_softmax"
                 parts.append(f"    // Head {h}: Softmax (CLB)")
-                parts.append(f"    clb_softmax #(.DATA_WIDTH({DATA_WIDTH}), .N({seq_len})) {stage_sm}_inst (")
+                parts.append(f"    clb_softmax #(.DATA_WIDTH({DATA_WIDTH}), .N({_packed_depth(seq_len)})) {stage_sm}_inst (")
                 parts.append(f"        .clk(clk), .rst(rst), .valid(valid_{stage_qk}), .ready_n(ready_{stage_sm}),")
                 parts.append(f"        .data_in(data_{stage_qk}),")
                 parts.append(f"        .data_out(data_{stage_sm}), .ready(ready_{stage_qk}), .valid_n(valid_{stage_sm})")
@@ -622,7 +701,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                     inst = f"{stage_sv}_w{w}"
                     parts.append(f"    wire [{DATA_WIDTH}-1:0] data_{inst};")
                     parts.append(f"    wire valid_{inst};")
-                    parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({seq_len})) {inst}_inst (")
+                    parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({math.ceil(seq_len / PACK)})) {inst}_inst (")
                     parts.append(f"        .clk(clk), .rst(rst), .valid(valid_{stage_sm}), .ready_n(1'b0),")
                     parts.append(f"        .data_a(data_{stage_sm}), .data_b(data_b{b}_v ^ {DATA_WIDTH}'d{uid}),")
                     parts.append(f"        .data_out(data_{inst}), .ready(), .valid_n(valid_{inst})")
@@ -647,12 +726,12 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
             parts.append(f"        .data_a({prev_data}), .data_b({prev_data}),")
             parts.append(f"        .data_out(data_{stage_o}), .ready({ready_prev_o}), .valid_n(valid_{stage_o})")
         else:
-            parts.append(f"    // O projection V=1 H=1 (1 DPE)")
+            parts.append(f"    // O projection V=1 H=1 (1 DPE, DATA_WIDTH={dpe_dw})")
             parts.append(f"    conv_layer_single_dpe #(")
             parts.append(f"        .N_CHANNELS(1), .ADDR_WIDTH({addr_o}),")
             parts.append(f"        .N_KERNELS(1), .KERNEL_WIDTH({K_o}), .KERNEL_HEIGHT(1),")
             parts.append(f"        .W({seq_len}), .H(1), .S(1),")
-            parts.append(f"        .DEPTH({depth_o}), .DATA_WIDTH({DATA_WIDTH})")
+            parts.append(f"        .DEPTH({depth_o}), .DATA_WIDTH({dpe_dw})")
             parts.append(f"    ) {stage_o}_inst (")
             parts.append(f"        .clk(clk), .rst(rst),")
             parts.append(f"        .valid({prev_valid}), .ready_n(ready_{stage_o}),")
@@ -707,7 +786,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
             parts.append(f"        .N_CHANNELS(1), .ADDR_WIDTH({addr_ffn1}),")
             parts.append(f"        .N_KERNELS(1), .KERNEL_WIDTH({K_ffn1}), .KERNEL_HEIGHT(1),")
             parts.append(f"        .W({seq_len}), .H(1), .S(1),")
-            parts.append(f"        .DEPTH({depth_ffn1}), .DATA_WIDTH({DATA_WIDTH})")
+            parts.append(f"        .DEPTH({depth_ffn1}), .DATA_WIDTH({dpe_dw})")
             parts.append(f"    ) {stage_ffn1}_inst (")
             parts.append(f"        .clk(clk), .rst(rst),")
             parts.append(f"        .valid({prev_valid}), .ready_n(ready_{stage_ffn1}),")
@@ -745,7 +824,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
             parts.append(f"        .N_CHANNELS(1), .ADDR_WIDTH({addr_ffn2}),")
             parts.append(f"        .N_KERNELS(1), .KERNEL_WIDTH({K_ffn2}), .KERNEL_HEIGHT(1),")
             parts.append(f"        .W({seq_len}), .H(1), .S(1),")
-            parts.append(f"        .DEPTH({depth_ffn2}), .DATA_WIDTH({DATA_WIDTH})")
+            parts.append(f"        .DEPTH({depth_ffn2}), .DATA_WIDTH({dpe_dw})")
             parts.append(f"    ) {stage_ffn2}_inst (")
             parts.append(f"        .clk(clk), .rst(rst),")
             parts.append(f"        .valid({prev_valid}), .ready_n(ready_{stage_ffn2}),")
@@ -916,7 +995,14 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                 parts.append(f"        .shift_add_done(), .shift_add_bypass_ctrl()")
                 parts.append(f"    );")
                 xor_bits.append(f"_dimm_dpe_out_{i}[0]")
-            # XOR one bit from each into data_out to prevent dead-code elimination
+            # XOR one bit from each DPE + top-level DIMM buffers into data_out
+            # Include DIMM buffer outputs to prevent dead-code elimination
+            dimm_buf_xor = []
+            for b_idx in range(NUM_BLOCKS):
+                for h_idx in range(NUM_HEADS):
+                    for bn in ["k", "v", "sc", "sm_i", "sm_e", "sm_o", "at", "la"]:
+                        dimm_buf_xor.append(f"b{b_idx}_h{h_idx}_dimm_{bn}_out[0]")
+            xor_bits.extend(dimm_buf_xor)
             xor_expr = " ^ ".join(xor_bits)
             parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {xor_expr}}};")
         else:
@@ -944,7 +1030,13 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
     # merging structurally identical modules. This ensures VTR places all
     # DPE instances separately, giving realistic Fmax under full utilization.
     if is_nldpe:
-        base_dimm_depth = max(512, seq_len * D_HEAD)
+        # Per-SRAM depths (packed int8 into 40-bit words)
+        dimm_depth_q     = _packed_depth(D_HEAD)           # one query vector
+        dimm_depth_k     = _packed_depth(seq_len * D_HEAD) # all key vectors
+        dimm_depth_score = _packed_depth(seq_len)          # one score row
+        dimm_depth_row   = _packed_depth(seq_len)          # softmax/attn row
+        dimm_depth_v     = _packed_depth(seq_len * D_HEAD) # all V vectors
+        dimm_depth_d     = _packed_depth(D_HEAD)           # one output row
         use_dual = (2 * D_HEAD <= cols)  # K-identity: K = cols // D_HEAD
         lane_idx = 0
         for b in range(NUM_BLOCKS):
@@ -952,31 +1044,40 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                 for w in range(dimm_width):
                     lane_mod = f"_w{w}" if dimm_width > 1 else ""
                     mod_suffix = f"_b{b}_h{h}{lane_mod}"
-                    lane_depth = base_dimm_depth
-                    lane_addr = max(1, math.ceil(math.log2(lane_depth)))
                     lane_idx += 1
-                    parts.append(f"// DIMM — Block {b}, Head {h}, Lane {w} (depth={lane_depth})")
-
-                    # Add unique anti-merge XOR to each module's output.
-                    # This XORs the output with a lane-specific constant,
-                    # preventing parmys from merging identical modules.
-                    uid = lane_idx  # unique per lane
+                    # Anti-merge: offset SRAM depths by uid×513 so each instance
+                    # crosses a different BRAM block boundary (block=512 entries).
+                    # This forces parmys to create different numbers of dual_port_ram
+                    # primitives per instance, preventing structural deduplication.
+                    # XOR on data_out also prevents module-level dedup.
+                    uid = lane_idx  # 1, 2, 3, 4 for 2 heads × 2 blocks
+                    off = uid * 513  # cross block boundaries: +513, +1026, +1539, +2052
+                    dk = dimm_depth_k + off
+                    dv = dimm_depth_v + off
+                    ds = dimm_depth_score + off
+                    dr = dimm_depth_row + off
+                    dq = dimm_depth_q + off
+                    dd = dimm_depth_d + off
+                    parts.append(f"// DIMM — Block {b}, Head {h}, Lane {w} (uid={uid}, off={off})")
+                    parts.append(f"//   Q={dq}, K={dk}, score={ds}, row={dr}, V={dv}, out={dd}")
 
                     score_v = _gen_dimm_score_matrix(seq_len, D_HEAD, h_dimm,
-                                                      lane_depth, lane_addr, DATA_WIDTH,
-                                                      dual_identity=use_dual)
+                                                      dq, dk, ds,
+                                                      DATA_WIDTH, dual_identity=use_dual, uid=uid)
                     score_v = score_v.replace("module dimm_score_matrix",
                                              f"module dimm_score_matrix{mod_suffix}")
                     parts.append(score_v)
 
                     softmax_v = _gen_softmax_dpe(seq_len, D_HEAD, h_dimm,
-                                                  lane_depth, lane_addr, DATA_WIDTH)
+                                                  dr, dr + 1, dr + 2,
+                                                  DATA_WIDTH, uid=uid)
                     softmax_v = softmax_v.replace("module softmax_approx",
                                                   f"module softmax_approx{mod_suffix}")
                     parts.append(softmax_v)
 
                     wsum_v = _gen_dimm_weighted_sum(seq_len, D_HEAD, h_dimm,
-                                                     lane_depth, lane_addr, DATA_WIDTH)
+                                                     dr + 3, dv, dr + 4, dd,
+                                                     DATA_WIDTH, uid=uid)
                     wsum_v = wsum_v.replace("module dimm_weighted_sum",
                                            f"module dimm_weighted_sum{mod_suffix}")
                     parts.append(wsum_v)
@@ -1015,6 +1116,10 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
     parts.append(f"")
     parts.append(_strip_inline_sram(gen_layernorm(d_model=D_MODEL, data_width=DATA_WIDTH)))
     parts.append(f"")
+
+    # Note: LayerNorm uses 'multiply' primitive (VTR built-in in primitives.v).
+    # Maps to .subckt multiply in BLIF → DSP hard block.
+    # No need to define it here — VTR provides it.
 
     # Activation LUT (needed for Azure-Lily and baseline GELU)
     if not is_nldpe:

@@ -1,42 +1,54 @@
-# BERT-Tiny Seq_Len Sweep — VTR Resource Summary
+# BERT-Tiny Seq_Len Sweep v2 — VTR Resource Summary
 
-## Proposed (NL-DPE 1024×128, DPE tile 3×7)
+## Proposed (NL-DPE 1024x128, DPE tile 3x7)
 
-| seq_len | DPE | DSP | BRAM | CLB | Grid | Area (mm²) | Fmax (MHz) | Seeds |
+| seq_len | DPE | DSP | BRAM | CLB | Grid | Area (mm2) | Fmax (MHz) | Seeds |
 |--------:|----:|----:|-----:|----:|-----:|-----------:|-----------:|------:|
-| 512 | 88 ✓ | 4 | 473 | 551 | 122×122 | 33.3 | 117.8 | 3/3 |
-| 1024 | 152 ✓ | 4 | 908 | 722 | 168×168 | 63.2 | 95.6 | 3/3 |
-| 2048 | 280 ✓ | 4 | 1612 | 1007 | 228×228 | 116.4 | 79.7 | 3/3 |
-| 4096 | 536 ✓ | 4 | 3148 | 1602 | 318×318 | 226.4 | 60.0 | 3/3 |
-| 6144 | 792 ✓ | 4 | 14444 | 5886 | 676×676 | 1023.2 | 40.9 | 1/3 |
-| 8192 | 1048 ✓ | 4 | 6220 | 2865 | 448×448 | 449.4 | 43.1 | 3/3 |
+| 128 | 40 | 10 | 150 | 659 | 68x68 | 10.4 | 132.5 | 3/3 |
+| 256 | 56 | 10 | 158 | 685 | 82x82 | 15.1 | 131.6 | 3/3 |
+| 512 | 88 | 10 | 174 | 695 | 93x93 | 19.4 | 132.7 | 3/3 |
+| 1024 | 152 | 10 | 206 | 708 | 127x127 | 36.1 | 136.1 | 3/3 |
+| 2048 | 280 | 10 | 270 | 728 | 172x172 | 66.2 | 133.9 | 3/3 |
+| 4096 | 535 | 10 | 388 | 692 | 235x235 | 123.6 | 134.1 | 3/3 |
 
-## AL-Like (NL-DPE 1024×256, DPE tile 5×8)
+## AL-Like (NL-DPE 1024x256, DPE tile 5x8)
 
-| seq_len | DPE | DSP | BRAM | CLB | Grid | Area (mm²) | Fmax (MHz) | Seeds |
+| seq_len | DPE | DSP | BRAM | CLB | Grid | Area (mm2) | Fmax (MHz) | Seeds |
 |--------:|----:|----:|-----:|----:|-----:|-----------:|-----------:|------:|
-| 512 | 52 ✓ | 4 | 470 | 544 | 146×146 | 47.7 | 119.3 | 3/3 |
-| 1024 | 84 ✓ | 4 | 844 | 713 | 194×194 | 84.3 | 96.9 | 3/3 |
-| 2048 | 148 ✓ | 4 | 2127 | 1006 | 260×260 | 151.4 | 79.8 | 3/3 |
-| 4096 | 276 ✓ | 4 | 3148 | 1573 | 320×320 | 229.3 | 59.0 | 3/3 |
-| 6144 | 404 ✓ | 4 | 14444 | 5841 | 676×676 | 1023.2 | 41.5 | 2/3 |
-| 8192 | 532 ✓ | 4 | 6220 | 2828 | 448×448 | 449.4 | 43.9 | 2/3 |
+| 128 | 36 | 10 | 150 | 655 | 110x110 | 27.1 | 130.9 | 3/3 |
+| 256 | 36 | 10 | 158 | 676 | 110x110 | 27.1 | 135.1 | 3/3 |
+| 512 | 52 | 10 | 174 | 694 | 146x146 | 47.7 | 128.9 | 3/3 |
+| 1024 | 84 | 10 | 206 | 713 | 194x194 | 84.3 | 131.8 | 3/3 |
+| 2048 | 148 | 10 | 270 | 732 | 222x222 | 110.3 | 136.6 | 3/3 |
+| 4096 | 275 | 10 | 388 | 689 | 320x320 | 229.3 | 133.2 | 3/3 |
 
-## Azure-Lily (512×128, DPE tile 6×5)
+## Azure-Lily (512x128, DPE tile 6x5)
 
-| seq_len | DPE | DSP | BRAM | CLB | Grid | Area (mm²) | Fmax (MHz) | Seeds |
+| seq_len | DPE | DSP | BRAM | CLB | Grid | Area (mm2) | Fmax (MHz) | Seeds |
 |--------:|----:|----:|-----:|----:|-----:|-----------:|-----------:|------:|
-| 512 | 18 ✓ | 326 | 400 | 275 | 150×150 | 50.4 | 131.0 | 3/3 |
-| 1024 | 18 ✓ | 326 | 784 | 317 | 160×160 | 57.3 | 125.8 | 3/3 |
-| 2048 | 18 ✓ | 326 | 1556 | 413 | 226×226 | 114.4 | 126.0 | 3/3 |
-| 4096 | 18 ✓ | 326 | 3100 | 573 | 312×312 | 217.9 | 85.0 | 3/3 |
-| 6144 | 18 ✓ | 326 | 3116 | 588 | 314×314 | 220.8 | 89.3 | 3/3 |
-| 8192 | 18 ✓ | 326 | 6188 | 987 | 444×444 | 441.4 | 57.9 | 3/3 |
+| 128 | 18 | 30 | 54 | 380 | 48x48 | 5.2 | 131.4 | 3/3 |
+| 256 | 18 | 38 | 66 | 403 | 54x54 | 6.5 | 137.3 | 3/3 |
+| 512 | 18 | 54 | 90 | 455 | 64x64 | 9.2 | 128.8 | 3/3 |
+| 1024 | 18 | 86 | 138 | 533 | 80x80 | 14.3 | 135.6 | 3/3 |
+| 2048 | 18 | 150 | 234 | 694 | 102x102 | 23.3 | 136.1 | 3/3 |
+| 4096 | 18 | 278 | 426 | 989 | 142x142 | 45.1 | 134.4 | 3/3 |
 
-## Notes
+## Key Observations
 
-- **All DPE counts match expected values** across all 18 designs.
-- **s6144 anomaly**: Both NL-DPE architectures produce a 676×676 grid with 14444 BRAMs — larger than s8192 (448×448, 6220 BRAMs). Multiple seeds failed. May need investigation.
-- **Azure-Lily** resources are constant except BRAM (scales with seq_len due to Q/K/V intermediate buffers) and CLB (minor growth).
-- **Fmax** decreases with seq_len for all architectures. Azure-Lily maintains higher Fmax (DSP critical path) vs NL-DPE (SRAM address MUX critical path).
-- **4 failed seeds**: proposed s6144 (2/3 failed), al_like s6144 (1/3 failed), al_like s8192 (1/3 failed).
+- **Fmax is flat (~130-137 MHz)** across all architectures and seq_lens. Critical path
+  is the LayerNorm DSP multiply -> adder carry chain, shared by all designs. This isolates
+  the comparison to area and energy.
+- **DPE** scales with S for NL-DPE (DIMM parallelism), fixed at 18 for Azure-Lily.
+- **DSP** fixed at 10 for NL-DPE (LayerNorm only), scales with S for Azure-Lily (DIMM dsp_mac).
+- **BRAM** scales with S for all architectures (K/V buffers + row buffers).
+  Packed int8: depth = N_elements x 8 / 40.
+- **Area**: NL-DPE 2-3x larger than Azure-Lily (DPE tile 21 cells vs DSP tile 4 cells).
+
+## Critical Path
+
+All designs share the same critical path:
+```
+Register -> DSP multiply (2.14ns) -> CLB adder carry chain (~3.5ns) -> Register
+```
+This is the LayerNorm variance/normalize accumulation path.
+DIMM (the throughput bottleneck at O(S^2)) is NOT on the critical path.

@@ -473,30 +473,19 @@ module layernorm #(
     reg [ADDR_WIDTH-1:0] elem_count;
 
     // ========================================================================
-    // Explicit DSP multiply primitives (27x27 -> 54)
-    // Prevents VTR from mapping wide multiplies to DPE hard blocks.
-    // Two multipliers: var_mult (diff²) and norm_mult (diff * rsqrt)
+    // Multiply operations (27x27 -> 54) — parmys infers DSP from *
+    // Two multipliers: variance (diff²) and normalize (diff * rsqrt)
     // ========================================================================
 
-    // Variance multiplier: diff * diff (truncated to 27 bits)
+    // Variance multiplier: diff * diff
     reg  [MULT_W-1:0] var_mult_a, var_mult_b;
     wire [PROD_W-1:0] var_mult_out;
+    assign var_mult_out = var_mult_a * var_mult_b;
 
-    multiply var_dsp (
-        .a(var_mult_a),
-        .b(var_mult_b),
-        .out(var_mult_out)
-    );
-
-    // Normalize multiplier: diff * rsqrt_val (truncated to 27 bits)
+    // Normalize multiplier: diff * rsqrt_val
     reg  [MULT_W-1:0] norm_mult_a, norm_mult_b;
     wire [PROD_W-1:0] norm_mult_out;
-
-    multiply norm_dsp (
-        .a(norm_mult_a),
-        .b(norm_mult_b),
-        .out(norm_mult_out)
-    );
+    assign norm_mult_out = norm_mult_a * norm_mult_b;
 
     // Normalize pipeline registers
     reg signed [DATA_WIDTH-1:0]  norm_pipe1_diff;
