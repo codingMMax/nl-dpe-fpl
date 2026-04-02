@@ -66,32 +66,94 @@ Where C = crossbar column count (128 for both proposed and Azure-Lily).
 
 ### DPE
 
-```
-Projection + FFN DPEs (both archs, fixed):
-  proposed (1024×128):  (4×1×1 + 1×4 + 1×1) × 2 blocks = 18
-  al_like  (1024×256):  (4×1×1 + 1×2 + 1×1) × 2 blocks = 14
-  azurelily (512×128):  (4×1×1 + 1×4 + 1×1) × 2 blocks = 18
+**DPE tiling formula** for a linear layer with weight matrix (K×N):
 
-DIMM DPEs (NL-DPE only):
+```
+V = ceil(K / R)    — vertical tiles (input dimension / crossbar rows)
+H = ceil(N / C)    — horizontal tiles (output dimension / crossbar cols)
+DPEs per layer = V × H
+```
+
+S tokens stream through the same V×H DPE array sequentially.
+
+**Projection + FFN DPE count (all architectures):**
+
+Azure-Lily (R=512, C=128) example:
+
+```
+Q/K/V/O projections: weight = 128×128
+  V = ceil(128/512) = 1, H = ceil(128/128) = 1 → 1 DPE each, × 4 = 4
+
+FFN1: weight = 128×512
+  V = ceil(128/512) = 1, H = ceil(512/128) = 4 → 4 DPEs
+
+FFN2: weight = 512×128
+  V = ceil(512/512) = 1, H = ceil(128/128) = 1 → 1 DPE
+
+Per block = 4 + 4 + 1 = 9, × 2 blocks = 18 DPEs
+```
+
+All architectures:
+
+```
+  proposed  (R=1024, C=128): (4×1×1 + 1×4 + 1×1) × 2 = 18
+  al_like   (R=1024, C=256): (4×1×1 + 1×2 + 1×1) × 2 = 14
+  azurelily (R=512,  C=128): (4×1×1 + 1×4 + 1×1) × 2 = 18
+```
+
+**DIMM DPE count (NL-DPE only):**
+
+QK^T output is S×S. Each DPE covers C output columns. To compute one full
+row of the S×S score matrix requires `h_dimm = ceil(S / C)` DPEs in parallel.
+4 DIMM stages (score, softmax_exp, softmax_norm, weighted_sum) each need h_dimm DPEs.
+
+```
   h_dimm = ceil(S / C)
   dimm_dpes = 4 stages × h_dimm × 2 heads × 2 blocks = 16 × h_dimm
 
-Total NL-DPE DPEs = functional + 16 × ceil(S / C)
-Total Azure-Lily DPEs = functional (constant)
+  Total NL-DPE DPEs = functional + 16 × ceil(S / C)
+```
+
+**Azure-Lily DPEs = functional only (constant):**
+
+Azure-Lily uses DSPs (not DPEs) for DIMM, so DPE count does not scale with S.
+
+```
+  Total Azure-Lily DPEs = 18 (independent of S)
 ```
 
 ### DSP
 
-```
-LayerNorm DSPs (both archs, fixed):
-  5 LN modules × 2 multiply primitives = 10
+**LayerNorm DSPs (both architectures, fixed):**
 
-DIMM DSPs (Azure-Lily only):
-  W = ceil(S / C) = ceil(S / 128)
+```
+  5 LN modules × 2 multiply primitives = 10
+```
+
+**Azure-Lily DIMM DSPs (scales with S):**
+
+Azure-Lily's DIMM uses DSP MAC units instead of DPEs. The same parallelism
+formula applies: W = ceil(S / C) parallel `dsp_mac` instances per DIMM stage.
+Each `dsp_mac` computes one output column's dot product via the Verilog `*`
+operator, which VTR maps to DSP blocks.
+
+```
+  W = ceil(S / C) = ceil(S / 128)           — same as NL-DPE's h_dimm
   dimm_dsps = 4 stages × W × 2 heads × 2 blocks = 16 × W
 
-Total NL-DPE DSPs = 10 (ACAM replaces DSP for DIMM)
-Total Azure-Lily DSPs = 10 + 16 × ceil(S / 128)
+  Total Azure-Lily DSPs = 10 (LN) + 16 × ceil(S / 128) (DIMM)
+```
+
+Note: parmys may merge some `dsp_mac` instances (synthesizable `*` is mergeable,
+unlike NL-DPE's `dpe` hard block primitive). VTR-reported DSP count may be
+lower than the intended formula. We use VTR-reported count as ground truth.
+
+**NL-DPE DSPs (fixed):**
+
+NL-DPE uses ACAM for DIMM nonlinear operations (exp/log), eliminating DSP need.
+
+```
+  Total NL-DPE DSPs = 10 (LayerNorm only, ACAM handles DIMM)
 ```
 
 ### BRAM
