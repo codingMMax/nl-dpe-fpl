@@ -564,15 +564,47 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                 prev_data = f"data_b{b}_h{h}{last_sfx}_wsum"
             else:
                 # Azure-Lily or Baseline: DSP MAC + CLB softmax
+                # Add per-head Q/K/V intermediate SRAMs that scale with seq_len.
+                # These buffer the projection outputs for time-multiplexed DIMM
+                # (QK MAC re-reads K S times, SV MAC re-reads V S times).
+                dimm_buf_depth = seq_len * D_HEAD  # S × d_head entries per buffer
+                buf_uid_base = b * NUM_HEADS * 3 + h * 3  # unique per (block, head, qkv)
+                for buf_idx, buf_name in enumerate(["q", "k", "v"]):
+                    buf_label = f"b{b}_h{h}_{buf_name}_buf"
+                    buf_depth = dimm_buf_depth + buf_uid_base + buf_idx + 1  # unique depth
+                    buf_addr_w = max(1, (buf_depth - 1).bit_length())
+                    parts.append(f"    // DIMM intermediate buffer: {buf_name.upper()} for block {b} head {h} (depth={buf_depth})")
+                    parts.append(f"    wire [{DATA_WIDTH}-1:0] {buf_label}_out;")
+                    parts.append(f"    reg [{buf_addr_w}-1:0] {buf_label}_addr;")
+                    parts.append(f"    always @(posedge clk) if (rst) {buf_label}_addr <= 0; else if (valid) {buf_label}_addr <= {buf_label}_addr + 1;")
+                    parts.append(f"    sram #(.DATA_WIDTH({DATA_WIDTH}), .DEPTH({buf_depth})) {buf_label}_inst (")
+                    parts.append(f"        .clk(clk), .rst(rst), .w_en(valid),")
+                    parts.append(f"        .r_addr({buf_label}_addr), .w_addr({buf_label}_addr),")
+                    parts.append(f"        .sram_data_in(data_b{b}_{buf_name}), .sram_data_out({buf_label}_out)")
+                    parts.append(f"    );")
+
                 mac_mod = "dsp_mac"
                 mac_label = "DSP MAC"
+                W_dimm = math.ceil(seq_len / cols)  # DIMM parallelism = ceil(S/C)
+
+                # QK^T: W parallel dsp_mac instances (each with unique data_b XOR)
                 stage_qk = f"b{b}_h{h}_qk"
-                parts.append(f"    // Head {h}: QK^T ({mac_label})")
-                parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({D_HEAD})) {stage_qk}_inst (")
-                parts.append(f"        .clk(clk), .rst(rst), .valid(valid_b{b}_v), .ready_n(ready_{stage_qk}),")
-                parts.append(f"        .data_a(data_b{b}_q), .data_b(data_b{b}_k),")
-                parts.append(f"        .data_out(data_{stage_qk}), .ready(ready_b{b}_v), .valid_n(valid_{stage_qk})")
-                parts.append(f"    );")
+                parts.append(f"    // Head {h}: QK^T — W={W_dimm} parallel {mac_label} units")
+                for w in range(W_dimm):
+                    uid = b * NUM_HEADS * W_dimm * 2 + h * W_dimm * 2 + w + 1
+                    inst = f"{stage_qk}_w{w}"
+                    parts.append(f"    wire [{DATA_WIDTH}-1:0] data_{inst};")
+                    parts.append(f"    wire valid_{inst};")
+                    parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({D_HEAD})) {inst}_inst (")
+                    parts.append(f"        .clk(clk), .rst(rst), .valid(valid_b{b}_v), .ready_n(1'b0),")
+                    parts.append(f"        .data_a(data_b{b}_q), .data_b(data_b{b}_k ^ {DATA_WIDTH}'d{uid}),")
+                    parts.append(f"        .data_out(data_{inst}), .ready(), .valid_n(valid_{inst})")
+                    parts.append(f"    );")
+                # Use first instance for downstream pipeline signals
+                parts.append(f"    wire [{DATA_WIDTH}-1:0] data_{stage_qk} = data_{stage_qk}_w0;")
+                parts.append(f"    wire valid_{stage_qk} = valid_{stage_qk}_w0;")
+                parts.append(f"    wire ready_{stage_qk};")
+                parts.append(f"    assign ready_b{b}_v = 1'b1;")
 
                 stage_sm = f"b{b}_h{h}_softmax"
                 parts.append(f"    // Head {h}: Softmax (CLB)")
@@ -582,13 +614,23 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
                 parts.append(f"        .data_out(data_{stage_sm}), .ready(ready_{stage_qk}), .valid_n(valid_{stage_sm})")
                 parts.append(f"    );")
 
+                # Score×V: W parallel dsp_mac instances
                 stage_sv = f"b{b}_h{h}_sv"
-                parts.append(f"    // Head {h}: Score×V ({mac_label})")
-                parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({seq_len})) {stage_sv}_inst (")
-                parts.append(f"        .clk(clk), .rst(rst), .valid(valid_{stage_sm}), .ready_n(ready_{stage_sv}),")
-                parts.append(f"        .data_a(data_{stage_sm}), .data_b(data_b{b}_v),")
-                parts.append(f"        .data_out(data_{stage_sv}), .ready(ready_{stage_sm}), .valid_n(valid_{stage_sv})")
-                parts.append(f"    );")
+                parts.append(f"    // Head {h}: Score×V — W={W_dimm} parallel {mac_label} units")
+                for w in range(W_dimm):
+                    uid = b * NUM_HEADS * W_dimm * 2 + h * W_dimm * 2 + W_dimm + w + 1
+                    inst = f"{stage_sv}_w{w}"
+                    parts.append(f"    wire [{DATA_WIDTH}-1:0] data_{inst};")
+                    parts.append(f"    wire valid_{inst};")
+                    parts.append(f"    {mac_mod} #(.DATA_WIDTH({DATA_WIDTH}), .K({seq_len})) {inst}_inst (")
+                    parts.append(f"        .clk(clk), .rst(rst), .valid(valid_{stage_sm}), .ready_n(1'b0),")
+                    parts.append(f"        .data_a(data_{stage_sm}), .data_b(data_b{b}_v ^ {DATA_WIDTH}'d{uid}),")
+                    parts.append(f"        .data_out(data_{inst}), .ready(), .valid_n(valid_{inst})")
+                    parts.append(f"    );")
+                parts.append(f"    wire [{DATA_WIDTH}-1:0] data_{stage_sv} = data_{stage_sv}_w0;")
+                parts.append(f"    wire valid_{stage_sv} = valid_{stage_sv}_w0;")
+                parts.append(f"    wire ready_{stage_sv};")
+                parts.append(f"    assign ready_{stage_sm} = 1'b1;")
                 prev_valid, prev_data = f"valid_{stage_sv}", f"data_{stage_sv}"
             parts.append(f"")
 
@@ -787,46 +829,31 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
         else:
             parts.append(f"    assign data_out = {prev_data};")
     elif not is_nldpe and not is_baseline:
-        # Azure-Lily: DIMM DSP bank for attention parallelism.
-        # Same strategy as NL-DPE's W parallel DPE DIMM lanes, but using
-        # DSP MACs (Azure-Lily has no ACAM for exp/log in analog domain).
+        # Azure-Lily: W parallel dsp_mac instances per DIMM stage are already
+        # generated above (functional Verilog with * operator). VTR/parmys
+        # infers DSPs from these naturally. No bare DSP padding needed.
         #
-        # Functional pipeline: 18 DPEs (projections/FFN) + 8 dsp_mac (DIMM)
-        #   + 4 softmax + 5 LN + 4 residual + 1 embedding (CLB modules)
-        # Parmys-surviving DSPs: ~14 (10 from LN multiply + 4 from softmax *)
-        # Extra DSPs: standalone multiplies for DIMM parallelism
-        #   8 DIMM stages (QK^T + Score×V) × 2 heads × 2 blocks
-        #   W parallel DSP MACs per stage
-        parmys_base_dsp = 14  # LN multiply primitives (10) + softmax * (4)
-        target_dsps_al = 333  # available on Azure-Lily 150×150 FPGA
-        n_dimm_stages = NUM_HEADS * NUM_BLOCKS * 2  # QK^T + Score×V per head
-        W_dimm_dsp = (target_dsps_al - parmys_base_dsp) // n_dimm_stages
-        extra_dsps_al = n_dimm_stages * W_dimm_dsp
-        total_dsps_al = parmys_base_dsp + extra_dsps_al
-
+        # W = ceil(S/C) per DIMM stage, same parallelism as NL-DPE h_dimm.
+        # Total DIMM DSPs = 4 stages × W × 2 heads × 2 blocks = 16 × W
+        # Plus ~10 structural DSPs from LayerNorm multiply + softmax *.
+        W_al = math.ceil(seq_len / cols)
+        total_dimm_dsps_al = 16 * W_al
         parts.append(f"")
-        parts.append(f"    // ═══ DIMM DSP bank for attention parallelism ═══")
-        parts.append(f"    // {n_dimm_stages} DIMM stages × W={W_dimm_dsp} parallel DSP MACs = {extra_dsps_al}")
-        parts.append(f"    // + {parmys_base_dsp} structural DSPs (LN multiply + softmax)")
-        parts.append(f"    // Target: {total_dsps_al} DSPs (available: {target_dsps_al})")
+        parts.append(f"    // ═══ Azure-Lily DIMM: W={W_al} parallel DSP MACs per stage ═══")
+        parts.append(f"    // 4 stages × {W_al} × 2 heads × 2 blocks = {total_dimm_dsps_al} DIMM DSPs")
+        parts.append(f"    // + ~10 structural DSPs (LayerNorm multiply + softmax)")
 
-        # Generate W standalone DSP multiplies per DIMM stage
-        # Organized by block/head/operation for clarity
-        dsp_idx = 0
+        # XOR all parallel dsp_mac outputs + buffer SRAM outputs into data_out
+        xor_parts = []
         for b_idx in range(NUM_BLOCKS):
             for h_idx in range(NUM_HEADS):
                 for op in ["qk", "sv"]:
-                    parts.append(f"    // DIMM DSP bank: block {b_idx} head {h_idx} {op} (W={W_dimm_dsp})")
-                    for w in range(W_dimm_dsp):
-                        parts.append(f"    wire [{DATA_WIDTH}-1:0] _dimm_dsp_out_{dsp_idx};")
-                        parts.append(f"    reg [{DATA_WIDTH}-1:0] _dimm_dsp_reg_{dsp_idx};")
-                        parts.append(f"    assign _dimm_dsp_out_{dsp_idx} = $signed(data_in ^ {DATA_WIDTH}'d{dsp_idx + 1}) * $signed(data_in ^ {DATA_WIDTH}'d{dsp_idx + 2});")
-                        parts.append(f"    always @(posedge clk) _dimm_dsp_reg_{dsp_idx} <= _dimm_dsp_out_{dsp_idx};")
-                        dsp_idx += 1
-
-        # XOR all DIMM DSP outputs into data_out to prevent dead-code elimination
-        dsp_xor = " ^ ".join(f"_dimm_dsp_reg_{i}[0]" for i in range(extra_dsps_al))
-        parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {dsp_xor}}};")
+                    for w in range(W_al):
+                        xor_parts.append(f"data_b{b_idx}_h{h_idx}_{op}_w{w}[0]")
+                for buf_name in ["q", "k", "v"]:
+                    xor_parts.append(f"b{b_idx}_h{h_idx}_{buf_name}_buf_out[0]")
+        all_xor = " ^ ".join(xor_parts)
+        parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {all_xor}}};")
     elif is_baseline:
         # Baseline: all-DSP, no DPE. Same DIMM parallelism strategy.
         # Functional pipeline: 12 dsp_mac (proj/FFN) + 8 dsp_mac (DIMM) — all
@@ -861,7 +888,39 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
         dsp_xor = " ^ ".join(f"_dimm_dsp_reg_{i}[0]" for i in range(extra_dsps_bl))
         parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {dsp_xor}}};")
     else:
-        parts.append(f"    assign data_out = {prev_data};")
+        # NL-DPE: add bare DPE instances for DIMM DPEs to ensure correct
+        # resource count. Parmys merges the conv_layer_single_dpe instances
+        # inside DIMM modules (identical structure), so we add standalone
+        # DPE hard blocks with unique data_in XOR to prevent optimization.
+        if is_nldpe and total_dimm_dpes > 0:
+            parts.append(f"")
+            parts.append(f"    // ═══ DIMM DPE instances (bare hard blocks) ═══")
+            parts.append(f"    // {total_dimm_dpes} DPEs for DIMM stages across all blocks/heads")
+            parts.append(f"    // Each has unique data_in XOR to prevent parmys optimization")
+            xor_bits = []
+            for i in range(total_dimm_dpes):
+                parts.append(f"    wire [{DATA_WIDTH}-1:0] _dimm_dpe_out_{i};")
+                parts.append(f"    wire _dimm_msbsa_{i};")
+                parts.append(f"    dpe _dimm_dpe_{i} (")
+                parts.append(f"        .clk(clk), .reset(rst),")
+                parts.append(f"        .data_in(data_in ^ {DATA_WIDTH}'d{i + 1}),")
+                parts.append(f"        .nl_dpe_control(2'b00),")
+                parts.append(f"        .w_buf_en(1'b0),")
+                parts.append(f"        .shift_add_control(1'b0),")
+                parts.append(f"        .shift_add_bypass(1'b0),")
+                parts.append(f"        .load_output_reg(1'b0),")
+                parts.append(f"        .load_input_reg(1'b0),")
+                parts.append(f"        .MSB_SA_Ready(_dimm_msbsa_{i}),")
+                parts.append(f"        .data_out(_dimm_dpe_out_{i}),")
+                parts.append(f"        .dpe_done(), .reg_full(),")
+                parts.append(f"        .shift_add_done(), .shift_add_bypass_ctrl()")
+                parts.append(f"    );")
+                xor_bits.append(f"_dimm_dpe_out_{i}[0]")
+            # XOR one bit from each into data_out to prevent dead-code elimination
+            xor_expr = " ^ ".join(xor_bits)
+            parts.append(f"    assign data_out = {prev_data} ^ {{{DATA_WIDTH-1}'b0, {xor_expr}}};")
+        else:
+            parts.append(f"    assign data_out = {prev_data};")
 
     parts.append(f"endmodule")
     parts.append(f"")

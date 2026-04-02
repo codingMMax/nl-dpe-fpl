@@ -65,6 +65,11 @@ def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
 
     The DPE crossbar stores identity weights; ACAM does exp or log.
     From VTR's perspective, this is identical to a projection DPE.
+
+    Note: conv_layer_single_dpe hardcodes its internal SRAM to DEPTH=512
+    regardless of the parameter, so parmys merges identical instances.
+    The caller (gen_bert_tiny_wrapper) adds bare DPE hard blocks at the
+    top level to ensure the correct total DPE count for area/routing.
     """
     lines = []
     lines.append(f"    conv_layer_single_dpe #(")
