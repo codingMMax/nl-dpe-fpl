@@ -126,9 +126,27 @@ Azure-Lily uses DSPs (not DPEs) for DIMM, so DPE count does not scale with S.
 
 **LayerNorm DSPs (both architectures, fixed):**
 
+LayerNorm normalizes d_model=128 elements per token. Per token it requires:
+1. Mean: sum 128 elements → CLB adder tree (no DSP)
+2. Variance: 128 × `(x - mean)²` → **1 multiply DSP** (time-shared across 128 elements)
+3. Rsqrt(variance) → CLB LUT (no DSP)
+4. Normalize: 128 × `(x - mean) * rsqrt` → **1 multiply DSP** (time-shared)
+
+Each LN module has 2 multiply primitives, time-shared across 128 elements and S tokens.
+More tokens (larger S) = more cycles through the same 2 multipliers, not more multipliers.
+
 ```
-  5 LN modules × 2 multiply primitives = 10
+  5 LN modules × 2 multiply primitives = 10 DSPs
+    - 1 embedding LN
+    - 2 per block × 2 blocks = 4 (post-attention LN + post-FFN LN)
 ```
+
+Why not scale with S? LayerNorm is never the bottleneck:
+```
+  LayerNorm latency ≈ S × 128 × (cycles per element)
+  DIMM latency      ≈ S × 128 × 64 × (cycles per element)
+```
+DIMM is ~64× slower. Adding more LN multipliers saves <2% total latency.
 
 **Azure-Lily DIMM DSPs (scales with S):**
 
