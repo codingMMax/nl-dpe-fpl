@@ -176,13 +176,45 @@ NL-DPE uses ACAM for DIMM nonlinear operations (exp/log), eliminating DSP need.
 
 ### BRAM
 
-Driven by intermediate SRAM depths:
-- DIMM buffers: depth = S × d_head per submodule (both archs)
-- Softmax buffer: depth = S (Azure-Lily clb_softmax)
-- Projection SRAMs: depth = 512 (fixed)
-- CLB module SRAMs: depth = 128 (fixed)
+**Per-stage BRAM access in the attention pipeline (per head):**
 
-Actual BRAM count determined by VTR packing.
+| Stage | Read from | Write to | Dominant size |
+|-------|-----------|----------|---------------|
+| QK^T | Q buffer (S×64), K buffer (S×64) | Score buffer (S×S) | **S×S** |
+| Softmax | Score buffer (S×S) | Exp SRAM (S per row), Attn buffer (S×S) | **S×S** |
+| Score×V | Attn buffer (S×S), V buffer (S×64) | Output buffer (S×64) | **S×S** |
+
+The S×S score and attention matrices dominate BRAM — this is where the O(S²) BRAM
+scaling comes from. The Q/K/V buffers (S×64 each) are linear in S.
+
+**How BRAM is implemented in RTL:**
+
+We declare behavioral SRAMs with the depth each buffer needs:
+```verilog
+sram #(.DATA_WIDTH(40), .DEPTH(S * 64)) q_buf_inst (...)   // Q buffer
+sram #(.DATA_WIDTH(40), .DEPTH(S * 64)) k_buf_inst (...)   // K buffer
+```
+
+The `sram` module is a behavioral `reg` array (`reg [DATA_WIDTH-1:0] mem [DEPTH-1:0]`).
+Parmys synthesizes this into `dual_port_ram` primitives in the BLIF, then VTR's
+packer maps each into physical memory blocks. Each VTR memory block holds up to
+512×40 entries, so a 65536-deep SRAM (S=1024, d_head=64) becomes ~128 physical
+memory blocks. We don't control the packing — VTR decides the BRAM count.
+
+**SRAM depths in the RTL:**
+
+| Buffer | Depth | Scaling | Location |
+|--------|-------|---------|----------|
+| Q/K/V intermediate (Azure-Lily) | S × d_head | O(S) | Top-level, per head |
+| DIMM submodule SRAMs (NL-DPE) | S × d_head | O(S) | Inside dimm_score_matrix, etc. |
+| Softmax buffer (Azure-Lily) | S | O(S) | Inside clb_softmax |
+| Projection/FFN SRAMs | 512 | Fixed | Inside conv_layer_single_dpe |
+| CLB module SRAMs (LN, residual) | 128 | Fixed | Inside layernorm, residual_add |
+
+Note: The S×S score/attention matrices are not stored in a single SRAM. They are
+computed and consumed row by row (S elements per row), streamed through the pipeline.
+The SRAM depth = S×d_head (not S×S) because each DIMM submodule buffers the input
+matrices (Q, K, V), not the full score matrix.
 
 ## Expected Resource Counts
 
