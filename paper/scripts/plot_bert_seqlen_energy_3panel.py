@@ -82,8 +82,8 @@ dimm_ratio_p2 = [_get("azurelily", N, "energy_dimm_pj") / _get("al_like", N, "en
 
 # ── Plot ─────────────────────────────────────────────────────────────────
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(7.16, 2.6),
-                                     gridspec_kw={'width_ratios': [1, 1, 0.9]})
-fig.subplots_adjust(wspace=0.45, top=0.78, bottom=0.18)
+                                     gridspec_kw={'width_ratios': [1, 1, 1]})
+fig.subplots_adjust(wspace=0.50, top=0.78, bottom=0.18, left=0.06, right=0.98)
 
 # ── Panel left: DIMM vs Proj+FFN vs Other stacked bars ──────────────────
 bar_w = 0.25
@@ -133,97 +133,108 @@ fig.legend(handles=left_handles, loc='upper center', ncol=3, fontsize=4.5,
            frameon=True, framealpha=0.9, bbox_to_anchor=bbox_left,
            columnspacing=0.5, handletextpad=0.3)
 
-# ── Panel middle: DIMM-internal DPE (analog) vs Digital ──────────────────
-DPE_COLOR = "#B5EAD7"     # mint green
-FABRIC_COLOR = "#FFDAC1"  # peach/yellow
+# ── Panel middle: 3-category stacked bars, normalized to min per S ───────
+# Crossbar vs Conversion (ACAM/ADC) vs Digital (DSP+CLB+BRAM)
+# Highlights the ADC→ACAM replacement benefit
+CAT3_GROUPS = [
+    ("Crossbar",       ["energy_crossbar_pj"]),
+    ("Conversion (ACAM/ADC)", ["energy_adc_acam_pj"]),
+    ("Digital Fabric (DSP+CLB)", ["energy_clb_pj", "energy_dsp_pj", "energy_bram_pj"]),
+]
+CAT3_LABELS = [g[0] for g in CAT3_GROUPS]
+CAT3_COLORS = ["#2B9E8F", "#B5EAD7", "#FFDAC1"]  # dark teal, mint, peach
 
 for ai, arch in enumerate(arch_list):
     offset = (ai - 1) * bar_w
     hatch = arch_hatch[arch]
-    dpe = dimm_dpe_pct[arch]
-    fab = [100 - d for d in dpe]
+    for i, N in enumerate(SEQ_LENS):
+        cat_vals = [sum(_get(arch, N, k) for k in keys) for _, keys in CAT3_GROUPS]
+        total = sum(cat_vals)
+        all_totals = [sum(sum(_get(a, N, k) for k in keys)
+                         for _, keys in CAT3_GROUPS) for a in arch_list]
+        min_total = min(all_totals)
+        scale = total / min_total if min_total > 0 else 1.0
+        bottom = 0
+        for ci, cv in enumerate(cat_vals):
+            h = (cv / total) * scale if total > 0 else 0
+            ax2.bar(x[i] + offset, h, bar_w * 0.9, bottom=bottom,
+                    color=CAT3_COLORS[ci], edgecolor='white', linewidth=0.3,
+                    hatch=hatch, zorder=3)
+            bottom += h
+    if arch == "azurelily":
+        for i, N in enumerate(SEQ_LENS):
+            all_totals = [sum(sum(_get(a, N, k) for k in keys)
+                             for _, keys in CAT3_GROUPS) for a in arch_list]
+            min_total = min(all_totals)
+            al_total = sum(sum(_get(arch, N, k) for k in keys) for _, keys in CAT3_GROUPS)
+            ratio = al_total / min_total if min_total > 0 else 1.0
+            ax2.text(x[i] + (2 - 1) * bar_w, ratio + 0.03, f'{ratio:.1f}\u00d7',
+                     ha='center', va='bottom', fontsize=4, fontweight='bold',
+                     color='#333', zorder=5)
 
-    for i in range(n_groups):
-        ax2.bar(x[i] + offset, dpe[i], bar_w * 0.9, color=DPE_COLOR,
-                edgecolor='white', linewidth=0.5, hatch=hatch, zorder=3)
-        ax2.bar(x[i] + offset, fab[i], bar_w * 0.9, bottom=dpe[i],
-                color=FABRIC_COLOR, edgecolor='white', linewidth=0.5,
-                hatch=hatch, zorder=3)
-        if dpe[i] > 30:
-            ax2.text(x[i] + offset, dpe[i] / 2, f'{dpe[i]:.0f}%',
-                     ha='center', va='center', fontsize=3.5,
-                     fontweight='bold', color='black', zorder=5)
-
-ax2.axhline(y=50, color='black', linewidth=1.0, linestyle='--', alpha=0.7, zorder=5)
-ax2.set_yticks([0, 25, 50, 75, 100])
+ax2.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
+            alpha=BASELINE_ALPHA)
 ax2.set_xticks(x)
 ax2.set_xticklabels([str(N) for N in SEQ_LENS])
 ax2.set_xlabel('Sequence Length (N)')
-ax2.set_ylabel('DIMM Energy Breakdown (%)')
-ax2.set_ylim(0, 105)
+ax2.set_ylabel('Normalized Energy (min = 1.0)')
+ax2.set_ylim(0, None)
 ax2.grid(True, alpha=0.08, axis='y', zorder=0)
 
 # Middle panel legend
-d_handles = [
-    mpatches.Patch(facecolor=DPE_COLOR, edgecolor='white', label='IMC block'),
-    mpatches.Patch(facecolor=FABRIC_COLOR, edgecolor='white', label='FPGA fabric'),
-]
-mid_handles = a_handles + d_handles
+cat3_handles = [mpatches.Patch(facecolor=CAT3_COLORS[ci], edgecolor='white',
+                label=CAT3_LABELS[ci]) for ci in range(3)]
+mid_handles = a_handles + cat3_handles
 bbox_mid = (ax2.get_position().x0 + ax2.get_position().width / 2, LEGEND_Y)
-fig.legend(handles=mid_handles, loc='upper center', ncol=3, fontsize=4.5,
+fig.legend(handles=mid_handles, loc='upper center', ncol=3, fontsize=4,
            frameon=True, framealpha=0.9, bbox_to_anchor=bbox_mid,
-           columnspacing=0.5, handletextpad=0.3)
+           columnspacing=0.3, handletextpad=0.2)
 
-# ── Panel right: Energy ratio lines (AL / P1 and AL / P2) ───────────────
-COLOR_P1 = '#2E86AB'
-COLOR_P2 = '#E05263'
+# ── Panel right: Normalized Inf/J/mm² (Azure-Lily = 1.0) ────────────────
+# Metric: (throughput_per_j / area) normalized to Azure-Lily per S.
+# >1 means better area-energy efficiency than Azure-Lily.
+import matplotlib.lines as mlines
 
-ax3.plot(x, energy_ratio_p1, color=COLOR_P1, linewidth=2,
-         marker='o', markersize=5, markeredgecolor='white', markeredgewidth=0.8,
-         label='Overall', zorder=4)
-ax3.plot(x, dimm_ratio_p1, color=COLOR_P1, linewidth=1.5, linestyle='--',
-         marker='s', markersize=3, markeredgecolor='white', markeredgewidth=0.8,
-         label='DIMM only', zorder=3)
-ax3.plot(x, energy_ratio_p2, color=COLOR_P2, linewidth=2,
-         marker='^', markersize=5, markeredgecolor='white', markeredgewidth=0.8,
-         zorder=4)
-ax3.plot(x, dimm_ratio_p2, color=COLOR_P2, linewidth=1.5, linestyle='--',
-         marker='D', markersize=3, markeredgecolor='white', markeredgewidth=0.8,
-         zorder=3)
+ARCH_SCATTER = {
+    "proposed":  {"color": "#2B9E8F", "marker": "o", "label": "Proposed-1"},
+    "al_like":   {"color": "#E8853D", "marker": "s", "label": "Proposed-2"},
+    "azurelily": {"color": "#9B59B6", "marker": "^", "label": "Azure-Lily"},
+}
 
-# Asymptotic lines + annotations
-ax3.axhline(y=1.4, color='#555', linewidth=0.8, linestyle=':', alpha=0.5)
-ax3.axhline(y=1.6, color='#555', linewidth=0.8, linestyle=':', alpha=0.5)
-ax3.text(0.3, 1.4, '1.4\u00d7', fontsize=7, color='#555', fontweight='bold', fontstyle='italic', va='bottom')
-ax3.text(1.0, 1.6, '1.6\u00d7', fontsize=7, color='#555', fontweight='bold', fontstyle='italic', va='bottom')
+# Compute Azure-Lily baseline per S
+al_eff = []
+for N in SEQ_LENS:
+    tj = _get("azurelily", N, "throughput_per_j")
+    a = _get("azurelily", N, "used_area_mm2")
+    al_eff.append(tj / a)
+
+for arch in arch_list:
+    tput_j = [_get(arch, N, "throughput_per_j") for N in SEQ_LENS]
+    areas = [_get(arch, N, "used_area_mm2") for N in SEQ_LENS]
+    eff = [tj / a for tj, a in zip(tput_j, areas)]
+    norm = [e / al for e, al in zip(eff, al_eff)]  # normalized to AL = 1.0
+    s = ARCH_SCATTER[arch]
+    ax3.plot(x, norm, color=s["color"], linewidth=1.8,
+             marker=s["marker"], markersize=5,
+             markeredgecolor='white', markeredgewidth=0.6,
+             label=s["label"], zorder=4)
+    # Annotate values
+    for i, N in enumerate(SEQ_LENS):
+        if arch != "azurelily":
+            ax3.annotate(f'{norm[i]:.2f}', (x[i], norm[i]),
+                         textcoords="offset points",
+                         xytext=(0, 7) if arch == "proposed" else (0, -12),
+                         fontsize=4.5, color=s["color"], fontweight='bold',
+                         ha='center')
 
 ax3.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
             alpha=BASELINE_ALPHA)
 ax3.set_xticks(x)
 ax3.set_xticklabels([str(N) for N in SEQ_LENS])
 ax3.set_xlabel('Sequence Length (N)')
-ax3.set_ylabel('Normalized Energy Consumption')
-all_ratios = energy_ratio_p1 + energy_ratio_p2 + dimm_ratio_p1 + dimm_ratio_p2
-ymin = min(min(all_ratios), 1.0) * 0.9
-ymax = max(all_ratios) * 1.1
-ax3.set_ylim(ymin, ymax)
-
-# Right panel legend: 2 columns — arch colors + line styles
-import matplotlib.lines as mlines
-arch_handles = [
-    mlines.Line2D([], [], color=COLOR_P1, linewidth=2, label='Proposed-1'),
-    mlines.Line2D([], [], color=COLOR_P2, linewidth=2, label='Proposed-2'),
-]
-style_handles = [
-    mlines.Line2D([], [], color='black', linewidth=1.5, linestyle='-', label='Overall'),
-    mlines.Line2D([], [], color='black', linewidth=1.5, linestyle='--', label='DIMM only'),
-]
-all_handles = arch_handles + style_handles
-bbox_right = (ax3.get_position().x0 + ax3.get_position().width / 2, LEGEND_Y)
-fig.legend(handles=all_handles, loc='upper center', ncol=2, fontsize=5,
-           frameon=True, framealpha=0.9, bbox_to_anchor=bbox_right,
-           columnspacing=0.8, handletextpad=0.3)
-ax3.grid(True, alpha=0.1)
+ax3.set_ylabel('Normalized Inf/J/mm²\n(Azure-Lily = 1.0)')
+ax3.grid(True, alpha=0.15)
+ax3.legend(fontsize=5, loc='upper right', frameon=True, framealpha=0.9)
 
 fig.savefig(OUT_PATH)
 print(f"Saved: {OUT_PATH}")
