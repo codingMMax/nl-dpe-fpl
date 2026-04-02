@@ -84,6 +84,30 @@
 | BRAM | AL-Like | 150 | 158 | 174 | 206 | 270 | 388 |
 | BRAM | Azure-Lily | 54 | 66 | 90 | 138 | 234 | 426 |
 
+## Performance Comparison (Fixed Fmax, with Streaming Pipeline)
+
+### Proposed (NL-DPE 1024x128) vs Azure-Lily
+
+| S | P1 Energy | AL Energy | E ratio | P1 Latency | AL Latency | Lat ratio | P1 Tput/J | AL Tput/J |
+|------:|----------:|----------:|--------:|-----------:|-----------:|----------:|----------:|----------:|
+| 128 | 9.2 MpJ | 15.9 MpJ | 0.58x | 906 us | 1407 us | 0.64x | 109005 | 62777 |
+| 256 | 33.1 MpJ | 52.2 MpJ | 0.63x | 2205 us | 5196 us | 0.42x | 30235 | 19169 |
+| 512 | 124.1 MpJ | 185.6 MpJ | 0.67x | 5974 us | 23752 us | 0.25x | 8059 | 5389 |
+| 1024 | 478.0 MpJ | 696.1 MpJ | 0.69x | 18242 us | 104764 us | 0.17x | 2092 | 1437 |
+| 2048 | 1871.6 MpJ | 2691.9 MpJ | 0.70x | 61810 us | 469113 us | 0.13x | 534 | 371 |
+| 4096 | 7397.5 MpJ | 10582.9 MpJ | 0.70x | 224959 us | 1976564 us | 0.11x | 135 | 94 |
+
+### AL-Like (NL-DPE 1024x256) vs Azure-Lily
+
+| S | P2 Energy | AL Energy | E ratio | P2 Latency | AL Latency | Lat ratio | P2 Tput/J | AL Tput/J |
+|------:|----------:|----------:|--------:|-----------:|-----------:|----------:|----------:|----------:|
+| 128 | 8.2 MpJ | 15.9 MpJ | 0.51x | 950 us | 1407 us | 0.68x | 122385 | 62777 |
+| 256 | 29.0 MpJ | 52.2 MpJ | 0.55x | 2304 us | 5196 us | 0.44x | 34542 | 19169 |
+| 512 | 107.5 MpJ | 185.6 MpJ | 0.58x | 6149 us | 23752 us | 0.26x | 9300 | 5389 |
+| 1024 | 411.6 MpJ | 696.1 MpJ | 0.59x | 18486 us | 104764 us | 0.18x | 2429 | 1437 |
+| 2048 | 1605.8 MpJ | 2691.9 MpJ | 0.60x | 61876 us | 469113 us | 0.13x | 623 | 371 |
+| 4096 | 6334.0 MpJ | 10582.9 MpJ | 0.60x | 223401 us | 1976564 us | 0.11x | 158 | 94 |
+
 ## Critical Path
 
 All designs: `Register -> DSP multiply (2.14ns) -> CLB adder carry chain (~3.5ns) -> Register`
@@ -91,3 +115,11 @@ All designs: `Register -> DSP multiply (2.14ns) -> CLB adder carry chain (~3.5ns
 This is the LayerNorm accumulation path — shared by all architectures.
 DIMM (throughput bottleneck, O(S^2)) is NOT on the critical path.
 Flat Fmax (~133 MHz) isolates the comparison to area and energy.
+
+## Key Takeaways
+
+- **Energy**: NL-DPE saves 30-49% vs Azure-Lily (analog ACAM replaces digital DSP)
+- **Latency**: NL-DPE is 1.5-9x faster (40-bit DPE bus + more parallel DPEs + pipeline overlap)
+- **Latency advantage grows with S**: NL-DPE's wider DPE bus and higher parallelism compound
+- **Fmax**: ~133 MHz for all (LayerNorm DSP critical path, fair comparison)
+- **Area**: NL-DPE uses 1.6-3.7x more area (DPE tile 5.25x larger than DSP tile)
