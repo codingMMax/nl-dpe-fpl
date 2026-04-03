@@ -107,14 +107,15 @@ for ai, arch in enumerate(arch_list):
             # Only annotate Proj+FFN for N=128,256,512 (first 3)
             if ck == "proj_ffn" and val > 2 and i < 3:
                 ax1.text(x[i] + offset, bottom + val / 2, f'{val:.0f}%',
-                         ha='center', va='center', fontsize=3.5,
+                         ha='center', va='center', fontsize=5,
                          fontweight='bold', color='black', zorder=5)
             bottom += val
 
 ax1.set_xticks(x)
 ax1.set_xticklabels([str(N) for N in SEQ_LENS])
-ax1.set_xlabel('Sequence Length (N)')
-ax1.set_ylabel('BERT-Tiny Energy Breakdown (%)')
+ax1.set_xlabel('Sequence Length (N)', fontsize=11)
+ax1.set_ylabel('Energy Breakdown (%)', fontsize=11, fontweight='normal')
+ax1.tick_params(axis='both', labelsize=10)
 ax1.set_ylim(0, 105)
 ax1.grid(True, alpha=0.08, axis='y', zorder=0)
 
@@ -129,7 +130,7 @@ c_handles = [mpatches.Patch(facecolor=cat_colors[ci], edgecolor='white',
 left_handles = a_handles + c_handles
 LEGEND_Y = 0.93
 bbox_left = (ax1.get_position().x0 + ax1.get_position().width / 2, LEGEND_Y)
-fig.legend(handles=left_handles, loc='upper center', ncol=3, fontsize=4.5,
+fig.legend(handles=left_handles, loc='upper center', ncol=3, fontsize=5.5,
            frameon=True, framealpha=0.9, bbox_to_anchor=bbox_left,
            columnspacing=0.5, handletextpad=0.3)
 
@@ -168,16 +169,17 @@ for ai, arch in enumerate(arch_list):
             min_total = min(all_totals)
             al_total = sum(sum(_get(arch, N, k) for k in keys) for _, keys in CAT3_GROUPS)
             ratio = al_total / min_total if min_total > 0 else 1.0
-            ax2.text(x[i] + (2 - 1) * bar_w, ratio + 0.03, f'{ratio:.1f}\u00d7',
-                     ha='center', va='bottom', fontsize=4, fontweight='bold',
+            ax2.text(x[i] + (2 - 1) * bar_w, 1.7, f'{ratio:.1f}\u00d7',
+                     ha='center', va='bottom', fontsize=6, fontweight='bold',
                      color='#333', zorder=5)
 
 ax2.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
             alpha=BASELINE_ALPHA)
 ax2.set_xticks(x)
 ax2.set_xticklabels([str(N) for N in SEQ_LENS])
-ax2.set_xlabel('Sequence Length (N)')
-ax2.set_ylabel('Normalized Energy (min = 1.0)')
+ax2.set_xlabel('Sequence Length (N)', fontsize=11)
+ax2.set_ylabel('Per-component breakdown', fontsize=9.5, fontweight='normal')
+ax2.tick_params(axis='both', labelsize=10)
 ax2.set_ylim(0, None)
 ax2.grid(True, alpha=0.08, axis='y', zorder=0)
 
@@ -186,55 +188,60 @@ cat3_handles = [mpatches.Patch(facecolor=CAT3_COLORS[ci], edgecolor='white',
                 label=CAT3_LABELS[ci]) for ci in range(3)]
 mid_handles = a_handles + cat3_handles
 bbox_mid = (ax2.get_position().x0 + ax2.get_position().width / 2, LEGEND_Y)
-fig.legend(handles=mid_handles, loc='upper center', ncol=3, fontsize=4,
+fig.legend(handles=mid_handles, loc='upper center', ncol=3, fontsize=5.5,
            frameon=True, framealpha=0.9, bbox_to_anchor=bbox_mid,
            columnspacing=0.3, handletextpad=0.2)
 
-# ── Panel right: Normalized Inf/J/mm² (Azure-Lily = 1.0) ────────────────
-# Metric: (throughput_per_j / area) normalized to Azure-Lily per S.
-# >1 means better area-energy efficiency than Azure-Lily.
+# ── Panel right: Energy ratio (Azure-Lily / Proposed) ──────────────────
 import matplotlib.lines as mlines
 
-ARCH_SCATTER = {
-    "proposed":  {"color": "#2B9E8F", "marker": "o", "label": "Proposed-1"},
-    "al_like":   {"color": "#E8853D", "marker": "s", "label": "Proposed-2"},
-    "azurelily": {"color": "#9B59B6", "marker": "^", "label": "Azure-Lily"},
-}
+# Overall energy ratio
+ax3.plot(x, energy_ratio_p1, color='#2B9E8F', linewidth=1.8, linestyle='-',
+         marker='o', markersize=5, markeredgecolor='white', markeredgewidth=0.6,
+         label='Azure-Lily / Proposed-1', zorder=4)
+ax3.plot(x, energy_ratio_p2, color='#E8853D', linewidth=1.8, linestyle='-',
+         marker='s', markersize=5, markeredgecolor='white', markeredgewidth=0.6,
+         label='Azure-Lily / Proposed-2', zorder=4)
 
-# Compute Azure-Lily baseline per S
-al_eff = []
-for N in SEQ_LENS:
-    tj = _get("azurelily", N, "throughput_per_j")
-    a = _get("azurelily", N, "used_area_mm2")
-    al_eff.append(tj / a)
+# DIMM-only energy ratio
+ax3.plot(x, dimm_ratio_p1, color='#2B9E8F', linewidth=1.2, linestyle='--',
+         marker='o', markersize=3, markeredgecolor='white', markeredgewidth=0.5,
+         label='DIMM (AL / P1)', zorder=3, alpha=0.7)
+ax3.plot(x, dimm_ratio_p2, color='#E8853D', linewidth=1.2, linestyle='--',
+         marker='s', markersize=3, markeredgecolor='white', markeredgewidth=0.5,
+         label='DIMM (AL / P2)', zorder=3, alpha=0.7)
 
-for arch in arch_list:
-    tput_j = [_get(arch, N, "throughput_per_j") for N in SEQ_LENS]
-    areas = [_get(arch, N, "used_area_mm2") for N in SEQ_LENS]
-    eff = [tj / a for tj, a in zip(tput_j, areas)]
-    norm = [e / al for e, al in zip(eff, al_eff)]  # normalized to AL = 1.0
-    s = ARCH_SCATTER[arch]
-    ax3.plot(x, norm, color=s["color"], linewidth=1.8,
-             marker=s["marker"], markersize=5,
-             markeredgecolor='white', markeredgewidth=0.6,
-             label=s["label"], zorder=4)
-    # Annotate values
-    for i, N in enumerate(SEQ_LENS):
-        if arch != "azurelily":
-            ax3.annotate(f'{norm[i]:.2f}', (x[i], norm[i]),
-                         textcoords="offset points",
-                         xytext=(0, 7) if arch == "proposed" else (0, -12),
-                         fontsize=4.5, color=s["color"], fontweight='bold',
-                         ha='center')
+# Asymptotic lines
+asymp_p1 = energy_ratio_p1[-1]
+asymp_p2 = energy_ratio_p2[-1]
+ax3.axhline(y=asymp_p1, color='#555', linewidth=1.0, linestyle='--', alpha=0.5)
+ax3.text(x[1], asymp_p1 + 0.01, f'{asymp_p1:.1f}\u00d7', ha='center', va='bottom',
+         fontsize=9, color='#555', fontweight='bold')
+ax3.axhline(y=asymp_p2, color='#555', linewidth=1.0, linestyle='--', alpha=0.5)
+ax3.text(x[1], asymp_p2 + 0.01, f'{asymp_p2:.1f}\u00d7', ha='center', va='bottom',
+         fontsize=9, color='#555', fontweight='bold')
 
 ax3.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
             alpha=BASELINE_ALPHA)
 ax3.set_xticks(x)
 ax3.set_xticklabels([str(N) for N in SEQ_LENS])
-ax3.set_xlabel('Sequence Length (N)')
-ax3.set_ylabel('Normalized Inf/J/mm²\n(Azure-Lily = 1.0)')
+ax3.set_xlabel('Sequence Length (N)', fontsize=11)
+ax3.set_ylabel('Total energy ratio', fontsize=11, fontweight='normal')
+ax3.tick_params(axis='both', labelsize=10)
+ax3.set_ylim(bottom=0.9)
 ax3.grid(True, alpha=0.15)
-ax3.legend(fontsize=5, loc='upper right', frameon=True, framealpha=0.9)
+
+# Right panel legend: 2x2
+r_handles = [
+    mlines.Line2D([], [], color='#2B9E8F', linewidth=1.5, label='AL / Proposed-1'),
+    mlines.Line2D([], [], color='#E8853D', linewidth=1.5, label='AL / Proposed-2'),
+    mlines.Line2D([], [], color='black', linewidth=1.5, linestyle='-', label='Overall'),
+    mlines.Line2D([], [], color='black', linewidth=1.2, linestyle='--', alpha=0.7, label='DIMM only'),
+]
+bbox_right = (ax3.get_position().x0 + ax3.get_position().width / 2, LEGEND_Y)
+fig.legend(handles=r_handles, loc='upper center', ncol=2, fontsize=5.5,
+           frameon=True, framealpha=0.9, bbox_to_anchor=bbox_right,
+           columnspacing=0.5, handletextpad=0.3)
 
 fig.savefig(OUT_PATH)
 print(f"Saved: {OUT_PATH}")

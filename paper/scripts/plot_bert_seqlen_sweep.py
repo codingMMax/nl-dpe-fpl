@@ -244,95 +244,96 @@ def plot_efficiency():
 
 
 def plot_efficiency_varfmax():
-    """Variable vs Fixed Fmax: shows architectural potential vs implementation reality."""
-    import matplotlib.lines as mlines
+    """Efficiency with reported (VTR) frequency + raw Fmax panel."""
 
     def _getv(arch, S, key):
         return data_var[(arch, S)][key]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 2.8))
-    fig.subplots_adjust(wspace=0.25, top=0.85)
+    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(7.16, 2.6),
+                                         gridspec_kw={'width_ratios': [1, 1, 1]})
+    fig.subplots_adjust(wspace=0.35, top=0.78, bottom=0.18, left=0.06, right=0.98)
 
-    # ── Left panel: Tput/mm² — fixed (potential) vs variable (reality) ──
+    # ── Left panel: Tput/mm² (reported Fmax) ──
     for arch in ["proposed", "al_like"]:
         dn = DISPLAY[arch]
         color = ARCH_COLORS[dn]
-
-        ys_fix = [_get(arch, S, "throughput_per_mm2") / _get("azurelily", S, "throughput_per_mm2")
-                  for S in SEQ_LENS]
-        ys_var = [_getv(arch, S, "throughput_per_mm2") / _getv("azurelily", S, "throughput_per_mm2")
-                  for S in SEQ_LENS]
-
-        # Fixed Fmax (dashed — potential)
-        ax1.plot(SEQ_LENS, ys_fix, color=color, linewidth=1.2,
-                 linestyle='--', alpha=0.5)
-        # Variable Fmax (solid — reality)
-        ax1.plot(SEQ_LENS, ys_var, color=color, linewidth=2,
+        ys = [_getv(arch, S, "throughput_per_mm2") / _getv("azurelily", S, "throughput_per_mm2")
+              for S in SEQ_LENS]
+        ax1.plot(SEQ_LENS, ys, color=color, linewidth=2,
                  linestyle=ARCH_LINESTYLES[dn],
                  marker=ARCH_MARKERS[dn], markersize=5,
                  markeredgecolor="white", markeredgewidth=0.8)
-        # Shaded gap
-        ax1.fill_between(SEQ_LENS, ys_var, ys_fix, color=color, alpha=0.15)
 
+    # Azure-Lily flat line at 1.0×
+    ax1.plot(SEQ_LENS, [1.0] * len(SEQ_LENS), color=ARCH_COLORS["Azure-Lily"], linewidth=2,
+             linestyle=ARCH_LINESTYLES["Azure-Lily"],
+             marker=ARCH_MARKERS["Azure-Lily"], markersize=5,
+             markeredgecolor="white", markeredgewidth=0.8)
     _setup_xaxis(ax1)
-    ax1.set_ylabel('Norm. Inference/s/mm\u00b2')
-    all_vals = ([_get(a, S, "throughput_per_mm2") / _get("azurelily", S, "throughput_per_mm2")
-                 for a in ["proposed", "al_like"] for S in SEQ_LENS] +
-                [_getv(a, S, "throughput_per_mm2") / _getv("azurelily", S, "throughput_per_mm2")
-                 for a in ["proposed", "al_like"] for S in SEQ_LENS])
+    ax1.tick_params(axis='both', labelsize=10)
+    ax1.set_ylabel('Inference/s/mm\u00b2', fontsize=13, fontweight='normal')
+    ax1.set_xlabel('Sequence Length (N)', fontsize=11)
+    all_vals = [_getv(a, S, "throughput_per_mm2") / _getv("azurelily", S, "throughput_per_mm2")
+                for a in ["proposed", "al_like"] for S in SEQ_LENS]
     ax1.set_ylim(bottom=min(min(all_vals), 0.7) * 0.9, top=max(all_vals) * 1.15)
     ax1.grid(True, alpha=0.1)
-    # Asymptotic lines (full width, annotations offset)
-    p1_asymp = _get("proposed", SEQ_LENS[-1], "throughput_per_mm2") / _get("azurelily", SEQ_LENS[-1], "throughput_per_mm2")
-    p2_asymp = _get("al_like", SEQ_LENS[-1], "throughput_per_mm2") / _get("azurelily", SEQ_LENS[-1], "throughput_per_mm2")
-    ax1.axhline(y=p1_asymp, color='#555', linewidth=0.8, linestyle=':', alpha=0.5)
-    ax1.axhline(y=p2_asymp, color='#555', linewidth=0.8, linestyle=':', alpha=0.5)
-    ax1.text(1500, 1.4, f'{p1_asymp:.2f}\u00d7', fontsize=6, color='#555', fontweight='bold', va='center')
-    ax1.text(1500, 1.2, f'{p2_asymp:.2f}\u00d7', fontsize=6, color='#555', fontweight='bold', va='center')
 
-    # ── Right panel: Inf/J — same treatment ──
+    # ── Right panel: Inf/J (reported Fmax) ──
     for arch in ["proposed", "al_like"]:
         dn = DISPLAY[arch]
         color = ARCH_COLORS[dn]
-
-        ys_fix = [_get(arch, S, "throughput_per_j") / _get("azurelily", S, "throughput_per_j")
-                  for S in SEQ_LENS]
-        ys_var = [_getv(arch, S, "throughput_per_j") / _getv("azurelily", S, "throughput_per_j")
-                  for S in SEQ_LENS]
-
-        ax2.plot(SEQ_LENS, ys_fix, color=color, linewidth=1.2,
-                 linestyle='--', alpha=0.5)
-        ax2.plot(SEQ_LENS, ys_var, color=color, linewidth=2,
+        ys = [_getv(arch, S, "throughput_per_j") / _getv("azurelily", S, "throughput_per_j")
+              for S in SEQ_LENS]
+        ax2.plot(SEQ_LENS, ys, color=color, linewidth=2,
                  linestyle=ARCH_LINESTYLES[dn],
                  marker=ARCH_MARKERS[dn], markersize=5,
                  markeredgecolor="white", markeredgewidth=0.8)
-        ax2.fill_between(SEQ_LENS, ys_var, ys_fix, color=color, alpha=0.15)
 
+    # Azure-Lily flat line at 1.0×
+    ax2.plot(SEQ_LENS, [1.0] * len(SEQ_LENS), color=ARCH_COLORS["Azure-Lily"], linewidth=2,
+             linestyle=ARCH_LINESTYLES["Azure-Lily"],
+             marker=ARCH_MARKERS["Azure-Lily"], markersize=5,
+             markeredgecolor="white", markeredgewidth=0.8)
     _setup_xaxis(ax2)
-    ax2.set_ylabel('Norm. Inference/s/J')
-    all_vals = ([_get(a, S, "throughput_per_j") / _get("azurelily", S, "throughput_per_j")
-                 for a in ["proposed", "al_like"] for S in SEQ_LENS] +
-                [_getv(a, S, "throughput_per_j") / _getv("azurelily", S, "throughput_per_j")
-                 for a in ["proposed", "al_like"] for S in SEQ_LENS])
+    ax2.tick_params(axis='both', labelsize=10)
+    ax2.set_ylabel('Inference/J', fontsize=13, fontweight='normal')
+    ax2.set_xlabel('Sequence Length (N)', fontsize=11)
+    all_vals = [_getv(a, S, "throughput_per_j") / _getv("azurelily", S, "throughput_per_j")
+                for a in ["proposed", "al_like"] for S in SEQ_LENS]
     ax2.set_ylim(bottom=min(min(all_vals), 0.8) * 0.9, top=max(all_vals) * 1.15)
     ax2.grid(True, alpha=0.1)
-    # Asymptotic lines (full width, annotations offset)
-    p1_asymp_j = _get("proposed", SEQ_LENS[-1], "throughput_per_j") / _get("azurelily", SEQ_LENS[-1], "throughput_per_j")
-    p2_asymp_j = _get("al_like", SEQ_LENS[-1], "throughput_per_j") / _get("azurelily", SEQ_LENS[-1], "throughput_per_j")
-    ax2.axhline(y=p1_asymp_j, color='#555', linewidth=0.8, linestyle=':', alpha=0.5)
-    ax2.axhline(y=p2_asymp_j, color='#555', linewidth=0.8, linestyle=':', alpha=0.5)
-    ax2.text(1500, 1.4, f'{p1_asymp_j:.2f}\u00d7', fontsize=6, color='#555', fontweight='bold', va='center')
-    ax2.text(1500, 1.7, f'{p2_asymp_j:.2f}\u00d7', fontsize=6, color='#555', fontweight='bold', va='center')
+
+    # Asymptotic lines at 1.4× and 1.7×
+    ax2.axhline(y=1.4, color='#555', linewidth=1.0, linestyle='--', alpha=0.5)
+    ax2.text(SEQ_LENS[1], 1.4 + 0.02, '1.4\u00d7', ha='center', va='bottom',
+             fontsize=8, color='#555', fontweight='bold')
+    ax2.axhline(y=1.7, color='#555', linewidth=1.0, linestyle='--', alpha=0.5)
+    ax2.text(SEQ_LENS[2], 1.7 + 0.02, '1.7\u00d7', ha='center', va='bottom',
+             fontsize=8, color='#555', fontweight='bold')
+
+    # ── First panel (ax0): Raw Fmax (MHz) ──
+    for arch in ["proposed", "al_like", "azurelily"]:
+        dn = DISPLAY[arch]
+        color = ARCH_COLORS[dn]
+        fmax_vals = [_getv(arch, S, "fmax_vtr") for S in SEQ_LENS]
+        ax0.plot(SEQ_LENS, fmax_vals, color=color, linewidth=2,
+                 linestyle=ARCH_LINESTYLES[dn],
+                 marker=ARCH_MARKERS[dn], markersize=5,
+                 markeredgecolor="white", markeredgewidth=0.8)
+
+    _setup_xaxis(ax0)
+    ax0.tick_params(axis='both', labelsize=10)
+    ax0.set_ylabel('Fmax (MHz)', fontsize=13, fontweight='normal')
+    ax0.set_xlabel('Sequence Length (N)', fontsize=11)
+    ax0.set_ylim(0, 160)
+    ax0.set_yticks([0, 40, 80, 120, 160])
+    ax0.grid(True, alpha=0.1)
 
     # Shared legend
     arch_h = [Patch(facecolor=ARCH_COLORS[DISPLAY[a]], label=DISPLAY[a])
-              for a in ["proposed", "al_like"]]
-    style_h = [
-        mlines.Line2D([], [], color='black', linewidth=2, linestyle='-', label='Reported Frequency'),
-        mlines.Line2D([], [], color='black', linewidth=1.2, linestyle='--', alpha=0.5, label='Ideal Frequency'),
-    ]
-    fig.legend(handles=arch_h + style_h, loc='upper center', ncol=4, fontsize=6,
-               bbox_to_anchor=(0.5, 0.92), frameon=False, columnspacing=0.8)
+              for a in ["proposed", "al_like", "azurelily"]]
+    fig.legend(handles=arch_h, loc='upper center', ncol=3, fontsize=10,
+               bbox_to_anchor=(0.5, 0.93), frameon=False, columnspacing=0.8)
 
     out = FIG_DIR / "bert_seqlen_efficiency_varfmax.pdf"
     fig.savefig(out)
@@ -380,8 +381,9 @@ def plot_latency():
 
     ax1.set_xticks(x)
     ax1.set_xticklabels([str(N) for N in SEQ_LENS])
-    ax1.set_xlabel('Sequence Length (N)')
-    ax1.set_ylabel('Latency Breakdown (%)')
+    ax1.set_xlabel('Sequence Length (N)', fontsize=11)
+    ax1.set_ylabel('Latency Breakdown (%)', fontsize=13, fontweight='normal')
+    ax1.tick_params(axis='both', labelsize=10)
     ax1.set_ylim(0, 105)
     ax1.grid(True, alpha=0.08, axis='y')
 
@@ -396,8 +398,8 @@ def plot_latency():
         mpatches.Patch(facecolor=DIMM_COLOR, edgecolor='white', label='DIMM'),
         mpatches.Patch(facecolor=NONDIMM_COLOR, edgecolor='white', label='Non-DIMM'),
     ]
-    bbox_left = (ax1.get_position().x0 + ax1.get_position().width / 2, 0.92)
-    fig.legend(handles=a_handles + c_handles, loc='upper center', fontsize=4.5,
+    bbox_left = (ax1.get_position().x0 + ax1.get_position().width / 2, 1.0)
+    fig.legend(handles=a_handles + c_handles, loc='upper center', fontsize=8,
                frameon=True, framealpha=0.9, bbox_to_anchor=bbox_left,
                ncol=3, columnspacing=0.5, handletextpad=0.3)
 
@@ -406,38 +408,28 @@ def plot_latency():
     COLOR_P2 = '#7b8bff'
 
     for arch, color in [("proposed", COLOR_P1), ("al_like", COLOR_P2)]:
-        # Variable Fmax (reported — solid)
-        dimm_sp_var = [_getv("azurelily", S, "latency_dimm_ns") / _getv(arch, S, "latency_dimm_ns")
-                       for S in SEQ_LENS]
-        nondimm_sp_var = [_getv("azurelily", S, "latency_non_dimm_ns") / _getv(arch, S, "latency_non_dimm_ns")
-                          for S in SEQ_LENS]
-
-        # Fixed Fmax (ideal — dashed)
-        dimm_sp_fix = [_get("azurelily", S, "latency_dimm_ns") / _get(arch, S, "latency_dimm_ns")
-                       for S in SEQ_LENS]
-        nondimm_sp_fix = [_get("azurelily", S, "latency_non_dimm_ns") / _get(arch, S, "latency_non_dimm_ns")
-                          for S in SEQ_LENS]
+        # Reported Fmax only
+        dimm_sp = [_getv("azurelily", S, "latency_dimm_ns") / _getv(arch, S, "latency_dimm_ns")
+                   for S in SEQ_LENS]
+        nondimm_sp = [_getv("azurelily", S, "latency_non_dimm_ns") / _getv(arch, S, "latency_non_dimm_ns")
+                      for S in SEQ_LENS]
 
         # DIMM speedup
-        ax2.plot(SEQ_LENS, dimm_sp_var, color=color, linewidth=2, linestyle='-',
+        ax2.plot(SEQ_LENS, dimm_sp, color=color, linewidth=2, linestyle='-',
                  marker='s', markersize=4, markeredgecolor='white', markeredgewidth=0.8, zorder=4)
-        ax2.plot(SEQ_LENS, dimm_sp_fix, color=color, linewidth=1.2, linestyle='--',
-                 alpha=0.5, zorder=3)
-        ax2.fill_between(SEQ_LENS, dimm_sp_var, dimm_sp_fix, color=color, alpha=0.1)
 
         # Non-DIMM speedup
-        ax2.plot(SEQ_LENS, nondimm_sp_var, color=color, linewidth=1.5, linestyle='-',
+        ax2.plot(SEQ_LENS, nondimm_sp, color=color, linewidth=1.5, linestyle='-',
                  marker='^', markersize=3, markeredgecolor='white', markeredgewidth=0.8,
                  alpha=0.7, zorder=4)
-        ax2.plot(SEQ_LENS, nondimm_sp_fix, color=color, linewidth=1.0, linestyle='--',
-                 alpha=0.3, zorder=3)
-        ax2.fill_between(SEQ_LENS, nondimm_sp_var, nondimm_sp_fix, color=color, alpha=0.05)
 
     _setup_xaxis(ax2)
-    ax2.set_ylabel('Speedup (over Azure-Lily)', labelpad=6)
+    ax2.set_xlabel('Sequence Length (N)', fontsize=11)
+    ax2.set_ylabel('Speedup', fontsize=13, fontweight='normal', labelpad=6)
+    ax2.tick_params(axis='both', labelsize=10)
     ax2.grid(True, alpha=0.1)
 
-    # Legend: arch colors + DIMM/nonDIMM markers + reported/ideal styles
+    # Legend: arch colors + DIMM/nonDIMM markers
     arch_h = [
         Patch(facecolor=COLOR_P1, label='Proposed-1'),
         Patch(facecolor=COLOR_P2, label='Proposed-2'),
@@ -446,14 +438,10 @@ def plot_latency():
         mlines.Line2D([], [], color='black', linewidth=2, marker='s', markersize=3, linestyle='-', label='DIMM'),
         mlines.Line2D([], [], color='black', linewidth=1.5, marker='^', markersize=3, linestyle='-', alpha=0.7, label='Non-DIMM'),
     ]
-    style_h = [
-        mlines.Line2D([], [], color='black', linewidth=2, linestyle='-', label='Reported Freq'),
-        mlines.Line2D([], [], color='black', linewidth=1.2, linestyle='--', alpha=0.5, label='Ideal Freq'),
-    ]
-    bbox_right = (ax2.get_position().x0 + ax2.get_position().width / 2, 0.92)
-    fig.legend(handles=arch_h + metric_h + style_h, loc='upper center', fontsize=4.5,
-               frameon=True, framealpha=0.9, bbox_to_anchor=bbox_right,
-               ncol=3, columnspacing=0.5, handletextpad=0.3)
+    bbox_right = (ax2.get_position().x0 + ax2.get_position().width / 2, 0.95)
+    fig.legend(handles=arch_h + metric_h, loc='upper center', fontsize=8,
+               frameon=True, framealpha=0.9, bbox_to_anchor=(ax2.get_position().x0 + ax2.get_position().width / 2, 1.0),
+               ncol=2, columnspacing=0.5, handletextpad=0.3)
 
     out = FIG_DIR / "bert_seqlen_latency.pdf"
     fig.savefig(out)

@@ -48,11 +48,11 @@ def main():
 
     cats = MODELS + ["Geomean"]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.16, 2.8))
-    fig.subplots_adjust(wspace=0.18)
+    fig.subplots_adjust(wspace=0.30)
 
     for ax, (metric, ylabel) in zip([ax1, ax2],
-            [('tput_mm2', 'Normalized Inference/s/mm\u00b2'),
-             ('tput_j', 'Normalized Inference/J')]):
+            [('tput_mm2', 'Inference/s/mm\u00b2'),
+             ('tput_j', 'Inference/J')]):
         x = np.arange(len(cats))
         w = 0.25
         max_val = 0
@@ -71,36 +71,12 @@ def main():
                             color=ARCH_COLORS[a], rotation=0)
 
         ax.axhline(y=1.0, color='#94A3B8', linewidth=1, linestyle=':', alpha=0.5, zorder=2)
-        ax.set_ylabel(ylabel)
+        ax.set_ylabel(ylabel, fontsize=13)
         ax.set_xticks(x)
         lbls = ax.set_xticklabels(cats)
         lbls[-1].set_fontweight('bold')
         ax.grid(True, alpha=0.08, axis="y", zorder=0)
         ax.set_ylim(bottom=0, top=max_val * 1.3)
-
-    # ── Secondary axis on energy panel: per-pass energy ratio ──
-    # Proposed (C=128): 53.0 pJ/pass, AL-like (C=256): 84.7 pJ/pass, Azure-Lily: 2385.9 pJ/pass
-    ax2r = ax2.twinx()
-    ratio_proposed = 2385.9 / 53.0    # ≈ 45×
-    ratio_allike = 2385.9 / 84.7      # ≈ 28× (C=256 → more ACAM energy)
-
-    ax2r.axhline(y=ratio_proposed, color="#B91C1C", linewidth=1.5,
-                 linestyle="--", alpha=0.7, zorder=1)
-    ax2r.text(len(cats) - 0.6, ratio_proposed + 0.8,
-              f"Proposed-1 / Azure-Lily: {ratio_proposed:.0f}\u00d7",
-              ha="right", va="bottom", fontsize=7, fontweight="bold",
-              color="#B91C1C", fontstyle="italic")
-
-    ax2r.axhline(y=ratio_allike, color="#475569", linewidth=1.5,
-                 linestyle="--", alpha=0.7, zorder=1)
-    ax2r.text(len(cats) - 0.6, ratio_allike + 0.8,
-              f"Proposed-2 / Azure-Lily: {ratio_allike:.0f}\u00d7",
-              ha="right", va="bottom", fontsize=7, fontweight="bold",
-              color="#475569", fontstyle="italic")
-
-    ax2r.set_ylabel("Energy Ratio per DPE Pass", color="#555")
-    ax2r.tick_params(axis="y", labelcolor="#555", labelsize=7)
-    ax2r.set_ylim(0, max_val * 1.3)
 
     handles = [Patch(facecolor=ARCH_COLORS[a], label=a) for a in ARCHS]
     fig.legend(handles=handles, loc='upper center', ncol=3, fontsize=12,
