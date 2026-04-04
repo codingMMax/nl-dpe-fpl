@@ -95,42 +95,62 @@ for name, cfg_file, R, C in ARCHS:
 
 # ── Plot: single row — energy bars + 3 area-scaled pie charts ────────────
 fig = plt.figure(figsize=(5.5, 2.0))
-ax1 = fig.add_axes([0.10, 0.18, 0.38, 0.68])
-
-# ── Panel (a): Vertical stacked bar chart — ACAM vs ADC energy ──────────
+# ── Panel (a): Broken Y-axis stacked bar chart ──────────────────────────
 arch_names = ["Proposed-1", "Proposed-2", "Azure-Lily"]
 x = np.arange(len(arch_names))
 bar_w = 0.5
 
+ax_bot = fig.add_axes([0.10, 0.18, 0.38, 0.38])
+ax_top = fig.add_axes([0.10, 0.58, 0.38, 0.28])
+
+for ax in [ax_bot, ax_top]:
+    for i, name in enumerate(arch_names):
+        r = pass_results[name]
+        acam_color = '#FFB3BA' if r["label"] == "ADC" else '#B5EAD7'
+        ax.bar(x[i], r["crossbar"], bar_w, color='#7EC8E3',
+               edgecolor='white', linewidth=0.5)
+        ax.bar(x[i], r["acam_adc"], bar_w, bottom=r["crossbar"],
+               color=acam_color, edgecolor='white', linewidth=0.5)
+
+# Bottom: 0-200 pJ (Proposed bars visible)
+ax_bot.set_ylim(0, 200)
+ax_bot.set_xticks(x)
+ax_bot.set_xticklabels(arch_names, fontsize=7)
+ax_bot.set_ylabel('')
+ax_bot.set_yticks([0, 50, 100, 150])
+ax_bot.grid(True, alpha=0.08, axis='y')
+
+# Top: 1400-1700 pJ (Azure-Lily bar top)
+ax_top.set_ylim(1400, 1700)
+ax_top.set_xticks(x)
+ax_top.set_xticklabels([])
+ax_top.grid(True, alpha=0.08, axis='y')
+ax_top.spines['bottom'].set_visible(False)
+ax_bot.spines['top'].set_visible(False)
+ax_top.tick_params(bottom=False)
+
+# Break marks
+d = 0.015
+kwargs = dict(transform=ax_top.transAxes, color='k', clip_on=False, linewidth=0.8)
+ax_top.plot((-d, +d), (-d, +d), **kwargs)
+ax_top.plot((1-d, 1+d), (-d, +d), **kwargs)
+kwargs.update(transform=ax_bot.transAxes)
+ax_bot.plot((-d, +d), (1-d, 1+d), **kwargs)
+ax_bot.plot((1-d, 1+d), (1-d, 1+d), **kwargs)
+
+# Annotations
 for i, name in enumerate(arch_names):
     r = pass_results[name]
-    ax1.bar(x[i], r["crossbar"], bar_w, color='#7EC8E3',
-            edgecolor='white', linewidth=0.5,
-            label='Crossbar+DAC' if i == 0 else None)
-    acam_color = '#FFB3BA' if r["label"] == "ADC" else '#B5EAD7'
-    ax1.bar(x[i], r["acam_adc"], bar_w, bottom=r["crossbar"],
-            color=acam_color, edgecolor='white', linewidth=0.5,
-            label=r["label"] if i == 0 or (i > 0 and r["label"] != pass_results[arch_names[i-1]]["label"]) else None)
-
     ratio_str = f'{r["total"]:.0f} pJ'
-    if name != "Proposed-1":
-        ratio_str += f'\n({r["total"]/pass_results["Proposed-1"]["total"]:.0f}\u00d7)'
     if name == "Azure-Lily":
-        # Put annotation at center of bar (log scale: geometric mean of bottom and top)
-        y_mid = (r["crossbar"] * r["total"]) ** 0.5
-        ax1.text(x[i], y_mid, ratio_str,
-                 ha='center', va='center', fontsize=6.5, fontweight='bold', color='black')
+        ax_top.text(x[i], r["total"] + 10, ratio_str,
+                    ha='center', va='bottom', fontsize=6.5, fontweight='bold')
     else:
-        ax1.text(x[i], r["total"] * 1.05, ratio_str,
-                 ha='center', va='bottom', fontsize=6.5, fontweight='bold')
+        ax_bot.text(x[i], r["total"] + 5, ratio_str,
+                    ha='center', va='bottom', fontsize=6.5, fontweight='bold')
 
-ax1.set_xticks(x)
-ax1.set_xticklabels(arch_names, fontsize=7)
-ax1.set_ylabel('')
-ax1.set_yscale('log')
-ax1.set_title('(a) Block Energy Breakdown', fontsize=8, fontweight='bold')
-ax1.legend(fontsize=6, loc='upper left', framealpha=0.9)
-ax1.grid(True, alpha=0.08, axis='y')
+ax_top.set_title('(a) Block Energy Breakdown', fontsize=8, fontweight='bold')
+ax1 = ax_bot  # keep reference
 
 # ── Right side: 3 area-scaled pie charts ─────────────────────────────────
 # Azure-Lily area from their paper: 2320000 MWTA = 78564 µm²
@@ -195,18 +215,27 @@ for i, (name, cfg_name, R, C) in enumerate(ARCHS):
     wedges, _ = pie_ax.pie(sizes, colors=colors, startangle=90,
                             wedgeprops=dict(edgecolor='white', linewidth=1.0))
 
-    # Percentage labels inside
+    # Percentage labels — all segments, bold black
     pcts = [v / total * 100 for v in sizes]
-    seg_labels = ['Xbar', conv_label, '']
+    seg_labels = ['Xbar', conv_label, '']  # "Other" just shows number
     for j, (w, pct, lbl) in enumerate(zip(wedges, pcts, seg_labels)):
-        if pct > 6:
-            ang = (w.theta2 + w.theta1) / 2
+        ang = (w.theta2 + w.theta1) / 2
+        if pct > 8:
+            # Inside the wedge
             r_t = 0.55
             x_t = r_t * np.cos(np.radians(ang))
             y_t = r_t * np.sin(np.radians(ang))
             txt = f'{lbl}\n{pct:.0f}%' if lbl else f'{pct:.0f}%'
             pie_ax.text(x_t, y_t, txt, ha='center', va='center',
-                        fontsize=5.5, fontweight='bold')
+                        fontsize=5.5, fontweight='bold', color='black')
+        else:
+            # Outside the wedge for small segments
+            r_t = 1.2
+            x_t = r_t * np.cos(np.radians(ang))
+            y_t = r_t * np.sin(np.radians(ang))
+            txt = f'{pct:.0f}%'
+            pie_ax.text(x_t, y_t, txt, ha='center', va='center',
+                        fontsize=5, fontweight='bold', color='black')
 
     # Label below pie
     pie_ax.text(0, -1.3, f'{name}\n{total:.3f} mm\u00b2',

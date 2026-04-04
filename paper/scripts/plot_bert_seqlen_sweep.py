@@ -270,9 +270,9 @@ def plot_efficiency_varfmax():
              marker=ARCH_MARKERS["Azure-Lily"], markersize=5,
              markeredgecolor="white", markeredgewidth=0.8)
     _setup_xaxis(ax1)
-    ax1.tick_params(axis='both', labelsize=10)
-    ax1.set_ylabel('Inference/s/mm\u00b2', fontsize=13, fontweight='normal')
-    ax1.set_xlabel('Sequence Length (N)', fontsize=11)
+    ax1.tick_params(axis='both', labelsize=8.5)
+    ax1.set_ylabel('Inference/s/mm\u00b2', fontsize=11, fontweight='normal')
+    ax1.set_xlabel('Sequence Length (N)', fontsize=9.5)
     all_vals = [_getv(a, S, "throughput_per_mm2") / _getv("azurelily", S, "throughput_per_mm2")
                 for a in ["proposed", "al_like"] for S in SEQ_LENS]
     ax1.set_ylim(bottom=min(min(all_vals), 0.7) * 0.9, top=max(all_vals) * 1.15)
@@ -295,9 +295,9 @@ def plot_efficiency_varfmax():
              marker=ARCH_MARKERS["Azure-Lily"], markersize=5,
              markeredgecolor="white", markeredgewidth=0.8)
     _setup_xaxis(ax2)
-    ax2.tick_params(axis='both', labelsize=10)
-    ax2.set_ylabel('Inference/J', fontsize=13, fontweight='normal')
-    ax2.set_xlabel('Sequence Length (N)', fontsize=11)
+    ax2.tick_params(axis='both', labelsize=8.5)
+    ax2.set_ylabel('Inference/J', fontsize=11, fontweight='normal')
+    ax2.set_xlabel('Sequence Length (N)', fontsize=9.5)
     all_vals = [_getv(a, S, "throughput_per_j") / _getv("azurelily", S, "throughput_per_j")
                 for a in ["proposed", "al_like"] for S in SEQ_LENS]
     ax2.set_ylim(bottom=min(min(all_vals), 0.8) * 0.9, top=max(all_vals) * 1.15)
@@ -322,9 +322,9 @@ def plot_efficiency_varfmax():
                  markeredgecolor="white", markeredgewidth=0.8)
 
     _setup_xaxis(ax0)
-    ax0.tick_params(axis='both', labelsize=10)
-    ax0.set_ylabel('Fmax (MHz)', fontsize=13, fontweight='normal')
-    ax0.set_xlabel('Sequence Length (N)', fontsize=11)
+    ax0.tick_params(axis='both', labelsize=8.5)
+    ax0.set_ylabel('Fmax (MHz)', fontsize=11, fontweight='normal')
+    ax0.set_xlabel('Sequence Length (N)', fontsize=9.5)
     ax0.set_ylim(0, 160)
     ax0.set_yticks([0, 40, 80, 120, 160])
     ax0.grid(True, alpha=0.1)

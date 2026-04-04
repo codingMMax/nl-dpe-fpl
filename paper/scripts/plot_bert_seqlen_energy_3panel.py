@@ -113,9 +113,9 @@ for ai, arch in enumerate(arch_list):
 
 ax1.set_xticks(x)
 ax1.set_xticklabels([str(N) for N in SEQ_LENS])
-ax1.set_xlabel('Sequence Length (N)', fontsize=11)
-ax1.set_ylabel('Energy Breakdown (%)', fontsize=11, fontweight='normal')
-ax1.tick_params(axis='both', labelsize=10)
+ax1.set_xlabel('Sequence Length (N)', fontsize=9.5)
+ax1.set_ylabel('Energy Breakdown (%)', fontsize=9.5, fontweight='normal')
+ax1.tick_params(axis='both', labelsize=8.5)
 ax1.set_ylim(0, 105)
 ax1.grid(True, alpha=0.08, axis='y', zorder=0)
 
@@ -177,9 +177,9 @@ ax2.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
             alpha=BASELINE_ALPHA)
 ax2.set_xticks(x)
 ax2.set_xticklabels([str(N) for N in SEQ_LENS])
-ax2.set_xlabel('Sequence Length (N)', fontsize=11)
+ax2.set_xlabel('Sequence Length (N)', fontsize=9.5)
 ax2.set_ylabel('Per-component breakdown', fontsize=9.5, fontweight='normal')
-ax2.tick_params(axis='both', labelsize=10)
+ax2.tick_params(axis='both', labelsize=8.5)
 ax2.set_ylim(0, None)
 ax2.grid(True, alpha=0.08, axis='y', zorder=0)
 
@@ -225,9 +225,9 @@ ax3.axhline(y=1.0, color=BASELINE_COLOR, linewidth=1, linestyle=BASELINE_LS,
             alpha=BASELINE_ALPHA)
 ax3.set_xticks(x)
 ax3.set_xticklabels([str(N) for N in SEQ_LENS])
-ax3.set_xlabel('Sequence Length (N)', fontsize=11)
-ax3.set_ylabel('Total energy ratio', fontsize=11, fontweight='normal')
-ax3.tick_params(axis='both', labelsize=10)
+ax3.set_xlabel('Sequence Length (N)', fontsize=9.5)
+ax3.set_ylabel('Total energy ratio', fontsize=9.5, fontweight='normal')
+ax3.tick_params(axis='both', labelsize=8.5)
 ax3.set_ylim(bottom=0.9)
 ax3.grid(True, alpha=0.15)
 
