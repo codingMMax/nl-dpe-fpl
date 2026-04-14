@@ -131,7 +131,14 @@ def _get_supporting_modules() -> str:
             parts.append(all_mods[name])
         else:
             print(f"  WARNING: module '{name}' not found in {GEMV_SRC.name}")
-    return "\n\n".join(parts)
+    result = "\n\n".join(parts)
+    # Fix $clog2(1)=0 issue: controller_scalable uses $clog2(N_DPE_V) which
+    # produces 0-width vectors when N_DPE_V=1. Patch to minimum width of 1.
+    result = result.replace(
+        "localparam N_DPE_SEL_V = $clog2(N_DPE_V);",
+        "localparam N_DPE_SEL_V = (N_DPE_V > 1) ? $clog2(N_DPE_V) : 1;"
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -228,16 +235,24 @@ def _gen_fc_layer_v1_h1(k: int, n: int, rows: int, cols: int,
 def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
                   depth: int, addr_width: int,
                   data_width: int = 40,
-                  module_name: str = "fc_layer") -> str:
+                  module_name: str = "fc_layer",
+                  conversion: str = "acam",
+                  dpe_data_width: int = 40) -> str:
     """Generate the fc_layer module for arbitrary (V, H) tiling.
 
     The fc_layer contains:
       - 1 sram + 1 controller_scalable driving all DPEs
       - V*H dpe instantiations
       - Per-column adder tree (V inputs -> 1 output) if V > 1
-      - Per-column activation_lut if V > 1
+      - Per-column activation_lut:
+          ACAM: only if V > 1 (ACAM handles activation when V=1)
+          ADC:  always (ADC gives raw output, no ACAM)
       - Horizontal concatenation of column outputs
+
+    conversion: "acam" or "adc"
+    dpe_data_width: DPE data_in/data_out pin width (16 or 40)
     """
+    needs_clb_activation = (conversion == "adc") or (v > 1)
     total_dpes = v * h
     lines = []
 
@@ -260,121 +275,115 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
     lines.append(f"    localparam ADDR_WIDTH = {addr_width};")
     lines.append(f"")
 
-    # Controller signals
-    lines.append(f"    // Controller signals")
-    lines.append(f"    wire MSB_SA_Ready;")
-    lines.append(f"    wire dpe_done;")
-    lines.append(f"    wire [{v}-1:0] reg_full_sig;")
-    lines.append(f"    wire [{h}-1:0] reg_empty;")
-    lines.append(f"    wire shift_add_done;")
-    lines.append(f"    wire shift_add_bypass_ctrl;")
-    lines.append(f"    wire [ADDR_WIDTH-1:0] read_address;")
-    lines.append(f"    wire [ADDR_WIDTH-1:0] write_address;")
-    lines.append(f"    wire [{v}-1:0] w_buf_en;")
-    lines.append(f"    wire [1:0] nl_dpe_control;")
-    lines.append(f"    wire shift_add_control;")
-    lines.append(f"    wire shift_add_bypass;")
-    lines.append(f"    wire load_output_reg;")
-    lines.append(f"    wire w_en;")
-    lines.append(f"    wire load_input_reg;")
-    lines.append(f"    wire dpe_accum_ready;")
-    lines.append(f"    wire dpe_accum_done;")
-    clog2_v = max(1, math.ceil(math.log2(v))) if v > 1 else 1
+    # ── Input demux: route elements to correct row SRAM (V>1) ──────
+    # Input arrives as a stream of K elements. First R go to row 0,
+    # next R to row 1, etc. Gate each row's valid signal.
+    if v > 1:
+        kw_bits = max(1, math.ceil(math.log2(k)) if k > 1 else 1)
+        lines.append(f"    // Input demux: route elements to per-row SRAMs")
+        lines.append(f"    reg [{kw_bits}-1:0] input_elem_count;")
+        lines.append(f"    always @(posedge clk or posedge rst) begin")
+        lines.append(f"        if (rst) input_elem_count <= 0;")
+        lines.append(f"        else if (valid) input_elem_count <= input_elem_count + 1;")
+        lines.append(f"    end")
+        for row_i in range(v):
+            lo = row_i * rows
+            hi = min((row_i + 1) * rows, k) - 1
+            lines.append(f"    wire valid_r{row_i} = valid && "
+                         f"(input_elem_count >= {lo}) && (input_elem_count <= {hi});")
+        lines.append(f"")
+
+    # ── Per-row SRAM + Controller + DPEs (parallel loading) ──────────
+    # Each vertical DPE row has its own SRAM and controller_scalable(N_DPE_V=1).
+    # All rows load in parallel. This matches the nn/ simulator assumption.
     clog2_h = max(1, math.ceil(math.log2(h))) if h > 1 else 1
-    lines.append(f"    wire [{clog2_v}-1:0] dpe_sel;")
-    lines.append(f"    wire [{clog2_h}-1:0] dpe_sel_h;")
-    lines.append(f"")
 
-    # SRAM data wire
-    lines.append(f"    wire [DATA_WIDTH-1:0] sram_data_out;")
-    lines.append(f"")
+    for row in range(v):
+        kw_row = min(k, rows) if row < v - 1 else k - row * rows  # elements for this tile
+        sram_depth_row = max(512, kw_row) + 1  # +1 to avoid write pointer wrap = empty
+        addr_width_row = max(1, math.ceil(math.log2(sram_depth_row)) if sram_depth_row > 1 else 1)
 
-    # SRAM instantiation
-    lines.append(f"    // Input SRAM")
-    lines.append(f"    sram #(")
-    lines.append(f"        .N_CHANNELS(1),")
-    lines.append(f"        .DEPTH({depth})")
-    lines.append(f"    ) sram_inst (")
-    lines.append(f"        .clk(clk),")
-    lines.append(f"        .rst(rst),")
-    lines.append(f"        .w_en(w_en),")
-    lines.append(f"        .r_addr(read_address),")
-    lines.append(f"        .w_addr(write_address),")
-    lines.append(f"        .sram_data_in(data_in),")
-    lines.append(f"        .sram_data_out(sram_data_out)")
-    lines.append(f"    );")
-    lines.append(f"")
+        lines.append(f"    // ── Row {row}: SRAM + controller + {h} DPEs (K_row={kw_row}) ──")
 
-    # Controller instantiation
-    lines.append(f"    // Controller")
-    lines.append(f"    controller_scalable #(")
-    lines.append(f"        .N_CHANNELS(1),")
-    lines.append(f"        .N_BRAM_R(1),")
-    lines.append(f"        .N_BRAM_W(1),")
-    lines.append(f"        .N_DPE_V({v}),")
-    lines.append(f"        .N_DPE_H({h}),")
-    lines.append(f"        .ADDR_WIDTH(ADDR_WIDTH),")
-    lines.append(f"        .N_KERNELS(1),")
-    lines.append(f"        .KERNEL_WIDTH({k}),")
-    lines.append(f"        .KERNEL_HEIGHT(1),")
-    lines.append(f"        .W(1),")
-    lines.append(f"        .H(1),")
-    lines.append(f"        .S(1)")
-    lines.append(f"    ) ctrl_inst (")
-    lines.append(f"        .clk(clk),")
-    lines.append(f"        .rst(rst),")
-    lines.append(f"        .MSB_SA_Ready(MSB_SA_Ready),")
-    lines.append(f"        .valid(valid),")
-    lines.append(f"        .ready_n(ready_n),")
-    lines.append(f"        .dpe_done(dpe_done),")
-    lines.append(f"        .reg_full(reg_full_sig),")
-    lines.append(f"        .reg_empty(reg_empty),")
-    lines.append(f"        .shift_add_done(shift_add_done),")
-    lines.append(f"        .shift_add_bypass_ctrl(shift_add_bypass_ctrl),")
-    lines.append(f"        .dpe_accum_done(dpe_accum_done),")
-    lines.append(f"        .read_address(read_address),")
-    lines.append(f"        .write_address(write_address),")
-    lines.append(f"        .w_en_dec(w_en),")
-    lines.append(f"        .w_buf_en(w_buf_en),")
-    lines.append(f"        .nl_dpe_control(nl_dpe_control),")
-    lines.append(f"        .shift_add_control(shift_add_control),")
-    lines.append(f"        .shift_add_bypass(shift_add_bypass),")
-    lines.append(f"        .load_output_reg(load_output_reg),")
-    lines.append(f"        .load_input_reg(load_input_reg),")
-    lines.append(f"        .dpe_sel(dpe_sel),")
-    lines.append(f"        .dpe_sel_h(dpe_sel_h),")
-    lines.append(f"        .ready(ready),")
-    lines.append(f"        .valid_n(valid_n),")
-    lines.append(f"        .dpe_accum_ready(dpe_accum_ready)")
-    lines.append(f"    );")
-    lines.append(f"")
+        # Per-row wires
+        lines.append(f"    wire [DATA_WIDTH-1:0] sram_data_out_r{row};")
+        lines.append(f"    wire [{addr_width_row}-1:0] read_addr_r{row}, write_addr_r{row};")
+        lines.append(f"    wire w_en_r{row}, w_buf_en_r{row};")
+        lines.append(f"    wire [1:0] nl_dpe_control_r{row};")
+        lines.append(f"    wire shift_add_control_r{row}, shift_add_bypass_r{row};")
+        lines.append(f"    wire load_output_reg_r{row}, load_input_reg_r{row};")
+        lines.append(f"    wire MSB_SA_Ready_r{row}, dpe_done_r{row};")
+        lines.append(f"    wire shift_add_done_r{row}, shift_add_bypass_ctrl_r{row};")
+        lines.append(f"    wire dpe_accum_done_r{row}, dpe_accum_ready_r{row};")
+        lines.append(f"    wire ready_r{row}, valid_n_r{row};")
+        lines.append(f"    wire [{h}-1:0] reg_empty_r{row};")
+        if h > 1:
+            lines.append(f"    wire [{clog2_h}-1:0] dpe_sel_h_r{row};")
+        lines.append(f"")
 
-    # DPE instantiations — V*H DPEs
-    # Wire declarations for each DPE output (including per-DPE MSB_SA_Ready)
-    for col in range(h):
-        for row in range(v):
-            lines.append(f"    wire [DATA_WIDTH-1:0] dpe_out_c{col}_r{row};")
+        # SRAM
+        lines.append(f"    sram #(.N_CHANNELS(1), .DEPTH({sram_depth_row})) sram_r{row} (")
+        lines.append(f"        .clk(clk), .rst(rst), .w_en(w_en_r{row}),")
+        lines.append(f"        .r_addr(read_addr_r{row}), .w_addr(write_addr_r{row}),")
+        lines.append(f"        .sram_data_in(data_in), .sram_data_out(sram_data_out_r{row})")
+        lines.append(f"    );")
+        lines.append(f"")
+
+        # Controller (N_DPE_V=1: this controller drives one row of H DPEs)
+        lines.append(f"    controller_scalable #(")
+        lines.append(f"        .N_CHANNELS(1), .N_BRAM_R(1), .N_BRAM_W(1),")
+        lines.append(f"        .N_DPE_V(1), .N_DPE_H({h}),")
+        lines.append(f"        .ADDR_WIDTH({addr_width_row}), .N_KERNELS(1),")
+        lines.append(f"        .KERNEL_WIDTH({kw_row}), .KERNEL_HEIGHT(1),")
+        lines.append(f"        .W(1), .H(1), .S(1)")
+        lines.append(f"    ) ctrl_r{row} (")
+        lines.append(f"        .clk(clk), .rst(rst),")
+        lines.append(f"        .MSB_SA_Ready(MSB_SA_Ready_r{row}),")
+        valid_sig = f"valid_r{row}" if v > 1 else "valid"
+        lines.append(f"        .valid({valid_sig}), .ready_n(ready_n),")
+        lines.append(f"        .dpe_done(dpe_done_r{row}),")
+        lines.append(f"        .reg_full(reg_full_c0_r{row}),")  # N_DPE_V=1 → use first column's reg_full
+        lines.append(f"        .reg_empty(reg_empty_r{row}),")
+        lines.append(f"        .shift_add_done(shift_add_done_r{row}),")
+        lines.append(f"        .shift_add_bypass_ctrl(shift_add_bypass_ctrl_r{row}),")
+        lines.append(f"        .dpe_accum_done(dpe_accum_done_r{row}),")
+        lines.append(f"        .read_address(read_addr_r{row}),")
+        lines.append(f"        .write_address(write_addr_r{row}),")
+        lines.append(f"        .w_en_dec(w_en_r{row}),")
+        lines.append(f"        .w_buf_en(w_buf_en_r{row}),")
+        lines.append(f"        .nl_dpe_control(nl_dpe_control_r{row}),")
+        lines.append(f"        .shift_add_control(shift_add_control_r{row}),")
+        lines.append(f"        .shift_add_bypass(shift_add_bypass_r{row}),")
+        lines.append(f"        .load_output_reg(load_output_reg_r{row}),")
+        lines.append(f"        .load_input_reg(load_input_reg_r{row}),")
+        lines.append(f"        .dpe_sel(),")  # unused (N_DPE_V=1)
+        lines.append(f"        .dpe_sel_h({f'dpe_sel_h_r{row}' if h > 1 else ''}),")
+        lines.append(f"        .ready(ready_r{row}),")
+        lines.append(f"        .valid_n(valid_n_r{row}),")
+        lines.append(f"        .dpe_accum_ready(dpe_accum_ready_r{row})")
+        lines.append(f"    );")
+        re_bits = ", ".join("1'b0" for _ in range(h))
+        lines.append(f"    assign reg_empty_r{row} = {{{re_bits}}};")
+        lines.append(f"    assign dpe_accum_done_r{row} = dpe_done_r{row};")
+        lines.append(f"")
+
+        # DPE instances for this row (H columns)
+        for col in range(h):
+            lines.append(f"    wire [{dpe_data_width}-1:0] dpe_out_c{col}_r{row};")
             lines.append(f"    wire dpe_done_c{col}_r{row};")
             lines.append(f"    wire reg_full_c{col}_r{row};")
             lines.append(f"    wire shift_add_done_c{col}_r{row};")
             lines.append(f"    wire shift_add_bypass_ctrl_c{col}_r{row};")
-            lines.append(f"    wire MSB_SA_Ready_c{col}_r{row};")  # output from dpe
-    lines.append(f"")
-
-    # DPE instances
-    lines.append(f"    // DPE instantiations: {v} vertical x {h} horizontal = {total_dpes} DPEs")
-    for col in range(h):
-        for row in range(v):
+            lines.append(f"    wire MSB_SA_Ready_c{col}_r{row};")
             lines.append(f"    dpe dpe_c{col}_r{row} (")
-            lines.append(f"        .clk(clk),")
-            lines.append(f"        .reset(rst),")
-            lines.append(f"        .data_in(sram_data_out),")
-            lines.append(f"        .nl_dpe_control(nl_dpe_control),")
-            lines.append(f"        .shift_add_control(shift_add_control),")
-            lines.append(f"        .w_buf_en(w_buf_en[{row}]),")
-            lines.append(f"        .shift_add_bypass(shift_add_bypass),")
-            lines.append(f"        .load_output_reg(load_output_reg),")
-            lines.append(f"        .load_input_reg(load_input_reg),")
+            lines.append(f"        .clk(clk), .reset(rst),")
+            lines.append(f"        .data_in(sram_data_out_r{row}),")  # per-row SRAM
+            lines.append(f"        .nl_dpe_control(nl_dpe_control_r{row}),")
+            lines.append(f"        .shift_add_control(shift_add_control_r{row}),")
+            lines.append(f"        .w_buf_en(w_buf_en_r{row}),")  # scalar (N_DPE_V=1)
+            lines.append(f"        .shift_add_bypass(shift_add_bypass_r{row}),")
+            lines.append(f"        .load_output_reg(load_output_reg_r{row}),")
+            lines.append(f"        .load_input_reg(load_input_reg_r{row}),")
             lines.append(f"        .MSB_SA_Ready(MSB_SA_Ready_c{col}_r{row}),")
             lines.append(f"        .data_out(dpe_out_c{col}_r{row}),")
             lines.append(f"        .dpe_done(dpe_done_c{col}_r{row}),")
@@ -384,30 +393,25 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
             lines.append(f"    );")
             lines.append(f"")
 
-    # Aggregate control signals (OR/AND across DPEs for controller feedback)
-    lines.append(f"    // Aggregate control signals")
-    done_expr = " | ".join(f"dpe_done_c{c}_r{r}" for c in range(h) for r in range(v))
-    lines.append(f"    assign dpe_done = {done_expr};")
+        # Per-row aggregate signals
+        done_r = " | ".join(f"dpe_done_c{c}_r{row}" for c in range(h))
+        lines.append(f"    assign dpe_done_r{row} = {done_r};")
+        sad_r = " & ".join(f"shift_add_done_c{c}_r{row}" for c in range(h))
+        lines.append(f"    assign shift_add_done_r{row} = {sad_r};")
+        sabp_r = " & ".join(f"shift_add_bypass_ctrl_c{c}_r{row}" for c in range(h))
+        lines.append(f"    assign shift_add_bypass_ctrl_r{row} = {sabp_r};")
+        msa_r = " & ".join(f"MSB_SA_Ready_c{c}_r{row}" for c in range(h))
+        lines.append(f"    assign MSB_SA_Ready_r{row} = {msa_r};")
+        lines.append(f"")
 
-    sad_expr = " & ".join(f"shift_add_done_c{c}_r{r}" for c in range(h) for r in range(v))
-    lines.append(f"    assign shift_add_done = {sad_expr};")
-
-    sabp_expr = " & ".join(f"shift_add_bypass_ctrl_c{c}_r{r}" for c in range(h) for r in range(v))
-    lines.append(f"    assign shift_add_bypass_ctrl = {sabp_expr};")
-
-    # MSB_SA_Ready: AND of per-DPE outputs (all DPEs must be ready)
-    msa_expr = " & ".join(f"MSB_SA_Ready_c{c}_r{r}" for c in range(h) for r in range(v))
-    lines.append(f"    assign MSB_SA_Ready = {msa_expr};")
-
-    # reg_full_sig: concatenate row-0 reg_full signals
-    rf_bits = ", ".join(f"reg_full_c0_r{r}" for r in range(v - 1, -1, -1))
-    lines.append(f"    assign reg_full_sig = {{{rf_bits}}};")
-
-    # reg_empty
-    re_bits = ", ".join(f"1'b0" for _ in range(h))
-    lines.append(f"    assign reg_empty = {{{re_bits}}};")
-
-    lines.append(f"    assign dpe_accum_done = dpe_done;")
+    # Global aggregate: ready when ALL rows are ready, valid when ALL rows valid
+    lines.append(f"    // Global control: AND ready across rows, AND valid")
+    lines.append(f"    assign ready = {' & '.join(f'ready_r{r}' for r in range(v))};")
+    lines.append(f"    assign valid_n = {' & '.join(f'valid_n_r{r}' for r in range(v))};")
+    # Global dpe_sel_h: use row 0's controller (all rows have identical H-sequencing)
+    if h > 1:
+        lines.append(f"    wire [{clog2_h}-1:0] dpe_sel_h;")
+        lines.append(f"    assign dpe_sel_h = dpe_sel_h_r0;")
     lines.append(f"")
 
     # Per-column reduction (adder tree + activation if V > 1)
@@ -418,26 +422,99 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
             tree_input_prefix = f"col{col}_dpe"
             tree_output = f"col{col}_sum"
             lines.append(f"    // Column {col} adder tree (V={v})")
-            # Alias DPE outputs to tree input names
+            # Alias DPE outputs to tree input names (sign-extend if dpe_data_width < DATA_WIDTH)
             for r in range(v):
                 lines.append(f"    wire signed [DATA_WIDTH-1:0] {tree_input_prefix}_{r};")
-                lines.append(f"    assign {tree_input_prefix}_{r} = dpe_out_c{col}_r{r};")
-            lines.append(f"    wire [DATA_WIDTH-1:0] {tree_output};")
-            lines.append(_gen_adder_tree(v, tree_input_prefix, tree_output,
-                                         data_width, wire_prefix=f"col{col}"))
-            # Activation LUT
+                if dpe_data_width < data_width:
+                    pad = data_width - dpe_data_width
+                    lines.append(f"    assign {tree_input_prefix}_{r} = "
+                                 f"{{{{{pad}{{dpe_out_c{col}_r{r}[{dpe_data_width-1}]}}}}, "
+                                 f"dpe_out_c{col}_r{r}}};")
+                else:
+                    lines.append(f"    assign {tree_input_prefix}_{r} = dpe_out_c{col}_r{r};")
+            # Registered streaming reduction (pipelined with DPE serial output)
+            lines.append(f"    reg signed [DATA_WIDTH-1:0] {tree_output}_reg;")
+            if v == 2:
+                # V=2: single registered add
+                lines.append(f"    always @(posedge clk) begin")
+                lines.append(f"        {tree_output}_reg <= $signed({tree_input_prefix}_0) "
+                             f"+ $signed({tree_input_prefix}_1);")
+                lines.append(f"    end")
+            else:
+                # V>2: cascaded registered adds (log2(V) stages)
+                # Level 0: pairwise add with register
+                prev_names = [f"{tree_input_prefix}_{r}" for r in range(v)]
+                level = 0
+                while len(prev_names) > 1:
+                    next_names = []
+                    lines.append(f"    // Reduction level {level}")
+                    for p in range(len(prev_names) // 2):
+                        sname = f"col{col}_reduc_L{level}_{p}"
+                        lines.append(f"    reg signed [DATA_WIDTH-1:0] {sname};")
+                        lines.append(f"    always @(posedge clk) "
+                                     f"{sname} <= $signed({prev_names[2*p]}) "
+                                     f"+ $signed({prev_names[2*p+1]});")
+                        next_names.append(sname)
+                    if len(prev_names) % 2:
+                        # Odd element: register and pass through
+                        sname = f"col{col}_reduc_L{level}_pass"
+                        lines.append(f"    reg signed [DATA_WIDTH-1:0] {sname};")
+                        lines.append(f"    always @(posedge clk) "
+                                     f"{sname} <= $signed({prev_names[-1]});")
+                        next_names.append(sname)
+                    prev_names = next_names
+                    level += 1
+                # Final result → registered output
+                lines.append(f"    always @(posedge clk) "
+                             f"{tree_output}_reg <= {prev_names[0]};")
+            lines.append(f"")
+            # Activation LUT reads from registered reduction output
             act_out = f"col{col}_act"
             lines.append(f"    wire [DATA_WIDTH-1:0] {act_out};")
             lines.append(f"    activation_lut #(.DATA_WIDTH(DATA_WIDTH)) act_c{col} (")
             lines.append(f"        .clk(clk),")
-            lines.append(f"        .data_in({tree_output}),")
+            lines.append(f"        .data_in({tree_output}_reg),")
             lines.append(f"        .data_out({act_out})")
             lines.append(f"    );")
             lines.append(f"")
             col_result_wires.append(act_out)
         else:
-            # V=1: no adder tree, no activation (ACAM eligible)
-            col_result_wires.append(f"dpe_out_c{col}_r0")
+            # V=1: no adder tree needed
+            if needs_clb_activation:
+                # Azure-Lily (ADC): still needs CLB activation even at V=1
+                # Sign-extend DPE output from dpe_data_width to DATA_WIDTH
+                act_in = f"col{col}_dpe_ext"
+                if dpe_data_width < data_width:
+                    pad = data_width - dpe_data_width
+                    lines.append(f"    wire [DATA_WIDTH-1:0] {act_in};")
+                    lines.append(f"    assign {act_in} = "
+                                 f"{{{{{pad}{{dpe_out_c{col}_r0[{dpe_data_width-1}]}}}}, "
+                                 f"dpe_out_c{col}_r0}};")
+                else:
+                    lines.append(f"    wire [DATA_WIDTH-1:0] {act_in};")
+                    lines.append(f"    assign {act_in} = dpe_out_c{col}_r0;")
+                act_out = f"col{col}_act"
+                lines.append(f"    wire [DATA_WIDTH-1:0] {act_out};")
+                lines.append(f"    activation_lut #(.DATA_WIDTH(DATA_WIDTH)) act_c{col} (")
+                lines.append(f"        .clk(clk),")
+                lines.append(f"        .data_in({act_in}),")
+                lines.append(f"        .data_out({act_out})")
+                lines.append(f"    );")
+                lines.append(f"")
+                col_result_wires.append(act_out)
+            else:
+                # NL-DPE (ACAM): activation handled by ACAM inside DPE
+                # Sign-extend DPE output for downstream
+                if dpe_data_width < data_width:
+                    ext_wire = f"col{col}_dpe_ext"
+                    pad = data_width - dpe_data_width
+                    lines.append(f"    wire [DATA_WIDTH-1:0] {ext_wire};")
+                    lines.append(f"    assign {ext_wire} = "
+                                 f"{{{{{pad}{{dpe_out_c{col}_r0[{dpe_data_width-1}]}}}}, "
+                                 f"dpe_out_c{col}_r0}};")
+                    col_result_wires.append(ext_wire)
+                else:
+                    col_result_wires.append(f"dpe_out_c{col}_r0")
 
     # Horizontal concatenation / output selection
     if h == 1:
@@ -462,8 +539,15 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
 
 def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
                 depth: int, addr_width: int,
-                data_width: int = 40) -> str:
-    """Generate the fc_top module (top-level wrapper)."""
+                data_width: int = 40,
+                conversion: str = "acam",
+                dpe_data_width: int = 40) -> str:
+    """Generate the fc_top module (top-level wrapper).
+
+    conversion: "acam" or "adc". Controls CLB activation LUT.
+    dpe_data_width: DPE data_in/data_out pin width (16 or 40).
+    """
+    needs_clb_activation = (conversion == "adc") or (v > 1)
     lines = []
     lines.append(f"module fc_top #(")
     lines.append(f"    parameter DATA_WIDTH = {data_width}")
@@ -491,30 +575,63 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
     lines.append(f"")
 
     # FC layer instantiation
+    dpe_dw = dpe_data_width
+
     if v == 1 and h == 1:
-        # Reuse conv_layer_single_dpe
-        lines.append(f"    // V=1, H=1: reuse conv_layer_single_dpe")
-        lines.append(f"    conv_layer_single_dpe #(")
-        lines.append(f"        .N_CHANNELS(1),")
-        lines.append(f"        .ADDR_WIDTH(ADDR_WIDTH),")
-        lines.append(f"        .N_KERNELS(1),")
-        lines.append(f"        .KERNEL_WIDTH({k}),")
-        lines.append(f"        .KERNEL_HEIGHT(1),")
-        lines.append(f"        .W(1),")
-        lines.append(f"        .H(1),")
-        lines.append(f"        .S(1),")
-        lines.append(f"        .DEPTH({depth}),")
-        lines.append(f"        .DATA_WIDTH(DATA_WIDTH)")
-        lines.append(f"    ) fc_layer_inst (")
-        lines.append(f"        .clk(clk),")
-        lines.append(f"        .rst(rst),")
-        lines.append(f"        .valid(valid_g_out),")
-        lines.append(f"        .ready_n(ready_g_out),")
-        lines.append(f"        .data_in(data_in),")
-        lines.append(f"        .data_out(data_out_layer),")
-        lines.append(f"        .ready(ready_g_in),")
-        lines.append(f"        .valid_n(valid_g_in)")
-        lines.append(f"    );")
+        if needs_clb_activation:
+            # Azure-Lily V=1 H=1: DPE + CLB activation LUT
+            lines.append(f"    // V=1, H=1: conv_layer_single_dpe + CLB activation (ADC, no ACAM)")
+            lines.append(f"    wire [DATA_WIDTH-1:0] dpe_raw_out;")
+            lines.append(f"    conv_layer_single_dpe #(")
+            lines.append(f"        .N_CHANNELS(1),")
+            lines.append(f"        .ADDR_WIDTH(ADDR_WIDTH),")
+            lines.append(f"        .N_KERNELS(1),")
+            lines.append(f"        .KERNEL_WIDTH({k}),")
+            lines.append(f"        .KERNEL_HEIGHT(1),")
+            lines.append(f"        .W(1),")
+            lines.append(f"        .H(1),")
+            lines.append(f"        .S(1),")
+            lines.append(f"        .DEPTH({depth}),")
+            lines.append(f"        .DATA_WIDTH({dpe_dw})")
+            lines.append(f"    ) fc_layer_inst (")
+            lines.append(f"        .clk(clk),")
+            lines.append(f"        .rst(rst),")
+            lines.append(f"        .valid(valid_g_out),")
+            lines.append(f"        .ready_n(ready_g_out),")
+            lines.append(f"        .data_in(data_in),")
+            lines.append(f"        .data_out(dpe_raw_out),")
+            lines.append(f"        .ready(ready_g_in),")
+            lines.append(f"        .valid_n(valid_g_in)")
+            lines.append(f"    );")
+            lines.append(f"    activation_lut #(.DATA_WIDTH(DATA_WIDTH)) act_inst (")
+            lines.append(f"        .clk(clk),")
+            lines.append(f"        .data_in(dpe_raw_out),")
+            lines.append(f"        .data_out(data_out_layer)")
+            lines.append(f"    );")
+        else:
+            # NL-DPE V=1 H=1: DPE with ACAM handles activation
+            lines.append(f"    // V=1, H=1: conv_layer_single_dpe (ACAM handles activation)")
+            lines.append(f"    conv_layer_single_dpe #(")
+            lines.append(f"        .N_CHANNELS(1),")
+            lines.append(f"        .ADDR_WIDTH(ADDR_WIDTH),")
+            lines.append(f"        .N_KERNELS(1),")
+            lines.append(f"        .KERNEL_WIDTH({k}),")
+            lines.append(f"        .KERNEL_HEIGHT(1),")
+            lines.append(f"        .W(1),")
+            lines.append(f"        .H(1),")
+            lines.append(f"        .S(1),")
+            lines.append(f"        .DEPTH({depth}),")
+            lines.append(f"        .DATA_WIDTH({dpe_dw})")
+            lines.append(f"    ) fc_layer_inst (")
+            lines.append(f"        .clk(clk),")
+            lines.append(f"        .rst(rst),")
+            lines.append(f"        .valid(valid_g_out),")
+            lines.append(f"        .ready_n(ready_g_out),")
+            lines.append(f"        .data_in(data_in),")
+            lines.append(f"        .data_out(data_out_layer),")
+            lines.append(f"        .ready(ready_g_in),")
+            lines.append(f"        .valid_n(valid_g_in)")
+            lines.append(f"    );")
     else:
         lines.append(f"    // FC layer: V={v}, H={h}")
         lines.append(f"    fc_layer #(")
@@ -588,9 +705,18 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
 
 
 def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
-                   output_dir: str) -> Path:
+                   output_dir: str,
+                   conversion: str = "acam",
+                   dpe_data_width: int = 40) -> Path:
     """Generate a self-contained FC+activation .v file for a (K,N) workload
     mapped onto (rows x cols) crossbars.
+
+    conversion: "acam" or "adc".
+      - acam: ACAM handles activation when V=1 (no CLB LUT needed).
+      - adc:  ADC gives raw output; CLB activation LUT always needed.
+
+    dpe_data_width: DPE hard block data_in/data_out width (16 or 40 bits).
+      Controls BRAM↔DPE transfer bandwidth.
 
     Returns the path to the generated file.
     """
@@ -598,13 +724,16 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     h = math.ceil(n / cols)
     total_dpes = v * h
     data_width = 40
-    depth = max(512, k)
+    # Depth must be > K to avoid write pointer wrapping to equal read pointer
+    # (controller's circular buffer can't distinguish "full" from "empty")
+    depth = max(512, k) + 1
     addr_width = math.ceil(math.log2(depth)) if depth > 1 else 1
-    acam_eligible = (v == 1)
+    acam_eligible = (v == 1) and (conversion == "acam")
+    needs_clb_activation = (conversion == "adc") or (v > 1)
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"fc_{k}_{n}_{rows}x{cols}.v"
+    filename = f"fc_{k}_{n}_{rows}x{cols}_{conversion}_dw{dpe_data_width}.v"
     out_path = out_dir / filename
 
     parts = []
@@ -613,8 +742,10 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     parts.append(f"// Auto-generated FC+activation wrapper")
     parts.append(f"// Workload: K={k}, N={n}")
     parts.append(f"// Crossbar: {rows}x{cols}")
+    parts.append(f"// Conversion: {conversion}, DPE DATA_WIDTH: {dpe_data_width}")
     parts.append(f"// Tiling: V={v}, H={h}, DPEs={total_dpes}")
-    parts.append(f"// ACAM eligible (V=1): {'yes' if acam_eligible else 'no'}")
+    parts.append(f"// ACAM eligible (V=1 + ACAM): {'yes' if acam_eligible else 'no'}")
+    parts.append(f"// CLB activation LUT: {'yes' if needs_clb_activation else 'no (ACAM)'}")
     parts.append(f"// Generated by gen_gemv_wrappers.py --fc")
     parts.append(f"")
 
@@ -623,7 +754,8 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     parts.append(f"// fc_top — top-level module")
     parts.append(f"// =====================================================")
     parts.append(_gen_fc_top(v, h, k, n, rows, cols, depth, addr_width,
-                             data_width))
+                             data_width, conversion=conversion,
+                             dpe_data_width=dpe_data_width))
     parts.append(f"")
 
     # fc_layer module (only if not V=1 H=1)
@@ -632,11 +764,12 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
         parts.append(f"// fc_layer — DPE stacking + reduction + activation")
         parts.append(f"// =====================================================")
         parts.append(_gen_fc_layer(v, h, k, n, rows, cols, depth, addr_width,
-                                   data_width))
+                                   data_width, conversion=conversion,
+                                   dpe_data_width=dpe_data_width))
         parts.append(f"")
 
-    # activation_lut module (only if V > 1)
-    if v > 1:
+    # activation_lut module (needed for Azure-Lily always, NL-DPE only when V>1)
+    if needs_clb_activation:
         parts.append(f"// =====================================================")
         parts.append(f"// activation_lut — piecewise-linear tanh approximation")
         parts.append(f"// =====================================================")
@@ -652,7 +785,9 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
 
     out_path.write_text("\n".join(parts))
     print(f"  Generated {filename} (K={k}, N={n}, V={v}, H={h}, "
-          f"DPEs={total_dpes}, ACAM={'yes' if acam_eligible else 'no'})")
+          f"DPEs={total_dpes}, conv={conversion}, dpe_dw={dpe_data_width}, "
+          f"ACAM={'yes' if acam_eligible else 'no'}, "
+          f"CLB_act={'yes' if needs_clb_activation else 'no'})")
     return out_path
 
 
