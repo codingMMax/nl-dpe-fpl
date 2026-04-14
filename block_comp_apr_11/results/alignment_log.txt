@@ -1,0 +1,247 @@
+================================================================
+  RTL ↔ Simulator Latency Alignment Report
+  Tue Apr 14 04:42:26 PM MST 2026
+================================================================
+
+================================================================
+  setup0: fc_512_128_512x128_adc_dw16.v (DPE_BUF_WIDTH=16, COMPUTE=44)
+================================================================
+block_comp_apr_11/rtl/setup0/fc_512_128_512x128_adc_dw16.v:195:        : Padding 24 high bits of the port.
+block_comp_apr_11/rtl/setup0/fc_512_128_512x128_adc_dw16.v:195:        : Padding 24 high bits of the port.
+block_comp_apr_11/rtl/setup0/fc_512_128_512x128_adc_dw16.v:86:        : Pruning 1 high bits of the expression.
+block_comp_apr_11/rtl/setup0/fc_512_128_512x128_adc_dw16.v:86:        : Pruning 1 high bits of the expression.
+=== Alignment TB (pre-load): K=512, N=128, DPE_BUF_WIDTH=16 ===
+    elems_per_word=2, packed_words=256
+Pre-loading SRAM with 256 packed words...
+SRAM pre-loaded, write_addr=256
+T=45000 (cycle 2): Waiting for DPE pipeline...
+
+=== RTL Cycle Count Report (pre-loaded SRAM) ===
+K=512, N=128, DPE_BUF_WIDTH=16, COMPUTE_CYCLES=44
+
+Stage Timestamps (cycle):
+  T_wbuf_first (SRAM→DPE start) = 2
+  T_regfull    (DPE buffer full) = 258
+  T_done_first (output start)    = 306
+  T_done_last  (output end)      = 369
+  T_validn     (first valid_n)   = 307
+
+Per-Stage Cycle Counts:
+  read (SRAM→DPE)  = 256 cycles  (wbuf_first→regfull)
+  compute+overhead = 48 cycles  (regfull→done_first)
+  output_serialize = 64 cycles  (done_first→done_last+1 = 64, done_pulses=64)
+  valid_n pipeline = 1 cycles  (done_first→validn)
+
+  w_buf_en pulses  = 512 (expect 256)
+  output count     = 63
+
+Totals:
+  DPE pipeline (wbuf_first→done_last+1) = 368 cycles
+  Simulator expects: read=256 + compute=44 + output=64 = 364 cycles
+
+block_comp_apr_11/tb/tb_alignment.v:188: $finish called at 6705000 (1ps)
+
+================================================================
+  setup1: fc_512_128_512x128_adc_dw40.v (DPE_BUF_WIDTH=40, COMPUTE=44)
+================================================================
+block_comp_apr_11/rtl/setup1/fc_512_128_512x128_adc_dw40.v:184:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup1/fc_512_128_512x128_adc_dw40.v:184:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup1/fc_512_128_512x128_adc_dw40.v:86:        : Pruning 3 high bits of the expression.
+block_comp_apr_11/rtl/setup1/fc_512_128_512x128_adc_dw40.v:86:        : Pruning 3 high bits of the expression.
+=== Alignment TB (pre-load): K=512, N=128, DPE_BUF_WIDTH=40 ===
+    elems_per_word=5, packed_words=103
+Pre-loading SRAM with 103 packed words...
+SRAM pre-loaded, write_addr=103
+T=45000 (cycle 2): Waiting for DPE pipeline...
+
+=== RTL Cycle Count Report (pre-loaded SRAM) ===
+K=512, N=128, DPE_BUF_WIDTH=40, COMPUTE_CYCLES=44
+
+Stage Timestamps (cycle):
+  T_wbuf_first (SRAM→DPE start) = 2
+  T_regfull    (DPE buffer full) = 105
+  T_done_first (output start)    = 153
+  T_done_last  (output end)      = 178
+  T_validn     (first valid_n)   = 154
+
+Per-Stage Cycle Counts:
+  read (SRAM→DPE)  = 103 cycles  (wbuf_first→regfull)
+  compute+overhead = 48 cycles  (regfull→done_first)
+  output_serialize = 26 cycles  (done_first→done_last+1 = 26, done_pulses=26)
+  valid_n pipeline = 1 cycles  (done_first→validn)
+
+  w_buf_en pulses  = 206 (expect 103)
+  output count     = 26
+
+Totals:
+  DPE pipeline (wbuf_first→done_last+1) = 177 cycles
+  Simulator expects: read=103 + compute=44 + output=26 = 173 cycles
+
+block_comp_apr_11/tb/tb_alignment.v:188: $finish called at 3645000 (1ps)
+
+================================================================
+  setup2: fc_512_128_512x128_acam_dw40.v (DPE_BUF_WIDTH=40, COMPUTE=3)
+================================================================
+block_comp_apr_11/rtl/setup2/fc_512_128_512x128_acam_dw40.v:157:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup2/fc_512_128_512x128_acam_dw40.v:157:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup2/fc_512_128_512x128_acam_dw40.v:80:        : Pruning 3 high bits of the expression.
+block_comp_apr_11/rtl/setup2/fc_512_128_512x128_acam_dw40.v:80:        : Pruning 3 high bits of the expression.
+=== Alignment TB (pre-load): K=512, N=128, DPE_BUF_WIDTH=40 ===
+    elems_per_word=5, packed_words=103
+Pre-loading SRAM with 103 packed words...
+SRAM pre-loaded, write_addr=103
+T=45000 (cycle 2): Waiting for DPE pipeline...
+
+=== RTL Cycle Count Report (pre-loaded SRAM) ===
+K=512, N=128, DPE_BUF_WIDTH=40, COMPUTE_CYCLES=3
+
+Stage Timestamps (cycle):
+  T_wbuf_first (SRAM→DPE start) = 2
+  T_regfull    (DPE buffer full) = 105
+  T_done_first (output start)    = 112
+  T_done_last  (output end)      = 137
+  T_validn     (first valid_n)   = 113
+
+Per-Stage Cycle Counts:
+  read (SRAM→DPE)  = 103 cycles  (wbuf_first→regfull)
+  compute+overhead = 7 cycles  (regfull→done_first)
+  output_serialize = 26 cycles  (done_first→done_last+1 = 26, done_pulses=26)
+  valid_n pipeline = 1 cycles  (done_first→validn)
+
+  w_buf_en pulses  = 206 (expect 103)
+  output count     = 25
+
+Totals:
+  DPE pipeline (wbuf_first→done_last+1) = 136 cycles
+  Simulator expects: read=103 + compute=3 + output=26 = 132 cycles
+
+block_comp_apr_11/tb/tb_alignment.v:188: $finish called at 3235000 (1ps)
+
+================================================================
+  setup3: fc_512_128_1024x128_adc_dw16.v (DPE_BUF_WIDTH=16, COMPUTE=44)
+================================================================
+block_comp_apr_11/rtl/setup3/fc_512_128_1024x128_adc_dw16.v:195:        : Padding 24 high bits of the port.
+block_comp_apr_11/rtl/setup3/fc_512_128_1024x128_adc_dw16.v:195:        : Padding 24 high bits of the port.
+block_comp_apr_11/rtl/setup3/fc_512_128_1024x128_adc_dw16.v:86:        : Pruning 1 high bits of the expression.
+block_comp_apr_11/rtl/setup3/fc_512_128_1024x128_adc_dw16.v:86:        : Pruning 1 high bits of the expression.
+=== Alignment TB (pre-load): K=512, N=128, DPE_BUF_WIDTH=16 ===
+    elems_per_word=2, packed_words=256
+Pre-loading SRAM with 256 packed words...
+SRAM pre-loaded, write_addr=256
+T=45000 (cycle 2): Waiting for DPE pipeline...
+
+=== RTL Cycle Count Report (pre-loaded SRAM) ===
+K=512, N=128, DPE_BUF_WIDTH=16, COMPUTE_CYCLES=44
+
+Stage Timestamps (cycle):
+  T_wbuf_first (SRAM→DPE start) = 2
+  T_regfull    (DPE buffer full) = 258
+  T_done_first (output start)    = 306
+  T_done_last  (output end)      = 369
+  T_validn     (first valid_n)   = 307
+
+Per-Stage Cycle Counts:
+  read (SRAM→DPE)  = 256 cycles  (wbuf_first→regfull)
+  compute+overhead = 48 cycles  (regfull→done_first)
+  output_serialize = 64 cycles  (done_first→done_last+1 = 64, done_pulses=64)
+  valid_n pipeline = 1 cycles  (done_first→validn)
+
+  w_buf_en pulses  = 512 (expect 256)
+  output count     = 63
+
+Totals:
+  DPE pipeline (wbuf_first→done_last+1) = 368 cycles
+  Simulator expects: read=256 + compute=44 + output=64 = 364 cycles
+
+block_comp_apr_11/tb/tb_alignment.v:188: $finish called at 6705000 (1ps)
+
+================================================================
+  setup4: fc_512_128_1024x128_adc_dw40.v (DPE_BUF_WIDTH=40, COMPUTE=44)
+================================================================
+block_comp_apr_11/rtl/setup4/fc_512_128_1024x128_adc_dw40.v:184:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup4/fc_512_128_1024x128_adc_dw40.v:184:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup4/fc_512_128_1024x128_adc_dw40.v:86:        : Pruning 3 high bits of the expression.
+block_comp_apr_11/rtl/setup4/fc_512_128_1024x128_adc_dw40.v:86:        : Pruning 3 high bits of the expression.
+=== Alignment TB (pre-load): K=512, N=128, DPE_BUF_WIDTH=40 ===
+    elems_per_word=5, packed_words=103
+Pre-loading SRAM with 103 packed words...
+SRAM pre-loaded, write_addr=103
+T=45000 (cycle 2): Waiting for DPE pipeline...
+
+=== RTL Cycle Count Report (pre-loaded SRAM) ===
+K=512, N=128, DPE_BUF_WIDTH=40, COMPUTE_CYCLES=44
+
+Stage Timestamps (cycle):
+  T_wbuf_first (SRAM→DPE start) = 2
+  T_regfull    (DPE buffer full) = 105
+  T_done_first (output start)    = 153
+  T_done_last  (output end)      = 178
+  T_validn     (first valid_n)   = 154
+
+Per-Stage Cycle Counts:
+  read (SRAM→DPE)  = 103 cycles  (wbuf_first→regfull)
+  compute+overhead = 48 cycles  (regfull→done_first)
+  output_serialize = 26 cycles  (done_first→done_last+1 = 26, done_pulses=26)
+  valid_n pipeline = 1 cycles  (done_first→validn)
+
+  w_buf_en pulses  = 206 (expect 103)
+  output count     = 26
+
+Totals:
+  DPE pipeline (wbuf_first→done_last+1) = 177 cycles
+  Simulator expects: read=103 + compute=44 + output=26 = 173 cycles
+
+block_comp_apr_11/tb/tb_alignment.v:188: $finish called at 3645000 (1ps)
+
+================================================================
+  setup5: fc_512_128_1024x128_acam_dw40.v (DPE_BUF_WIDTH=40, COMPUTE=3)
+================================================================
+block_comp_apr_11/rtl/setup5/fc_512_128_1024x128_acam_dw40.v:157:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup5/fc_512_128_1024x128_acam_dw40.v:157:        : Padding 2 high bits of the port.
+block_comp_apr_11/rtl/setup5/fc_512_128_1024x128_acam_dw40.v:80:        : Pruning 3 high bits of the expression.
+block_comp_apr_11/rtl/setup5/fc_512_128_1024x128_acam_dw40.v:80:        : Pruning 3 high bits of the expression.
+=== Alignment TB (pre-load): K=512, N=128, DPE_BUF_WIDTH=40 ===
+    elems_per_word=5, packed_words=103
+Pre-loading SRAM with 103 packed words...
+SRAM pre-loaded, write_addr=103
+T=45000 (cycle 2): Waiting for DPE pipeline...
+
+=== RTL Cycle Count Report (pre-loaded SRAM) ===
+K=512, N=128, DPE_BUF_WIDTH=40, COMPUTE_CYCLES=3
+
+Stage Timestamps (cycle):
+  T_wbuf_first (SRAM→DPE start) = 2
+  T_regfull    (DPE buffer full) = 105
+  T_done_first (output start)    = 112
+  T_done_last  (output end)      = 137
+  T_validn     (first valid_n)   = 113
+
+Per-Stage Cycle Counts:
+  read (SRAM→DPE)  = 103 cycles  (wbuf_first→regfull)
+  compute+overhead = 7 cycles  (regfull→done_first)
+  output_serialize = 26 cycles  (done_first→done_last+1 = 26, done_pulses=26)
+  valid_n pipeline = 1 cycles  (done_first→validn)
+
+  w_buf_en pulses  = 206 (expect 103)
+  output count     = 25
+
+Totals:
+  DPE pipeline (wbuf_first→done_last+1) = 136 cycles
+  Simulator expects: read=103 + compute=3 + output=26 = 132 cycles
+
+block_comp_apr_11/tb/tb_alignment.v:188: $finish called at 3235000 (1ps)
+
+================================================================
+  Summary: Simulator vs RTL cycle counts (fc_512_128)
+================================================================
+
+Simulator predictions (from _dpe_buf_fill_row + _core_bit_pipeline_row_latency):
+  Setup 0 (16b/ADC):  read=256  compute=44  output=64   total=364
+  Setup 1 (40b/ADC):  read=103  compute=44  output=26   total=173
+  Setup 2 (40b/ACAM): read=103  compute=3   output=26   total=132
+  Setup 3 (16b/ADC):  read=256  compute=44  output=64   total=364
+  Setup 4 (40b/ADC):  read=103  compute=44  output=26   total=173
+  Setup 5 (40b/ACAM): read=103  compute=3   output=26   total=132
+
+Expected RTL delta: +4 cycles constant controller overhead on compute stage.
+Expected RTL totals: sim_total + 4

@@ -11,7 +11,7 @@
 // fc_top — top-level module
 // =====================================================
 module fc_top #(
-    parameter DATA_WIDTH = 40
+    parameter DATA_WIDTH = 16
 )(
     input wire clk,
     input wire rst,
@@ -25,8 +25,8 @@ module fc_top #(
 
     localparam V = 4;
     localparam H = 2;
-    localparam DEPTH = 2049;
-    localparam ADDR_WIDTH = 12;
+    localparam DEPTH = 1025;
+    localparam ADDR_WIDTH = 11;
 
     // Internal signals for global controller
     wire valid_g_in, valid_g_out, ready_g_in, ready_g_out;
@@ -62,11 +62,11 @@ module fc_top #(
         .ready_Ln(ready_g_out)
     );
 
-    // Output SRAM buffer
+    // Output SRAM buffer (packed: 2 cols/word)
     sram #(
         .N_CHANNELS(1),
         .DATA_WIDTH(DATA_WIDTH),
-        .DEPTH(16)
+        .DEPTH(130)
     ) global_sram_inst (
         .clk(clk),
         .rst(rst),
@@ -99,7 +99,7 @@ endmodule
 // fc_layer — DPE stacking + reduction + activation
 // =====================================================
 module fc_layer #(
-    parameter DATA_WIDTH = 40
+    parameter DATA_WIDTH = 16
 )(
     input wire clk,
     input wire rst,
@@ -113,22 +113,23 @@ module fc_layer #(
 
     localparam V = 4;
     localparam H = 2;
-    localparam DEPTH = 2049;
-    localparam ADDR_WIDTH = 12;
+    localparam DEPTH = 1025;
+    localparam ADDR_WIDTH = 11;
 
-    // Input demux: route elements to per-row SRAMs
-    reg [11-1:0] input_elem_count;
+    // Input demux: route packed words to per-row SRAMs
+    // (2 int8/word, 1024 words total)
+    reg [10-1:0] input_word_count;
     always @(posedge clk or posedge rst) begin
-        if (rst) input_elem_count <= 0;
-        else if (valid) input_elem_count <= input_elem_count + 1;
+        if (rst) input_word_count <= 0;
+        else if (valid) input_word_count <= input_word_count + 1;
     end
-    wire valid_r0 = valid && (input_elem_count >= 0) && (input_elem_count <= 511);
-    wire valid_r1 = valid && (input_elem_count >= 512) && (input_elem_count <= 1023);
-    wire valid_r2 = valid && (input_elem_count >= 1024) && (input_elem_count <= 1535);
-    wire valid_r3 = valid && (input_elem_count >= 1536) && (input_elem_count <= 2047);
+    wire valid_r0 = valid && (input_word_count >= 0) && (input_word_count <= 255);
+    wire valid_r1 = valid && (input_word_count >= 256) && (input_word_count <= 511);
+    wire valid_r2 = valid && (input_word_count >= 512) && (input_word_count <= 767);
+    wire valid_r3 = valid && (input_word_count >= 768) && (input_word_count <= 1023);
 
-    // ── Row 0: SRAM + controller + 2 DPEs (K_row=512) ──
-    wire [DATA_WIDTH-1:0] sram_data_out_r0;
+    // ── Row 0: SRAM + controller + 2 DPEs (K_row=512, packed=256 words) ──
+    wire [16-1:0] sram_data_out_r0;
     wire [9-1:0] read_addr_r0, write_addr_r0;
     wire w_en_r0, w_buf_en_r0;
     wire [1:0] nl_dpe_control_r0;
@@ -141,7 +142,7 @@ module fc_layer #(
     wire [2-1:0] reg_empty_r0;
     wire [1-1:0] dpe_sel_h_r0;
 
-    sram #(.N_CHANNELS(1), .DEPTH(512)) sram_r0 (
+    sram #(.N_CHANNELS(1), .DEPTH(257), .DATA_WIDTH(16)) sram_r0 (
         .clk(clk), .rst(rst), .w_en(w_en_r0),
         .r_addr(read_addr_r0), .w_addr(write_addr_r0),
         .sram_data_in(data_in), .sram_data_out(sram_data_out_r0)
@@ -151,14 +152,14 @@ module fc_layer #(
         .N_CHANNELS(1), .N_BRAM_R(1), .N_BRAM_W(1),
         .N_DPE_V(1), .N_DPE_H(2),
         .ADDR_WIDTH(9), .N_KERNELS(1),
-        .KERNEL_WIDTH(512), .KERNEL_HEIGHT(1),
+        .KERNEL_WIDTH(256), .KERNEL_HEIGHT(1),
         .W(1), .H(1), .S(1)
     ) ctrl_r0 (
         .clk(clk), .rst(rst),
         .MSB_SA_Ready(MSB_SA_Ready_r0),
         .valid(valid_r0), .ready_n(ready_n),
         .dpe_done(dpe_done_r0),
-        .reg_full(1'b0),
+        .reg_full(reg_full_c0_r0),
         .reg_empty(reg_empty_r0),
         .shift_add_done(shift_add_done_r0),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl_r0),
@@ -232,8 +233,8 @@ module fc_layer #(
     assign shift_add_bypass_ctrl_r0 = shift_add_bypass_ctrl_c0_r0 & shift_add_bypass_ctrl_c1_r0;
     assign MSB_SA_Ready_r0 = MSB_SA_Ready_c0_r0 & MSB_SA_Ready_c1_r0;
 
-    // ── Row 1: SRAM + controller + 2 DPEs (K_row=512) ──
-    wire [DATA_WIDTH-1:0] sram_data_out_r1;
+    // ── Row 1: SRAM + controller + 2 DPEs (K_row=512, packed=256 words) ──
+    wire [16-1:0] sram_data_out_r1;
     wire [9-1:0] read_addr_r1, write_addr_r1;
     wire w_en_r1, w_buf_en_r1;
     wire [1:0] nl_dpe_control_r1;
@@ -246,7 +247,7 @@ module fc_layer #(
     wire [2-1:0] reg_empty_r1;
     wire [1-1:0] dpe_sel_h_r1;
 
-    sram #(.N_CHANNELS(1), .DEPTH(512)) sram_r1 (
+    sram #(.N_CHANNELS(1), .DEPTH(257), .DATA_WIDTH(16)) sram_r1 (
         .clk(clk), .rst(rst), .w_en(w_en_r1),
         .r_addr(read_addr_r1), .w_addr(write_addr_r1),
         .sram_data_in(data_in), .sram_data_out(sram_data_out_r1)
@@ -256,14 +257,14 @@ module fc_layer #(
         .N_CHANNELS(1), .N_BRAM_R(1), .N_BRAM_W(1),
         .N_DPE_V(1), .N_DPE_H(2),
         .ADDR_WIDTH(9), .N_KERNELS(1),
-        .KERNEL_WIDTH(512), .KERNEL_HEIGHT(1),
+        .KERNEL_WIDTH(256), .KERNEL_HEIGHT(1),
         .W(1), .H(1), .S(1)
     ) ctrl_r1 (
         .clk(clk), .rst(rst),
         .MSB_SA_Ready(MSB_SA_Ready_r1),
         .valid(valid_r1), .ready_n(ready_n),
         .dpe_done(dpe_done_r1),
-        .reg_full(1'b0),
+        .reg_full(reg_full_c0_r1),
         .reg_empty(reg_empty_r1),
         .shift_add_done(shift_add_done_r1),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl_r1),
@@ -337,8 +338,8 @@ module fc_layer #(
     assign shift_add_bypass_ctrl_r1 = shift_add_bypass_ctrl_c0_r1 & shift_add_bypass_ctrl_c1_r1;
     assign MSB_SA_Ready_r1 = MSB_SA_Ready_c0_r1 & MSB_SA_Ready_c1_r1;
 
-    // ── Row 2: SRAM + controller + 2 DPEs (K_row=512) ──
-    wire [DATA_WIDTH-1:0] sram_data_out_r2;
+    // ── Row 2: SRAM + controller + 2 DPEs (K_row=512, packed=256 words) ──
+    wire [16-1:0] sram_data_out_r2;
     wire [9-1:0] read_addr_r2, write_addr_r2;
     wire w_en_r2, w_buf_en_r2;
     wire [1:0] nl_dpe_control_r2;
@@ -351,7 +352,7 @@ module fc_layer #(
     wire [2-1:0] reg_empty_r2;
     wire [1-1:0] dpe_sel_h_r2;
 
-    sram #(.N_CHANNELS(1), .DEPTH(512)) sram_r2 (
+    sram #(.N_CHANNELS(1), .DEPTH(257), .DATA_WIDTH(16)) sram_r2 (
         .clk(clk), .rst(rst), .w_en(w_en_r2),
         .r_addr(read_addr_r2), .w_addr(write_addr_r2),
         .sram_data_in(data_in), .sram_data_out(sram_data_out_r2)
@@ -361,14 +362,14 @@ module fc_layer #(
         .N_CHANNELS(1), .N_BRAM_R(1), .N_BRAM_W(1),
         .N_DPE_V(1), .N_DPE_H(2),
         .ADDR_WIDTH(9), .N_KERNELS(1),
-        .KERNEL_WIDTH(512), .KERNEL_HEIGHT(1),
+        .KERNEL_WIDTH(256), .KERNEL_HEIGHT(1),
         .W(1), .H(1), .S(1)
     ) ctrl_r2 (
         .clk(clk), .rst(rst),
         .MSB_SA_Ready(MSB_SA_Ready_r2),
         .valid(valid_r2), .ready_n(ready_n),
         .dpe_done(dpe_done_r2),
-        .reg_full(1'b0),
+        .reg_full(reg_full_c0_r2),
         .reg_empty(reg_empty_r2),
         .shift_add_done(shift_add_done_r2),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl_r2),
@@ -442,8 +443,8 @@ module fc_layer #(
     assign shift_add_bypass_ctrl_r2 = shift_add_bypass_ctrl_c0_r2 & shift_add_bypass_ctrl_c1_r2;
     assign MSB_SA_Ready_r2 = MSB_SA_Ready_c0_r2 & MSB_SA_Ready_c1_r2;
 
-    // ── Row 3: SRAM + controller + 2 DPEs (K_row=512) ──
-    wire [DATA_WIDTH-1:0] sram_data_out_r3;
+    // ── Row 3: SRAM + controller + 2 DPEs (K_row=512, packed=256 words) ──
+    wire [16-1:0] sram_data_out_r3;
     wire [9-1:0] read_addr_r3, write_addr_r3;
     wire w_en_r3, w_buf_en_r3;
     wire [1:0] nl_dpe_control_r3;
@@ -456,7 +457,7 @@ module fc_layer #(
     wire [2-1:0] reg_empty_r3;
     wire [1-1:0] dpe_sel_h_r3;
 
-    sram #(.N_CHANNELS(1), .DEPTH(512)) sram_r3 (
+    sram #(.N_CHANNELS(1), .DEPTH(257), .DATA_WIDTH(16)) sram_r3 (
         .clk(clk), .rst(rst), .w_en(w_en_r3),
         .r_addr(read_addr_r3), .w_addr(write_addr_r3),
         .sram_data_in(data_in), .sram_data_out(sram_data_out_r3)
@@ -466,14 +467,14 @@ module fc_layer #(
         .N_CHANNELS(1), .N_BRAM_R(1), .N_BRAM_W(1),
         .N_DPE_V(1), .N_DPE_H(2),
         .ADDR_WIDTH(9), .N_KERNELS(1),
-        .KERNEL_WIDTH(512), .KERNEL_HEIGHT(1),
+        .KERNEL_WIDTH(256), .KERNEL_HEIGHT(1),
         .W(1), .H(1), .S(1)
     ) ctrl_r3 (
         .clk(clk), .rst(rst),
         .MSB_SA_Ready(MSB_SA_Ready_r3),
         .valid(valid_r3), .ready_n(ready_n),
         .dpe_done(dpe_done_r3),
-        .reg_full(1'b0),
+        .reg_full(reg_full_c0_r3),
         .reg_empty(reg_empty_r3),
         .shift_add_done(shift_add_done_r3),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl_r3),
@@ -555,13 +556,13 @@ module fc_layer #(
 
     // Column 0 adder tree (V=4)
     wire signed [DATA_WIDTH-1:0] col0_dpe_0;
-    assign col0_dpe_0 = {{24{dpe_out_c0_r0[15]}}, dpe_out_c0_r0};
+    assign col0_dpe_0 = dpe_out_c0_r0;
     wire signed [DATA_WIDTH-1:0] col0_dpe_1;
-    assign col0_dpe_1 = {{24{dpe_out_c0_r1[15]}}, dpe_out_c0_r1};
+    assign col0_dpe_1 = dpe_out_c0_r1;
     wire signed [DATA_WIDTH-1:0] col0_dpe_2;
-    assign col0_dpe_2 = {{24{dpe_out_c0_r2[15]}}, dpe_out_c0_r2};
+    assign col0_dpe_2 = dpe_out_c0_r2;
     wire signed [DATA_WIDTH-1:0] col0_dpe_3;
-    assign col0_dpe_3 = {{24{dpe_out_c0_r3[15]}}, dpe_out_c0_r3};
+    assign col0_dpe_3 = dpe_out_c0_r3;
     reg signed [DATA_WIDTH-1:0] col0_sum_reg;
     // Reduction level 0
     reg signed [DATA_WIDTH-1:0] col0_reduc_L0_0;
@@ -582,13 +583,13 @@ module fc_layer #(
 
     // Column 1 adder tree (V=4)
     wire signed [DATA_WIDTH-1:0] col1_dpe_0;
-    assign col1_dpe_0 = {{24{dpe_out_c1_r0[15]}}, dpe_out_c1_r0};
+    assign col1_dpe_0 = dpe_out_c1_r0;
     wire signed [DATA_WIDTH-1:0] col1_dpe_1;
-    assign col1_dpe_1 = {{24{dpe_out_c1_r1[15]}}, dpe_out_c1_r1};
+    assign col1_dpe_1 = dpe_out_c1_r1;
     wire signed [DATA_WIDTH-1:0] col1_dpe_2;
-    assign col1_dpe_2 = {{24{dpe_out_c1_r2[15]}}, dpe_out_c1_r2};
+    assign col1_dpe_2 = dpe_out_c1_r2;
     wire signed [DATA_WIDTH-1:0] col1_dpe_3;
-    assign col1_dpe_3 = {{24{dpe_out_c1_r3[15]}}, dpe_out_c1_r3};
+    assign col1_dpe_3 = dpe_out_c1_r3;
     reg signed [DATA_WIDTH-1:0] col1_sum_reg;
     // Reduction level 0
     reg signed [DATA_WIDTH-1:0] col1_reduc_L0_0;
@@ -613,7 +614,7 @@ module fc_layer #(
         case (dpe_sel_h)
             1'd0: data_out_mux = col0_act;
             1'd1: data_out_mux = col1_act;
-            default: data_out_mux = 40'd0;
+            default: data_out_mux = 16'd0;
         endcase
     end
     assign data_out = data_out_mux;
@@ -685,10 +686,11 @@ module conv_layer_single_dpe #(
     wire load_input_reg;
     wire [DATA_WIDTH-1:0] sram_data_out;
 
-    // Instantiate the SRAM module
+    // Instantiate the SRAM module (DATA_WIDTH propagated from parent)
     sram #(
         .N_CHANNELS(1),
-        .DEPTH(512)
+        .DEPTH(512),
+        .DATA_WIDTH(DATA_WIDTH)
     ) sram_inst (
         .clk(clk),
 		.rst(rst),

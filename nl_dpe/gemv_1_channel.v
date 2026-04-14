@@ -301,10 +301,11 @@ module conv_layer_single_dpe #(
     wire load_input_reg;
     wire [DATA_WIDTH-1:0] sram_data_out;
 
-    // Instantiate the SRAM module
+    // Instantiate the SRAM module (DATA_WIDTH propagated from parent)
     sram #(
         .N_CHANNELS(1),
-        .DEPTH(512)
+        .DEPTH(512),
+        .DATA_WIDTH(DATA_WIDTH)
     ) sram_inst (
         .clk(clk),
 		.rst(rst),

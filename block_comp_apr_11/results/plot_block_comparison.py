@@ -27,15 +27,21 @@ from style_constants import apply_style
 apply_style()
 
 CSV_PATH = SCRIPT_DIR / "block_comparison_results.csv"
-OUT_PATH = SCRIPT_DIR / "block_comparison_stacked.pdf"
+
+# ── Workload selection (default: fc_2048_256, or pass as argv[1]) ────────
+import argparse
+_parser = argparse.ArgumentParser()
+_parser.add_argument("workload", nargs="?", default="fc_2048_256",
+                     choices=["fc_512_128", "fc_2048_256"])
+_args = _parser.parse_args()
+WL = _args.workload
+OUT_PATH = SCRIPT_DIR / f"block_comparison_stacked_{WL}.pdf"
 
 # ── Load data ────────────────────────────────────────────────────────────
 data = {}
 with open(CSV_PATH) as f:
     for r in csv.DictReader(f):
         data[(r['setup'], r['workload'])] = r
-
-WL = "fc_2048_256"
 
 # Accumulation path: baseline → +crossbar → +bus width → +ACAM
 SETUPS = ["setup0", "setup3", "setup4", "setup5"]
@@ -169,16 +175,19 @@ for vals_n, vals_abs, seg_label in lat_components:
 ax_lat.set_xticks(x)
 ax_lat.set_xticklabels(LABELS, fontsize=6.5)
 ax_lat.set_ylabel('Latency')
-ax_lat.set_title('(a) Latency Breakdown — fc_2048_256', fontsize=8, fontweight='bold')
+ax_lat.set_title(f'(a) Latency Breakdown — {WL}', fontsize=8, fontweight='bold')
 ax_lat.set_ylim(0, max(lat_total_n) * 1.18)
 ax_lat.axhline(1.0, color='gray', linewidth=0.5, linestyle='--', alpha=0.5)
 ax_lat.legend(loc='upper right', fontsize=6, framealpha=0.9, ncol=1)
 ax_lat.grid(True, alpha=0.08, axis='y')
 
 # ── Panel (b): Energy — broken Y-axis ───────────────────────────────────
-# Data ranges: proposed ≈ 0.04, crossbar bars ≈ 0.53, baseline ≈ 1.0
-break_lo = 0.12   # top of bottom panel
-break_hi = 0.42   # bottom of top panel
+# Adaptive break points: gap between the proposed bar and the next-smallest
+e_sorted = sorted(e_total_n)
+e_smallest = e_sorted[0]          # proposed bar
+e_second = e_sorted[1]            # next bar
+break_lo = e_smallest * 2.5       # top of bottom panel: enough room for proposed
+break_hi = e_second * 0.85        # bottom of top panel: just below the next bar
 
 ax_e_bot.set_ylim(0, break_lo)
 ax_e_top.set_ylim(break_hi, max(e_total_n) * 1.10)
@@ -223,7 +232,7 @@ e_label_y = bot_y + (e_bot_h + e_gap + e_top_h) / 2
 fig.text(E_left - 0.04, e_label_y, 'Energy', va='center', ha='center',
          rotation='vertical', fontsize=8)
 ax_e_bot.set_ylabel('')  # clear default
-ax_e_top.set_title('(b) Energy Breakdown — fc_2048_256', fontsize=8, fontweight='bold')
+ax_e_top.set_title(f'(b) Energy Breakdown — {WL}', fontsize=8, fontweight='bold')
 
 # Annotate energy segments with > 5% share
 e_conv_n = [a + b for a, b in zip(e_adc_n, e_acam_n)]
@@ -258,7 +267,7 @@ fig.savefig(OUT_PATH)
 print(f"Saved to {OUT_PATH}")
 
 # Print summary
-print(f"\nfc_2048_256 — Accumulation path:")
+print(f"\n{WL} — Accumulation path:")
 print(f"{'Setup':30s} {'Latency':>10s} {'norm':>6s} {'Energy':>10s} {'norm':>6s}")
 for i, (s, l) in enumerate(zip(SETUPS, LABELS)):
     lb = l.replace('\n', ' ')

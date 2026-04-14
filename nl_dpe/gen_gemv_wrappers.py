@@ -237,7 +237,8 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
                   data_width: int = 40,
                   module_name: str = "fc_layer",
                   conversion: str = "acam",
-                  dpe_data_width: int = 40) -> str:
+                  dpe_data_width: int = 40,
+                  elems_per_word: int = 5) -> str:
     """Generate the fc_layer module for arbitrary (V, H) tiling.
 
     The fc_layer contains:
@@ -275,22 +276,24 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
     lines.append(f"    localparam ADDR_WIDTH = {addr_width};")
     lines.append(f"")
 
-    # ── Input demux: route elements to correct row SRAM (V>1) ──────
-    # Input arrives as a stream of K elements. First R go to row 0,
-    # next R to row 1, etc. Gate each row's valid signal.
+    # ── Input demux: route packed words to correct row SRAM (V>1) ──────
+    # Input arrives as a stream of packed words (elems_per_word int8s each).
+    # First ceil(R/epw) words go to row 0, next ceil(R/epw) to row 1, etc.
     if v > 1:
-        kw_bits = max(1, math.ceil(math.log2(k)) if k > 1 else 1)
-        lines.append(f"    // Input demux: route elements to per-row SRAMs")
-        lines.append(f"    reg [{kw_bits}-1:0] input_elem_count;")
+        total_packed_words = math.ceil(k / elems_per_word)
+        pw_bits = max(1, math.ceil(math.log2(total_packed_words)) if total_packed_words > 1 else 1)
+        lines.append(f"    // Input demux: route packed words to per-row SRAMs")
+        lines.append(f"    // ({elems_per_word} int8/word, {total_packed_words} words total)")
+        lines.append(f"    reg [{pw_bits}-1:0] input_word_count;")
         lines.append(f"    always @(posedge clk or posedge rst) begin")
-        lines.append(f"        if (rst) input_elem_count <= 0;")
-        lines.append(f"        else if (valid) input_elem_count <= input_elem_count + 1;")
+        lines.append(f"        if (rst) input_word_count <= 0;")
+        lines.append(f"        else if (valid) input_word_count <= input_word_count + 1;")
         lines.append(f"    end")
         for row_i in range(v):
-            lo = row_i * rows
-            hi = min((row_i + 1) * rows, k) - 1
+            lo = math.ceil(row_i * rows / elems_per_word)
+            hi = math.ceil(min((row_i + 1) * rows, k) / elems_per_word) - 1
             lines.append(f"    wire valid_r{row_i} = valid && "
-                         f"(input_elem_count >= {lo}) && (input_elem_count <= {hi});")
+                         f"(input_word_count >= {lo}) && (input_word_count <= {hi});")
         lines.append(f"")
 
     # ── Per-row SRAM + Controller + DPEs (parallel loading) ──────────
@@ -300,13 +303,15 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
 
     for row in range(v):
         kw_row = min(k, rows) if row < v - 1 else k - row * rows  # elements for this tile
-        sram_depth_row = max(512, kw_row) + 1  # +1 to avoid write pointer wrap = empty
+        packed_kw_row = math.ceil(kw_row / elems_per_word)  # packed word count
+        sram_depth_row = max(512 // elems_per_word, packed_kw_row) + 1
         addr_width_row = max(1, math.ceil(math.log2(sram_depth_row)) if sram_depth_row > 1 else 1)
 
-        lines.append(f"    // ── Row {row}: SRAM + controller + {h} DPEs (K_row={kw_row}) ──")
+        lines.append(f"    // ── Row {row}: SRAM + controller + {h} DPEs "
+                     f"(K_row={kw_row}, packed={packed_kw_row} words) ──")
 
         # Per-row wires
-        lines.append(f"    wire [DATA_WIDTH-1:0] sram_data_out_r{row};")
+        lines.append(f"    wire [{dpe_data_width}-1:0] sram_data_out_r{row};")
         lines.append(f"    wire [{addr_width_row}-1:0] read_addr_r{row}, write_addr_r{row};")
         lines.append(f"    wire w_en_r{row}, w_buf_en_r{row};")
         lines.append(f"    wire [1:0] nl_dpe_control_r{row};")
@@ -321,8 +326,9 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
             lines.append(f"    wire [{clog2_h}-1:0] dpe_sel_h_r{row};")
         lines.append(f"")
 
-        # SRAM
-        lines.append(f"    sram #(.N_CHANNELS(1), .DEPTH({sram_depth_row})) sram_r{row} (")
+        # SRAM (packed: DATA_WIDTH=dpe_data_width, each word holds elems_per_word int8s)
+        lines.append(f"    sram #(.N_CHANNELS(1), .DEPTH({sram_depth_row}), "
+                     f".DATA_WIDTH({dpe_data_width})) sram_r{row} (")
         lines.append(f"        .clk(clk), .rst(rst), .w_en(w_en_r{row}),")
         lines.append(f"        .r_addr(read_addr_r{row}), .w_addr(write_addr_r{row}),")
         lines.append(f"        .sram_data_in(data_in), .sram_data_out(sram_data_out_r{row})")
@@ -330,11 +336,12 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
         lines.append(f"")
 
         # Controller (N_DPE_V=1: this controller drives one row of H DPEs)
+        # KERNEL_WIDTH = packed word count (not element count)
         lines.append(f"    controller_scalable #(")
         lines.append(f"        .N_CHANNELS(1), .N_BRAM_R(1), .N_BRAM_W(1),")
         lines.append(f"        .N_DPE_V(1), .N_DPE_H({h}),")
         lines.append(f"        .ADDR_WIDTH({addr_width_row}), .N_KERNELS(1),")
-        lines.append(f"        .KERNEL_WIDTH({kw_row}), .KERNEL_HEIGHT(1),")
+        lines.append(f"        .KERNEL_WIDTH({packed_kw_row}), .KERNEL_HEIGHT(1),")
         lines.append(f"        .W(1), .H(1), .S(1)")
         lines.append(f"    ) ctrl_r{row} (")
         lines.append(f"        .clk(clk), .rst(rst),")
@@ -541,11 +548,13 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
                 depth: int, addr_width: int,
                 data_width: int = 40,
                 conversion: str = "acam",
-                dpe_data_width: int = 40) -> str:
+                dpe_data_width: int = 40,
+                elems_per_word: int = 5) -> str:
     """Generate the fc_top module (top-level wrapper).
 
     conversion: "acam" or "adc". Controls CLB activation LUT.
     dpe_data_width: DPE data_in/data_out pin width (16 or 40).
+    elems_per_word: int8 elements packed per SRAM word (dpe_data_width // 8).
     """
     needs_clb_activation = (conversion == "adc") or (v > 1)
     lines = []
@@ -578,15 +587,19 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
     dpe_dw = dpe_data_width
 
     if v == 1 and h == 1:
+        # Packed KERNEL_WIDTH: controller loops over packed words, not elements
+        packed_kw = math.ceil(k / elems_per_word)
+
         if needs_clb_activation:
             # Azure-Lily V=1 H=1: DPE + CLB activation LUT
             lines.append(f"    // V=1, H=1: conv_layer_single_dpe + CLB activation (ADC, no ACAM)")
+            lines.append(f"    // Packed: {elems_per_word} int8/word, {packed_kw} words for K={k}")
             lines.append(f"    wire [DATA_WIDTH-1:0] dpe_raw_out;")
             lines.append(f"    conv_layer_single_dpe #(")
             lines.append(f"        .N_CHANNELS(1),")
             lines.append(f"        .ADDR_WIDTH(ADDR_WIDTH),")
             lines.append(f"        .N_KERNELS(1),")
-            lines.append(f"        .KERNEL_WIDTH({k}),")
+            lines.append(f"        .KERNEL_WIDTH({packed_kw}),")
             lines.append(f"        .KERNEL_HEIGHT(1),")
             lines.append(f"        .W(1),")
             lines.append(f"        .H(1),")
@@ -611,11 +624,12 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
         else:
             # NL-DPE V=1 H=1: DPE with ACAM handles activation
             lines.append(f"    // V=1, H=1: conv_layer_single_dpe (ACAM handles activation)")
+            lines.append(f"    // Packed: {elems_per_word} int8/word, {packed_kw} words for K={k}")
             lines.append(f"    conv_layer_single_dpe #(")
             lines.append(f"        .N_CHANNELS(1),")
             lines.append(f"        .ADDR_WIDTH(ADDR_WIDTH),")
             lines.append(f"        .N_KERNELS(1),")
-            lines.append(f"        .KERNEL_WIDTH({k}),")
+            lines.append(f"        .KERNEL_WIDTH({packed_kw}),")
             lines.append(f"        .KERNEL_HEIGHT(1),")
             lines.append(f"        .W(1),")
             lines.append(f"        .H(1),")
@@ -665,11 +679,13 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
     lines.append(f"")
 
     # Global output SRAM buffer
-    lines.append(f"    // Output SRAM buffer")
+    # Output SRAM depth: enough for packed output words + margin
+    out_sram_depth = max(16, math.ceil(n / elems_per_word) + 2)
+    lines.append(f"    // Output SRAM buffer (packed: {elems_per_word} cols/word)")
     lines.append(f"    sram #(")
     lines.append(f"        .N_CHANNELS(1),")
     lines.append(f"        .DATA_WIDTH(DATA_WIDTH),")
-    lines.append(f"        .DEPTH(16)")
+    lines.append(f"        .DEPTH({out_sram_depth})")
     lines.append(f"    ) global_sram_inst (")
     lines.append(f"        .clk(clk),")
     lines.append(f"        .rst(rst),")
@@ -723,10 +739,12 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     v = math.ceil(k / rows)
     h = math.ceil(n / cols)
     total_dpes = v * h
-    data_width = 40
-    # Depth must be > K to avoid write pointer wrapping to equal read pointer
-    # (controller's circular buffer can't distinguish "full" from "empty")
-    depth = max(512, k) + 1
+    data_width = dpe_data_width  # external port matches DPE bus width
+    # Packed transfers: floor(dpe_data_width / 8) int8 elements per SRAM word
+    elems_per_word = dpe_data_width // 8  # 2 for 16-bit, 5 for 40-bit
+    # SRAM depth in packed words (not individual elements)
+    packed_k = math.ceil(k / elems_per_word)
+    depth = max(512 // elems_per_word, packed_k) + 1
     addr_width = math.ceil(math.log2(depth)) if depth > 1 else 1
     acam_eligible = (v == 1) and (conversion == "acam")
     needs_clb_activation = (conversion == "adc") or (v > 1)
@@ -755,7 +773,8 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     parts.append(f"// =====================================================")
     parts.append(_gen_fc_top(v, h, k, n, rows, cols, depth, addr_width,
                              data_width, conversion=conversion,
-                             dpe_data_width=dpe_data_width))
+                             dpe_data_width=dpe_data_width,
+                             elems_per_word=elems_per_word))
     parts.append(f"")
 
     # fc_layer module (only if not V=1 H=1)
@@ -765,7 +784,8 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
         parts.append(f"// =====================================================")
         parts.append(_gen_fc_layer(v, h, k, n, rows, cols, depth, addr_width,
                                    data_width, conversion=conversion,
-                                   dpe_data_width=dpe_data_width))
+                                   dpe_data_width=dpe_data_width,
+                                   elems_per_word=elems_per_word))
         parts.append(f"")
 
     # activation_lut module (needed for Azure-Lily always, NL-DPE only when V>1)

@@ -1,26 +1,33 @@
-// Behavioral DPE model with real VMM computation.
+// Behavioral DPE model with real VMM computation — cycle-accurate.
 //
 // Models an R×C analog crossbar at behavioral level:
 //   - Weight memory: R × C int8 weights (pre-loaded via weight_load interface)
 //   - Input buffer: R int8 values loaded via w_buf_en
 //   - VMM: output[c] = Σ_{r=0}^{R-1} input[r] × weight[r][c]  for each column c
-//   - Output: C results serialized through data_out port, one per cycle
+//   - Output: C results serialized through data_out port
 //
-// Weight loading: before normal operation, assert weight_wen with weight_data
-//   and weight_col_idx to load one column of weights at a time.
-//   Each column load takes R cycles (one weight per cycle).
-//   This is a testbench-only interface (not part of the real DPE hard block).
+// Cycle-accurate parameters:
+//   - DPE_BUF_WIDTH: bits per w_buf_en strobe (16 or 40)
+//     S_LOAD takes ceil(KERNEL_WIDTH * 8 / DPE_BUF_WIDTH) strobes
+//     S_OUTPUT takes ceil(NUM_COLS * 8 / DPE_BUF_WIDTH) cycles
+//   - COMPUTE_CYCLES: bit-serial pipeline delay
+//     ADC (Azure-Lily): 44 cycles (8 bit-slices × 3-stage pipeline + ADC)
+//     ACAM (NL-DPE): 3 cycles (8 bit-slices × 2-stage pipeline + ACAM drain)
+//
+// Weight loading: testbench-only interface (weight_wen, weight_data, etc.)
 //
 // Handshake protocol (matches controller_scalable and conv_controller):
-//   1. Controller asserts w_buf_en → DPE buffers data_in into input_buffer[r]
-//   2. After KERNEL_WIDTH elements → DPE asserts reg_full
+//   1. Controller asserts w_buf_en → DPE buffers data_in
+//   2. After enough strobes → DPE asserts reg_full
 //   3. Controller fires nl_dpe_control=2'b11 → DPE computes VMM
-//   4. DPE outputs C results serially → asserts dpe_done
+//   4. DPE outputs results serially → asserts dpe_done
 //   5. DPE resets → ready for next pass
 
 module dpe #(
-    parameter KERNEL_WIDTH = 512,   // R: number of input elements per VMM pass
-    parameter NUM_COLS     = 128    // C: number of crossbar columns (output elements)
+    parameter KERNEL_WIDTH  = 512,  // R: number of input elements per VMM pass
+    parameter NUM_COLS      = 128,  // C: number of crossbar columns (output elements)
+    parameter DPE_BUF_WIDTH = 16,   // bits per transfer strobe (16 or 40)
+    parameter COMPUTE_CYCLES = 44   // bit-serial pipeline delay (44=ADC, 3=ACAM)
 )(
     input  wire        clk,
     input  wire        reset,
@@ -45,6 +52,13 @@ module dpe #(
     input  wire [15:0] weight_col_addr   // which column to write
 );
 
+    // ── Derived parameters ──
+    // Packed transfers: each w_buf_en strobe carries DPE_BUF_WIDTH bits
+    // = ELEMS_PER_STROBE int8 elements. Controller sends LOAD_STROBES strobes.
+    localparam ELEMS_PER_STROBE = DPE_BUF_WIDTH / 8;
+    localparam LOAD_STROBES  = (KERNEL_WIDTH + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;
+    localparam OUTPUT_CYCLES = (NUM_COLS + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;
+
     // ── Weight memory: R × C int8 ──
     reg signed [7:0] weights [0:KERNEL_WIDTH-1][0:NUM_COLS-1];
 
@@ -56,11 +70,11 @@ module dpe #(
 
     // ── Input buffer: R int8 ──
     reg signed [7:0] input_buffer [0:KERNEL_WIDTH-1];
-    reg [15:0] load_count;
+    reg [15:0] load_count;  // counts elements loaded (1 per w_buf_en strobe)
 
     // ── VMM result: C columns ──
     reg signed [31:0] vmm_result [0:NUM_COLS-1];
-    reg [15:0] output_col_idx;   // which column is being output
+    reg [15:0] output_col_idx;   // which output column we're on
 
     // ── FSM ──
     localparam S_IDLE      = 3'd0;
@@ -71,21 +85,25 @@ module dpe #(
     localparam S_DRAIN     = 3'd5;
 
     reg [2:0]  state;
-    reg [7:0]  compute_cycles;
+    reg [15:0] compute_cycle_cnt;
 
-    integer r, c;  // loop variables for VMM
+    integer r, c, b;  // loop variables
+
+    // Track strobes (not individual elements)
+    reg [15:0] strobe_count;
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             state <= S_IDLE;
             load_count <= 0;
+            strobe_count <= 0;
             data_out <= 0;
             dpe_done <= 0;
             reg_full <= 0;
             MSB_SA_Ready <= 1;
             shift_add_done <= 1;
             shift_add_bypass_ctrl <= 1;
-            compute_cycles <= 0;
+            compute_cycle_cnt <= 0;
             output_col_idx <= 0;
         end else begin
             dpe_done <= 0;  // default: pulse
@@ -96,21 +114,38 @@ module dpe #(
                     MSB_SA_Ready <= 1;
                     shift_add_done <= 1;
                     load_count <= 0;
-                    compute_cycles <= 0;
+                    strobe_count <= 0;
+                    compute_cycle_cnt <= 0;
                     output_col_idx <= 0;
 
                     if (w_buf_en) begin
-                        input_buffer[0] <= data_in[7:0];  // store int8
-                        load_count <= 1;
-                        state <= S_LOAD;
+                        // Unpack ELEMS_PER_STROBE bytes from data_in
+                        for (b = 0; b < ELEMS_PER_STROBE; b = b + 1)
+                            if (b < KERNEL_WIDTH)
+                                input_buffer[b] <= data_in[b*8 +: 8];
+                        load_count <= (ELEMS_PER_STROBE < KERNEL_WIDTH) ?
+                                       ELEMS_PER_STROBE : KERNEL_WIDTH;
+                        strobe_count <= 1;
+                        if (1 >= LOAD_STROBES) begin
+                            reg_full <= 1;
+                            MSB_SA_Ready <= 0;
+                            shift_add_done <= 0;
+                            state <= S_WAIT_EXEC;
+                        end else begin
+                            state <= S_LOAD;
+                        end
                     end
                 end
 
                 S_LOAD: begin
                     if (w_buf_en) begin
-                        input_buffer[load_count] <= data_in[7:0];
-                        load_count <= load_count + 1;
-                        if (load_count + 1 >= KERNEL_WIDTH) begin
+                        // Unpack ELEMS_PER_STROBE bytes from data_in
+                        for (b = 0; b < ELEMS_PER_STROBE; b = b + 1)
+                            if (load_count + b < KERNEL_WIDTH)
+                                input_buffer[load_count + b] <= data_in[b*8 +: 8];
+                        load_count <= load_count + ELEMS_PER_STROBE;
+                        strobe_count <= strobe_count + 1;
+                        if (strobe_count + 1 >= LOAD_STROBES) begin
                             reg_full <= 1;
                             MSB_SA_Ready <= 0;
                             shift_add_done <= 0;
@@ -129,16 +164,16 @@ module dpe #(
                                     input_buffer[r] * weights[r][c];
                             end
                         end
-                        compute_cycles <= 0;
+                        compute_cycle_cnt <= 0;
                         output_col_idx <= 0;
                         state <= S_COMPUTE;
                     end
                 end
 
                 S_COMPUTE: begin
-                    // Simulate 8-cycle bit-serial compute delay
-                    compute_cycles <= compute_cycles + 1;
-                    if (compute_cycles >= 7) begin
+                    // Parameterized bit-serial compute delay
+                    compute_cycle_cnt <= compute_cycle_cnt + 1;
+                    if (compute_cycle_cnt >= COMPUTE_CYCLES - 1) begin
                         MSB_SA_Ready <= 1;
                         shift_add_done <= 1;
                         output_col_idx <= 0;
@@ -147,11 +182,14 @@ module dpe #(
                 end
 
                 S_OUTPUT: begin
-                    // Serial output: one column per cycle
+                    // Packed output: OUTPUT_CYCLES cycles, ELEMS_PER_STROBE cols per cycle
                     dpe_done <= 1;  // held high during output phase
-                    data_out <= {{8{vmm_result[output_col_idx][31]}},
-                                 vmm_result[output_col_idx][31:0]};
-                    if (output_col_idx < NUM_COLS - 1) begin
+                    // Pack ELEMS_PER_STROBE column results into data_out
+                    data_out <= 0;
+                    for (b = 0; b < ELEMS_PER_STROBE; b = b + 1)
+                        if (output_col_idx * ELEMS_PER_STROBE + b < NUM_COLS)
+                            data_out[b*8 +: 8] <= vmm_result[output_col_idx * ELEMS_PER_STROBE + b][7:0];
+                    if (output_col_idx < OUTPUT_CYCLES - 1) begin
                         output_col_idx <= output_col_idx + 1;
                     end else begin
                         state <= S_DRAIN;
@@ -162,6 +200,7 @@ module dpe #(
                     dpe_done <= 0;
                     reg_full <= 0;
                     load_count <= 0;
+                    strobe_count <= 0;
                     output_col_idx <= 0;
                     MSB_SA_Ready <= 1;
                     shift_add_done <= 1;

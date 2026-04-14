@@ -11,7 +11,7 @@
 // fc_top — top-level module
 // =====================================================
 module fc_top #(
-    parameter DATA_WIDTH = 40
+    parameter DATA_WIDTH = 16
 )(
     input wire clk,
     input wire rst,
@@ -25,8 +25,8 @@ module fc_top #(
 
     localparam V = 1;
     localparam H = 1;
-    localparam DEPTH = 513;
-    localparam ADDR_WIDTH = 10;
+    localparam DEPTH = 257;
+    localparam ADDR_WIDTH = 9;
 
     // Internal signals for global controller
     wire valid_g_in, valid_g_out, ready_g_in, ready_g_out;
@@ -35,17 +35,18 @@ module fc_top #(
     reg [7:0] read_address, write_address;
 
     // V=1, H=1: conv_layer_single_dpe + CLB activation (ADC, no ACAM)
+    // Packed: 2 int8/word, 256 words for K=512
     wire [DATA_WIDTH-1:0] dpe_raw_out;
     conv_layer_single_dpe #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(ADDR_WIDTH),
         .N_KERNELS(1),
-        .KERNEL_WIDTH(512),
+        .KERNEL_WIDTH(256),
         .KERNEL_HEIGHT(1),
         .W(1),
         .H(1),
         .S(1),
-        .DEPTH(513),
+        .DEPTH(257),
         .DATA_WIDTH(16)
     ) fc_layer_inst (
         .clk(clk),
@@ -77,11 +78,11 @@ module fc_top #(
         .ready_Ln(ready_g_out)
     );
 
-    // Output SRAM buffer
+    // Output SRAM buffer (packed: 2 cols/word)
     sram #(
         .N_CHANNELS(1),
         .DATA_WIDTH(DATA_WIDTH),
-        .DEPTH(16)
+        .DEPTH(66)
     ) global_sram_inst (
         .clk(clk),
         .rst(rst),
@@ -175,10 +176,11 @@ module conv_layer_single_dpe #(
     wire load_input_reg;
     wire [DATA_WIDTH-1:0] sram_data_out;
 
-    // Instantiate the SRAM module
+    // Instantiate the SRAM module (DATA_WIDTH propagated from parent)
     sram #(
         .N_CHANNELS(1),
-        .DEPTH(512)
+        .DEPTH(512),
+        .DATA_WIDTH(DATA_WIDTH)
     ) sram_inst (
         .clk(clk),
 		.rst(rst),
