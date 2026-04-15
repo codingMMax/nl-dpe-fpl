@@ -117,8 +117,13 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
       Halves DPE passes → ~42% energy reduction on QK^T.
     """
     dw = data_width
+    epw = dw // 8  # elements per packed word
     # Dual-identity: DPE processes 2×d_head elements per pass
     dpe_kw = 2 * d_head if dual_identity else d_head
+    # Packed word counts for FSM thresholds
+    packed_d = math.ceil(d_head / epw)      # packed words per Q/K vector
+    packed_Nd = math.ceil(n_seq * d_head / epw)  # packed words for all K vectors
+    packed_N = math.ceil(n_seq / epw)       # packed words per score row
     # Addr width = max across all SRAMs (safe for all addr registers)
     max_depth = max(depth_q, depth_k, depth_score)
     addr_width = max(1, (max_depth - 1).bit_length())
@@ -168,12 +173,20 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"              .w_addr(k_write_addr[{k_addr_width}-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_b));")
     lines.append(f"")
 
-    # CLB adders
-    lines.append(f"    // CLB adder A: log_Q + log_K[j₁] (log-domain addition)")
-    lines.append(f"    wire [DATA_WIDTH-1:0] log_sum_a = q_sram_out + k_sram_out_a;")
+    # CLB adders — byte-wise parallel (no carry between packed int8 lanes)
+    lines.append(f"    // CLB adder A: log_Q + log_K[j₁] (byte-wise, {epw} lanes)")
+    lines.append(f"    wire [DATA_WIDTH-1:0] log_sum_a;")
+    lines.append(f"    genvar ga;")
+    lines.append(f"    generate for (ga = 0; ga < {epw}; ga = ga + 1) begin : add_a")
+    lines.append(f"        assign log_sum_a[ga*8 +: 8] = q_sram_out[ga*8 +: 8] + k_sram_out_a[ga*8 +: 8];")
+    lines.append(f"    end endgenerate")
     if dual_identity:
-        lines.append(f"    // CLB adder B: log_Q + log_K[j₂] (second vector for dual-identity)")
-        lines.append(f"    wire [DATA_WIDTH-1:0] log_sum_b = q_sram_out + k_sram_out_b;")
+        lines.append(f"    // CLB adder B: log_Q + log_K[j₂] (byte-wise, {epw} lanes)")
+        lines.append(f"    wire [DATA_WIDTH-1:0] log_sum_b;")
+        lines.append(f"    genvar gb;")
+        lines.append(f"    generate for (gb = 0; gb < {epw}; gb = gb + 1) begin : add_b")
+        lines.append(f"        assign log_sum_b[gb*8 +: 8] = q_sram_out[gb*8 +: 8] + k_sram_out_b[gb*8 +: 8];")
+        lines.append(f"    end endgenerate")
     lines.append(f"")
 
     # DPE(I|exp) stage — wider KERNEL_WIDTH for dual-identity
@@ -196,53 +209,80 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
             lines.append(f"    reg feed_phase;  // 0=vector A, 1=vector B")
             lines.append(f"    assign dimm_exp_data_in = feed_phase ? log_sum_b : log_sum_a;")
             lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE);")
-            lines.append(f"    assign dimm_exp_ready_n = 1'b0;")
+            lines.append(f"    assign dimm_exp_ready_n = 1'b1;  // accumulator always ready")
         else:
             lines.append(f"    assign dimm_exp_data_in = log_sum_a;")
             lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE);")
-            lines.append(f"    assign dimm_exp_ready_n = 1'b0;")
+            lines.append(f"    assign dimm_exp_ready_n = 1'b1;  // accumulator always ready")
     else:
         lines.append(f"    reg [{max(1, math.ceil(math.log2(h_dimm)))-1}:0] dimm_sel;")
         for i in range(h_dimm):
             lines.append(f"    assign dimm_exp_{i}_data_in = log_sum_a;")
             lines.append(f"    assign dimm_exp_{i}_valid = (state == S_COMPUTE) && (dimm_sel == {i});")
-            lines.append(f"    assign dimm_exp_{i}_ready_n = 1'b0;")
+            lines.append(f"    assign dimm_exp_{i}_ready_n = 1'b1;  // accumulator always ready")
     lines.append(f"")
 
-    # CLB accumulators — dual-identity needs two independent accumulators
-    if dual_identity:
-        lines.append(f"    // Dual accumulators: one per vector (A for j₁, B for j₂)")
-        lines.append(f"    reg [2*DATA_WIDTH-1:0] accumulator_a, accumulator_b;")
-        lines.append(f"    reg acc_phase;  // 0=accumulating A outputs, 1=accumulating B outputs")
-        lines.append(f"    always @(posedge clk) begin")
-        lines.append(f"        if (rst) begin accumulator_a <= 0; accumulator_b <= 0; end")
-        lines.append(f"        else if (dimm_exp_valid_n) begin")
-        lines.append(f"            if (!acc_phase) accumulator_a <= accumulator_a + dimm_exp_data_out;")
-        lines.append(f"            else accumulator_b <= accumulator_b + dimm_exp_data_out;")
-        lines.append(f"        end")
+    # CLB byte-wise accumulator: sum the first d (or 2*d) meaningful int8 results
+    # from packed DPE output. Only columns 0..d-1 (or 0..2*d-1 for dual) carry
+    # useful exp() values. Columns >= d are exp(0)=1 from zero-weight identity rows.
+    epw = dw // 8
+    useful_cols = dpe_kw  # d for single, 2*d for dual
+    dpe_out_signal = "dimm_exp_data_out" if h_dimm == 1 else "dimm_exp_mux"
+    dpe_valid_signal = "dimm_exp_valid_n" if h_dimm == 1 else "dimm_exp_any_valid_n"
+
+    if h_dimm > 1:
+        lines.append(f"    wire dimm_exp_any_valid_n = {' || '.join(f'dimm_exp_{i}_valid_n' for i in range(h_dimm))};")
+        lines.append(f"    reg [DATA_WIDTH-1:0] dimm_exp_mux;")
+        lines.append(f"    always @(*) begin")
+        lines.append(f"        case (dimm_sel)")
+        for i in range(h_dimm):
+            lines.append(f"            {i}: dimm_exp_mux = dimm_exp_{i}_data_out;")
+        lines.append(f"            default: dimm_exp_mux = 0;")
+        lines.append(f"        endcase")
         lines.append(f"    end")
-    else:
-        lines.append(f"    reg [2*DATA_WIDTH-1:0] accumulator;")
-        dpe_done_signal = "dimm_exp_valid_n" if h_dimm == 1 else " || ".join(f"dimm_exp_{i}_valid_n" for i in range(h_dimm))
-        if h_dimm == 1:
-            lines.append(f"    always @(posedge clk) begin")
-            lines.append(f"        if (rst) accumulator <= 0;")
-            lines.append(f"        else if (dimm_exp_valid_n) accumulator <= accumulator + dimm_exp_data_out;")
-            lines.append(f"    end")
-        else:
-            lines.append(f"    wire dimm_exp_any_valid_n = {dpe_done_signal};")
-            lines.append(f"    reg [DATA_WIDTH-1:0] dimm_exp_mux;")
-            lines.append(f"    always @(*) begin")
-            lines.append(f"        case (dimm_sel)")
-            for i in range(h_dimm):
-                lines.append(f"            {i}: dimm_exp_mux = dimm_exp_{i}_data_out;")
-            lines.append(f"            default: dimm_exp_mux = 0;")
-            lines.append(f"        endcase")
-            lines.append(f"    end")
-            lines.append(f"    always @(posedge clk) begin")
-            lines.append(f"        if (rst) accumulator <= 0;")
-            lines.append(f"        else if (dimm_exp_any_valid_n) accumulator <= accumulator + dimm_exp_mux;")
-            lines.append(f"    end")
+
+    # Masked byte-wise sum: only sum columns < useful_cols per output word.
+    # Column index for output word w, byte b = w * EPW + b.
+    # We use a col_counter that tracks which absolute column is in each byte lane.
+    lines.append(f"    // Masked accumulator: sum only first {useful_cols} columns per score")
+    lines.append(f"    reg [31:0] accumulator;")
+    lines.append(f"    reg acc_clear;")
+    lines.append(f"    reg [15:0] col_counter;  // absolute column index for current output word")
+    lines.append(f"    wire [31:0] masked_byte_sum;")
+    # Generate masked sum: only include bytes where col_counter + b < useful_cols
+    mask_terms = []
+    for b in range(epw):
+        mask_terms.append(f"((col_counter + {b} < {useful_cols}) ? {{24'b0, {dpe_out_signal}[{b}*8 +: 8]}} : 32'd0)")
+    lines.append(f"    assign masked_byte_sum = " + " + ".join(mask_terms) + ";")
+    lines.append(f"    always @(posedge clk) begin")
+    lines.append(f"        if (rst || acc_clear) begin accumulator <= 0; col_counter <= 0; end")
+    lines.append(f"        else if ({dpe_valid_signal}) begin")
+    lines.append(f"            accumulator <= accumulator + masked_byte_sum;")
+    lines.append(f"            col_counter <= col_counter + {epw};")
+    lines.append(f"        end")
+    lines.append(f"    end")
+
+    if dual_identity:
+        # For dual-identity: cols 0..d-1 = vec A, cols d..2d-1 = vec B
+        # Split accumulator into A and B after DPE output is done
+        # (simpler: use two separate accumulators with col masking)
+        # TODO: implement dual-identity accumulator splitting
+        lines.append(f"    // TODO: dual-identity requires separate A/B accumulators")
+        lines.append(f"    // For now, single accumulator sums both vectors")
+        lines.append(f"    wire [31:0] accumulator_a = accumulator;  // placeholder")
+        lines.append(f"    wire [31:0] accumulator_b = 0;  // placeholder")
+
+    # DPE output counter
+    out_cycles = math.ceil(128 / epw)  # NUM_COLS=128 hardcoded for DPE crossbar
+    lines.append(f"    reg dpe_output_done;")
+    lines.append(f"    reg [15:0] dpe_out_count;")
+    lines.append(f"    always @(posedge clk) begin")
+    lines.append(f"        if (rst || acc_clear) begin dpe_out_count <= 0; dpe_output_done <= 0; end")
+    lines.append(f"        else if ({dpe_valid_signal}) begin")
+    lines.append(f"            dpe_out_count <= dpe_out_count + 1;")
+    lines.append(f"            if (dpe_out_count + 1 >= {out_cycles}) dpe_output_done <= 1;")
+    lines.append(f"        end")
+    lines.append(f"    end")
     lines.append(f"")
 
     # Score SRAM
@@ -255,15 +295,19 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"                .w_addr(score_write_addr),.sram_data_in(score_write_data),.sram_data_out(score_sram_out));")
     lines.append(f"")
 
-    # FSM — dual-identity processes 2 score elements per iteration
+    # FSM — S_COMPUTE feeds data, S_WAIT_DPE waits for DPE output,
+    # S_WRITE_SCORE writes accumulator to score SRAM
     stride = 2 if dual_identity else 1
-    lines.append(f"    localparam S_IDLE = 3'd0, S_LOAD_Q = 3'd1, S_LOAD_K = 3'd2,")
-    lines.append(f"               S_COMPUTE = 3'd3, S_OUTPUT = 3'd4;")
+    lines.append(f"    localparam S_IDLE = 4'd0, S_LOAD_Q = 4'd1, S_LOAD_K = 4'd2,")
+    lines.append(f"               S_COMPUTE = 4'd3, S_WAIT_DPE = 4'd4, S_WRITE_SCORE = 4'd5,")
+    lines.append(f"               S_OUTPUT = 4'd6;")
     if dual_identity:
-        lines.append(f"    localparam S_WRITE_B = 3'd5;  // write second score for dual-identity")
-    lines.append(f"    reg [2:0] state;")
-    lines.append(f"    reg [$clog2(d)-1:0] mac_count;")
-    lines.append(f"    reg [$clog2(N)-1:0] score_idx;")
+        lines.append(f"    localparam S_WRITE_B = 4'd7;")
+    mac_bits = max(1, (packed_d - 1).bit_length())
+    score_bits = max(1, (n_seq - 1).bit_length())
+    lines.append(f"    reg [3:0] state;")
+    lines.append(f"    reg [{mac_bits}-1:0] mac_count;  // packed word counter (0..{packed_d-1})")
+    lines.append(f"    reg [{score_bits}-1:0] score_idx;  // score column index (element, 0..N-1)")
     if dual_identity:
         lines.append(f"    reg feed_half;  // 0=feeding vector A (d elements), 1=feeding vector B")
     lines.append(f"")
@@ -277,72 +321,81 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"            feed_half <= 0; feed_phase <= 0; acc_phase <= 0;")
     lines.append(f"            score_write_addr <= 0; score_read_addr <= 0; score_w_en <= 0;")
     lines.append(f"            score_write_data <= 0;")
-    lines.append(f"            mac_count <= 0; score_idx <= 0;")
+    lines.append(f"            mac_count <= 0; score_idx <= 0; acc_clear <= 0;")
     if h_dimm > 1:
         lines.append(f"            dimm_sel <= 0;")
     lines.append(f"        end else begin")
-    lines.append(f"            q_w_en <= 0; k_w_en <= 0; score_w_en <= 0;")
+    lines.append(f"            q_w_en <= 0; k_w_en <= 0; score_w_en <= 0; acc_clear <= 0;")
     lines.append(f"            case (state)")
     lines.append(f"                S_IDLE: if (valid_q || valid_k) state <= S_LOAD_Q;")
     lines.append(f"                S_LOAD_Q: begin")
     lines.append(f"                    if (valid_q) begin q_w_en <= 1; q_write_addr <= q_write_addr + 1; end")
-    lines.append(f"                    if (q_write_addr == d-1) state <= S_LOAD_K;")
+    lines.append(f"                    if (q_write_addr == {packed_d - 1}) state <= S_LOAD_K;  // {packed_d} packed words for d={d_head}")
     lines.append(f"                end")
     lines.append(f"                S_LOAD_K: begin")
     lines.append(f"                    if (valid_k) begin k_w_en <= 1; k_write_addr <= k_write_addr + 1; end")
-    lines.append(f"                    if (k_write_addr == N*d-1) state <= S_COMPUTE;")
+    lines.append(f"                    if (k_write_addr == {packed_Nd - 1}) state <= S_COMPUTE;  // {packed_Nd} packed words for N*d={n_seq}*{d_head}")
     lines.append(f"                end")
     lines.append(f"                S_COMPUTE: begin")
 
     if dual_identity:
-        # Dual-identity FSM: feed d elements for vec A, then d elements for vec B
-        lines.append(f"                    // Dual-identity: feed vector A then vector B per DPE pass")
+        # Dual-identity: feed vec A (packed_d words) then vec B (packed_d), then wait for DPE
+        lines.append(f"                    // Feed phase: read Q/K, produce log_sum, feed to DPE")
         lines.append(f"                    q_read_addr <= mac_count;")
-        lines.append(f"                    k_read_addr_a <= (score_idx << $clog2(d)) + mac_count;")
-        lines.append(f"                    k_read_addr_b <= ((score_idx + 1) << $clog2(d)) + mac_count;")
+        lines.append(f"                    k_read_addr_a <= score_idx * {packed_d} + mac_count;")
+        lines.append(f"                    k_read_addr_b <= (score_idx + 1) * {packed_d} + mac_count;")
         lines.append(f"                    if (!feed_half) begin")
-        lines.append(f"                        // Feeding vector A (log_sum_a)")
         lines.append(f"                        feed_phase <= 0; acc_phase <= 0;")
         lines.append(f"                        mac_count <= mac_count + 1;")
-        lines.append(f"                        if (mac_count == d-1) begin")
+        lines.append(f"                        if (mac_count == {packed_d - 1}) begin")
         lines.append(f"                            mac_count <= 0;")
         lines.append(f"                            feed_half <= 1;")
         lines.append(f"                        end")
         lines.append(f"                    end else begin")
-        lines.append(f"                        // Feeding vector B (log_sum_b)")
         lines.append(f"                        feed_phase <= 1; acc_phase <= 1;")
         lines.append(f"                        mac_count <= mac_count + 1;")
-        lines.append(f"                        if (mac_count == d-1) begin")
-        lines.append(f"                            // Both vectors done — write score A, then B")
-        lines.append(f"                            score_write_data <= accumulator_a[2*DATA_WIDTH-1:DATA_WIDTH];")
-        lines.append(f"                            score_w_en <= 1;")
-        lines.append(f"                            score_write_addr <= score_idx;")
+        lines.append(f"                        if (mac_count == {packed_d - 1}) begin")
         lines.append(f"                            mac_count <= 0;")
         lines.append(f"                            feed_half <= 0;")
-        lines.append(f"                            state <= S_WRITE_B;")
+        lines.append(f"                            state <= S_WAIT_DPE;  // wait for DPE to finish")
         lines.append(f"                        end")
         lines.append(f"                    end")
         lines.append(f"                end")
+        lines.append(f"                S_WAIT_DPE: begin")
+        lines.append(f"                    // Wait for DPE to process and produce all output")
+        lines.append(f"                    if (dpe_output_done) begin")
+        lines.append(f"                        // Write score A")
+        lines.append(f"                        score_write_data <= accumulator_a[7:0];")
+        lines.append(f"                        score_w_en <= 1;")
+        lines.append(f"                        score_write_addr <= score_idx;")
+        lines.append(f"                        state <= S_WRITE_B;")
+        lines.append(f"                    end")
+        lines.append(f"                end")
         lines.append(f"                S_WRITE_B: begin")
-        lines.append(f"                    // Write second score (j₂ = score_idx + 1)")
-        lines.append(f"                    score_write_data <= accumulator_b[2*DATA_WIDTH-1:DATA_WIDTH];")
+        lines.append(f"                    score_write_data <= accumulator_b[7:0];")
         lines.append(f"                    score_w_en <= 1;")
         lines.append(f"                    score_write_addr <= score_idx + 1;")
-        lines.append(f"                    accumulator_a <= 0; accumulator_b <= 0;")
+        lines.append(f"                    acc_clear <= 1;")
         lines.append(f"                    if (score_idx >= N-2) state <= S_OUTPUT;")
         lines.append(f"                    else begin score_idx <= score_idx + {stride}; state <= S_COMPUTE; end")
     else:
-        lines.append(f"                    // Feed log_sum to DPE, accumulate exp results")
+        lines.append(f"                    // Feed log_sum to DPE (packed, {packed_d} words per score)")
         lines.append(f"                    q_read_addr <= mac_count;")
-        lines.append(f"                    k_read_addr_a <= (score_idx << $clog2(d)) + mac_count;")
+        lines.append(f"                    k_read_addr_a <= score_idx * {packed_d} + mac_count;")
         lines.append(f"                    mac_count <= mac_count + 1;")
-        lines.append(f"                    if (mac_count == d-1) begin")
-        lines.append(f"                        score_write_data <= accumulator[2*DATA_WIDTH-1:DATA_WIDTH];")
+        lines.append(f"                    if (mac_count == {packed_d - 1}) begin")
+        lines.append(f"                        mac_count <= 0;")
+        lines.append(f"                        state <= S_WAIT_DPE;")
+        lines.append(f"                    end")
+        lines.append(f"                end")
+        lines.append(f"                S_WAIT_DPE: begin")
+        lines.append(f"                    if (dpe_output_done) begin")
+        lines.append(f"                        score_write_data <= accumulator[7:0];")
         lines.append(f"                        score_w_en <= 1;")
         lines.append(f"                        score_write_addr <= score_idx;")
-        lines.append(f"                        mac_count <= 0;")
+        lines.append(f"                        acc_clear <= 1;")
         lines.append(f"                        if (score_idx == N-1) state <= S_OUTPUT;")
-        lines.append(f"                        else score_idx <= score_idx + 1;")
+        lines.append(f"                        else begin score_idx <= score_idx + 1; state <= S_COMPUTE; end")
         lines.append(f"                    end")
 
     lines.append(f"                end")
