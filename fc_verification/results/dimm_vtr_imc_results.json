@@ -1,0 +1,35 @@
+{
+  "config": "Proposed_1024x128",
+  "d_head": 64,
+  "seq_len": 128,
+  "K_id": 2,
+  "fmax_avg_mhz": 341.27,
+  "fmax_seeds": [
+    357.19,
+    323.23,
+    343.38
+  ],
+  "clb": 7,
+  "bram": 2,
+  "wc": 1,
+  "dsp": 0,
+  "energy_pj": 3469902.42,
+  "latency_ns": 3131613.44,
+  "breakdown": {
+    "sram_read": 648.945,
+    "sram_write": 486.7335,
+    "imc_vmm": 13209.8445,
+    "imc_digital_post": 8416.6475,
+    "clb_reduction": 456091.3073,
+    "clb_norm_sum": 685.3076,
+    "clb_add": 178223.4848,
+    "imc_dimm_exp_vmm": 1704069.9468,
+    "imc_dimm_exp_digital": 1085747.5241,
+    "imc_dimm_log_vmm": 13209.8445,
+    "imc_dimm_log_digital": 8416.6475,
+    "clb_subtract": 696.1855,
+    "_dpe": 2833070.4549,
+    "_mem": 1135.6785,
+    "_fpga": 635696.2852
+  }
+}

@@ -1,0 +1,46 @@
+attention /mnt/vault0/jiajunh5/nl-dpe-fpl/fc_verification/results/dimm_imc_config.json
+=== NL-DPE ===
+Tech Node: 22nm
+Precision: 8-bit
+Array: 1024x128 (8-bit cells)
+Core Frequency 1000 MHz
+FPGA Frequency: 341.26500000000004 MHz
+
+Energy total (by layer): 3469902.42 pJ
+Energy total (by breakdown): 3469902.42 pJ
+Energy breakdown (by component):
+  sram_read: 648.9450 pJ
+  sram_write: 486.7335 pJ
+  imc_vmm: 13209.8445 pJ
+  imc_digital_post: 8416.6475 pJ
+  clb_reduction: 456091.3073 pJ
+  clb_norm_sum: 685.3076 pJ
+  clb_add: 178223.4848 pJ
+  imc_dimm_exp_vmm: 1704069.9468 pJ
+  imc_dimm_exp_digital: 1085747.5241 pJ
+  imc_dimm_log_vmm: 13209.8445 pJ
+  imc_dimm_log_digital: 8416.6475 pJ
+  clb_subtract: 696.1855 pJ
+Energy grouped: DPE=2833070.4549 pJ, Memory=1135.6785 pJ, FPGA=635696.2852 pJ
+Latency total (critical path): 3131613.44 ns
+Latency total (raw sum): 3131613.44 ns
+Resource total counts:
+  imc_tiles: 1.00
+  dsp_used: 64.00
+  clb_used: 63.00
+  act_units: 0.00
+  memory_blocks: 2.00
+  bram_read_cnt_access: 8297.00
+  bram_write_cnt_access: 6620.00
+Resource peak usage:
+  imc_tiles: 1.00
+  dsp_used: 64.00
+  clb_used: 63.00
+  act_units: 0.00
+  memory_blocks: 1.00
+Resource layer-wise breakdown:
+  linear_Q: bram_write_cnt_access=1639.00, imc_tiles=1.00, memory_blocks=1.00
+  mac_qk: bram_read_cnt_access=3316.00, bram_write_cnt_access=3303.00
+  exp: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00
+  norm: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00, clb_used=63.00, dsp_used=64.00
+  mac_sv: bram_read_cnt_access=4955.00, bram_write_cnt_access=1652.00
