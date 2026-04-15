@@ -186,7 +186,7 @@ module fc_layer #(
     wire shift_add_done_c0_r0;
     wire shift_add_bypass_ctrl_c0_r0;
     wire MSB_SA_Ready_c0_r0;
-    dpe dpe_c0_r0 (
+    dpe #(.KERNEL_WIDTH(1024), .NUM_COLS(128)) dpe_c0_r0 (
         .clk(clk), .reset(rst),
         .data_in(sram_data_out_r0),
         .nl_dpe_control(nl_dpe_control_r0),
@@ -209,7 +209,7 @@ module fc_layer #(
     wire shift_add_done_c1_r0;
     wire shift_add_bypass_ctrl_c1_r0;
     wire MSB_SA_Ready_c1_r0;
-    dpe dpe_c1_r0 (
+    dpe #(.KERNEL_WIDTH(1024), .NUM_COLS(128)) dpe_c1_r0 (
         .clk(clk), .reset(rst),
         .data_in(sram_data_out_r0),
         .nl_dpe_control(nl_dpe_control_r0),
@@ -291,7 +291,7 @@ module fc_layer #(
     wire shift_add_done_c0_r1;
     wire shift_add_bypass_ctrl_c0_r1;
     wire MSB_SA_Ready_c0_r1;
-    dpe dpe_c0_r1 (
+    dpe #(.KERNEL_WIDTH(1024), .NUM_COLS(128)) dpe_c0_r1 (
         .clk(clk), .reset(rst),
         .data_in(sram_data_out_r1),
         .nl_dpe_control(nl_dpe_control_r1),
@@ -314,7 +314,7 @@ module fc_layer #(
     wire shift_add_done_c1_r1;
     wire shift_add_bypass_ctrl_c1_r1;
     wire MSB_SA_Ready_c1_r1;
-    dpe dpe_c1_r1 (
+    dpe #(.KERNEL_WIDTH(1024), .NUM_COLS(128)) dpe_c1_r1 (
         .clk(clk), .reset(rst),
         .data_in(sram_data_out_r1),
         .nl_dpe_control(nl_dpe_control_r1),

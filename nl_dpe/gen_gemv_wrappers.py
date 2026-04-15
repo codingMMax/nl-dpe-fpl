@@ -382,7 +382,7 @@ def _gen_fc_layer(v: int, h: int, k: int, n: int, rows: int, cols: int,
             lines.append(f"    wire shift_add_done_c{col}_r{row};")
             lines.append(f"    wire shift_add_bypass_ctrl_c{col}_r{row};")
             lines.append(f"    wire MSB_SA_Ready_c{col}_r{row};")
-            lines.append(f"    dpe dpe_c{col}_r{row} (")
+            lines.append(f"    dpe #(.KERNEL_WIDTH({kw_row}), .NUM_COLS({cols})) dpe_c{col}_r{row} (")
             lines.append(f"        .clk(clk), .reset(rst),")
             lines.append(f"        .data_in(sram_data_out_r{row}),")  # per-row SRAM
             lines.append(f"        .nl_dpe_control(nl_dpe_control_r{row}),")
