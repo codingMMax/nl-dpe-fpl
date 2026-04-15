@@ -1,62 +1,56 @@
 ================================================================
-  DIMM Stage: Simulator ↔ RTL Latency Alignment Report
+  DIMM Pipeline: Formal Verification Results
+  Config: Proposed NL-DPE (R=1024, C=128, dpe_bw=40)
+  BERT-Tiny dims: d_head=64, K_id=2 (dual-identity)
 ================================================================
 
-=== Standalone DPE DIMM (K=C=128, ACAM, dpe_buf_width=40) ===
+=== Functional Test (tb_dimm_pipeline_functional.v) ===
 
-Simulator (corrected dimm_nonlinear):
-  read = ceil(128×8/40) = 26 cycles
-  compute = 3 cycles (ACAM)
-  output_ser = ceil(128×8/40) = 26 cycles
-  TOTAL = 55 cycles
+RTL: dimm_pipeline_d64_c128.v (gen_dimm_wrapper.py)
+DPE: KERNEL_WIDTH=128, NUM_COLS=128, DPE_BUF_WIDTH=40, ACAM_MODE=1
+Test: N=4, Q=[1,0,...,0], K=identity, dual-identity (K_id=2)
 
-RTL (tb_alignment.v with ACAM defparams):
-  read = 26 cycles ✓
-  compute+overhead = 7 cycles (+4 controller)
-  output_serialize = 26 cycles ✓
-  TOTAL = 59 cycles (+4 constant overhead)
-
-=== Full DIMM Pipeline: dimm_score_matrix ===
-
-Architecture: CLB byte-wise add + Direct DPE(I|exp) + Masked accumulator
-
-Test 1: N=4, d=5, aligned (d=epw=5)
-  Q = [1,0,0,0,0], K = identity
-  Expected: S[0]=9, S[1]=7, S[2]=7, S[3]=7
-  Result:   S[0]=9, S[1]=7, S[2]=7, S[3]=7
+Results:
+  S[0] = 68 ✓ (expect 68 = exp(2) + 63×exp(0) = 5+63)
+  S[1] = 66 ✓ (expect 66 = 2×exp(1) + 62×exp(0) = 4+62)
+  S[2] = 66 ✓
+  S[3] = 66 ✓
   PASS
 
-Test 2: N=4, d=8, non-aligned (d%epw=3)
-  Q = [1,0,0,0,0,0,0,0], K = identity
-  Expected: S[0]=12, S[1]=10, S[2]=10, S[3]=10
-  Result:   S[0]=12, S[1]=10, S[2]=10, S[3]=10
-  PASS
+=== Latency Alignment (tb_dimm_pipeline_latency.v) ===
 
-Per-score latency (d=5, C=128, dpe_bw=40):
-  Simulator gemm_log cycles_per_row:
-    CLB add=1 + DPE(read=1 + compute=3 + output=26) + reduce=3 = 34 cycles
-  RTL measured: 37 cycles/score avg (+3 FSM overhead)
-    Feed phase: 3 cycles (mac_count 0→2: 2-cycle SRAM latency + 1 data valid)
-    DPE pipeline: ~30 cycles (read + compute + output_serialize)
-    Drain wait: ~3 cycles (S_DRAIN + MSB_SA_Ready check)
-    Write: 1 cycle
+IMC Simulator Cycle Counts (ground truth):
+  read     = ceil(128×8/40) = 26 cycles
+  compute  = 3 cycles (ACAM)
+  output   = ceil(128×8/40) = 26 cycles
+  per_pass = 55 cycles
+  CLB_add  = 1 cycle
+  CLB_reduce = ceil(log2(64)) = 6 cycles
+  per_row  = 1 + 55 + 6 = 62 cycles (for 2 scores via K_id=2)
+  per_score (amortized) = 62 / 2 = 31 cycles
 
-=== Bugs Found and Fixed ===
+RTL Measured:
+  Score[0,1] (pair 0): written at cycle 66-67 (from start: 64 cycles + 1 write)
+  Score[2,3] (pair 1): written at cycle 131-132 (delta: 65 cycles from pair 0)
+  Per DPE pass: ~65 cycles
+  Per score (amortized): 32.5 cycles
+  Delta: +1.5 cycles/score = +3 cycles/pair (FSM overhead: feed phase + drain wait)
 
-Simulator:
-  1. dimm_nonlinear() missing SRAM→DPE read stage (47% latency undercount)
-  2. gemm_log() same missing read stage
+DPE Statistics:
+  w_buf_en pulses: 52 total (26 per DPE pass × 2 passes) ✓
+  dpe_done pulses: 52 total (26 per DPE pass × 2 passes) ✓
 
-RTL generator (gen_attention_wrapper.py):
-  1. conv_controller write-address off-by-one → replaced with direct DPE
-  2. Word-wise CLB adder → byte-wise (no carry between int8 lanes)
-  3. 1-cycle SRAM latency assumption → 2-cycle (addr register + SRAM registered read)
-  4. Flat K SRAM packing → padded per-key (word-aligned offsets)
-  5. dimm_exp_valid timing: mac_count > 0 → mac_count >= 2
-  6. ready_n polarity: 1'b0 (stall) → 1'b1 (ready)
-  7. Missing DPE idle wait between scores → MSB_SA_Ready check
-  8. Accumulator summed full 40-bit words → masked byte-wise sum (first d cols only)
+=== Key Cross-Check ===
 
-Behavioral DPE (dpe_stub.v):
-  1. Added ACAM_MODE parameter (0=none, 1=exp, 2=log)
-  2. Weight memory zero-initialized (fixes X propagation)
+| Parameter              | Simulator | RTL      | Match |
+|------------------------|-----------|----------|-------|
+| DPE KERNEL_WIDTH       | 128       | 128      | ✓     |
+| DPE LOAD_STROBES       | 26        | 26       | ✓     |
+| DPE OUTPUT_CYCLES      | 26        | 26       | ✓     |
+| K_id packing           | 2         | 2 (dual) | ✓     |
+| DPE passes per score   | 1         | 1        | ✓     |
+| CLB reduce cycles      | 6         | 6        | ✓     |
+| Per-score (amortized)  | 31        | 32.5     | +1.5  |
+
+Delta explained: +3 cycles per DPE pass = FSM coordination overhead
+  (2-cycle SRAM read latency + 1-cycle drain/write)

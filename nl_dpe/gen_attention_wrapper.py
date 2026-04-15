@@ -224,7 +224,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
             lines.append(f"    // Dual-identity: feed vector A then vector B")
             lines.append(f"    reg feed_phase;  // 0=vector A, 1=vector B")
             lines.append(f"    assign dimm_exp_data_in = feed_phase ? log_sum_b : log_sum_a;")
-            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 0);  // 1-cycle SRAM latency")
+            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count >= 2) && (mac_count <= {packed_d + 1});  // 2-cycle SRAM latency")
             lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
         else:
             # Direct DPE: valid acts as w_buf_en. Data goes straight to DPE.
@@ -261,36 +261,50 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"        endcase")
         lines.append(f"    end")
 
-    # Masked byte-wise sum: only sum columns < useful_cols per output word.
-    # Column index for output word w, byte b = w * EPW + b.
-    # We use a col_counter that tracks which absolute column is in each byte lane.
-    lines.append(f"    // Masked accumulator: sum only first {useful_cols} columns per score")
-    lines.append(f"    reg [31:0] accumulator;")
+    # Byte-wise accumulator with column tracking.
+    # col_counter tracks which absolute column each byte lane represents.
     lines.append(f"    reg acc_clear;")
-    lines.append(f"    reg [15:0] col_counter;  // absolute column index for current output word")
-    lines.append(f"    wire [31:0] masked_byte_sum;")
-    # Generate masked sum: only include bytes where col_counter + b < useful_cols
-    mask_terms = []
-    for b in range(epw):
-        mask_terms.append(f"((col_counter + {b} < {useful_cols}) ? {{24'b0, {dpe_out_signal}[{b}*8 +: 8]}} : 32'd0)")
-    lines.append(f"    assign masked_byte_sum = " + " + ".join(mask_terms) + ";")
-    lines.append(f"    always @(posedge clk) begin")
-    lines.append(f"        if (rst || acc_clear) begin accumulator <= 0; col_counter <= 0; end")
-    lines.append(f"        else if ({dpe_valid_signal}) begin")
-    lines.append(f"            accumulator <= accumulator + masked_byte_sum;")
-    lines.append(f"            col_counter <= col_counter + {epw};")
-    lines.append(f"        end")
-    lines.append(f"    end")
+    lines.append(f"    reg [15:0] col_counter;")
 
     if dual_identity:
-        # For dual-identity: cols 0..d-1 = vec A, cols d..2d-1 = vec B
-        # Split accumulator into A and B after DPE output is done
-        # (simpler: use two separate accumulators with col masking)
-        # TODO: implement dual-identity accumulator splitting
-        lines.append(f"    // TODO: dual-identity requires separate A/B accumulators")
-        lines.append(f"    // For now, single accumulator sums both vectors")
-        lines.append(f"    wire [31:0] accumulator_a = accumulator;  // placeholder")
-        lines.append(f"    wire [31:0] accumulator_b = 0;  // placeholder")
+        # Dual-identity: cols 0..d-1 = vec A, cols d..2d-1 = vec B.
+        # Two separate masked sums, one per vector.
+        lines.append(f"    // Dual accumulators: A for cols 0..{d_head-1}, B for cols {d_head}..{2*d_head-1}")
+        lines.append(f"    reg [31:0] accumulator_a, accumulator_b;")
+        lines.append(f"    wire [31:0] masked_sum_a, masked_sum_b;")
+        terms_a, terms_b = [], []
+        for b in range(epw):
+            terms_a.append(f"((col_counter + {b} >= 0 && col_counter + {b} < {d_head}) ? "
+                           f"{{24'b0, {dpe_out_signal}[{b}*8 +: 8]}} : 32'd0)")
+            terms_b.append(f"((col_counter + {b} >= {d_head} && col_counter + {b} < {2*d_head}) ? "
+                           f"{{24'b0, {dpe_out_signal}[{b}*8 +: 8]}} : 32'd0)")
+        lines.append(f"    assign masked_sum_a = " + " + ".join(terms_a) + ";")
+        lines.append(f"    assign masked_sum_b = " + " + ".join(terms_b) + ";")
+        lines.append(f"    always @(posedge clk) begin")
+        lines.append(f"        if (rst || acc_clear) begin accumulator_a <= 0; accumulator_b <= 0; col_counter <= 0; end")
+        lines.append(f"        else if ({dpe_valid_signal}) begin")
+        lines.append(f"            accumulator_a <= accumulator_a + masked_sum_a;")
+        lines.append(f"            accumulator_b <= accumulator_b + masked_sum_b;")
+        lines.append(f"            col_counter <= col_counter + {epw};")
+        lines.append(f"        end")
+        lines.append(f"    end")
+    else:
+        # Single identity: only cols 0..d-1 are meaningful.
+        lines.append(f"    // Single accumulator: sum cols 0..{d_head-1}")
+        lines.append(f"    reg [31:0] accumulator;")
+        lines.append(f"    wire [31:0] masked_byte_sum;")
+        mask_terms = []
+        for b in range(epw):
+            mask_terms.append(f"((col_counter + {b} < {d_head}) ? "
+                              f"{{24'b0, {dpe_out_signal}[{b}*8 +: 8]}} : 32'd0)")
+        lines.append(f"    assign masked_byte_sum = " + " + ".join(mask_terms) + ";")
+        lines.append(f"    always @(posedge clk) begin")
+        lines.append(f"        if (rst || acc_clear) begin accumulator <= 0; col_counter <= 0; end")
+        lines.append(f"        else if ({dpe_valid_signal}) begin")
+        lines.append(f"            accumulator <= accumulator + masked_byte_sum;")
+        lines.append(f"            col_counter <= col_counter + {epw};")
+        lines.append(f"        end")
+        lines.append(f"    end")
 
     # DPE output counter
     out_cycles = math.ceil(128 / epw)  # NUM_COLS=128 hardcoded for DPE crossbar
@@ -338,7 +352,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"            k_write_addr <= 0; k_read_addr_a <= 0;")
     if dual_identity:
         lines.append(f"            k_read_addr_b <= 0;")
-        lines.append(f"            feed_half <= 0; feed_phase <= 0; acc_phase <= 0;")
+        lines.append(f"            feed_half <= 0; feed_phase <= 0;")
     lines.append(f"            score_write_addr <= 0; score_read_addr <= 0; score_w_en <= 0;")
     lines.append(f"            score_write_data <= 0;")
     lines.append(f"            mac_count <= 0; score_idx <= 0; acc_clear <= 0;")
@@ -359,25 +373,31 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"                S_COMPUTE: begin")
 
     if dual_identity:
-        # Dual-identity: feed vec A (packed_d words) then vec B (packed_d), then wait for DPE
-        lines.append(f"                    // Feed phase: read Q/K, produce log_sum, feed to DPE")
-        lines.append(f"                    q_read_addr <= mac_count;")
-        lines.append(f"                    k_read_addr_a <= score_idx * {packed_d} + mac_count;")
-        lines.append(f"                    k_read_addr_b <= (score_idx + 1) * {packed_d} + mac_count;")
+        # Dual-identity: feed vec A (packed_d+1 cycles for SRAM latency) then vec B, then wait
+        # mac_count 0..packed_d-1: set SRAM addresses. mac_count packed_d..packed_d+1: pipeline drain.
+        # dimm_exp_valid fires at mac_count >= 2 (2-cycle SRAM latency) for packed_d valid strobes per half.
+        half_end = packed_d + 1  # = feed_end for single-identity
+        lines.append(f"                    // Feed phase: {packed_d}+2 cycles per half (2-cycle SRAM latency)")
+        lines.append(f"                    if (mac_count < {packed_d}) begin")
+        lines.append(f"                        q_read_addr <= mac_count;")
+        lines.append(f"                        if (!feed_half)")
+        lines.append(f"                            k_read_addr_a <= score_idx * {packed_d} + mac_count;")
+        lines.append(f"                        else")
+        lines.append(f"                            k_read_addr_b <= (score_idx + 1) * {packed_d} + mac_count;")
+        lines.append(f"                    end")
+        lines.append(f"                    mac_count <= mac_count + 1;")
         lines.append(f"                    if (!feed_half) begin")
-        lines.append(f"                        feed_phase <= 0; acc_phase <= 0;")
-        lines.append(f"                        mac_count <= mac_count + 1;")
-        lines.append(f"                        if (mac_count == {packed_d - 1}) begin")
+        lines.append(f"                        feed_phase <= 0;")
+        lines.append(f"                        if (mac_count == {half_end}) begin")
         lines.append(f"                            mac_count <= 0;")
         lines.append(f"                            feed_half <= 1;")
         lines.append(f"                        end")
         lines.append(f"                    end else begin")
-        lines.append(f"                        feed_phase <= 1; acc_phase <= 1;")
-        lines.append(f"                        mac_count <= mac_count + 1;")
-        lines.append(f"                        if (mac_count == {packed_d - 1}) begin")
+        lines.append(f"                        feed_phase <= 1;")
+        lines.append(f"                        if (mac_count == {half_end}) begin")
         lines.append(f"                            mac_count <= 0;")
         lines.append(f"                            feed_half <= 0;")
-        lines.append(f"                            state <= S_WAIT_DPE;  // wait for DPE to finish")
+        lines.append(f"                            state <= S_WAIT_DPE;")
         lines.append(f"                        end")
         lines.append(f"                    end")
         lines.append(f"                end")
