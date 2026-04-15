@@ -1,9 +1,9 @@
 module dimm_score_matrix #(
     parameter N = 4,
-    parameter d = 5,
+    parameter d = 8,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 3,
-    parameter DEPTH = 5
+    parameter ADDR_WIDTH = 4,
+    parameter DEPTH = 9
 )(
     input wire clk, input wire rst,
     input wire valid_q, input wire valid_k,
@@ -18,16 +18,16 @@ module dimm_score_matrix #(
     reg [ADDR_WIDTH-1:0] q_write_addr, q_read_addr;
     wire q_w_en = (state == S_LOAD_Q) && valid_q;
     wire [DATA_WIDTH-1:0] q_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(2))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(3))
     q_sram (.clk(clk),.rst(rst),.w_en(q_w_en),.r_addr(q_read_addr),
             .w_addr(q_write_addr),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));
 
-    reg [3-1:0] k_write_addr, k_read_addr_a;
+    reg [4-1:0] k_write_addr, k_read_addr_a;
     wire k_w_en = (state == S_LOAD_K) && valid_k;
     wire [DATA_WIDTH-1:0] k_sram_out_a;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(5))
-    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[3-1:0]),
-              .w_addr(k_write_addr[3-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_a));
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(9))
+    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[4-1:0]),
+              .w_addr(k_write_addr[4-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_a));
 
     // CLB adder A: log_Q + log_K[j₁] (byte-wise, 5 lanes)
     wire [DATA_WIDTH-1:0] log_sum_a;
@@ -36,10 +36,10 @@ module dimm_score_matrix #(
         assign log_sum_a[ga*8 +: 8] = q_sram_out[ga*8 +: 8] + k_sram_out_a[ga*8 +: 8];
     end endgenerate
 
-    // DPE(I|exp) stage: identity crossbar + ACAM=exp (KW=5)
+    // DPE(I|exp) stage: identity crossbar + ACAM=exp (KW=8)
     wire dimm_exp_valid, dimm_exp_ready_n, dimm_exp_ready, dimm_exp_valid_n;
     wire [DATA_WIDTH-1:0] dimm_exp_data_in, dimm_exp_data_out;
-    // Inner DPE: KW_elems=5, KW_packed=1 (epw=5)
+    // Inner DPE: KW_elems=8, KW_packed=2 (epw=5)
     // DPE direct instantiation (no conv_controller/SRAM wrapper)
     wire dimm_exp_dpe_done, dimm_exp_reg_full;
     wire dimm_exp_MSB_SA_Ready, dimm_exp_shift_add_done, dimm_exp_shift_add_bypass_ctrl;
@@ -74,15 +74,15 @@ module dimm_score_matrix #(
     assign dimm_exp_valid_n = dimm_exp_dpe_done;
 
     assign dimm_exp_data_in = log_sum_a;
-    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count >= 2) && (mac_count <= 2);
+    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count >= 2) && (mac_count <= 3);
     assign dimm_exp_ready_n = 1'b1;
 
-    // Masked accumulator: sum only first 5 columns per score
+    // Masked accumulator: sum only first 8 columns per score
     reg [31:0] accumulator;
     reg acc_clear;
     reg [15:0] col_counter;  // absolute column index for current output word
     wire [31:0] masked_byte_sum;
-    assign masked_byte_sum = ((col_counter + 0 < 5) ? {24'b0, dimm_exp_data_out[0*8 +: 8]} : 32'd0) + ((col_counter + 1 < 5) ? {24'b0, dimm_exp_data_out[1*8 +: 8]} : 32'd0) + ((col_counter + 2 < 5) ? {24'b0, dimm_exp_data_out[2*8 +: 8]} : 32'd0) + ((col_counter + 3 < 5) ? {24'b0, dimm_exp_data_out[3*8 +: 8]} : 32'd0) + ((col_counter + 4 < 5) ? {24'b0, dimm_exp_data_out[4*8 +: 8]} : 32'd0);
+    assign masked_byte_sum = ((col_counter + 0 < 8) ? {24'b0, dimm_exp_data_out[0*8 +: 8]} : 32'd0) + ((col_counter + 1 < 8) ? {24'b0, dimm_exp_data_out[1*8 +: 8]} : 32'd0) + ((col_counter + 2 < 8) ? {24'b0, dimm_exp_data_out[2*8 +: 8]} : 32'd0) + ((col_counter + 3 < 8) ? {24'b0, dimm_exp_data_out[3*8 +: 8]} : 32'd0) + ((col_counter + 4 < 8) ? {24'b0, dimm_exp_data_out[4*8 +: 8]} : 32'd0);
     always @(posedge clk) begin
         if (rst || acc_clear) begin accumulator <= 0; col_counter <= 0; end
         else if (dimm_exp_valid_n) begin
@@ -112,7 +112,7 @@ module dimm_score_matrix #(
                S_COMPUTE = 4'd3, S_WAIT_DPE = 4'd4, S_WRITE_SCORE = 4'd5,
                S_OUTPUT = 4'd6;
     reg [3:0] state;
-    reg [2-1:0] mac_count;  // packed word counter (0..0)
+    reg [2-1:0] mac_count;  // packed word counter (0..1)
     reg [2-1:0] score_idx;  // score column index (element, 0..N-1)
 
     always @(posedge clk or posedge rst) begin
@@ -129,20 +129,20 @@ module dimm_score_matrix #(
                 S_IDLE: if (valid_q || valid_k) state <= S_LOAD_Q;
                 S_LOAD_Q: begin
                     if (valid_q) q_write_addr <= q_write_addr + 1;
-                    if (q_write_addr == 1) state <= S_LOAD_K;  // written 1 words
+                    if (q_write_addr == 2) state <= S_LOAD_K;  // written 2 words
                 end
                 S_LOAD_K: begin
                     if (valid_k) k_write_addr <= k_write_addr + 1;
-                    if (k_write_addr == 4) state <= S_COMPUTE;  // written 4 words
+                    if (k_write_addr == 8) state <= S_COMPUTE;  // written 8 words
                 end
                 S_COMPUTE: begin
-                    // Feed: set SRAM addr, data valid next cycle (1+1 cycles)
-                    if (mac_count < 1) begin
+                    // Feed: set SRAM addr, data valid next cycle (2+1 cycles)
+                    if (mac_count < 2) begin
                         q_read_addr <= mac_count;
-                        k_read_addr_a <= score_idx * 1 + mac_count;
+                        k_read_addr_a <= score_idx * 2 + mac_count;
                     end
                     mac_count <= mac_count + 1;
-                    if (mac_count == 2) begin
+                    if (mac_count == 3) begin
                         mac_count <= 0;
                         state <= S_WAIT_DPE;
                     end

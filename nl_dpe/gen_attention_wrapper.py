@@ -117,9 +117,11 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     S[i][j] = Σ_m exp(log_Q[i][m] + log_K[j][m])
 
     Per-SRAM depths (packed int8 into DATA_WIDTH-bit words):
-      depth_q:     one query vector (d elements)
-      depth_k:     all key vectors (S×d elements)
-      depth_score: one score row (S elements)
+      depth_q:     one query vector: ceil(d/epw) + 1 words
+      depth_k:     all key vectors, padded per-key: N * ceil(d/epw) + 1 words
+                   Each key vector occupies ceil(d/epw) words at word-aligned offsets.
+                   K[j] starts at word j * ceil(d/epw). Padding zeros at end of each key.
+      depth_score: score output: N + 1 words (one scalar per element)
 
     When dual_identity=True (2×d_head ≤ C):
       Pack two d_head-sized identity blocks into the crossbar.
@@ -133,7 +135,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     dpe_kw = 2 * d_head if dual_identity else d_head
     # Packed word counts for FSM thresholds
     packed_d = math.ceil(d_head / epw)      # packed words per Q/K vector
-    packed_Nd = math.ceil(n_seq * d_head / epw)  # packed words for all K vectors
+    packed_Nd = n_seq * packed_d  # padded: each key at word-aligned offset
     packed_N = math.ceil(n_seq / epw)       # packed words per score row
     # Addr width = max across all SRAMs (safe for all addr registers)
     max_depth = max(depth_q, depth_k, depth_score)
@@ -228,8 +230,9 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
             # Direct DPE: valid acts as w_buf_en. Data goes straight to DPE.
             # Valid on cycles when SRAM output is ready (1 cycle after addr set).
             # 2-cycle SRAM latency: addr set at mac_count=i, output valid at mac_count=i+2
+            # Addresses set for mac_count 0..packed_d-1. Data valid mac_count 2..packed_d+1.
             lines.append(f"    assign dimm_exp_data_in = log_sum_a;")
-            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > {packed_d});  // data valid after 2-cycle SRAM latency")
+            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count >= 2) && (mac_count <= {packed_d + 1});")
             lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
     else:
         lines.append(f"    reg [{max(1, math.ceil(math.log2(h_dimm)))-1}:0] dimm_sel;")
