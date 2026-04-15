@@ -22,7 +22,7 @@
 module tb_dimm_pipeline_functional;
 
     parameter DW = 40;
-    parameter N = 4;
+    parameter N = 128;
     parameter D = 64;
     parameter C = 128;
     parameter EPW = DW / 8;
@@ -107,24 +107,42 @@ module tb_dimm_pipeline_functional;
         $display("  Waiting for compute...");
 
         // Wait for S_OUTPUT (state=6)
-        while (dut.state != 6 && cycle < 2000) @(posedge clk);
+        while (dut.state != 6 && cycle < 10000) @(posedge clk);
 
         if (dut.state == 6) begin
             @(posedge clk); @(posedge clk); #1;
             $display("");
             $display("=== Results ===");
-            $display("  S[0] = %0d (expect 68)", dut.score_sram.mem[0][7:0]);
-            $display("  S[1] = %0d (expect 66)", dut.score_sram.mem[1][7:0]);
-            $display("  S[2] = %0d (expect 66)", dut.score_sram.mem[2][7:0]);
-            $display("  S[3] = %0d (expect 66)", dut.score_sram.mem[3][7:0]);
+            $display("  S[0]   = %0d (expect 68)", dut.score_sram.mem[0][7:0]);
+            $display("  S[1]   = %0d (expect 66)", dut.score_sram.mem[1][7:0]);
+            $display("  S[63]  = %0d (expect 66)", dut.score_sram.mem[63][7:0]);
+            $display("  S[64]  = %0d (expect 65)", dut.score_sram.mem[64][7:0]);
+            $display("  S[127] = %0d (expect 65)", dut.score_sram.mem[N-1][7:0]);
             $display("  Total compute: %0d cycles", cycle);
             $display("");
 
-            if (dut.score_sram.mem[0][7:0] == 68 && dut.score_sram.mem[1][7:0] == 66 &&
-                dut.score_sram.mem[2][7:0] == 66 && dut.score_sram.mem[3][7:0] == 66)
-                $display("  PASS: DIMM pipeline functional (K_id=2, d=64, C=128)");
-            else
-                $display("  FAIL: score values don't match");
+            // Check scores:
+            // S[0] = 68 (exp(2) + 63×exp(0))
+            // S[1..d-1] = 66 (2×exp(1) + 62×exp(0)) — K[j] has diagonal within d
+            // S[d..N-1] = 65 (exp(1) + 63×exp(0)) — K[j] diagonal beyond d
+            begin : check_scores
+                integer err, si, expected;
+                err = 0;
+                for (si = 0; si < N; si = si + 1) begin
+                    if (si == 0) expected = 68;
+                    else if (si < D) expected = 66;
+                    else expected = 65;
+                    if (dut.score_sram.mem[si][7:0] != expected) begin
+                        if (err < 5) $display("  MISMATCH: S[%0d]=%0d (expect %0d)", si,
+                            dut.score_sram.mem[si][7:0], expected);
+                        err = err + 1;
+                    end
+                end
+                if (err == 0)
+                    $display("  PASS: DIMM pipeline functional (K_id=2, d=%0d, C=%0d, N=%0d)", D, C, N);
+                else
+                    $display("  FAIL: %0d score mismatches", err);
+            end
         end else begin
             $display("  TIMEOUT at cycle %0d, state=%0d", cycle, dut.state);
         end

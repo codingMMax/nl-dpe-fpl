@@ -1,14 +1,14 @@
 // DIMM Pipeline RTL — Proposed NL-DPE, BERT-Tiny dims
-// R=1024, C=128, d_head=64, N=4, K_id=2
+// R=1024, C=128, d_head=64, N=128, K_id=2
 // dpe_buf_width=40, dual_identity=True
 // Simulator: per_pass=55cyc, per_row=62cyc
 
 module dimm_score_matrix #(
-    parameter N = 4,
+    parameter N = 128,
     parameter d = 64,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 6,
-    parameter DEPTH = 53
+    parameter ADDR_WIDTH = 11,
+    parameter DEPTH = 1665
 )(
     input wire clk, input wire rst,
     input wire valid_q, input wire valid_k,
@@ -27,17 +27,17 @@ module dimm_score_matrix #(
     q_sram (.clk(clk),.rst(rst),.w_en(q_w_en),.r_addr(q_read_addr),
             .w_addr(q_write_addr),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));
 
-    reg [6-1:0] k_write_addr, k_read_addr_a;
+    reg [11-1:0] k_write_addr, k_read_addr_a;
     wire k_w_en = (state == S_LOAD_K) && valid_k;
     wire [DATA_WIDTH-1:0] k_sram_out_a;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(53))
-    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[6-1:0]),
-              .w_addr(k_write_addr[6-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_a));
-    reg [6-1:0] k_read_addr_b;
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(1665))
+    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[11-1:0]),
+              .w_addr(k_write_addr[11-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_a));
+    reg [11-1:0] k_read_addr_b;
     wire [DATA_WIDTH-1:0] k_sram_out_b;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(53))
-    k_sram_b (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_b[6-1:0]),
-              .w_addr(k_write_addr[6-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_b));
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(1665))
+    k_sram_b (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_b[11-1:0]),
+              .w_addr(k_write_addr[11-1:0]),.sram_data_in(data_in_k),.sram_data_out(k_sram_out_b));
 
     // CLB adder A: log_Q + log_K[j₁] (byte-wise, 5 lanes)
     wire [DATA_WIDTH-1:0] log_sum_a;
@@ -124,7 +124,7 @@ module dimm_score_matrix #(
     reg score_w_en;
     reg [DATA_WIDTH-1:0] score_write_data;
     wire [DATA_WIDTH-1:0] score_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(5))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
     score_sram (.clk(clk),.rst(rst),.w_en(score_w_en),.r_addr(score_read_addr),
                 .w_addr(score_write_addr),.sram_data_in(score_write_data),.sram_data_out(score_sram_out));
 
@@ -134,7 +134,7 @@ module dimm_score_matrix #(
     localparam S_WRITE_B = 4'd7;
     reg [3:0] state;
     reg [4-1:0] mac_count;  // packed word counter (0..12)
-    reg [2-1:0] score_idx;  // score column index (element, 0..N-1)
+    reg [7-1:0] score_idx;  // score column index (element, 0..N-1)
     reg feed_half;  // 0=feeding vector A (d elements), 1=feeding vector B
 
     always @(posedge clk or posedge rst) begin
@@ -157,7 +157,7 @@ module dimm_score_matrix #(
                 end
                 S_LOAD_K: begin
                     if (valid_k) k_write_addr <= k_write_addr + 1;
-                    if (k_write_addr == 52) state <= S_COMPUTE;  // written 52 words
+                    if (k_write_addr == 1664) state <= S_COMPUTE;  // written 1664 words
                 end
                 S_COMPUTE: begin
                     // Feed phase: 13+2 cycles per half (2-cycle SRAM latency)

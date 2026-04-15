@@ -13,7 +13,7 @@
 module tb_dimm_pipeline_latency;
 
     parameter DW = 40;
-    parameter N = 4;
+    parameter N = 128;
     parameter D = 64;
     parameter C = 128;
     parameter EPW = DW / 8;
@@ -51,7 +51,8 @@ module tb_dimm_pipeline_latency;
     end
 
     // Timestamps
-    integer T_start, T_score_write[0:N-1];
+    integer T_start, T_first_pair, T_last_pair;
+    integer T_score_write[0:3];  // track first few scores
     integer score_writes;
     wire probe_score_w_en = dut.score_w_en;
     wire probe_dpe_wbuf = dut.dimm_exp.w_buf_en;
@@ -96,11 +97,15 @@ module tb_dimm_pipeline_latency;
 
         T_start = cycle;
 
+        T_first_pair = -1; T_last_pair = -1;
+
         // Track score writes
-        while (dut.state != 6 && cycle < 2000) begin
+        while (dut.state != 6 && cycle < 10000) begin
             @(posedge clk); #1;
-            if (probe_score_w_en && score_writes < N) begin
-                T_score_write[score_writes] = cycle;
+            if (probe_score_w_en) begin
+                if (score_writes < 4) T_score_write[score_writes] = cycle;
+                if (T_first_pair < 0) T_first_pair = cycle;
+                T_last_pair = cycle;
                 score_writes = score_writes + 1;
             end
         end
@@ -109,15 +114,13 @@ module tb_dimm_pipeline_latency;
         $display("  Config: R=1024, C=%0d, d=%0d, N=%0d, K_id=2", C, D, N);
         $display("  DPE: KERNEL_WIDTH=%0d, DPE_BUF_WIDTH=%0d, COMPUTE=3", C, DW);
         $display("");
-        $display("Per-Score Cycle Counts:");
-        for (i = 0; i < score_writes; i = i + 1) begin
-            if (i == 0)
-                $display("  Score[%0d] at cycle %0d (from start: %0d cycles)",
-                    i, T_score_write[i], T_score_write[i] - T_start);
-            else
-                $display("  Score[%0d] at cycle %0d (delta: %0d cycles)",
-                    i, T_score_write[i], T_score_write[i] - T_score_write[i-1]);
-        end
+        $display("Score Write Timestamps:");
+        $display("  First score pair [0,1]: cycle %0d-%0d (from start: %0d)",
+            T_score_write[0], T_score_write[1], T_score_write[0] - T_start);
+        $display("  Second score pair [2,3]: cycle %0d-%0d (delta: %0d)",
+            T_score_write[2], T_score_write[3], T_score_write[2] - T_score_write[0]);
+        $display("  Last score write: cycle %0d", T_last_pair);
+        $display("  Total score writes: %0d (expect %0d)", score_writes, N);
         $display("");
         $display("DPE Statistics:");
         $display("  w_buf_en pulses: %0d (expect %0d per pair × %0d pairs = %0d)",
@@ -139,15 +142,24 @@ module tb_dimm_pipeline_latency;
         $display("");
 
         // Verify scores
-        $display("Score Values:");
-        $display("  S[0]=%0d S[1]=%0d S[2]=%0d S[3]=%0d",
+        $display("Score Values (sample):");
+        $display("  S[0]=%0d S[1]=%0d S[63]=%0d S[127]=%0d",
             dut.score_sram.mem[0][7:0], dut.score_sram.mem[1][7:0],
-            dut.score_sram.mem[2][7:0], dut.score_sram.mem[3][7:0]);
-        if (dut.score_sram.mem[0][7:0]==68 && dut.score_sram.mem[1][7:0]==66 &&
-            dut.score_sram.mem[2][7:0]==66 && dut.score_sram.mem[3][7:0]==66)
-            $display("  Functional: PASS");
-        else
-            $display("  Functional: FAIL");
+            dut.score_sram.mem[63][7:0], dut.score_sram.mem[127][7:0]);
+        begin : verify
+            integer err, si, expected;
+            err = 0;
+            for (si = 0; si < N; si = si + 1) begin
+                if (si == 0) expected = 68;
+                else if (si < D) expected = 66;
+                else expected = 65;
+                if (dut.score_sram.mem[si][7:0] != expected) err = err + 1;
+            end
+            if (err == 0)
+                $display("  Functional: PASS (all %0d scores correct)", N);
+            else
+                $display("  Functional: FAIL (%0d mismatches)", err);
+        end
 
         $finish;
     end

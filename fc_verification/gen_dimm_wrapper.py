@@ -27,7 +27,7 @@ DW = DPE_BW     # DATA_WIDTH = dpe_buf_width
 
 # ── BERT-Tiny attention head dims ────────────────────────────────────
 D_HEAD = 64     # head dimension
-N_SEQ = 4       # sequence length (small for fast sim; real = 128)
+N_SEQ = 128     # sequence length (BERT-Tiny actual)
 
 # ── Derived parameters ───────────────────────────────────────────────
 K_id = C // D_HEAD                    # identity packing factor = 2
