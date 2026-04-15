@@ -147,9 +147,9 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f");")
     lines.append(f"")
 
-    # Q SRAM
+    # Q SRAM — w_en is combinational for same-cycle write
     lines.append(f"    reg [ADDR_WIDTH-1:0] q_write_addr, q_read_addr;")
-    lines.append(f"    reg q_w_en;")
+    lines.append(f"    wire q_w_en = (state == S_LOAD_Q) && valid_q;")
     lines.append(f"    wire [DATA_WIDTH-1:0] q_sram_out;")
     lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_q}))")
     lines.append(f"    q_sram (.clk(clk),.rst(rst),.w_en(q_w_en),.r_addr(q_read_addr),")
@@ -158,7 +158,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
 
     # K SRAM(s) — dual-identity needs two K read ports
     lines.append(f"    reg [{k_addr_width}-1:0] k_write_addr, k_read_addr_a;")
-    lines.append(f"    reg k_w_en;")
+    lines.append(f"    wire k_w_en = (state == S_LOAD_K) && valid_k;")
     lines.append(f"    wire [DATA_WIDTH-1:0] k_sram_out_a;")
     lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_k}))")
     lines.append(f"    k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[{k_addr_width}-1:0]),")
@@ -197,23 +197,33 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"    // DPE(I|exp) stage{suffix}: {label} crossbar + ACAM=exp (KW={dpe_kw})")
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        kw = min(dpe_kw, 512) if h_dimm == 1 else min(dpe_kw // h_dimm, 512)
-        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
+        # KERNEL_WIDTH for inner conv_layer_single_dpe: packed word count
+        kw_elems = dpe_kw if h_dimm == 1 else dpe_kw // h_dimm
+        kw_packed = math.ceil(min(kw_elems, 512) / epw)
+        lines.append(f"    // Inner DPE: KW_elems={kw_elems}, KW_packed={kw_packed} (epw={epw})")
+        lines.append(_gen_dimm_stage(inst_name, kw_packed, 512, 9, dw))
         lines.append(f"")
 
-    # Wire DPE input — for dual-identity, interleave two vectors
+    # Wire DPE input — data valid 1 cycle after SRAM read addr is set
+    # (SRAM has 1-cycle read latency). Use mac_count > 0 to gate valid.
     if h_dimm == 1:
         if dual_identity:
-            # Feed alternating: d_head elements from sum_a, then d_head from sum_b
-            lines.append(f"    // Dual-identity: feed vector A (lower d elements) then vector B (upper d elements)")
+            lines.append(f"    // Dual-identity: feed vector A then vector B")
             lines.append(f"    reg feed_phase;  // 0=vector A, 1=vector B")
             lines.append(f"    assign dimm_exp_data_in = feed_phase ? log_sum_b : log_sum_a;")
-            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE);")
-            lines.append(f"    assign dimm_exp_ready_n = 1'b1;  // accumulator always ready")
+            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 0);  // 1-cycle SRAM latency")
+            lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
         else:
-            lines.append(f"    assign dimm_exp_data_in = log_sum_a;")
-            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE);")
-            lines.append(f"    assign dimm_exp_ready_n = 1'b1;  // accumulator always ready")
+            # Register log_sum when valid to hold it for the inner controller's
+            # 1-cycle-late write (inner conv_controller w_en is registered)
+            lines.append(f"    reg [DATA_WIDTH-1:0] dimm_exp_data_reg;")
+            lines.append(f"    wire dimm_exp_valid_pulse = (state == S_COMPUTE) && (mac_count > 0);")
+            lines.append(f"    always @(posedge clk) begin")
+            lines.append(f"        if (dimm_exp_valid_pulse) dimm_exp_data_reg <= log_sum_a;")
+            lines.append(f"    end")
+            lines.append(f"    assign dimm_exp_data_in = dimm_exp_valid_pulse ? log_sum_a : dimm_exp_data_reg;")
+            lines.append(f"    assign dimm_exp_valid = dimm_exp_valid_pulse;")
+            lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
     else:
         lines.append(f"    reg [{max(1, math.ceil(math.log2(h_dimm)))-1}:0] dimm_sel;")
         for i in range(h_dimm):
@@ -314,8 +324,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    always @(posedge clk or posedge rst) begin")
     lines.append(f"        if (rst) begin")
     lines.append(f"            state <= S_IDLE;")
-    lines.append(f"            q_write_addr <= 0; q_read_addr <= 0; q_w_en <= 0;")
-    lines.append(f"            k_write_addr <= 0; k_read_addr_a <= 0; k_w_en <= 0;")
+    lines.append(f"            q_write_addr <= 0; q_read_addr <= 0;")
+    lines.append(f"            k_write_addr <= 0; k_read_addr_a <= 0;")
     if dual_identity:
         lines.append(f"            k_read_addr_b <= 0;")
         lines.append(f"            feed_half <= 0; feed_phase <= 0; acc_phase <= 0;")
@@ -325,16 +335,16 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     if h_dimm > 1:
         lines.append(f"            dimm_sel <= 0;")
     lines.append(f"        end else begin")
-    lines.append(f"            q_w_en <= 0; k_w_en <= 0; score_w_en <= 0; acc_clear <= 0;")
+    lines.append(f"            score_w_en <= 0; acc_clear <= 0;")
     lines.append(f"            case (state)")
     lines.append(f"                S_IDLE: if (valid_q || valid_k) state <= S_LOAD_Q;")
     lines.append(f"                S_LOAD_Q: begin")
-    lines.append(f"                    if (valid_q) begin q_w_en <= 1; q_write_addr <= q_write_addr + 1; end")
-    lines.append(f"                    if (q_write_addr == {packed_d - 1}) state <= S_LOAD_K;  // {packed_d} packed words for d={d_head}")
+    lines.append(f"                    if (valid_q) q_write_addr <= q_write_addr + 1;")
+    lines.append(f"                    if (q_write_addr == {packed_d}) state <= S_LOAD_K;  // written {packed_d} words")
     lines.append(f"                end")
     lines.append(f"                S_LOAD_K: begin")
-    lines.append(f"                    if (valid_k) begin k_w_en <= 1; k_write_addr <= k_write_addr + 1; end")
-    lines.append(f"                    if (k_write_addr == {packed_Nd - 1}) state <= S_COMPUTE;  // {packed_Nd} packed words for N*d={n_seq}*{d_head}")
+    lines.append(f"                    if (valid_k) k_write_addr <= k_write_addr + 1;")
+    lines.append(f"                    if (k_write_addr == {packed_Nd}) state <= S_COMPUTE;  // written {packed_Nd} words")
     lines.append(f"                end")
     lines.append(f"                S_COMPUTE: begin")
 
@@ -379,11 +389,19 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                    if (score_idx >= N-2) state <= S_OUTPUT;")
         lines.append(f"                    else begin score_idx <= score_idx + {stride}; state <= S_COMPUTE; end")
     else:
-        lines.append(f"                    // Feed log_sum to DPE (packed, {packed_d} words per score)")
-        lines.append(f"                    q_read_addr <= mac_count;")
-        lines.append(f"                    k_read_addr_a <= score_idx * {packed_d} + mac_count;")
+        # Feed log_sum to DPE (packed, {packed_d} words per score)
+        # SRAM has 1-cycle read latency, so we set address on cycle i
+        # and the data appears on cycle i+1. We need packed_d+1 cycles:
+        # cycle 0..packed_d-1: set read addresses
+        # cycle packed_d: last SRAM output valid, transition to S_WAIT_DPE
+        feed_end = packed_d  # one extra cycle for SRAM read latency
+        lines.append(f"                    // Feed: set SRAM addr, data valid next cycle ({packed_d}+1 cycles)")
+        lines.append(f"                    if (mac_count < {packed_d}) begin")
+        lines.append(f"                        q_read_addr <= mac_count;")
+        lines.append(f"                        k_read_addr_a <= score_idx * {packed_d} + mac_count;")
+        lines.append(f"                    end")
         lines.append(f"                    mac_count <= mac_count + 1;")
-        lines.append(f"                    if (mac_count == {packed_d - 1}) begin")
+        lines.append(f"                    if (mac_count == {feed_end}) begin")
         lines.append(f"                        mac_count <= 0;")
         lines.append(f"                        state <= S_WAIT_DPE;")
         lines.append(f"                    end")

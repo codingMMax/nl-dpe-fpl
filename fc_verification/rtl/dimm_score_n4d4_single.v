@@ -16,14 +16,14 @@ module dimm_score_matrix #(
 );
 
     reg [ADDR_WIDTH-1:0] q_write_addr, q_read_addr;
-    reg q_w_en;
+    wire q_w_en = (state == S_LOAD_Q) && valid_q;
     wire [DATA_WIDTH-1:0] q_sram_out;
     sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(2))
     q_sram (.clk(clk),.rst(rst),.w_en(q_w_en),.r_addr(q_read_addr),
             .w_addr(q_write_addr),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));
 
     reg [3-1:0] k_write_addr, k_read_addr_a;
-    reg k_w_en;
+    wire k_w_en = (state == S_LOAD_K) && valid_k;
     wire [DATA_WIDTH-1:0] k_sram_out_a;
     sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(5))
     k_sram_a (.clk(clk),.rst(rst),.w_en(k_w_en),.r_addr(k_read_addr_a[3-1:0]),
@@ -39,11 +39,12 @@ module dimm_score_matrix #(
     // DPE(I|exp) stage: identity crossbar + ACAM=exp (KW=4)
     wire dimm_exp_valid, dimm_exp_ready_n, dimm_exp_ready, dimm_exp_valid_n;
     wire [DATA_WIDTH-1:0] dimm_exp_data_in, dimm_exp_data_out;
+    // Inner DPE: KW_elems=4, KW_packed=1 (epw=5)
     conv_layer_single_dpe #(
         .N_CHANNELS(1),
         .ADDR_WIDTH(9),
         .N_KERNELS(1),
-        .KERNEL_WIDTH(4),
+        .KERNEL_WIDTH(1),
         .KERNEL_HEIGHT(1),
         .W(1),
         .H(1),
@@ -61,9 +62,14 @@ module dimm_score_matrix #(
         .valid_n(dimm_exp_valid_n)
     );
 
-    assign dimm_exp_data_in = log_sum_a;
-    assign dimm_exp_valid = (state == S_COMPUTE);
-    assign dimm_exp_ready_n = 1'b1;  // accumulator always ready
+    reg [DATA_WIDTH-1:0] dimm_exp_data_reg;
+    wire dimm_exp_valid_pulse = (state == S_COMPUTE) && (mac_count > 0);
+    always @(posedge clk) begin
+        if (dimm_exp_valid_pulse) dimm_exp_data_reg <= log_sum_a;
+    end
+    assign dimm_exp_data_in = dimm_exp_valid_pulse ? log_sum_a : dimm_exp_data_reg;
+    assign dimm_exp_valid = dimm_exp_valid_pulse;
+    assign dimm_exp_ready_n = 1'b1;
 
     // Masked accumulator: sum only first 4 columns per score
     reg [31:0] accumulator;
@@ -106,29 +112,31 @@ module dimm_score_matrix #(
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             state <= S_IDLE;
-            q_write_addr <= 0; q_read_addr <= 0; q_w_en <= 0;
-            k_write_addr <= 0; k_read_addr_a <= 0; k_w_en <= 0;
+            q_write_addr <= 0; q_read_addr <= 0;
+            k_write_addr <= 0; k_read_addr_a <= 0;
             score_write_addr <= 0; score_read_addr <= 0; score_w_en <= 0;
             score_write_data <= 0;
             mac_count <= 0; score_idx <= 0; acc_clear <= 0;
         end else begin
-            q_w_en <= 0; k_w_en <= 0; score_w_en <= 0; acc_clear <= 0;
+            score_w_en <= 0; acc_clear <= 0;
             case (state)
                 S_IDLE: if (valid_q || valid_k) state <= S_LOAD_Q;
                 S_LOAD_Q: begin
-                    if (valid_q) begin q_w_en <= 1; q_write_addr <= q_write_addr + 1; end
-                    if (q_write_addr == 0) state <= S_LOAD_K;  // 1 packed words for d=4
+                    if (valid_q) q_write_addr <= q_write_addr + 1;
+                    if (q_write_addr == 1) state <= S_LOAD_K;  // written 1 words
                 end
                 S_LOAD_K: begin
-                    if (valid_k) begin k_w_en <= 1; k_write_addr <= k_write_addr + 1; end
-                    if (k_write_addr == 3) state <= S_COMPUTE;  // 4 packed words for N*d=4*4
+                    if (valid_k) k_write_addr <= k_write_addr + 1;
+                    if (k_write_addr == 4) state <= S_COMPUTE;  // written 4 words
                 end
                 S_COMPUTE: begin
-                    // Feed log_sum to DPE (packed, 1 words per score)
-                    q_read_addr <= mac_count;
-                    k_read_addr_a <= score_idx * 1 + mac_count;
+                    // Feed: set SRAM addr, data valid next cycle (1+1 cycles)
+                    if (mac_count < 1) begin
+                        q_read_addr <= mac_count;
+                        k_read_addr_a <= score_idx * 1 + mac_count;
+                    end
                     mac_count <= mac_count + 1;
-                    if (mac_count == 0) begin
+                    if (mac_count == 1) begin
                         mac_count <= 0;
                         state <= S_WAIT_DPE;
                     end
