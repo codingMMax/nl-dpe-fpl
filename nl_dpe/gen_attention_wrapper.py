@@ -57,42 +57,53 @@ def _dimm_dpe_count(d: int, n: int, cols: int) -> int:
 
 def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
                     addr_width: int, data_width: int = 40) -> str:
-    """Generate a DIMM DPE stage as a conv_layer_single_dpe instance.
+    """Generate a DIMM DPE stage as a direct DPE instantiation.
 
-    This wraps a single DPE hard block with a controller and SRAM.
-    For H_dimm=1, one instance suffices. For H_dimm>1, the caller
-    generates multiple instances.
+    The outer FSM drives w_buf_en and data_in directly — no intermediate
+    SRAM or conv_controller. This avoids the write-address off-by-one issue
+    in conv_controller's registered write path.
 
     The DPE crossbar stores identity weights; ACAM does exp or log.
-    From VTR's perspective, this is identical to a projection DPE.
+    From VTR's perspective, this is a DPE hard block (same as projection).
 
-    Note: conv_layer_single_dpe hardcodes its internal SRAM to DEPTH=512
-    regardless of the parameter, so parmys merges identical instances.
-    The caller (gen_bert_tiny_wrapper) adds bare DPE hard blocks at the
-    top level to ensure the correct total DPE count for area/routing.
+    Handshake:
+      - {name}_valid high: outer FSM feeds data via w_buf_en
+      - {name}_valid_n high: DPE output phase (dpe_done)
+      - {name}_data_out: packed DPE output
     """
     lines = []
-    lines.append(f"    conv_layer_single_dpe #(")
-    lines.append(f"        .N_CHANNELS(1),")
-    lines.append(f"        .ADDR_WIDTH({addr_width}),")
-    lines.append(f"        .N_KERNELS(1),")
-    lines.append(f"        .KERNEL_WIDTH({kernel_width}),")
-    lines.append(f"        .KERNEL_HEIGHT(1),")
-    lines.append(f"        .W(1),")
-    lines.append(f"        .H(1),")
-    lines.append(f"        .S(1),")
-    lines.append(f"        .DEPTH({depth}),")
-    lines.append(f"        .DATA_WIDTH({data_width})")
-    lines.append(f"    ) {name} (")
-    lines.append(f"        .clk(clk),")
-    lines.append(f"        .rst(rst),")
-    lines.append(f"        .valid({name}_valid),")
-    lines.append(f"        .ready_n({name}_ready_n),")
+    lines.append(f"    // DPE direct instantiation (no conv_controller/SRAM wrapper)")
+    lines.append(f"    wire {name}_dpe_done, {name}_reg_full;")
+    lines.append(f"    wire {name}_MSB_SA_Ready, {name}_shift_add_done, {name}_shift_add_bypass_ctrl;")
+    lines.append(f"    reg [1:0] {name}_nl_dpe_control;")
+    lines.append(f"    reg {name}_dpe_exec;")
+    lines.append(f"    // w_buf_en = valid (outer FSM feeds directly)")
+    lines.append(f"    wire {name}_w_buf_en = {name}_valid;")
+    lines.append(f"    // nl_dpe_control fires 1 cycle after reg_full")
+    lines.append(f"    always @(posedge clk) begin")
+    lines.append(f"        if (rst) begin {name}_dpe_exec <= 0; {name}_nl_dpe_control <= 0; end")
+    lines.append(f"        else begin")
+    lines.append(f"            {name}_dpe_exec <= {name}_reg_full;")
+    lines.append(f"            {name}_nl_dpe_control <= {name}_dpe_exec ? 2'b11 : 2'b00;")
+    lines.append(f"        end")
+    lines.append(f"    end")
+    lines.append(f"    dpe {name} (")
+    lines.append(f"        .clk(clk), .reset(rst),")
     lines.append(f"        .data_in({name}_data_in),")
+    lines.append(f"        .nl_dpe_control({name}_nl_dpe_control),")
+    lines.append(f"        .shift_add_control({name}_MSB_SA_Ready),")
+    lines.append(f"        .w_buf_en({name}_w_buf_en),")
+    lines.append(f"        .shift_add_bypass(1'b0),")
+    lines.append(f"        .load_output_reg({name}_shift_add_done),")
+    lines.append(f"        .load_input_reg(1'b0),")
+    lines.append(f"        .MSB_SA_Ready({name}_MSB_SA_Ready),")
     lines.append(f"        .data_out({name}_data_out),")
-    lines.append(f"        .ready({name}_ready),")
-    lines.append(f"        .valid_n({name}_valid_n)")
+    lines.append(f"        .dpe_done({name}_dpe_done),")
+    lines.append(f"        .reg_full({name}_reg_full),")
+    lines.append(f"        .shift_add_done({name}_shift_add_done),")
+    lines.append(f"        .shift_add_bypass_ctrl({name}_shift_add_bypass_ctrl)")
     lines.append(f"    );")
+    lines.append(f"    assign {name}_valid_n = {name}_dpe_done;")
     return "\n".join(lines)
 
 
@@ -214,15 +225,10 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
             lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 0);  // 1-cycle SRAM latency")
             lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
         else:
-            # Register log_sum when valid to hold it for the inner controller's
-            # 1-cycle-late write (inner conv_controller w_en is registered)
-            lines.append(f"    reg [DATA_WIDTH-1:0] dimm_exp_data_reg;")
-            lines.append(f"    wire dimm_exp_valid_pulse = (state == S_COMPUTE) && (mac_count > 0);")
-            lines.append(f"    always @(posedge clk) begin")
-            lines.append(f"        if (dimm_exp_valid_pulse) dimm_exp_data_reg <= log_sum_a;")
-            lines.append(f"    end")
-            lines.append(f"    assign dimm_exp_data_in = dimm_exp_valid_pulse ? log_sum_a : dimm_exp_data_reg;")
-            lines.append(f"    assign dimm_exp_valid = dimm_exp_valid_pulse;")
+            # Direct DPE: valid acts as w_buf_en. Data goes straight to DPE.
+            # Valid on cycles when SRAM output is ready (1 cycle after addr set).
+            lines.append(f"    assign dimm_exp_data_in = log_sum_a;")
+            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 0);")
             lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
     else:
         lines.append(f"    reg [{max(1, math.ceil(math.log2(h_dimm)))-1}:0] dimm_sel;")
