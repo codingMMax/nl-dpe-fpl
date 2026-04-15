@@ -1,13 +1,13 @@
 #!/bin/bash
 # Run latency alignment for all 6 setups × both workloads.
-# Usage: bash block_comp_apr_11/tb/run_alignment.sh > block_comp_apr_11/results/alignment_log.txt 2>&1
+# Usage: bash fc_verification/run_alignment.sh > fc_verification/results/alignment_log.txt 2>&1
 
 set -e
-TB_DIR="block_comp_apr_11/tb"
+VERIF_DIR="fc_verification"
 RTL_DIR="block_comp_apr_11/rtl"
-STUB="$TB_DIR/dpe_stub.v"
-TB_V1="$TB_DIR/tb_alignment.v"
-TB_VN="$TB_DIR/tb_alignment_v4h2.v"
+STUB="$VERIF_DIR/dpe_stub.v"
+TB_V1="$VERIF_DIR/tb_alignment.v"
+TB_VN="$VERIF_DIR/tb_alignment_v4h2.v"
 
 echo "================================================================"
 echo "  RTL ↔ Simulator Latency Alignment Report"
