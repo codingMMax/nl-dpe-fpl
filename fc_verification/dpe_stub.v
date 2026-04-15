@@ -27,7 +27,8 @@ module dpe #(
     parameter KERNEL_WIDTH  = 512,  // R: number of input elements per VMM pass
     parameter NUM_COLS      = 128,  // C: number of crossbar columns (output elements)
     parameter DPE_BUF_WIDTH = 16,   // bits per transfer strobe (16 or 40)
-    parameter COMPUTE_CYCLES = 44   // bit-serial pipeline delay (44=ADC, 3=ACAM)
+    parameter COMPUTE_CYCLES = 44,  // bit-serial pipeline delay (44=ADC, 3=ACAM)
+    parameter ACAM_MODE     = 0     // 0=none (VMM only), 1=exp, 2=log
 )(
     input  wire        clk,
     input  wire        reset,
@@ -61,6 +62,14 @@ module dpe #(
 
     // ── Weight memory: R × C int8 ──
     reg signed [7:0] weights [0:KERNEL_WIDTH-1][0:NUM_COLS-1];
+
+    // Weight initialization (zero all weights at reset)
+    integer wi, wj;
+    initial begin
+        for (wi = 0; wi < KERNEL_WIDTH; wi = wi + 1)
+            for (wj = 0; wj < NUM_COLS; wj = wj + 1)
+                weights[wi][wj] = 0;
+    end
 
     // Weight loading (testbench only)
     always @(posedge clk) begin
@@ -163,6 +172,19 @@ module dpe #(
                                 vmm_result[c] = vmm_result[c] +
                                     input_buffer[r] * weights[r][c];
                             end
+                        end
+                        // Apply ACAM nonlinear function (behavioral, per column)
+                        // For identity weights: vmm_result[c] = input[c]
+                        // ACAM_MODE=0: no ACAM (FC/ADC), output = VMM result
+                        // ACAM_MODE=1: exp approximation (DIMM exp)
+                        // ACAM_MODE=2: log approximation (DIMM log)
+                        if (ACAM_MODE == 1) begin
+                            for (c = 0; c < NUM_COLS; c = c + 1)
+                                vmm_result[c] = 1 + vmm_result[c] +
+                                    (vmm_result[c] * vmm_result[c]) / 2;
+                        end else if (ACAM_MODE == 2) begin
+                            for (c = 0; c < NUM_COLS; c = c + 1)
+                                vmm_result[c] = vmm_result[c] - 1;
                         end
                         compute_cycle_cnt <= 0;
                         output_col_idx <= 0;

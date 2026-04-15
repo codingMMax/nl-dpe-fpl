@@ -37,6 +37,8 @@ module tb_alignment;
     wire ready, valid_n;
 
     // Override DPE parameters
+    defparam dut.fc_layer_inst.dpe_inst.KERNEL_WIDTH = K;
+    defparam dut.fc_layer_inst.dpe_inst.NUM_COLS = N;
     defparam dut.fc_layer_inst.dpe_inst.DPE_BUF_WIDTH = `DPE_BUF_WIDTH;
     defparam dut.fc_layer_inst.dpe_inst.COMPUTE_CYCLES = `DPE_COMPUTE_CYCLES;
 
