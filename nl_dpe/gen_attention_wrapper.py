@@ -227,8 +227,9 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         else:
             # Direct DPE: valid acts as w_buf_en. Data goes straight to DPE.
             # Valid on cycles when SRAM output is ready (1 cycle after addr set).
+            # 2-cycle SRAM latency: addr set at mac_count=i, output valid at mac_count=i+2
             lines.append(f"    assign dimm_exp_data_in = log_sum_a;")
-            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 0);")
+            lines.append(f"    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > {packed_d});  // data valid after 2-cycle SRAM latency")
             lines.append(f"    assign dimm_exp_ready_n = 1'b1;")
     else:
         lines.append(f"    reg [{max(1, math.ceil(math.log2(h_dimm)))-1}:0] dimm_sel;")
@@ -319,7 +320,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"               S_OUTPUT = 4'd6;")
     if dual_identity:
         lines.append(f"    localparam S_WRITE_B = 4'd7;")
-    mac_bits = max(1, (packed_d - 1).bit_length())
+    mac_bits = max(1, (packed_d + 1).bit_length())  # needs to count up to packed_d + 1 (2-cycle SRAM latency)
     score_bits = max(1, (n_seq - 1).bit_length())
     lines.append(f"    reg [3:0] state;")
     lines.append(f"    reg [{mac_bits}-1:0] mac_count;  // packed word counter (0..{packed_d-1})")
@@ -378,8 +379,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                    end")
         lines.append(f"                end")
         lines.append(f"                S_WAIT_DPE: begin")
-        lines.append(f"                    // Wait for DPE to process and produce all output")
-        lines.append(f"                    if (dpe_output_done) begin")
+        lines.append(f"                    // Wait for DPE to finish and return to idle")
+        lines.append(f"                    if (dpe_output_done && dimm_exp_MSB_SA_Ready) begin")
         lines.append(f"                        // Write score A")
         lines.append(f"                        score_write_data <= accumulator_a[7:0];")
         lines.append(f"                        score_w_en <= 1;")
@@ -400,7 +401,7 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         # and the data appears on cycle i+1. We need packed_d+1 cycles:
         # cycle 0..packed_d-1: set read addresses
         # cycle packed_d: last SRAM output valid, transition to S_WAIT_DPE
-        feed_end = packed_d  # one extra cycle for SRAM read latency
+        feed_end = packed_d + 1  # 2 extra cycles: 1 for addr register + 1 for SRAM registered read
         lines.append(f"                    // Feed: set SRAM addr, data valid next cycle ({packed_d}+1 cycles)")
         lines.append(f"                    if (mac_count < {packed_d}) begin")
         lines.append(f"                        q_read_addr <= mac_count;")
@@ -413,7 +414,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                    end")
         lines.append(f"                end")
         lines.append(f"                S_WAIT_DPE: begin")
-        lines.append(f"                    if (dpe_output_done) begin")
+        lines.append(f"                    // Wait for DPE to finish and return to idle (MSB_SA_Ready=1)")
+        lines.append(f"                    if (dpe_output_done && dimm_exp_MSB_SA_Ready) begin")
         lines.append(f"                        score_write_data <= accumulator[7:0];")
         lines.append(f"                        score_w_en <= 1;")
         lines.append(f"                        score_write_addr <= score_idx;")

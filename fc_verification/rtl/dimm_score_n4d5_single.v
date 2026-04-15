@@ -74,7 +74,7 @@ module dimm_score_matrix #(
     assign dimm_exp_valid_n = dimm_exp_dpe_done;
 
     assign dimm_exp_data_in = log_sum_a;
-    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 0);
+    assign dimm_exp_valid = (state == S_COMPUTE) && (mac_count > 1);  // data valid after 2-cycle SRAM latency
     assign dimm_exp_ready_n = 1'b1;
 
     // Masked accumulator: sum only first 5 columns per score
@@ -112,7 +112,7 @@ module dimm_score_matrix #(
                S_COMPUTE = 4'd3, S_WAIT_DPE = 4'd4, S_WRITE_SCORE = 4'd5,
                S_OUTPUT = 4'd6;
     reg [3:0] state;
-    reg [1-1:0] mac_count;  // packed word counter (0..0)
+    reg [2-1:0] mac_count;  // packed word counter (0..0)
     reg [2-1:0] score_idx;  // score column index (element, 0..N-1)
 
     always @(posedge clk or posedge rst) begin
@@ -142,13 +142,14 @@ module dimm_score_matrix #(
                         k_read_addr_a <= score_idx * 1 + mac_count;
                     end
                     mac_count <= mac_count + 1;
-                    if (mac_count == 1) begin
+                    if (mac_count == 2) begin
                         mac_count <= 0;
                         state <= S_WAIT_DPE;
                     end
                 end
                 S_WAIT_DPE: begin
-                    if (dpe_output_done) begin
+                    // Wait for DPE to finish and return to idle (MSB_SA_Ready=1)
+                    if (dpe_output_done && dimm_exp_MSB_SA_Ready) begin
                         score_write_data <= accumulator[7:0];
                         score_w_en <= 1;
                         score_write_addr <= score_idx;
