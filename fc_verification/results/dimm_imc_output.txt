@@ -22,8 +22,8 @@ Energy breakdown (by component):
   imc_dimm_log_digital: 8416.6475 pJ
   clb_subtract: 696.1855 pJ
 Energy grouped: DPE=2833070.4549 pJ, Memory=1135.6785 pJ, FPGA=635696.2852 pJ
-Latency total (critical path): 3131613.44 ns
-Latency total (raw sum): 3131613.44 ns
+Latency total (critical path): 3206628.45 ns
+Latency total (raw sum): 3206628.45 ns
 Resource total counts:
   imc_tiles: 1.00
   dsp_used: 64.00
