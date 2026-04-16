@@ -1,7 +1,4 @@
-// DIMM Pipeline RTL — Proposed NL-DPE, BERT-Tiny dims
-// R=1024, C=128, d_head=64, N=128, K_id=2
-// dpe_buf_width=40, dual_identity=True
-// Simulator: per_pass=55cyc, per_row=62cyc
+// DIMM for VTR: R=1024, C=128, d=64, S=128, K_id=2
 
 module dimm_score_matrix #(
     parameter N = 128,
