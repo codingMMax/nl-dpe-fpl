@@ -261,3 +261,26 @@ The cap is set by the DIMM digital overhead (BRAM I/O, CLB reductions) which bot
 architectures share — this is an inherent property of the O(N²) attention workload,
 not an NL-DPE limitation. For linear-layer-dominant workloads (CNNs), NL-DPE delivers
 the full 40× efficiency advantage.
+
+## 8. DIMM-only comparison setup (verification)
+
+The "0 DSPs" Azure-Lily in §6 represents the extreme paper-canonical architecture
+that replaced all DSP columns with DPE columns. For apples-to-apples DIMM
+verification against NL-DPE's W=16 mapping, we instantiate a DIMM-only
+**Azure-Lily W=16 DSP variant**: 16 `dsp_mac` per DIMM matmul stage, each = one
+`int_sop_4` hard block = 4 MAC/cycle. This variant:
+
+- Is used only for the block-level DIMM architecture comparison (Phase H-M of
+  `fc_verification/`), not for the paper's main Proposed vs Canonical contrast.
+- Preserves the paper's central per-lane throughput argument (NL-DPE W=16 vs
+  Azure-Lily W=16) without forcing the strawman "0 DSP" setup into the DIMM
+  verification loop.
+- Matches the simulator's `DSP_WIDTH=4` assumption exactly (no CLB-multiply
+  helper), so RTL ≡ simulator at the arithmetic level. See
+  `fc_verification/VERIFICATION.md` §"Full DIMM Top Verification (W=16)" for
+  the cycle alignment and resource-count results.
+
+The paper's §3–6 architecture claims (40× CNN efficiency, 1.77× attention at
+N=128, 93% DPE utilization) are unchanged by this verification variant — the
+W=16 DSP lane count is a lane-match for the NL-DPE configuration and does not
+alter the paper-canonical Azure-Lily's resource story.

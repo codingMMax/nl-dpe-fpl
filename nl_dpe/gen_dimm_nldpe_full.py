@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""DEPRECATED (superseded by W=16 full DIMM top verification).
+
+This file was part of the Phase A-E per-stage W=1 DIMM exploration.
+Authoritative generators:
+  nl_dpe/gen_dimm_nldpe_top.py (NL-DPE W=16 full DIMM top)
+  nl_dpe/gen_dimm_azurelily_top.py (Azure-Lily W=16 full DIMM top)
+See fc_verification/VERIFICATION.md for the full-DIMM verification story.
+"""
 """Generate NL-DPE DIMM extension RTL — softmax_norm and mac_sv.
 
 Two new DIMM stages to complement the existing score-matrix (mac_qk + softmax_exp fused):

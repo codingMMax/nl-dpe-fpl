@@ -1,3 +1,8 @@
+// DEPRECATED (superseded by W=16 full DIMM top verification).
+// This file was part of the Phase A-E per-stage W=1 DIMM exploration.
+// Authoritative DIMM verification: fc_verification/rtl/nldpe_dimm_top_d64_c128.v
+// and fc_verification/rtl/azurelily_dimm_top_d64_c128.v; see VERIFICATION.md.
+//
 // Azure-Lily DIMM softmax_exp Functional Test
 //
 // Covers the S_LOAD phase of clb_softmax: combinational exp approximation

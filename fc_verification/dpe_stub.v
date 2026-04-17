@@ -23,12 +23,17 @@
 //   4. DPE outputs results serially → asserts dpe_done
 //   5. DPE resets → ready for next pass
 
+// Default parameters match the NL-DPE W=16 full DIMM top's primary dimm_exp
+// stage (KW=128 dual-identity exp, BUF_WIDTH=40 → 5 elements/strobe, COMPUTE=3
+// ACAM pipeline). Other DPE uses (sm_exp/ws_log/ws_exp) override via defparam
+// in the TB when needed. These module-level defaults are IGNORED by VTR — the
+// arch XML's dpe model is parameterless — so they only affect iverilog sim.
 module dpe #(
-    parameter KERNEL_WIDTH  = 512,  // R: number of input elements per VMM pass
-    parameter NUM_COLS      = 128,  // C: number of crossbar columns (output elements)
-    parameter DPE_BUF_WIDTH = 16,   // bits per transfer strobe (16 or 40)
-    parameter COMPUTE_CYCLES = 44,  // bit-serial pipeline delay (44=ADC, 3=ACAM)
-    parameter ACAM_MODE     = 0     // 0=none (VMM only), 1=exp, 2=log
+    parameter KERNEL_WIDTH   = 128,
+    parameter NUM_COLS       = 128,
+    parameter DPE_BUF_WIDTH  = 40,
+    parameter COMPUTE_CYCLES = 3,
+    parameter ACAM_MODE      = 1
 )(
     input  wire        clk,
     input  wire        reset,

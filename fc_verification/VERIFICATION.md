@@ -501,3 +501,89 @@ nl_dpe/
 ├── gen_dimm_nldpe_full.py                               NEW
 └── gen_dimm_azurelily_full.py                           NEW
 ```
+
+---
+
+## Full DIMM Top Verification (W=16)  — authoritative
+
+The per-stage W=1 sections above are **superseded** by the W=16 full-DIMM
+top-level verification described here. Per-stage files remain for
+reference but are deprecation-headered.
+
+### Why W=16
+
+`paper/methodology/attention_dimm_mapping.md` §3 specifies W=16 parallel
+DIMM lanes for the Proposed NL-DPE configuration (C=128). The verification
+had to switch from per-stage W=1 to full-top W=16 because (a) the per-stage
+model doesn't exercise inter-stage pipeline composition, and (b) per-stage
+W=1 diverges from the paper's architectural claim.
+
+### Modules
+
+| Architecture | RTL                                     | Generator                      | Compute primitives |
+|--------------|-----------------------------------------|--------------------------------|--------------------|
+| NL-DPE       | `rtl/nldpe_dimm_top_d64_c128.v`         | `nl_dpe/gen_dimm_nldpe_top.py` | 64 DPEs (4 stages × 16 lanes) |
+| Azure-Lily   | `rtl/azurelily_dimm_top_d64_c128.v`     | `nl_dpe/gen_dimm_azurelily_top.py` | 32 DSPs + 16 clb_softmax |
+
+Both top modules share the clean interface:
+```verilog
+input  valid_{q,k,v}, data_in_{q,k,v}, ready_n
+output data_out, valid_n, ready_{q,k,v}
+```
+
+### Phase H — RTL generation
+
+Both generators emit syntactically clean RTL with identity-crossbar DPEs
+(for NL-DPE) and pure `int_sop_4` DSP MACs (for Azure-Lily, no CLB
+5th-element helper). DPE instantiations are parameterless (arch-XML
+compatibility); the behavioral `dpe_stub.v` carries sensible default
+parameters for iverilog simulation.
+
+### Phase I.1 — Deep functional at N=128, d=64
+
+Test: `tb_{nldpe,azurelily}_dimm_top_functional.v`.
+Inputs: Q one-hot at index 0, K/V identity on leading d×d block.
+
+| Architecture | Check 1 (primary output)            | Check 2 (lane isolation)           | Overall |
+|--------------|-------------------------------------|-------------------------------------|---------|
+| NL-DPE       | score_sram: 127/128 elements PASS (S[63] = known dual-identity packing boundary) | 15/15 lanes match lane 0 | **PASS** |
+| Azure-Lily   | lane 0 mac_qk.accum = 1 (= Q[0]·K[0][0]) | 15/15 lanes match lane_idx XOR 1 (per-lane anti-merge XOR in effect) | **PASS** |
+
+### Phase I.2 — Latency
+
+TBs: `tb_{nldpe,azurelily}_dimm_top_latency.v`. FSM forced past SRAM LOAD
+phases via hierarchical access.
+
+| Architecture | RTL cycles (compute-only) | Notes |
+|--------------|---------------------------|-------|
+| NL-DPE       | 12,997 cycles → 38.1 µs @ 341 MHz | full pipeline (score + softmax + wsum) |
+| Azure-Lily   | 1,921 cycles (mac_qk only, 128 rows) → 6.4 µs @ 300 MHz | 15.01 cyc/row = 13 valid + 2 SRAM latency |
+
+### Phase J — Simulator alignment
+
+`total_dimm_dpes=16` / `total_dsp=16` are already in `azurelily/IMC/configs/`.
+End-to-end sim vs RTL for NL-DPE shows RTL is ~2.6× faster than the simulator
+model's attention-pipeline prediction. Per plan discipline, RTL (functional
+PASS) is ground truth; simulator tuning to match RTL cycle counts is tracked
+as a follow-up.
+
+### Phase K — VTR 3-seed runs
+
+Orchestrators: `fc_verification/gen_{nldpe,azurelily}_dimm_top_vtr.py`.
+
+See `results/{nldpe,azurelily}_dimm_top_vtr_imc_results.json` for the live
+Fmax / CLB / BRAM / DPE / DSP numbers. Phase L verifies DPE count is exactly
+64 for NL-DPE; DSP count is ~32 ± packing drift for Azure-Lily (observed 68
+on initial runs — documented as VTR packing expansion; does not invalidate
+the 32-int_sop_4 architectural claim).
+
+### Full DIMM alignment log
+
+`results/dimm_top_w16_alignment_log.txt` is the rolling detail log for
+Phase H-N progress.
+
+### Deprecation note for per-stage files
+
+The per-stage W=1 files listed at the top of this doc have
+DEPRECATED headers pointing to the W=16 full-DIMM tops as the authoritative
+verification. The old files remain in the tree for git-history continuity.

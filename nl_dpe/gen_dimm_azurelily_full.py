@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""DEPRECATED (superseded by W=16 full DIMM top verification).
+
+This file was part of the Phase A-E per-stage W=1 DIMM exploration.
+Authoritative generators:
+  nl_dpe/gen_dimm_nldpe_top.py (NL-DPE W=16 full DIMM top)
+  nl_dpe/gen_dimm_azurelily_top.py (Azure-Lily W=16 full DIMM top)
+See fc_verification/VERIFICATION.md for the full-DIMM verification story.
+"""
 """Generate Azure-Lily DIMM RTL — mac_qk, softmax, mac_sv.
 
 Azure-Lily attention has no crossbar involvement in the DIMM path. MAC_QK
@@ -24,7 +32,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
 from gen_gemv_wrappers import _get_supporting_modules
-from gen_bert_tiny_wrapper import _gen_dsp_mac_module, _gen_clb_softmax_module
+from gen_bert_tiny_wrapper import _gen_dsp_mac_module, _gen_clb_mac_module, _gen_clb_softmax_module
 
 
 def _get_sram_module_only():

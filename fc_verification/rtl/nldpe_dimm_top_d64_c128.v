@@ -150,13 +150,10 @@ module dimm_score_matrix #(
             dimm_exp_nl_dpe_control <= dimm_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe #(
-        .KERNEL_WIDTH(128),
-        .NUM_COLS(128),
-        .DPE_BUF_WIDTH(40),
-        .COMPUTE_CYCLES(3),
-        .ACAM_MODE(1)
-    ) dimm_exp (
+    // dpe instantiation — no #() params (arch XML model is parameterless)
+    // Intended: KERNEL_WIDTH=128, NUM_COLS=128,
+    //           ACAM_MODE=1, COMPUTE_CYCLES=3
+    dpe dimm_exp (
         .clk(clk), .reset(rst),
         .data_in(dimm_exp_data_in),
         .nl_dpe_control(dimm_exp_nl_dpe_control),
@@ -170,10 +167,11 @@ module dimm_score_matrix #(
         .dpe_done(dimm_exp_dpe_done),
         .reg_full(dimm_exp_reg_full),
         .shift_add_done(dimm_exp_shift_add_done),
-        .shift_add_bypass_ctrl(dimm_exp_shift_add_bypass_ctrl),
-        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
-        .weight_wen(1'b0), .weight_data(8'b0),
-        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
+        .shift_add_bypass_ctrl(dimm_exp_shift_add_bypass_ctrl)
+        // Note: dpe_stub has weight_wen/weight_data/weight_row_addr/weight_col_addr
+        // for TB preload; the arch-XML dpe hard block does NOT have those pins.
+        // We leave them unconnected so VTR synthesis works; TB preloads weights
+        // directly via hierarchical memory access (dut.X.dpe.weights[i][j]=...).
     );
     assign dimm_exp_valid_n = dimm_exp_dpe_done;
 
@@ -339,13 +337,10 @@ module softmax_approx #(
             sm_exp_nl_dpe_control <= sm_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe #(
-        .KERNEL_WIDTH(1),
-        .NUM_COLS(1),
-        .DPE_BUF_WIDTH(40),
-        .COMPUTE_CYCLES(3),
-        .ACAM_MODE(1)
-    ) sm_exp (
+    // dpe instantiation — no #() params (arch XML model is parameterless)
+    // Intended: KERNEL_WIDTH=1, NUM_COLS=1,
+    //           ACAM_MODE=1, COMPUTE_CYCLES=3
+    dpe sm_exp (
         .clk(clk), .reset(rst),
         .data_in(sm_exp_data_in),
         .nl_dpe_control(sm_exp_nl_dpe_control),
@@ -359,10 +354,11 @@ module softmax_approx #(
         .dpe_done(sm_exp_dpe_done),
         .reg_full(sm_exp_reg_full),
         .shift_add_done(sm_exp_shift_add_done),
-        .shift_add_bypass_ctrl(sm_exp_shift_add_bypass_ctrl),
-        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
-        .weight_wen(1'b0), .weight_data(8'b0),
-        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
+        .shift_add_bypass_ctrl(sm_exp_shift_add_bypass_ctrl)
+        // Note: dpe_stub has weight_wen/weight_data/weight_row_addr/weight_col_addr
+        // for TB preload; the arch-XML dpe hard block does NOT have those pins.
+        // We leave them unconnected so VTR synthesis works; TB preloads weights
+        // directly via hierarchical memory access (dut.X.dpe.weights[i][j]=...).
     );
     assign sm_exp_valid_n = sm_exp_dpe_done;
 
@@ -518,13 +514,10 @@ module dimm_weighted_sum #(
             ws_log_nl_dpe_control <= ws_log_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe #(
-        .KERNEL_WIDTH(1),
-        .NUM_COLS(1),
-        .DPE_BUF_WIDTH(40),
-        .COMPUTE_CYCLES(3),
-        .ACAM_MODE(2)
-    ) ws_log (
+    // dpe instantiation — no #() params (arch XML model is parameterless)
+    // Intended: KERNEL_WIDTH=1, NUM_COLS=1,
+    //           ACAM_MODE=2, COMPUTE_CYCLES=3
+    dpe ws_log (
         .clk(clk), .reset(rst),
         .data_in(ws_log_data_in),
         .nl_dpe_control(ws_log_nl_dpe_control),
@@ -538,10 +531,11 @@ module dimm_weighted_sum #(
         .dpe_done(ws_log_dpe_done),
         .reg_full(ws_log_reg_full),
         .shift_add_done(ws_log_shift_add_done),
-        .shift_add_bypass_ctrl(ws_log_shift_add_bypass_ctrl),
-        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
-        .weight_wen(1'b0), .weight_data(8'b0),
-        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
+        .shift_add_bypass_ctrl(ws_log_shift_add_bypass_ctrl)
+        // Note: dpe_stub has weight_wen/weight_data/weight_row_addr/weight_col_addr
+        // for TB preload; the arch-XML dpe hard block does NOT have those pins.
+        // We leave them unconnected so VTR synthesis works; TB preloads weights
+        // directly via hierarchical memory access (dut.X.dpe.weights[i][j]=...).
     );
     assign ws_log_valid_n = ws_log_dpe_done;
 
@@ -584,13 +578,10 @@ module dimm_weighted_sum #(
             ws_exp_nl_dpe_control <= ws_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe #(
-        .KERNEL_WIDTH(1),
-        .NUM_COLS(1),
-        .DPE_BUF_WIDTH(40),
-        .COMPUTE_CYCLES(3),
-        .ACAM_MODE(1)
-    ) ws_exp (
+    // dpe instantiation — no #() params (arch XML model is parameterless)
+    // Intended: KERNEL_WIDTH=1, NUM_COLS=1,
+    //           ACAM_MODE=1, COMPUTE_CYCLES=3
+    dpe ws_exp (
         .clk(clk), .reset(rst),
         .data_in(ws_exp_data_in),
         .nl_dpe_control(ws_exp_nl_dpe_control),
@@ -604,10 +595,11 @@ module dimm_weighted_sum #(
         .dpe_done(ws_exp_dpe_done),
         .reg_full(ws_exp_reg_full),
         .shift_add_done(ws_exp_shift_add_done),
-        .shift_add_bypass_ctrl(ws_exp_shift_add_bypass_ctrl),
-        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
-        .weight_wen(1'b0), .weight_data(8'b0),
-        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
+        .shift_add_bypass_ctrl(ws_exp_shift_add_bypass_ctrl)
+        // Note: dpe_stub has weight_wen/weight_data/weight_row_addr/weight_col_addr
+        // for TB preload; the arch-XML dpe hard block does NOT have those pins.
+        // We leave them unconnected so VTR synthesis works; TB preloads weights
+        // directly via hierarchical memory access (dut.X.dpe.weights[i][j]=...).
     );
     assign ws_exp_valid_n = ws_exp_dpe_done;
 

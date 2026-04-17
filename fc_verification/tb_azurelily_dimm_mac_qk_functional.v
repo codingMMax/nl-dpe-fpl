@@ -1,3 +1,8 @@
+// DEPRECATED (superseded by W=16 full DIMM top verification).
+// This file was part of the Phase A-E per-stage W=1 DIMM exploration.
+// Authoritative DIMM verification: fc_verification/rtl/nldpe_dimm_top_d64_c128.v
+// and fc_verification/rtl/azurelily_dimm_top_d64_c128.v; see VERIFICATION.md.
+//
 // Azure-Lily DIMM mac_qk Functional Test
 //
 // Computes score[j] = Σ_k Q[k] × K[j][k]  for j = 0..N-1
