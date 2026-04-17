@@ -40,7 +40,8 @@ module clb_softmax #(
 
     // SRAM to buffer exp values
     reg [ADDR_W-1:0] w_addr, r_addr;
-    reg w_en;
+    wire w_en;  // combinational fix for SRAM[0] skip bug
+    assign w_en = (state == 3'd0 /*S_LOAD*/) && valid;
     wire [DATA_WIDTH-1:0] sram_out;
     sram #(.DATA_WIDTH(40), .DEPTH(N)) sm_buf (
         .clk(clk), .rst(rst), .w_en(w_en),
@@ -74,14 +75,14 @@ module clb_softmax #(
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             state <= S_LOAD; w_addr <= 0; r_addr <= 0;
-            sum_exp <= 0; out_valid <= 0; w_en <= 0;
+            sum_exp <= 0; out_valid <= 0;
         end else case (state)
             S_LOAD: begin
-                w_en <= valid;
+                // w_en is now combinational — see assign below
                 if (valid) begin
                     sum_exp <= sum_exp + exp_val;
                     if (w_addr == N-1) begin
-                        state <= S_INV; w_addr <= 0; w_en <= 0; r_addr <= 0;
+                        state <= S_INV; w_addr <= 0; r_addr <= 0;
                     end else
                         w_addr <= w_addr + 1;
                 end
@@ -94,11 +95,11 @@ module clb_softmax #(
                 data_out <= norm_product;
                 out_valid <= 1;
                 if (r_addr == N-1) begin
-                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0; out_valid <= 0;
+                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0; /* out_valid kept high */
                 end else
                     r_addr <= r_addr + 1;
             end
-            default: begin state <= S_LOAD; out_valid <= 0; w_en <= 0; end
+            default: begin state <= S_LOAD; out_valid <= 0; end
         endcase
     end
     assign valid_n = out_valid;

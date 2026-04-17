@@ -470,6 +470,33 @@ def main():
         "output reg  [DATA_WIDTH-1:0]  data_out,",
         "output wire [DATA_WIDTH-1:0]  data_out,")
     clb_softmax_mod = _gen_clb_softmax_module(data_width=dw)
+    # Patch: w_en registered 1 cycle late causes SRAM[0] to be skipped.
+    # Replace registered w_en with combinational enable.
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "    reg [ADDR_W-1:0] w_addr, r_addr;\n    reg w_en;",
+        "    reg [ADDR_W-1:0] w_addr, r_addr;\n    wire w_en;  // combinational fix for SRAM[0] skip bug")
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "            S_LOAD: begin\n                w_en <= valid;\n                if (valid) begin",
+        "            S_LOAD: begin\n                // w_en is now combinational — see assign below\n                if (valid) begin")
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "                    if (w_addr == N-1) begin\n                        state <= S_INV; w_addr <= 0; w_en <= 0; r_addr <= 0;\n                    end else",
+        "                    if (w_addr == N-1) begin\n                        state <= S_INV; w_addr <= 0; r_addr <= 0;\n                    end else")
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "            default: begin state <= S_LOAD; out_valid <= 0; w_en <= 0; end",
+        "            default: begin state <= S_LOAD; out_valid <= 0; end")
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "            sum_exp <= 0; out_valid <= 0; w_en <= 0;",
+        "            sum_exp <= 0; out_valid <= 0;")
+    # Fix: last output in S_NORM gets dropped because out_valid clears on same
+    # cycle as final data_out. Keep out_valid=1 through the final cycle.
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "                if (r_addr == N-1) begin\n                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0; out_valid <= 0;\n                end else",
+        "                if (r_addr == N-1) begin\n                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0; /* out_valid kept high */\n                end else")
+    # Insert combinational w_en after wire decl.
+    clb_softmax_mod = clb_softmax_mod.replace(
+        "    wire w_en;  // combinational fix for SRAM[0] skip bug",
+        "    wire w_en;  // combinational fix for SRAM[0] skip bug\n"
+        "    assign w_en = (state == 3'd0 /*S_LOAD*/) && valid;")
     int_sop_4_stub = _gen_int_sop_4_stub(data_width=dw)
 
     # Write int_sop_4 stub (shared by all Azure-Lily RTL files)
