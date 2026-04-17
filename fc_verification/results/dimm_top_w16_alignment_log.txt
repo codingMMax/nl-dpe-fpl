@@ -89,7 +89,44 @@ Softmax/wsum sub-SRAM output values:
   Phase I.1 status — Azure-Lily
 ================================================================
 
-Pending. Next step.
+Test: fc_verification/tb_azurelily_dimm_top_functional.v
+Inputs:  Q[0] = 1 (one-hot), K/V identity on leading d×d block (64×64),
+         preloaded hierarchically into shared q_sram/k_sram/v_sram.
+
+Expected lane-L mac_qk.accum for row 0 (Q·K[0]):
+  lane 0: 1           (Q[0]*K[0][0] = 1*1 = 1)
+  lane L: 1 XOR L     (per-lane XOR anti-merge on k_sram_out prevents VTR
+                       from merging the 16 mac_qk instances)
+
+Run result (iverilog, 21 cycles to row-0 out_valid):
+  Lane 0  mac_qk.accum : 1 = expected 1        ✓ PASS
+  Lanes 1..15 accum    : (1 XOR L) for L=1..15 ✓ 15/15 PASS
+  Overall              : PASS
+
+Generator fixes applied for Phase H Azure-Lily closure:
+  - `data_b` XOR constant changed from shared `40'd1` to per-lane
+    `lane[DATA_WIDTH-1:0]` so VTR cannot merge the 16 mac_qk instances.
+    Lane 0 sees unmodified K (XOR 0) for natural functional verification.
+  - S_FEED_QK duration extended from packed_d cycles to packed_d+2 to
+    account for 2-cycle SRAM read latency (addr→data chain).
+  - dsp_mac.valid gated to (mac_count >= 2 && mac_count <= packed_d+1)
+    so it sees exactly the 13 cycles with valid data.
+  - Added row_count iteration 0..N-1 so the AL top actually produces all
+    N=128 QK^T scores (previously row_count was never incremented — the
+    FSM was a structural placeholder).  This makes Phase I.2 latency
+    measurement and Phase J sim-alignment tractable on this top.
+
+Limitations documented for Phase I.1 AL:
+  - clb_softmax expects N=128 scores but was not integrated to receive them
+    directly from mac_qk (the score stream goes into each lane's softmax
+    via the generate block's local `score_valid` wire; the lanes receive
+    identical scores via shared SRAM broadcast).  Full softmax + mac_sv
+    numeric verification requires wsum_inst-equivalent orchestration of
+    attn×V post-softmax — deferred to Phase I.2 or Phase M extension.
+  - The top FSM's S_WAIT_QK waits for mac_sv's output (`|lane_valid`),
+    which depends on softmax completion.  For Phase I.1 the TB samples
+    mac_qk.accum directly before the row iteration overwrites it
+    (sampling triggered by lane 0's out_valid rising edge).
 
 ================================================================
   Phase I.2 / J / K / L / M / N status

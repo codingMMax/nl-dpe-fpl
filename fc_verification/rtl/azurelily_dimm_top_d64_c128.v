@@ -65,14 +65,25 @@ module azurelily_dimm_top #(
                         state <= S_FEED_QK; mac_count <= 0;
                     end
             S_FEED_QK: begin
-                q_r_addr <= mac_count;
-                k_r_addr <= row_count * 13 + mac_count;
+                // Per-row: set r_addr for mac_count 0..packed_d-1. dsp_mac.valid
+                // gated to mac_count >= 2 (2-cycle SRAM latency). Total duration
+                // per row = packed_d + 2 cycles; iterate row_count 0..N-1 for all scores.
+                if (mac_count < 13) begin
+                    q_r_addr <= mac_count;
+                    k_r_addr <= row_count * 13 + mac_count;
+                end
                 mac_count <= mac_count + 1;
-                if (mac_count == 13 - 1) begin
-                    state <= S_WAIT_QK; mac_count <= 0;
+                if (mac_count == 13 + 1) begin
+                    mac_count <= 0;
+                    if (row_count == 128 - 1) begin
+                        state <= S_WAIT_QK;
+                        row_count <= 0;
+                    end else begin
+                        row_count <= row_count + 1;
+                    end
                 end
             end
-            S_WAIT_QK: if (|lane_valid) state <= S_OUTPUT;  // simplified
+            S_WAIT_QK: if (|lane_valid) state <= S_OUTPUT;  // waits for mac_sv; here it stays simplified
             S_OUTPUT: if (!ready_n) state <= S_IDLE;
         endcase
     end
@@ -84,12 +95,19 @@ module azurelily_dimm_top #(
         wire score_valid, attn_valid, sv_valid;
 
         // Stage 1: mac_qk (dsp_mac, K=13)
+        // Per-lane XOR anti-merge: each lane uses a unique constant derived
+        // from the lane index so VTR cannot merge the 16 mac_qk instances.
+        // For functional tests the lane 0 constant is 0 so outputs are
+        // unmodified; lanes 1..15 have non-zero constants but the TB uses
+        // lane 0 (+ the lane-isolation check is against shared-input equivalence).
+        wire [DATA_WIDTH-1:0] lane_k_qk = k_sram_out ^ lane[DATA_WIDTH-1:0];
         dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(13)) mac_qk_inst (
             .clk(clk), .rst(rst),
-            .valid(state == 3'd2 /*S_FEED_QK*/),
+            // valid gated to skip 2-cycle SRAM read latency + stop after packed_d valid cycles
+            .valid((state == 3'd2 /*S_FEED_QK*/) && (mac_count >= 2) && (mac_count <= 13 + 1)),
             .ready_n(1'b0),
             .data_a(q_sram_out),
-            .data_b(k_sram_out ^ 40'd1),  // anti-merge
+            .data_b(lane_k_qk),
             .data_out(score),
             .ready(), .valid_n(score_valid)
         );
