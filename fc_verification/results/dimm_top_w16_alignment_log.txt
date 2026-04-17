@@ -129,7 +129,68 @@ Limitations documented for Phase I.1 AL:
     (sampling triggered by lane 0's out_valid rising edge).
 
 ================================================================
-  Phase I.2 / J / K / L / M / N status
+  Phase I.2 status — latency measurements
+================================================================
+
+Test files (created 2026-04-17):
+  fc_verification/tb_nldpe_dimm_top_latency.v
+  fc_verification/tb_azurelily_dimm_top_latency.v
+
+Measurement method:
+  - Preload Q/K/V SRAMs hierarchically + DPE identity weights.
+  - For NL-DPE: force each lane's score_inst.state to S_COMPUTE and
+    address counters past LOAD. Record cycle at force time → cycle at
+    lane 0's wsum_inst.ws_state == WS_OUTPUT.
+  - For AL: drive valid_q=1 once, force top w_addr past LOAD thresholds.
+    Record cycle at S_FEED_QK entry → cycle at lane 0's 128th mac_qk
+    out_valid pulse.
+
+RTL latency results (at target Fmax Proposed=341MHz, AL=300MHz):
+  NL-DPE (end-to-end: score+softmax+wsum)  : 12997 cycles = 38.11 µs @ 341MHz
+  Azure-Lily (mac_qk only, 128 rows)       : 1921 cycles = 6.40 µs @ 300MHz
+
+================================================================
+  Phase J status — RTL ↔ simulator cycle comparison
+================================================================
+
+Simulator run (test.py --model attention --seq_length 128 --head_dim 64):
+
+  NL-DPE (nl_dpe.json, total_dimm_dpes=16):
+    mac_qk pipelined steady = 766.7 ns/row, 128 rows
+    softmax pipelined       = (bottleneck of other stages)
+    mac_sv steady           = 740 ns/row
+    Attention pipeline: fill + 127 × max(steady) + drain
+                      ≈ 100 µs = ~34,100 cycles at 341MHz
+
+  Azure-Lily (azure_lily.json, total_dsp=16):
+    Total attention latency = 217,883 ns = ~65,365 cycles at 300MHz
+    Includes projections + mac_qk + softmax + mac_sv.
+
+Comparison:
+  NL-DPE: RTL=12,997 cycles, sim≈34,100 cycles → sim predicts ~2.6× slower.
+
+  Interpretation: RTL is faster than simulator's attention model predicts.
+  Possible sources of divergence:
+    - RTL's direct-DPE instantiation has minimal FSM overhead; sim models
+      include more conservative per-row fill/drain cycles.
+    - Inter-stage buffer overlap in RTL may be more aggressive than the
+      sim's "one DPE pass per row" model.
+    - Sim counts DPE output/reduction cycles separately; RTL overlaps them.
+
+  Per plan §Autonomous Operation Discipline — when functional has PASSED
+  the RTL is ground truth and the simulator needs adjustment. Within this
+  phase we document the delta (Δcycles ≈ 21,100 for NL-DPE, ~2.6× factor);
+  a simulator tuning pass to match RTL is tracked separately.
+
+  Azure-Lily: RTL's mac_qk portion alone = 1,921 cycles. The sim's total
+  attention latency includes projections + softmax + mac_sv that aren't
+  end-to-end exercised in the AL RTL top (the FSM's S_WAIT_QK placeholder
+  never completes those stages). Direct comparison requires either
+  extending the AL top or restricting the sim to mac_qk only — documented
+  as a known gap for Phase M.
+
+================================================================
+  Phase K / L / M / N status
 ================================================================
 
 All pending, in that order, per DIMM_FULL_VERIFICATION_PLAN.md.
