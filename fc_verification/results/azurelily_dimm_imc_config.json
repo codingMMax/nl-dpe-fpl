@@ -1,0 +1,51 @@
+{
+    "core_name": "Azure-Lily",
+    "tech_node_nm": 22,
+    "precision_bits": 8,
+    "geometry": {
+        "array_rows": 512,
+        "array_cols": 128,
+        "acam_rows": 0,
+        "weight_bits_per_cell": 8
+    },
+    "capabilities": {
+        "analog_nonlinear": false,
+        "input_bit_slicing": true,
+        "analog_accum": false,
+        "digital_accum": true
+    },
+    "area_params": {
+        "bitcell_area_um2": 0.16,
+        "adc_area_per_col_um2": 275.0,
+        "overhead_factor": 0.02
+    },
+    "params": {
+        "cols_per_adc": 16,
+        "scale_with_geometry": true,
+        "freq_MHz": 1000,
+        "t_analoge": 1,
+        "t_conv": 1.09,
+        "t_digital": 0.0,
+        "e_analoge_pj": 0.0,
+        "e_conv_pj": 2.33,
+        "e_digital_pj": 0.0
+    },
+    "fpga_specs": {
+        "freq": 300,
+        "bram_width": 40,
+        "dpe_buf_width": 40,
+        "mem_bw_utilization": 1,
+        "bram_mode": 0,
+        "bram_pj_per_access": 0.0495,
+        "dsp_pj_per_mac": 1.2,
+        "clb_pj_per_mac": 0.66,
+        "act_units": 16,
+        "act_cycles_per_op": 1,
+        "act_energy_pj_per_op": 0.45,
+        "total_io": 2630,
+        "total_clb": 6688,
+        "total_dsp": 132,
+        "total_mem": 264,
+        "total_imc": 896
+    }
+}

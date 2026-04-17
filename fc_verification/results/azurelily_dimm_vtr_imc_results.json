@@ -1,0 +1,21 @@
+{
+  "config": "Azure-Lily",
+  "d_head": 64,
+  "seq_len": 128,
+  "fmax_mhz": 300,
+  "energy_pj": 2681487.01,
+  "latency_ns": 99989.89,
+  "breakdown": {
+    "sram_read": 648.945,
+    "sram_write": 499.9995,
+    "imc_conversion": 152698.88,
+    "dsp_gemm": 2516582.4,
+    "clb_exp": 270.336,
+    "clb_norm_sum": 685.3076,
+    "clb_norm_inv": 270.7388,
+    "mul": 9830.4,
+    "_dpe": 152698.88,
+    "_mem": 1148.9445,
+    "_fpga": 2527639.1824
+  }
+}
