@@ -284,7 +284,9 @@ def _gen_azurelily_mac_sv(n_seq: int, d_head: int, data_width: int = 40) -> str:
     packed_d = math.ceil(d_head / epw)
     depth_s = packed_n + 1
     depth_v = d_head * packed_n + 1
-    depth_o = packed_d + 1
+    # One SRAM entry per output (no packing) — simpler capture, each word has low
+    # byte containing one score. TBs check low 8 bits of o_sram.mem[m].
+    depth_o = d_head + 1
 
     addr_s = max(1, (depth_s - 1).bit_length())
     addr_v = max(1, (depth_v - 1).bit_length())
@@ -324,7 +326,6 @@ def _gen_azurelily_mac_sv(n_seq: int, d_head: int, data_width: int = 40) -> str:
     L.append(f"    reg [15:0] m_count;     // output column index (0..D-1)")
     L.append(f"    reg [15:0] k_count;     // inner index (0..PACKED_N-1)")
     L.append(f"    reg [15:0] mac_count;")
-    L.append(f"    reg [7:0]  output_buf [0:PACKED_D*EPW-1];")  # scratch for bytes before packing
     L.append(f"")
 
     L.append(f"    wire s_w_en = (state == S_LOAD_S) && valid_s;")
@@ -360,14 +361,14 @@ def _gen_azurelily_mac_sv(n_seq: int, d_head: int, data_width: int = 40) -> str:
     L.append(f"    );")
     L.append(f"")
 
-    L.append(f"    // Collect output bytes: m_count goes 0..D-1, pack into words of EPW bytes")
-    L.append(f"    integer oi;")
+    L.append(f"    // Capture dsp_out directly to o_sram — one entry per output")
     L.append(f"    always @(posedge clk or posedge rst) begin")
-    L.append(f"        if (rst) begin")
-    L.append(f"            for (oi = 0; oi < PACKED_D * EPW; oi = oi + 1) output_buf[oi] <= 0;")
-    L.append(f"        end else if (dsp_out_valid && state == S_COMPUTE) begin")
-    L.append(f"            output_buf[m_count] <= dsp_out[7:0];")
-    L.append(f"        end")
+    L.append(f"        if (rst) begin o_w_en <= 0; o_w_addr <= 0; o_w_data <= 0; end")
+    L.append(f"        else if (dsp_out_valid && state == S_COMPUTE) begin")
+    L.append(f"            o_w_en <= 1;")
+    L.append(f"            o_w_addr <= m_count;")
+    L.append(f"            o_w_data <= dsp_out;")
+    L.append(f"        end else begin o_w_en <= 0; end")
     L.append(f"    end")
     L.append(f"")
     L.append(f"    always @(posedge clk or posedge rst) begin")
@@ -375,10 +376,9 @@ def _gen_azurelily_mac_sv(n_seq: int, d_head: int, data_width: int = 40) -> str:
     L.append(f"            state <= S_IDLE;")
     L.append(f"            s_w_addr <= 0; s_r_addr <= 0;")
     L.append(f"            v_w_addr <= 0; v_r_addr <= 0;")
-    L.append(f"            o_w_addr <= 0; o_r_addr <= 0; o_w_en <= 0; o_w_data <= 0;")
+    L.append(f"            o_r_addr <= 0;")
     L.append(f"            m_count <= 0; k_count <= 0; mac_count <= 0;")
     L.append(f"        end else begin")
-    L.append(f"            o_w_en <= 0;")
     L.append(f"            case (state)")
     L.append(f"                S_IDLE: if (valid_s || valid_v) state <= S_LOAD_S;")
     L.append(f"                S_LOAD_S: begin")
@@ -401,9 +401,7 @@ def _gen_azurelily_mac_sv(n_seq: int, d_head: int, data_width: int = 40) -> str:
     L.append(f"                    if (mac_count < PACKED_N + 1) k_count <= k_count + 1;")
     L.append(f"                    if (dsp_out_valid) begin")
     L.append(f"                        if (m_count == D - 1) begin")
-    L.append(f"                            // Pack output_buf bytes into output SRAM")
     L.append(f"                            state <= S_OUTPUT;")
-    L.append(f"                            o_w_addr <= 0;")
     L.append(f"                        end else begin")
     L.append(f"                            m_count <= m_count + 1;")
     L.append(f"                            k_count <= 0;")
@@ -414,35 +412,13 @@ def _gen_azurelily_mac_sv(n_seq: int, d_head: int, data_width: int = 40) -> str:
     L.append(f"                S_OUTPUT: begin")
     L.append(f"                    if (!ready_n) begin")
     L.append(f"                        o_r_addr <= o_r_addr + 1;")
-    L.append(f"                        if (o_r_addr == PACKED_D - 1) state <= S_IDLE;")
+    L.append(f"                        if (o_r_addr == D - 1) state <= S_IDLE;")
     L.append(f"                    end")
     L.append(f"                end")
     L.append(f"            endcase")
     L.append(f"        end")
     L.append(f"    end")
     L.append(f"")
-
-    # Packing output buffer to SRAM — write all PACKED_D words at end of compute
-    L.append(f"    // Pack output_buf bytes into PACKED_D SRAM words (done combinationally,")
-    L.append(f"    // written in one burst after all D outputs collected)")
-    L.append(f"    reg [15:0] pack_i;")
-    L.append(f"    always @(posedge clk) begin")
-    L.append(f"        if (state == S_OUTPUT && pack_i < PACKED_D) begin")
-    L.append(f"            // Not used — pack happens below via generate")
-    L.append(f"        end")
-    L.append(f"    end")
-    L.append(f"")
-
-    # Actually use a simpler approach: write bytes to SRAM directly as they come
-    # Revisit: instead of output_buf, write each dsp_out byte directly to the correct SRAM location
-    # For simplicity (and following existing DIMM pattern), use output_buf + combinational pack + single-burst write
-    # But combinational pack + immediate write is simpler: on dsp_out_valid, write to output SRAM at address m/EPW, byte m%EPW.
-    # Easier: expose output_buf contents in a packed wire that the TB can read directly.
-
-    # Simpler approach: in the FSM, on dsp_out_valid, accumulate into a word register,
-    # and when word complete (every EPW outputs), write to SRAM.
-    # But this complicates timing. Let me just rely on output_buf being readable by TB hierarchically.
-
     L.append(f"    assign valid_n = (state == S_OUTPUT);")
     L.append(f"    assign data_out = o_sram_out;")
     L.append(f"")

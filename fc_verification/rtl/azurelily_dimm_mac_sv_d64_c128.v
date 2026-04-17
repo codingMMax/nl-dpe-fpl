@@ -27,13 +27,12 @@ module azurelily_dimm_mac_sv #(
     reg [2:0] state;
     reg [5-1:0] s_w_addr, s_r_addr;
     reg [11-1:0] v_w_addr, v_r_addr;
-    reg [4-1:0] o_r_addr, o_w_addr;
+    reg [7-1:0] o_r_addr, o_w_addr;
     reg o_w_en;
     reg [DATA_WIDTH-1:0] o_w_data;
     reg [15:0] m_count;     // output column index (0..D-1)
     reg [15:0] k_count;     // inner index (0..PACKED_N-1)
     reg [15:0] mac_count;
-    reg [7:0]  output_buf [0:PACKED_D*EPW-1];
 
     wire s_w_en = (state == S_LOAD_S) && valid_s;
     wire [DATA_WIDTH-1:0] s_sram_out;
@@ -50,7 +49,7 @@ module azurelily_dimm_mac_sv #(
                 .sram_data_in(data_in_v),.sram_data_out(v_sram_out));
 
     wire [DATA_WIDTH-1:0] o_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(14))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(65))
         o_sram (.clk(clk),.rst(rst),.w_en(o_w_en),
                 .r_addr(o_r_addr),.w_addr(o_w_addr),
                 .sram_data_in(o_w_data),.sram_data_out(o_sram_out));
@@ -67,14 +66,14 @@ module azurelily_dimm_mac_sv #(
         .ready(), .valid_n(dsp_out_valid)
     );
 
-    // Collect output bytes: m_count goes 0..D-1, pack into words of EPW bytes
-    integer oi;
+    // Capture dsp_out directly to o_sram — one entry per output
     always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            for (oi = 0; oi < PACKED_D * EPW; oi = oi + 1) output_buf[oi] <= 0;
-        end else if (dsp_out_valid && state == S_COMPUTE) begin
-            output_buf[m_count] <= dsp_out[7:0];
-        end
+        if (rst) begin o_w_en <= 0; o_w_addr <= 0; o_w_data <= 0; end
+        else if (dsp_out_valid && state == S_COMPUTE) begin
+            o_w_en <= 1;
+            o_w_addr <= m_count;
+            o_w_data <= dsp_out;
+        end else begin o_w_en <= 0; end
     end
 
     always @(posedge clk or posedge rst) begin
@@ -82,10 +81,9 @@ module azurelily_dimm_mac_sv #(
             state <= S_IDLE;
             s_w_addr <= 0; s_r_addr <= 0;
             v_w_addr <= 0; v_r_addr <= 0;
-            o_w_addr <= 0; o_r_addr <= 0; o_w_en <= 0; o_w_data <= 0;
+            o_r_addr <= 0;
             m_count <= 0; k_count <= 0; mac_count <= 0;
         end else begin
-            o_w_en <= 0;
             case (state)
                 S_IDLE: if (valid_s || valid_v) state <= S_LOAD_S;
                 S_LOAD_S: begin
@@ -108,9 +106,7 @@ module azurelily_dimm_mac_sv #(
                     if (mac_count < PACKED_N + 1) k_count <= k_count + 1;
                     if (dsp_out_valid) begin
                         if (m_count == D - 1) begin
-                            // Pack output_buf bytes into output SRAM
                             state <= S_OUTPUT;
-                            o_w_addr <= 0;
                         end else begin
                             m_count <= m_count + 1;
                             k_count <= 0;
@@ -121,19 +117,10 @@ module azurelily_dimm_mac_sv #(
                 S_OUTPUT: begin
                     if (!ready_n) begin
                         o_r_addr <= o_r_addr + 1;
-                        if (o_r_addr == PACKED_D - 1) state <= S_IDLE;
+                        if (o_r_addr == D - 1) state <= S_IDLE;
                     end
                 end
             endcase
-        end
-    end
-
-    // Pack output_buf bytes into PACKED_D SRAM words (done combinationally,
-    // written in one burst after all D outputs collected)
-    reg [15:0] pack_i;
-    always @(posedge clk) begin
-        if (state == S_OUTPUT && pack_i < PACKED_D) begin
-            // Not used — pack happens below via generate
         end
     end
 
