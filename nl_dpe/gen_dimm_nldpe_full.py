@@ -302,6 +302,9 @@ def _gen_dimm_mac_sv(n_seq: int, d_head: int, crossbar_rows: int = 1024,
     # DPE passes. If N <= R (crossbar rows), one pass handles all inputs.
     dpe_passes = math.ceil(n_seq / crossbar_rows)
 
+    # Number of DPE output pulses (determined by hardware: C cols / epw per pulse)
+    dpe_output_cycles = math.ceil(C * 8 / dw)  # = 26 for C=128, dw=40
+
     addr_in = max(1, (depth_in - 1).bit_length())
     addr_out = max(1, (depth_out - 1).bit_length())
     mac_bits = max(1, (packed_n + 2).bit_length())
@@ -401,16 +404,19 @@ def _gen_dimm_mac_sv(n_seq: int, d_head: int, crossbar_rows: int = 1024,
     L.append(f"    reg dpe_output_done;")
     L.append(f"    reg [15:0] dpe_out_count;")
     L.append(f"")
+    L.append(f"    // DPE hardware output = {dpe_output_cycles} packed words (C×8/dpe_bw).")
+    L.append(f"    // Wait for full output (all {dpe_output_cycles} pulses) to align latency with simulator.")
+    L.append(f"    localparam DPE_OUT_CYCLES = {dpe_output_cycles};")
     L.append(f"    always @(posedge clk or posedge rst) begin")
     L.append(f"        if (rst) begin dpe_out_count <= 0; dpe_output_done <= 0; end")
     L.append(f"        else if (state == S_IDLE) begin dpe_out_count <= 0; dpe_output_done <= 0; end")
     L.append(f"        else if (sv_dpe_dpe_done) begin")
     L.append(f"            dpe_out_count <= dpe_out_count + 1;")
-    L.append(f"            if (dpe_out_count + 1 >= PACKED_D) dpe_output_done <= 1;")
+    L.append(f"            if (dpe_out_count + 1 >= DPE_OUT_CYCLES) dpe_output_done <= 1;")
     L.append(f"        end")
     L.append(f"    end")
     L.append(f"")
-    L.append(f"    // Capture DPE output into output SRAM (first PACKED_D words)")
+    L.append(f"    // Capture first PACKED_D output words (contain d meaningful outputs).")
     L.append(f"    reg [{addr_out}-1:0] capture_addr;")
     L.append(f"    always @(posedge clk or posedge rst) begin")
     L.append(f"        if (rst) begin capture_addr <= 0; out_w_en <= 0; end")

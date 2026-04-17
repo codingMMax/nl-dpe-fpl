@@ -87,16 +87,19 @@ module nldpe_dimm_mac_sv #(
     reg dpe_output_done;
     reg [15:0] dpe_out_count;
 
+    // DPE hardware output = 26 packed words (C×8/dpe_bw).
+    // Wait for full output (all 26 pulses) to align latency with simulator.
+    localparam DPE_OUT_CYCLES = 26;
     always @(posedge clk or posedge rst) begin
         if (rst) begin dpe_out_count <= 0; dpe_output_done <= 0; end
         else if (state == S_IDLE) begin dpe_out_count <= 0; dpe_output_done <= 0; end
         else if (sv_dpe_dpe_done) begin
             dpe_out_count <= dpe_out_count + 1;
-            if (dpe_out_count + 1 >= PACKED_D) dpe_output_done <= 1;
+            if (dpe_out_count + 1 >= DPE_OUT_CYCLES) dpe_output_done <= 1;
         end
     end
 
-    // Capture DPE output into output SRAM (first PACKED_D words)
+    // Capture first PACKED_D output words (contain d meaningful outputs).
     reg [4-1:0] capture_addr;
     always @(posedge clk or posedge rst) begin
         if (rst) begin capture_addr <= 0; out_w_en <= 0; end
