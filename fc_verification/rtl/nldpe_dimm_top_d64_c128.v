@@ -150,7 +150,13 @@ module dimm_score_matrix #(
             dimm_exp_nl_dpe_control <= dimm_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe dimm_exp (
+    dpe #(
+        .KERNEL_WIDTH(128),
+        .NUM_COLS(128),
+        .DPE_BUF_WIDTH(40),
+        .COMPUTE_CYCLES(3),
+        .ACAM_MODE(1)
+    ) dimm_exp (
         .clk(clk), .reset(rst),
         .data_in(dimm_exp_data_in),
         .nl_dpe_control(dimm_exp_nl_dpe_control),
@@ -164,7 +170,10 @@ module dimm_score_matrix #(
         .dpe_done(dimm_exp_dpe_done),
         .reg_full(dimm_exp_reg_full),
         .shift_add_done(dimm_exp_shift_add_done),
-        .shift_add_bypass_ctrl(dimm_exp_shift_add_bypass_ctrl)
+        .shift_add_bypass_ctrl(dimm_exp_shift_add_bypass_ctrl),
+        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
+        .weight_wen(1'b0), .weight_data(8'b0),
+        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
     );
     assign dimm_exp_valid_n = dimm_exp_dpe_done;
 
@@ -330,7 +339,13 @@ module softmax_approx #(
             sm_exp_nl_dpe_control <= sm_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe sm_exp (
+    dpe #(
+        .KERNEL_WIDTH(1),
+        .NUM_COLS(1),
+        .DPE_BUF_WIDTH(40),
+        .COMPUTE_CYCLES(3),
+        .ACAM_MODE(1)
+    ) sm_exp (
         .clk(clk), .reset(rst),
         .data_in(sm_exp_data_in),
         .nl_dpe_control(sm_exp_nl_dpe_control),
@@ -344,7 +359,10 @@ module softmax_approx #(
         .dpe_done(sm_exp_dpe_done),
         .reg_full(sm_exp_reg_full),
         .shift_add_done(sm_exp_shift_add_done),
-        .shift_add_bypass_ctrl(sm_exp_shift_add_bypass_ctrl)
+        .shift_add_bypass_ctrl(sm_exp_shift_add_bypass_ctrl),
+        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
+        .weight_wen(1'b0), .weight_data(8'b0),
+        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
     );
     assign sm_exp_valid_n = sm_exp_dpe_done;
 
@@ -408,7 +426,7 @@ module softmax_approx #(
     localparam SM_IDLE = 3'd0, SM_LOAD = 3'd1, SM_EXP = 3'd2,
                SM_NORMALIZE = 3'd3, SM_OUTPUT = 3'd4;
     reg [2:0] sm_state;
-    reg [$clog2(N)-1:0] sm_count;
+    reg [$clog2(N+2)-1:0] sm_count;  // needs to hold N+1 for SM_NORMALIZE exit check
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -456,8 +474,8 @@ module dimm_weighted_sum #(
     parameter N = 128,
     parameter d = 64,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 11,
-    parameter DEPTH = 1665
+    parameter ADDR_WIDTH = 14,
+    parameter DEPTH = 8193
 )(
     input wire clk, input wire rst,
     input wire valid_attn, input wire valid_v,
@@ -476,12 +494,12 @@ module dimm_weighted_sum #(
     attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_read_addr),
                .w_addr(attn_write_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));
 
-    reg [11-1:0] v_write_addr, v_read_addr;
+    reg [14-1:0] v_write_addr, v_read_addr;
     reg v_w_en;
     wire [DATA_WIDTH-1:0] v_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(1665))
-    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[11-1:0]),
-            .w_addr(v_write_addr[11-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(8193))
+    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[14-1:0]),
+            .w_addr(v_write_addr[14-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));
 
     wire ws_log_valid, ws_log_ready_n, ws_log_ready, ws_log_valid_n;
     wire [DATA_WIDTH-1:0] ws_log_data_in, ws_log_data_out;
@@ -500,7 +518,13 @@ module dimm_weighted_sum #(
             ws_log_nl_dpe_control <= ws_log_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe ws_log (
+    dpe #(
+        .KERNEL_WIDTH(1),
+        .NUM_COLS(1),
+        .DPE_BUF_WIDTH(40),
+        .COMPUTE_CYCLES(3),
+        .ACAM_MODE(2)
+    ) ws_log (
         .clk(clk), .reset(rst),
         .data_in(ws_log_data_in),
         .nl_dpe_control(ws_log_nl_dpe_control),
@@ -514,7 +538,10 @@ module dimm_weighted_sum #(
         .dpe_done(ws_log_dpe_done),
         .reg_full(ws_log_reg_full),
         .shift_add_done(ws_log_shift_add_done),
-        .shift_add_bypass_ctrl(ws_log_shift_add_bypass_ctrl)
+        .shift_add_bypass_ctrl(ws_log_shift_add_bypass_ctrl),
+        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
+        .weight_wen(1'b0), .weight_data(8'b0),
+        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
     );
     assign ws_log_valid_n = ws_log_dpe_done;
 
@@ -557,7 +584,13 @@ module dimm_weighted_sum #(
             ws_exp_nl_dpe_control <= ws_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    dpe ws_exp (
+    dpe #(
+        .KERNEL_WIDTH(1),
+        .NUM_COLS(1),
+        .DPE_BUF_WIDTH(40),
+        .COMPUTE_CYCLES(3),
+        .ACAM_MODE(1)
+    ) ws_exp (
         .clk(clk), .reset(rst),
         .data_in(ws_exp_data_in),
         .nl_dpe_control(ws_exp_nl_dpe_control),
@@ -571,7 +604,10 @@ module dimm_weighted_sum #(
         .dpe_done(ws_exp_dpe_done),
         .reg_full(ws_exp_reg_full),
         .shift_add_done(ws_exp_shift_add_done),
-        .shift_add_bypass_ctrl(ws_exp_shift_add_bypass_ctrl)
+        .shift_add_bypass_ctrl(ws_exp_shift_add_bypass_ctrl),
+        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)
+        .weight_wen(1'b0), .weight_data(8'b0),
+        .weight_row_addr(16'b0), .weight_col_addr(16'b0)
     );
     assign ws_exp_valid_n = ws_exp_dpe_done;
 

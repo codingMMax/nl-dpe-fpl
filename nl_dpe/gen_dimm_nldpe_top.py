@@ -196,7 +196,7 @@ def main():
     wsum_rtl = _gen_dimm_weighted_sum(
         n_seq=args.N, d_head=args.d, h_dimm=h_dimm,
         depth_attn=args.N + 1,
-        depth_v=args.N * packed_d + 1,
+        depth_v=args.N * args.d + 1,   # element-wise V: FSM writes N*d words, reads j*d+m
         depth_log=args.N + 1,
         depth_out=args.d + 1,
         data_width=dw, uid=0,

@@ -56,7 +56,9 @@ def _dimm_dpe_count(d: int, n: int, cols: int) -> int:
 
 
 def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
-                    addr_width: int, data_width: int = 40) -> str:
+                    addr_width: int, data_width: int = 40,
+                    acam_mode: int = 1, compute_cycles: int = 3,
+                    num_cols: int = None) -> str:
     """Generate a DIMM DPE stage as a direct DPE instantiation.
 
     The outer FSM drives w_buf_en and data_in directly — no intermediate
@@ -66,11 +68,22 @@ def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
     The DPE crossbar stores identity weights; ACAM does exp or log.
     From VTR's perspective, this is a DPE hard block (same as projection).
 
+    Parameters emitted on the `dpe` instantiation so the behavioural stub
+    matches the intended operation size (without external defparams):
+      KERNEL_WIDTH, NUM_COLS, DPE_BUF_WIDTH, COMPUTE_CYCLES, ACAM_MODE.
+    acam_mode:    0 = plain VMM (used for FC/projections)
+                  1 = exp approximation (DIMM exp stages)
+                  2 = log (DIMM log stage)
+    compute_cycles: 3 for ACAM (short pipeline), 44 for ADC (long pipeline).
+    num_cols: defaults to kernel_width for identity crossbars.
+
     Handshake:
       - {name}_valid high: outer FSM feeds data via w_buf_en
       - {name}_valid_n high: DPE output phase (dpe_done)
       - {name}_data_out: packed DPE output
     """
+    if num_cols is None:
+        num_cols = kernel_width
     lines = []
     lines.append(f"    // DPE direct instantiation (no conv_controller/SRAM wrapper)")
     lines.append(f"    wire {name}_dpe_done, {name}_reg_full;")
@@ -87,7 +100,13 @@ def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
     lines.append(f"            {name}_nl_dpe_control <= {name}_dpe_exec ? 2'b11 : 2'b00;")
     lines.append(f"        end")
     lines.append(f"    end")
-    lines.append(f"    dpe {name} (")
+    lines.append(f"    dpe #(")
+    lines.append(f"        .KERNEL_WIDTH({kernel_width}),")
+    lines.append(f"        .NUM_COLS({num_cols}),")
+    lines.append(f"        .DPE_BUF_WIDTH({data_width}),")
+    lines.append(f"        .COMPUTE_CYCLES({compute_cycles}),")
+    lines.append(f"        .ACAM_MODE({acam_mode})")
+    lines.append(f"    ) {name} (")
     lines.append(f"        .clk(clk), .reset(rst),")
     lines.append(f"        .data_in({name}_data_in),")
     lines.append(f"        .nl_dpe_control({name}_nl_dpe_control),")
@@ -101,7 +120,10 @@ def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
     lines.append(f"        .dpe_done({name}_dpe_done),")
     lines.append(f"        .reg_full({name}_reg_full),")
     lines.append(f"        .shift_add_done({name}_shift_add_done),")
-    lines.append(f"        .shift_add_bypass_ctrl({name}_shift_add_bypass_ctrl)")
+    lines.append(f"        .shift_add_bypass_ctrl({name}_shift_add_bypass_ctrl),")
+    lines.append(f"        // Testbench-only weight interface — tie to 0 (weights preloaded via initial block)")
+    lines.append(f"        .weight_wen(1'b0), .weight_data(8'b0),")
+    lines.append(f"        .weight_row_addr(16'b0), .weight_col_addr(16'b0)")
     lines.append(f"    );")
     lines.append(f"    assign {name}_valid_n = {name}_dpe_done;")
     return "\n".join(lines)
@@ -210,11 +232,16 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"    // DPE(I|exp) stage{suffix}: {label} crossbar + ACAM=exp (KW={dpe_kw})")
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        # KERNEL_WIDTH for inner conv_layer_single_dpe: packed word count
+        # DPE stub LOAD_STROBES = ceil(KERNEL_WIDTH / ELEMS_PER_STROBE) with
+        # ELEMS_PER_STROBE = DPE_BUF_WIDTH/8 = 5.
+        # FSM pulses w_buf_en for ceil(dpe_kw / epw) × (2 if dual_identity else 1) cycles.
+        # KERNEL_WIDTH should be dpe_kw (= element count) so LOAD_STROBES matches.
         kw_elems = dpe_kw if h_dimm == 1 else dpe_kw // h_dimm
         kw_packed = math.ceil(min(kw_elems, 512) / epw)
         lines.append(f"    // Inner DPE: KW_elems={kw_elems}, KW_packed={kw_packed} (epw={epw})")
-        lines.append(_gen_dimm_stage(inst_name, kw_packed, 512, 9, dw))
+        lines.append(_gen_dimm_stage(inst_name, kw_elems, 512, 9, dw,
+                                     acam_mode=1, compute_cycles=3,
+                                     num_cols=kw_elems))
         lines.append(f"")
 
     # Wire DPE input — data valid 1 cycle after SRAM read addr is set
@@ -515,8 +542,11 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
         inst_name = f"sm_exp{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
+        # softmax FSM feeds 1 element per cycle (byte 0 of 40-bit word). Treat as
+        # single-element DPE operation: KW=1, NUM_COLS=1, ACAM=exp.
         kw = min(n_seq, 512) if h_dimm == 1 else min(n_seq // h_dimm, 512)
-        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
+        lines.append(_gen_dimm_stage(inst_name, 1, 512, 9, dw,
+                                     acam_mode=1, compute_cycles=3, num_cols=1))
         lines.append(f"")
 
     if h_dimm == 1:
@@ -587,7 +617,7 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    localparam SM_IDLE = 3'd0, SM_LOAD = 3'd1, SM_EXP = 3'd2,")
     lines.append(f"               SM_NORMALIZE = 3'd3, SM_OUTPUT = 3'd4;")
     lines.append(f"    reg [2:0] sm_state;")
-    lines.append(f"    reg [$clog2(N)-1:0] sm_count;")
+    lines.append(f"    reg [$clog2(N+2)-1:0] sm_count;  // needs to hold N+1 for SM_NORMALIZE exit check")
     lines.append(f"")
     lines.append(f"    always @(posedge clk or posedge rst) begin")
     lines.append(f"        if (rst) begin")
@@ -702,8 +732,10 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
         inst_name = f"ws_log{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
+        # ws_log FSM feeds 1 attn element per cycle. KW=1, ACAM=log.
         kw = min(n_seq, 512) if h_dimm == 1 else min(n_seq // h_dimm, 512)
-        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
+        lines.append(_gen_dimm_stage(inst_name, 1, 512, 9, dw,
+                                     acam_mode=2, compute_cycles=3, num_cols=1))
         lines.append(f"")
 
     if h_dimm == 1:
@@ -748,8 +780,10 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
         inst_name = f"ws_exp{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
+        # ws_exp feeds CLB-adder sum (log_attn + log_V) one element per cycle. KW=1, ACAM=exp.
         kw = min(d_head, 512) if h_dimm == 1 else min(d_head // h_dimm, 512)
-        lines.append(_gen_dimm_stage(inst_name, kw, 512, 9, dw))
+        lines.append(_gen_dimm_stage(inst_name, 1, 512, 9, dw,
+                                     acam_mode=1, compute_cycles=3, num_cols=1))
         lines.append(f"")
 
     if h_dimm == 1:
