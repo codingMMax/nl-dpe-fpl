@@ -45,6 +45,7 @@
         "total_clb": 6688,
         "total_dsp": 132,
         "total_mem": 264,
-        "total_imc": 896
+        "total_imc": 896,
+        "total_dimm_dpes": 16
     }
 }

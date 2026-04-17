@@ -14,7 +14,7 @@
   "wc": 1,
   "dsp": 0,
   "energy_pj": 3469902.42,
-  "latency_ns": 2916540.63,
+  "latency_ns": 225001.8,
   "breakdown": {
     "sram_read": 648.945,
     "sram_write": 486.7335,

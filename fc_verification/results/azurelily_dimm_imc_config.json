@@ -44,7 +44,7 @@
         "act_energy_pj_per_op": 0.45,
         "total_io": 2630,
         "total_clb": 6688,
-        "total_dsp": 132,
+        "total_dsp": 16,
         "total_mem": 264,
         "total_imc": 896
     }

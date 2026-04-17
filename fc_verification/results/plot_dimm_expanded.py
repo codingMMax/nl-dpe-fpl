@@ -115,11 +115,10 @@ ax_l.bar(xpos, latencies_us, 0.55, color=["#9BB4D8", "#E8A87C"],
 for x, lat in zip(xpos, latencies_us):
     ax_l.text(x, lat, f"{lat:.0f} µs", ha='center', va='bottom', fontsize=8)
 ax_l.set_ylabel("Latency (µs)")
-ax_l.set_title("DIMM Attention Latency", fontsize=9, fontweight='bold')
+ax_l.set_title("DIMM Attention Latency (W=16 lanes)", fontsize=9, fontweight='bold')
 ax_l.set_xticks(xpos)
 ax_l.set_xticklabels(["NL-DPE", "Azure-Lily"], fontsize=7)
-ax_l.set_yscale("log")
-ax_l.set_ylim(50, max(latencies_us) * 2)
+ax_l.set_ylim(0, max(latencies_us) * 1.15)
 
 plt.tight_layout()
 out_path = SCRIPT_DIR / "dimm_architecture_comparison.pdf"

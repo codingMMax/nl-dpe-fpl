@@ -22,16 +22,16 @@ Energy breakdown (by component):
   imc_dimm_log_digital: 8416.6475 pJ
   clb_subtract: 696.1855 pJ
 Energy grouped: DPE=2833070.4549 pJ, Memory=1135.6785 pJ, FPGA=635696.2852 pJ
-Latency total (critical path): 2916540.63 ns
-Latency total (raw sum): 2916540.63 ns
+Latency total (critical path): 225001.80 ns
+Latency total (raw sum): 225001.80 ns
 Resource total counts:
   imc_tiles: 1.00
   dsp_used: 64.00
   clb_used: 63.00
   act_units: 0.00
   memory_blocks: 2.00
-  bram_read_cnt_access: 8297.00
-  bram_write_cnt_access: 6620.00
+  bram_read_cnt_access: 545.00
+  bram_write_cnt_access: 1976.00
 Resource peak usage:
   imc_tiles: 1.00
   dsp_used: 64.00
@@ -40,7 +40,7 @@ Resource peak usage:
   memory_blocks: 1.00
 Resource layer-wise breakdown:
   linear_Q: bram_write_cnt_access=1639.00, imc_tiles=1.00, memory_blocks=1.00
-  mac_qk: bram_read_cnt_access=3316.00, bram_write_cnt_access=3303.00
+  mac_qk: bram_read_cnt_access=208.00, bram_write_cnt_access=207.00
   exp: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00
   norm: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00, clb_used=63.00, dsp_used=64.00
-  mac_sv: bram_read_cnt_access=4955.00, bram_write_cnt_access=1652.00
+  mac_sv: bram_read_cnt_access=311.00, bram_write_cnt_access=104.00

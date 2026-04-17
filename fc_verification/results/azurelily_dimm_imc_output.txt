@@ -6,37 +6,37 @@ Array: 512x128 (8-bit cells)
 Core Frequency 1000 MHz
 FPGA Frequency: 300 MHz
 
-Energy total (by layer): 2681487.01 pJ
-Energy total (by breakdown): 2681487.01 pJ
+Energy total (by layer): 2681534.53 pJ
+Energy total (by breakdown): 2681534.53 pJ
 Energy breakdown (by component):
   sram_read: 648.9450 pJ
-  sram_write: 499.9995 pJ
+  sram_write: 547.5195 pJ
   imc_conversion: 152698.8800 pJ
   dsp_gemm: 2516582.4000 pJ
   clb_exp: 270.3360 pJ
   clb_norm_sum: 685.3076 pJ
   clb_norm_inv: 270.7388 pJ
   mul: 9830.4000 pJ
-Energy grouped: DPE=152698.8800 pJ, Memory=1148.9445 pJ, FPGA=2527639.1824 pJ
-Latency total (critical path): 99989.89 ns
-Latency total (raw sum): 99989.89 ns
+Energy grouped: DPE=152698.8800 pJ, Memory=1196.4645 pJ, FPGA=2527639.1824 pJ
+Latency total (critical path): 201543.23 ns
+Latency total (raw sum): 201543.23 ns
 Resource total counts:
   imc_tiles: 1.00
-  dsp_used: 328.00
+  dsp_used: 48.00
   clb_used: 71.00
   act_units: 0.00
   memory_blocks: 2.00
-  bram_read_cnt_access: 91.00
-  bram_write_cnt_access: 1721.00
+  bram_read_cnt_access: 545.00
+  bram_write_cnt_access: 1676.00
 Resource peak usage:
   imc_tiles: 1.00
-  dsp_used: 132.00
+  dsp_used: 16.00
   clb_used: 63.00
   act_units: 0.00
   memory_blocks: 1.00
 Resource layer-wise breakdown:
   linear_Q: bram_write_cnt_access=1639.00, imc_tiles=1.00, memory_blocks=1.00
-  mac_qk: bram_read_cnt_access=26.00, bram_write_cnt_access=28.00, dsp_used=132.00
+  mac_qk: bram_read_cnt_access=208.00, bram_write_cnt_access=6.00, dsp_used=16.00
   exp: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00, clb_used=8.00
-  norm: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00, clb_used=63.00, dsp_used=64.00
-  mac_sv: bram_read_cnt_access=39.00, bram_write_cnt_access=28.00, dsp_used=132.00
+  norm: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00, clb_used=63.00, dsp_used=16.00
+  mac_sv: bram_read_cnt_access=311.00, bram_write_cnt_access=5.00, dsp_used=16.00
