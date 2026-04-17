@@ -438,7 +438,7 @@ def gen_bert_tiny(arch_type, rows, cols, output_dir, label=None,
         parts.append(f"// All GEMMs use DSP MAC (Verilog * operator)")
         parts.append(f"// DIMM: DSP MAC time-shared")
     else:
-        parts.append(f"// Projections/FFN: DPE, DIMM: CLB MAC (0 DSPs)")
+        parts.append(f"// Projections/FFN: DPE, DIMM: DSP MAC (int_sop_4, W=ceil(S/C) lanes)")
     parts.append(f"")
 
     # ─── Top-level module ──────────────────────────────────────────
