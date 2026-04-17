@@ -33,8 +33,30 @@ def load(p):
     with open(p) as f:
         return json.load(f)
 
-nl = load(SCRIPT_DIR / "dimm_vtr_imc_results.json")
-al = load(SCRIPT_DIR / "azurelily_dimm_vtr_imc_results.json")
+def normalize(d):
+    """Map new W=16 full-DIMM top JSON schema to the score-matrix schema the
+    plotter expects.  New key names: imc_energy_pj, imc_latency_ns, imc_breakdown."""
+    if "energy_pj" not in d and "imc_energy_pj" in d:
+        return {
+            **d,
+            "energy_pj":  d.get("imc_energy_pj"),
+            "latency_ns": d.get("imc_latency_ns"),
+            "breakdown":  d.get("imc_breakdown", {}),
+        }
+    return d
+
+# Prefer the W=16 full-DIMM top results; fall back to the older score-matrix files.
+NL_NEW = SCRIPT_DIR / "nldpe_dimm_top_vtr_imc_results.json"
+NL_OLD = SCRIPT_DIR / "dimm_vtr_imc_results.json"
+AL_NEW = SCRIPT_DIR / "azurelily_dimm_top_vtr_imc_results.json"
+AL_OLD = SCRIPT_DIR / "azurelily_dimm_vtr_imc_results.json"
+
+nl_path = NL_NEW if NL_NEW.is_file() else NL_OLD
+al_path = AL_NEW if AL_NEW.is_file() else AL_OLD
+print(f"Loading NL-DPE : {nl_path.name}")
+print(f"Loading AL     : {al_path.name}")
+nl = normalize(load(nl_path))
+al = normalize(load(al_path))
 
 # NL-DPE grouping (matches existing plot_dimm_breakdown.py categories):
 def nl_group(bd):
