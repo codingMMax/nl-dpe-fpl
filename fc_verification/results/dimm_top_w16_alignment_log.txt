@@ -198,6 +198,15 @@ Per-stage alignment : 3/3 stages ≤20 ✓
 End-to-end          : Δ=11 ≤20 ✓
 Phase I.2 + J       : CLOSED at plan acceptance.
 
+Dataflow model assumption (documented 2026-04-18):
+  All measured cycle counts above correspond to **Layout A** (natural-
+  packed int8 + load-then-compute) per paper/methodology/dpe_pipeline_model.md
+  §3.1. The RTL's DPE stub fills its internal input_buffer word-by-word
+  (103 load strobes for R=512 at W_DPE=40) before any analog fire.
+  Layout B (bit-plane transposed with wide read-BRAM matching R) would
+  reduce the load portion ~13× at the cost of an R×N_in_bits transpose
+  buffer — not implemented here, tracked as a future architectural variant.
+
 Changes applied to RTL generator:
   dimm_score_matrix:
     + LANE_IDX, W parameters

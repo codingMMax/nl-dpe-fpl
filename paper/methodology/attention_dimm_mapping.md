@@ -110,6 +110,18 @@ For BERT-Tiny (N=128, d_head=64) on the two evaluation configs:
 Proposed achieves higher absolute throughput (more DPEs), while AL-like achieves higher
 **per-DPE efficiency** (4× vs 2× K-identity). Both fully utilize the FPGA.
 
+> **Caveat — idealised throughput, 2026-04-18.** The "elem/cycle" and "cycles
+> (N=128)" rows above are **steady-state compute-bandwidth** figures that
+> assume one MAC output is produced per cycle per parallel unit, ignoring
+> the per-pass load and output serialisation overhead. Actual measured RTL
+> cycles (see `fc_verification/VERIFICATION.md` Phase I.2) include the
+> per-pass load (~103 cycles under Layout A) and output (~26 cycles)
+> phases described in `paper/methodology/dpe_pipeline_model.md` §5–6, and
+> are therefore substantially larger than `N² / (W·K)`. The idealised
+> figure is the upper bound reached only when many passes run back-to-back
+> under Layout B with `W_BRAM ≥ R`; for a single isolated pass the per-pass
+> overhead dominates.
+
 ### No Hardware Change Required
 
 K-identity is purely a **weight programming** change. The same DPE hard block, same ACAM,
@@ -284,3 +296,34 @@ The paper's §3–6 architecture claims (40× CNN efficiency, 1.77× attention a
 N=128, 93% DPE utilization) are unchanged by this verification variant — the
 W=16 DSP lane count is a lane-match for the NL-DPE configuration and does not
 alter the paper-canonical Azure-Lily's resource story.
+
+## 9. Per-pass dataflow model (dated: 2026-04-18)
+
+This document specifies **which primitive handles which attention stage**
+and the per-stage parallelism (K-identity packing, W=16 lane count,
+DPE/DSP counts). It does **not** specify the per-pass dataflow —
+i.e. how bits move between BRAM and the crossbar inside a single DPE
+pass. That model is captured separately in:
+
+> `paper/methodology/dpe_pipeline_model.md` (added 2026-04-18)
+
+The companion document covers:
+- Layout A (natural-packed int8 + load-then-compute) vs Layout B
+  (bit-plane transposed + streaming bit-serial).
+- Transpose-buffer architecture for Layout B and its FPGA cost
+  (`R · N_in_bits` flip-flops per DPE input).
+- Multi-pass pipelined timing with overlap between the output of pass
+  `k` and the load of pass `k+1`.
+- Analytical per-pass cycle formulas.
+
+**Assumption for cycle-budget numbers in this document.** The cycle
+and DPE-utilisation tables in §5 and §6 assume **Layout A** with
+`W_BRAM = W_DPE = 40 bits`. The mapping itself (K-identity, W=16)
+is independent of the layout choice — only the per-pass cycle cost
+and the read-BRAM port width differ.
+
+If the project later adopts Layout B as the authoritative HW model
+(because it better matches real analog IMC implementations), the
+mapping structure in §§1–8 is unchanged, but the per-pass cycle
+numbers in §5 and the scaling in §7 should be re-derived from
+`dpe_pipeline_model.md` §6 formulas.

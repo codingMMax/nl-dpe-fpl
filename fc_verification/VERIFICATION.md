@@ -556,6 +556,14 @@ phases via hierarchical preload. Per-stage timestamps capture first cycle
 each stage reaches its OUTPUT state (score=S_OUTPUT, softmax=SM_OUTPUT,
 wsum=WS_OUTPUT).
 
+**Dataflow assumption:** all measured cycle counts below are for
+**Layout A** (natural-packed int8 + load-then-compute, `W_BRAM = W_DPE =
+40 bits`) as defined in `paper/methodology/dpe_pipeline_model.md` §3.1.
+Moving to Layout B (bit-plane transposed with a wide read-BRAM) would
+reduce the score and wsum load portions roughly 13× at R=512, with a
+corresponding transpose-buffer area cost — see the per-pass model doc
+for formulas and the design-choice table.
+
 **NL-DPE per-stage (post-restructure, lane 0):**
 
 | Stage | Cycles | Range (start → end) |
