@@ -42,6 +42,39 @@ module tb_nldpe_dimm_top_latency;
 
     integer i, j, m, ww;
     integer start_cyc, feed_qk_cyc, end_cyc;
+    // Per-stage timestamps (lane 0)
+    integer score_start_cyc, score_end_cyc;
+    integer softmax_start_cyc, softmax_end_cyc;
+    integer wsum_start_cyc, wsum_end_cyc;
+
+    // Detect first rising edge of each stage's valid_n on lane 0.
+    reg score_caught, softmax_caught, wsum_caught;
+    always @(posedge clk) begin
+        if (rst) begin
+            score_start_cyc <= 0; score_end_cyc <= 0;
+            softmax_start_cyc <= 0; softmax_end_cyc <= 0;
+            wsum_start_cyc <= 0; wsum_end_cyc <= 0;
+            score_caught <= 0; softmax_caught <= 0; wsum_caught <= 0;
+        end else begin
+            // Score: first cycle state==S_OUTPUT (6)
+            if (!score_caught && dut.dimm_lane[0].score_inst.state == 4'd6) begin
+                score_end_cyc <= cycle;
+                score_caught <= 1;
+                softmax_start_cyc <= cycle;
+            end
+            // Softmax: first cycle sm_state==SM_OUTPUT (4)
+            if (!softmax_caught && dut.dimm_lane[0].softmax_inst.sm_state == 3'd4) begin
+                softmax_end_cyc <= cycle;
+                softmax_caught <= 1;
+                wsum_start_cyc <= cycle;
+            end
+            // Wsum: first cycle ws_state==WS_OUTPUT (5)
+            if (!wsum_caught && dut.dimm_lane[0].wsum_inst.ws_state == 3'd5) begin
+                wsum_end_cyc <= cycle;
+                wsum_caught <= 1;
+            end
+        end
+    end
 
     // Identity-weight preload for all 64 DPE instances per lane.
     `define LOAD_WEIGHTS(L) begin \
@@ -152,19 +185,26 @@ module tb_nldpe_dimm_top_latency;
         end_cyc = cycle;
         $display("  [t=%0d] Lane 0 WS_OUTPUT reached", end_cyc);
 
+        // Force score_start_cyc = FSM force time (everyone starts after force).
+        score_start_cyc = feed_qk_cyc;
+
         $display("");
-        $display("=== Latency Report ===");
+        $display("=== Per-Stage Latency Report (lane 0) ===");
+        $display("  Score stage   : %0d cycles  (start=%0d  end=%0d)",
+                 score_end_cyc - score_start_cyc, score_start_cyc, score_end_cyc);
+        $display("  Softmax stage : %0d cycles  (start=%0d  end=%0d)",
+                 softmax_end_cyc - softmax_start_cyc, softmax_start_cyc, softmax_end_cyc);
+        $display("  Wsum stage    : %0d cycles  (start=%0d  end=%0d)",
+                 wsum_end_cyc - wsum_start_cyc, wsum_start_cyc, wsum_end_cyc);
+        $display("");
+        $display("=== End-to-end ===");
         $display("  Reset release      : cycle %0d",  start_cyc);
         $display("  FSM force (compute): cycle %0d",  feed_qk_cyc);
         $display("  WS_OUTPUT reached  : cycle %0d",  end_cyc);
+        $display("  Compute+output     : %0d cycles", end_cyc - feed_qk_cyc);
         $display("");
-        $display("  Compute + output latency (compute-only)  : %0d cycles",
-                 end_cyc - feed_qk_cyc);
-        $display("  Total RTL latency (reset -> output)      : %0d cycles",
-                 end_cyc - start_cyc);
-        $display("");
-        $display("  Use for Phase J: compare compute-only latency against");
-        $display("  simulator's attention model at total_dimm_dpes=16.");
+        $display("  Phase J comparison: these per-stage RTL cycles are the ground");
+        $display("  truth that sim's gemm_log/row_timing must match within 20 cyc.");
 
         $finish;
     end

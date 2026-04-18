@@ -129,7 +129,59 @@ Limitations documented for Phase I.1 AL:
     (sampling triggered by lane 0's out_valid rising edge).
 
 ================================================================
-  Phase I.2 status — latency measurements
+  Phase I.2 status — latency measurements (RE-OPENED 2026-04-17)
+================================================================
+
+Per-stage RTL cycle breakdown (lane 0, from instrumented latency TB):
+  Score stage   : 4,160 cycles   (0   → 4160, 64 dual-passes × 65 cyc/pass)
+  Softmax stage :   387 cycles   (4160 → 4549)
+  Wsum stage    : 8,450 cycles   (4549 → 12999, dominated by N*d inner loop)
+  End-to-end    : 12,997 cycles
+
+Sim per-stage (at N=128, d=64, W=16):
+  mac_qk        : 99,500 ns  ≈ 33,900 cycles at 341MHz
+  exp+norm      : 62,303 ns  ≈ 21,245 cycles
+  mac_sv        : 96,090 ns  ≈ 32,800 cycles
+  Pipelined     : ≈ 34,100 cycles (bottleneck-dominated)
+
+Ratios (sim / RTL):
+  mac_qk   : 33,900 / 4,160 = 8.1×
+  softmax  : 21,245 /   387 = 55×
+  mac_sv   : 32,800 / 8,450 = 3.9×
+
+Plan acceptance (≤20 cycle delta) NOT met at any stage. Reopened.
+
+Structural analysis — why the gap:
+  1. Sim models the FULL M=N²=16384 output matrix (M queries × N keys).
+     Our RTL TB computes ONE M-row at a time (single query's attention
+     over N keys). Sim would predict this case via M=1; with M=1 + the
+     current sim constants per-pass=111 cyc, sim predicts ~3,552 cycles
+     for mac_qk — close to RTL's 4,160 cyc but still 14.6% high.
+  2. Sim's per-DPE-pass model: feed=56, compute=3, output=52 = 111 cyc.
+     RTL measured: 65 cyc/pass. Sim over-accounts feed by ~35 cyc and
+     output by ~26 cyc. These come from sim's conservative SRAM read
+     overlap and ADC-side bit-serial output pipeline modelling.
+  3. Sim's softmax model uses M-row iterations × per-row exp/sum/norm,
+     treating softmax as full N² work. RTL's softmax_approx processes
+     one row at a time with ~400 cyc total (the SM_LOAD/SM_EXP/NORM/OUTPUT
+     stages overlap via DPE streaming). Simulator model needs to collapse
+     inner N×d work into streaming model matching RTL.
+  4. Sim's mac_sv over-counts similarly.
+
+Remaining work to close Phase J:
+  A. Tune sim's cycles_per_pass constant from 111 → 65 (or reparameterize
+     feed/output to match RTL's stamp-level timing).
+  B. Adjust sim's softmax and mac_sv models to use RTL-measured
+     per-stage cycles × M_effective rather than per-element aggregation.
+  C. Decide semantics of M=1 (single query) vs M=N (batch) comparison:
+     run sim with M=1 for apples-to-apples with current RTL TB, or
+     extend RTL to iterate M queries.
+
+Recommendation: item C first (settle semantics), then A+B tuning.
+Progress toward ≤20 cycle delta tracked here; phase not closed.
+
+================================================================
+  Phase I.2 (original entry — kept for history)
 ================================================================
 
 Test files (created 2026-04-17):
