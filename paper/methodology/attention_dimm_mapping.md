@@ -97,30 +97,43 @@ S×V  elements/cycle = W × K_sv    (K_sv = floor(C/N))
 
 For BERT-Tiny (N=128, d_head=64) on the two evaluation configs:
 
+**Peak compute bandwidth** (architectural ceiling — no per-pass overhead):
+
 | | Proposed (C=128) | AL-like (C=256) |
 |---|---|---|
 | K (QK^T) | 2 | 4 |
 | K (S×V) | 1 | 2 |
 | W (parallel lanes) | 16 | 4 |
-| **QK^T elem/cycle** | **32** | **16** |
-| **S×V elem/cycle** | **16** | **8** |
+| **QK^T elem/cycle (peak)** | **32** | **16** |
+| **S×V elem/cycle (peak)** | **16** | **8** |
 | DPEs used | 274/294 (93%) | 78/90 (87%) |
-| QK^T cycles (N=128) | 512 | 1024 |
 
-Proposed achieves higher absolute throughput (more DPEs), while AL-like achieves higher
-**per-DPE efficiency** (4× vs 2× K-identity). Both fully utilize the FPGA.
+These figures answer the question *"when every parallel unit is producing
+one MAC output per cycle, how many outputs per cycle in total?"*. Peak is
+the architectural ceiling, reached only under Layout B with `W_BRAM ≥ R`
+in a many-pass streaming pipeline where per-pass overhead fully amortises
+away.
 
-> **Caveat — idealised throughput, 2026-04-18.** The "elem/cycle" and "cycles
-> (N=128)" rows above are **steady-state compute-bandwidth** figures that
-> assume one MAC output is produced per cycle per parallel unit, ignoring
-> the per-pass load and output serialisation overhead. Actual measured RTL
-> cycles (see `fc_verification/VERIFICATION.md` Phase I.2) include the
-> per-pass load (~103 cycles under Layout A) and output (~26 cycles)
-> phases described in `paper/methodology/dpe_pipeline_model.md` §5–6, and
-> are therefore substantially larger than `N² / (W·K)`. The idealised
-> figure is the upper bound reached only when many passes run back-to-back
-> under Layout B with `W_BRAM ≥ R`; for a single isolated pass the per-pass
-> overhead dominates.
+**Realistic per-pass cycles** (dataflow-aware, N=128 × N=128 score matrix;
+see `dpe_pipeline_model.md` §5–6 for formulas):
+
+| Configuration | Dataflow | Single-pass cycles | Steady-state per additional pass | QK^T cycles for 128 queries |
+|---|---|---:|---:|---:|
+| Proposed, W_BRAM = W_DPE = 40 | **Layout A** (current RTL) | L+O = 103 + 26 ≈ 130 | max(103, 26) = 103 | ~13.4 k |
+| Proposed, W_BRAM = W_DPE = 40 | **Layout B**, narrow BRAM | 104 + 26 ≈ 130 | 104 | ~13.5 k |
+| Proposed, W_BRAM = R = 512 | **Layout B**, matched BRAM | 8 + 26 ≈ 34 | max(8, 26) = 26 | ~3.4 k |
+| Idealised (peak-only)         | — | — | — | `N² / (W·K)` = **512** |
+
+Proposed achieves higher **absolute** throughput (more DPEs), while AL-like
+achieves higher **per-DPE** efficiency (4× vs 2× K-identity). Both fully
+utilize the FPGA.
+
+The measured RTL at Phase I.2 (561 compute cycles end-to-end, score stage
+260 of those) aligns with the Layout A row above: the score stage is one
+pass per lane × 4 passes per lane (4 dual-identity iterations × ~65 cycles
+each). See `fc_verification/VERIFICATION.md` Phase I.2 and
+`fc_verification/results/dimm_top_w16_alignment_log.txt` for the
+cycle-by-cycle trace.
 
 ### No Hardware Change Required
 
