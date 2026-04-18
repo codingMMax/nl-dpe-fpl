@@ -549,23 +549,69 @@ Inputs: Q one-hot at index 0, K/V identity on leading d×d block.
 | NL-DPE       | score_sram: 127/128 elements PASS (S[63] = known dual-identity packing boundary) | 15/15 lanes match lane 0 | **PASS** |
 | Azure-Lily   | lane 0 mac_qk.accum = 1 (= Q[0]·K[0][0]) | 15/15 lanes match lane_idx XOR 1 (per-lane anti-merge XOR in effect) | **PASS** |
 
-### Phase I.2 — Latency
+### Phase I.2 — Latency (after W=16 key-parallel restructure)
 
 TBs: `tb_{nldpe,azurelily}_dimm_top_latency.v`. FSM forced past SRAM LOAD
-phases via hierarchical access.
+phases via hierarchical preload. Per-stage timestamps capture first cycle
+each stage reaches its OUTPUT state (score=S_OUTPUT, softmax=SM_OUTPUT,
+wsum=WS_OUTPUT).
 
-| Architecture | RTL cycles (compute-only) | Notes |
-|--------------|---------------------------|-------|
-| NL-DPE       | 12,997 cycles → 38.1 µs @ 341 MHz | full pipeline (score + softmax + wsum) |
-| Azure-Lily   | 1,921 cycles (mac_qk only, 128 rows) → 6.4 µs @ 300 MHz | 15.01 cyc/row = 13 valid + 2 SRAM latency |
+**NL-DPE per-stage (post-restructure, lane 0):**
 
-### Phase J — Simulator alignment
+| Stage | Cycles | Range (start → end) |
+|-------|--------|---------------------|
+| score (dimm_score_matrix) | 260 | 2 → 262 |
+| softmax (softmax_approx)  | 27  | 262 → 289 |
+| wsum (dimm_weighted_sum)  | 274 | 289 → 563 |
+| **End-to-end**            | **561** | compute+output only |
 
-`total_dimm_dpes=16` / `total_dsp=16` are already in `azurelily/IMC/configs/`.
-End-to-end sim vs RTL for NL-DPE shows RTL is ~2.6× faster than the simulator
-model's attention-pipeline prediction. Per plan discipline, RTL (functional
-PASS) is ground truth; simulator tuning to match RTL cycle counts is tracked
-as a follow-up.
+Reduction from pre-restructure: 12,997 → 561 cycles (23× speedup).
+
+**Azure-Lily mac_qk-only:** 1,921 cycles for 128 rows (15.01 cyc/row, matches
+13 valid + 2 SRAM latency).
+
+### Phase J — Simulator alignment (CLOSED)
+
+RTL ↔ simulator cycle-exact alignment achieved within plan's ≤20 cycle
+tolerance. Per-stage comparison at N=128, d=64, W=16 (M=1 pipelined):
+
+| Stage   | RTL | Sim | Δ  | ≤20? |
+|---------|----:|----:|---:|:----:|
+| score   | 260 | 267 |  7 |  ✓   |
+| softmax |  27 |  26 |  1 |  ✓   |
+| wsum    | 274 | 257 | 17 |  ✓   |
+| **E2E** | **561** | **550** | **11** | **✓** |
+
+**RTL-side alignment changes** (in generator):
+- `dimm_score_matrix` gains `LANE_IDX` + `W` params → each lane handles
+  sparse key indices `{2L, 2L+1, 2L+32, ...}` (key-parallel).
+- `softmax_approx` gains `LANE_IDX` + `W` + `N_PER_LANE=N/W` params →
+  each lane processes 8 scores locally.
+- `dimm_weighted_sum` gains `LANE_IDX` + `W` + `M_PER_LANE=d/W=4` params
+  → each lane handles 4 output columns; `WS_COMPUTE` inner loop is
+  `N/2` to match sim's K_id=2 dual-identity packing.
+
+**Sim-side alignment changes** (in `azurelily/IMC/scheduler_stats/scheduler.py`
+and `azurelily/models/attention.py`):
+- New `total_softmax_lanes` config (defaults to `total_dimm_dpes`). Divides
+  softmax per-row compute by `W_softmax` and adds `log2(W_softmax)` cycles
+  of cross-lane CLB sum-reduction.
+- Softmax dimension corrected: `d=seq_length` (attention softmax is N×N).
+- Per-lane BRAM banking: softmax memory latency uses `cols/W_softmax`
+  elements per row.
+
+**Boundary-effect deltas explained** (`results/dimm_top_w16_alignment_log.txt`
+has full trace):
+- Score Δ=7 : sim's `per_row_total` adds inter-stage BRAM read/write
+  book-keeping (≈6 cyc) that RTL accounts for outside the "score" probe
+  window (LOAD phases are one-shot before compute; output streams bracket
+  into softmax's 27-cycle count).
+- Wsum Δ=17: RTL's `WS_LOAD_A` (8 cyc, attn into wsum's attn_sram) and
+  `WS_LOG` (8 cyc, attn → log via DPE) are sequential phases; sim models
+  them as overlapping with upstream softmax streaming.
+
+Neither delta is a real arithmetic or cycle-count bug — both reflect
+where the bookkeeping boundary lies between stages.
 
 ### Phase K — VTR 3-seed runs
 
