@@ -341,6 +341,38 @@ layout/width sweep.
   Moving to Layout B would drop the score and wsum load portions
   substantially (see §6.3).
 
+### 8.1 Outstanding TODOs (opened 2026-04-18)
+
+**TODO 1 — Simulator: multi-pass pipelined model for GEMV & GEMM**
+Change `gemm_log` total cycles from `M · cycles_per_pass` to
+`L + max(L, O) · (M − 1) + O`. Preserve the `M = 1` case as
+`L + O = cycles_per_pass` (exactly what it is today). Analytically
+verify the new model on GEMV (same-input-across-passes, output-
+stream-bound) and GEMM (different-input-per-pass, full pipeline)
+test cases with hand-computed expected cycle counts. Both workloads
+are spatial mappings. Must land before TODOs 2 and 3.
+
+**TODO 2 — RTL: re-verify FC and add a GEMM workload**
+Once TODO 1 is in place, re-run FC verification against the new
+sim model and add a new GEMM RTL workload to the verification set.
+Prerequisite:
+
+- **TODO 2.1 — Transpose module (corner-turn buffer):** design and
+  implement the `R × N_in_bits` shift-register array described in
+  §4, place it between natural-int8 producers and Layout-B BRAM
+  consumers. This unlocks the full Layout B speedup at
+  `W_BRAM ≥ R`; Layout A FC paths continue to work unchanged.
+
+**TODO 3 — DIMM: propagate the pipelined model to attention**
+After TODOs 1 and 2 are green, apply intra-stage multi-pass
+pipelining to `mac_qk` (Q shared across passes, K segment per
+pass) and `mac_sv` (attn row per pass). `softmax` is effectively
+1 DPE pass per lane, so no change. Re-measure RTL + sim end-to-end
+attention and re-align all stages to the ≤20 cycle tolerance.
+Both sim- and RTL-side changes are needed (sim: `steady = max(L,
+O)` per stage; RTL: double-buffer the DPE input register so pass
+`k+1` can start loading during pass `k`'s output phase).
+
 ## 9. Terminology quick reference
 
 | Term | Meaning |

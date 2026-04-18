@@ -340,3 +340,24 @@ If the project later adopts Layout B as the authoritative HW model
 mapping structure in §§1–8 is unchanged, but the per-pass cycle
 numbers in §5 and the scaling in §7 should be re-derived from
 `dpe_pipeline_model.md` §6 formulas.
+
+## 10. Outstanding TODOs (2026-04-18)
+
+The multi-pass pipelined DPE model opened by `dpe_pipeline_model.md` has
+three tracked TODOs that affect this document once complete:
+
+- **TODO 1** (sim): update `gemm_log` to `L + max(L, O)·(M−1) + O`. When
+  done, the "realistic per-pass cycles" table in §5 gains a pipelined
+  variant row for each layout.
+- **TODO 2** (RTL): FC re-verification + new GEMM workload, gated by
+  **TODO 2.1** transpose module. Does not change this document's
+  mapping claims (K-identity, W=16 lane counts) but validates them
+  under the pipelined model.
+- **TODO 3** (DIMM): propagate the pipelined model to mac_qk and
+  mac_sv. The peak-bandwidth table in §5 is unchanged (it is the
+  architectural ceiling). The realistic per-pass table gains a
+  "pipelined Layout B" row reflecting the new attention cycle count;
+  numbers will be refreshed after Phase I.2+J is re-aligned under
+  the pipelined model.
+
+Full TODO detail lives in `dpe_pipeline_model.md` §8.1.

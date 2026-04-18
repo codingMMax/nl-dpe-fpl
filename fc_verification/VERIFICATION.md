@@ -564,6 +564,17 @@ reduce the score and wsum load portions roughly 13× at R=512, with a
 corresponding transpose-buffer area cost — see the per-pass model doc
 for formulas and the design-choice table.
 
+**Tracked TODOs (2026-04-18) from `dpe_pipeline_model.md` §8.1:**
+
+- **TODO 2** — Re-run FC verification against the pipelined-multi-pass sim
+  model (TODO 1) and add a new GEMM RTL workload to the verification set.
+- **TODO 2.1** — Prerequisite for TODO 2: design and implement the
+  transpose module (corner-turn buffer, `R × N_in_bits` FFs per DPE
+  input) so Layout B dataflow can be exercised in RTL.
+- **TODO 3** — Re-align DIMM Phase I.2 + J end-to-end under the pipelined
+  model once TODOs 1 and 2 are closed. The current 260/27/274/561
+  numbers above are the baseline to beat.
+
 **NL-DPE per-stage (post-restructure, lane 0):**
 
 | Stage | Cycles | Range (start → end) |
