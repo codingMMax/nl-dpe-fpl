@@ -32,7 +32,10 @@ module nldpe_dimm_top #(
         wire score_ready, softmax_ready;
 
         // Stage 1: dimm_score_matrix (mac_qk + softmax_exp fused)
-        dimm_score_matrix #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH)) score_inst (
+        // LANE_IDX + W parameters make this lane handle keys {2*lane, 2*lane+1,
+        // 2*lane+2W, 2*lane+2W+1, ...}, giving N/W=8 scores per lane at N=128, W=16.
+        dimm_score_matrix #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
+                            .LANE_IDX(lane), .W(W)) score_inst (
             .clk(clk), .rst(rst),
             .valid_q(valid_q), .valid_k(valid_k),
             .ready_n(softmax_ready),
@@ -87,7 +90,9 @@ module dimm_score_matrix #(
     parameter d = 64,
     parameter DATA_WIDTH = 40,
     parameter ADDR_WIDTH = 11,
-    parameter DEPTH = 1665
+    parameter DEPTH = 1665,
+    parameter LANE_IDX = 0,       // which key-lane this instance handles (0..W-1)
+    parameter W = 1               // total number of parallel key-lanes at top
 )(
     input wire clk, input wire rst,
     input wire valid_q, input wire valid_k,
@@ -232,7 +237,7 @@ module dimm_score_matrix #(
             feed_half <= 0; feed_phase <= 0;
             score_write_addr <= 0; score_read_addr <= 0; score_w_en <= 0;
             score_write_data <= 0;
-            mac_count <= 0; score_idx <= 0; acc_clear <= 0;
+            mac_count <= 0; score_idx <= LANE_IDX * 2; acc_clear <= 0;
         end else begin
             score_w_en <= 0; acc_clear <= 0;
             case (state)
@@ -285,8 +290,8 @@ module dimm_score_matrix #(
                     score_w_en <= 1;
                     score_write_addr <= score_idx + 1;
                     acc_clear <= 1;
-                    if (score_idx >= N-2) state <= S_OUTPUT;
-                    else begin score_idx <= score_idx + 2; state <= S_COMPUTE; end
+                    if (score_idx + W * 2 >= N) state <= S_OUTPUT;
+                    else begin score_idx <= score_idx + W * 2; state <= S_COMPUTE; end
                 end
                 S_OUTPUT: if (ready_n) score_read_addr <= score_read_addr + 1;
             endcase

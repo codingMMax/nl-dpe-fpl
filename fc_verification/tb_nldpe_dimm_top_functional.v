@@ -173,26 +173,34 @@ module tb_nldpe_dimm_top_functional;
             end
         end
 
-        // ==== Phase I.1 Check 1: score_sram values (per plan §I.1 debug tree) ====
+        // ==== Phase I.1 Check 1: key-parallel per-lane sparse score_sram ====
+        // With W=16 key-parallelism, lane L owns addrs {2L, 2L+1, 2L+32, 2L+33,
+        // 2L+64, 2L+65, 2L+96, 2L+97}. Each populated entry should match
+        // expected_score(addr); other entries may be X/0 and are not checked.
         @(posedge clk); #1;
         $display("");
-        $display("=== Check 1: score_sram (first lane) ===");
+        $display("=== Check 1: per-lane sparse score_sram (key-parallel W=16) ===");
         err_count = 0;
-        for (j = 0; j < N; j = j + 1) begin
-            expected = expected_score(j);
-            observed = dut.dimm_lane[0].score_inst.score_sram.mem[j][7:0];
-            // Use !== to force X values to mismatch (!= with X yields X which iverilog treats as false).
-            if ((observed !== expected) || (^observed === 1'bx)) begin
-                if (err_count < 5)
-                    $display("  MISMATCH score[0][%0d]: got %0d (bits=%b) expected %0d",
-                             j, observed, observed, expected);
-                err_count = err_count + 1;
-            end
-        end
+        verify_lane( 0, err_count);
+        verify_lane( 1, err_count);
+        verify_lane( 2, err_count);
+        verify_lane( 3, err_count);
+        verify_lane( 4, err_count);
+        verify_lane( 5, err_count);
+        verify_lane( 6, err_count);
+        verify_lane( 7, err_count);
+        verify_lane( 8, err_count);
+        verify_lane( 9, err_count);
+        verify_lane(10, err_count);
+        verify_lane(11, err_count);
+        verify_lane(12, err_count);
+        verify_lane(13, err_count);
+        verify_lane(14, err_count);
+        verify_lane(15, err_count);
         if (err_count == 0)
-            $display("  PASS: all 128 score elements match (68 / 66x63 / 65x64)");
+            $display("  PASS: all 16 lanes produced their 8 sparse scores correctly");
         else
-            $display("  FAIL: %0d score mismatches of 128", err_count);
+            $display("  FAIL: %0d per-lane sparse mismatches of 128 (tolerance ≤64 per plan)", err_count);
 
         // ==== Phase I.1 Check 2: lane-isolation — all 16 lanes produce same score ====
         // Iverilog doesn't allow dynamic scope indexing, so we explicitly unroll.
@@ -245,8 +253,69 @@ module tb_nldpe_dimm_top_functional;
         $finish;
     end
 
-    // Task: check lane <k> vs lane 0, update counter
-    // Must be compile-time constant lane index → one task per lane via macros below.
+    // Verify one lane's 8 sparse score addresses against expected_score().
+    // With W=16, lane L owns {2L, 2L+1, 2L+32, 2L+33, 2L+64, 2L+65, 2L+96, 2L+97}.
+    task verify_lane(input integer L, inout integer err_count);
+        integer aa, addr, k;
+        reg [7:0] exp_val, got;
+        begin
+            for (k = 0; k < 4; k = k + 1) begin
+                aa = 2*L + 32*k;  // iteration base: 2L, 2L+32, 2L+64, 2L+96
+                // Check addr aa (score "A") and aa+1 (score "B")
+                exp_val = expected_score(aa);
+                case (L)
+                     0: got = dut.dimm_lane[ 0].score_inst.score_sram.mem[aa][7:0];
+                     1: got = dut.dimm_lane[ 1].score_inst.score_sram.mem[aa][7:0];
+                     2: got = dut.dimm_lane[ 2].score_inst.score_sram.mem[aa][7:0];
+                     3: got = dut.dimm_lane[ 3].score_inst.score_sram.mem[aa][7:0];
+                     4: got = dut.dimm_lane[ 4].score_inst.score_sram.mem[aa][7:0];
+                     5: got = dut.dimm_lane[ 5].score_inst.score_sram.mem[aa][7:0];
+                     6: got = dut.dimm_lane[ 6].score_inst.score_sram.mem[aa][7:0];
+                     7: got = dut.dimm_lane[ 7].score_inst.score_sram.mem[aa][7:0];
+                     8: got = dut.dimm_lane[ 8].score_inst.score_sram.mem[aa][7:0];
+                     9: got = dut.dimm_lane[ 9].score_inst.score_sram.mem[aa][7:0];
+                    10: got = dut.dimm_lane[10].score_inst.score_sram.mem[aa][7:0];
+                    11: got = dut.dimm_lane[11].score_inst.score_sram.mem[aa][7:0];
+                    12: got = dut.dimm_lane[12].score_inst.score_sram.mem[aa][7:0];
+                    13: got = dut.dimm_lane[13].score_inst.score_sram.mem[aa][7:0];
+                    14: got = dut.dimm_lane[14].score_inst.score_sram.mem[aa][7:0];
+                    15: got = dut.dimm_lane[15].score_inst.score_sram.mem[aa][7:0];
+                endcase
+                if ((got !== exp_val) || (^got === 1'bx)) begin
+                    if (err_count < 10)
+                        $display("  lane %0d addr %0d: got %0d expected %0d", L, aa, got, exp_val);
+                    err_count = err_count + 1;
+                end
+                // addr aa+1
+                exp_val = expected_score(aa + 1);
+                case (L)
+                     0: got = dut.dimm_lane[ 0].score_inst.score_sram.mem[aa+1][7:0];
+                     1: got = dut.dimm_lane[ 1].score_inst.score_sram.mem[aa+1][7:0];
+                     2: got = dut.dimm_lane[ 2].score_inst.score_sram.mem[aa+1][7:0];
+                     3: got = dut.dimm_lane[ 3].score_inst.score_sram.mem[aa+1][7:0];
+                     4: got = dut.dimm_lane[ 4].score_inst.score_sram.mem[aa+1][7:0];
+                     5: got = dut.dimm_lane[ 5].score_inst.score_sram.mem[aa+1][7:0];
+                     6: got = dut.dimm_lane[ 6].score_inst.score_sram.mem[aa+1][7:0];
+                     7: got = dut.dimm_lane[ 7].score_inst.score_sram.mem[aa+1][7:0];
+                     8: got = dut.dimm_lane[ 8].score_inst.score_sram.mem[aa+1][7:0];
+                     9: got = dut.dimm_lane[ 9].score_inst.score_sram.mem[aa+1][7:0];
+                    10: got = dut.dimm_lane[10].score_inst.score_sram.mem[aa+1][7:0];
+                    11: got = dut.dimm_lane[11].score_inst.score_sram.mem[aa+1][7:0];
+                    12: got = dut.dimm_lane[12].score_inst.score_sram.mem[aa+1][7:0];
+                    13: got = dut.dimm_lane[13].score_inst.score_sram.mem[aa+1][7:0];
+                    14: got = dut.dimm_lane[14].score_inst.score_sram.mem[aa+1][7:0];
+                    15: got = dut.dimm_lane[15].score_inst.score_sram.mem[aa+1][7:0];
+                endcase
+                if ((got !== exp_val) || (^got === 1'bx)) begin
+                    if (err_count < 10)
+                        $display("  lane %0d addr %0d: got %0d expected %0d", L, aa+1, got, exp_val);
+                    err_count = err_count + 1;
+                end
+            end
+        end
+    endtask
+
+    // (legacy, unused but kept for compile) — not used in key-parallel checks.
     task check_lane(input integer lane_idx, inout integer ok_counter);
         integer jj, mismatch;
         begin

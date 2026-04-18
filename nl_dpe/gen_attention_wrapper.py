@@ -173,7 +173,9 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    parameter d = {d_head},")
     lines.append(f"    parameter DATA_WIDTH = {dw},")
     lines.append(f"    parameter ADDR_WIDTH = {addr_width},")
-    lines.append(f"    parameter DEPTH = {max_depth}")
+    lines.append(f"    parameter DEPTH = {max_depth},")
+    lines.append(f"    parameter LANE_IDX = 0,       // which key-lane this instance handles (0..W-1)")
+    lines.append(f"    parameter W = 1               // total number of parallel key-lanes at top")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid_q, input wire valid_k,")
@@ -386,7 +388,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"            feed_half <= 0; feed_phase <= 0;")
     lines.append(f"            score_write_addr <= 0; score_read_addr <= 0; score_w_en <= 0;")
     lines.append(f"            score_write_data <= 0;")
-    lines.append(f"            mac_count <= 0; score_idx <= 0; acc_clear <= 0;")
+    # Key-parallel W=16: lane L starts at score_idx = L*stride, steps by W*stride.
+    lines.append(f"            mac_count <= 0; score_idx <= LANE_IDX * {stride}; acc_clear <= 0;")
     if h_dimm > 1:
         lines.append(f"            dimm_sel <= 0;")
     lines.append(f"        end else begin")
@@ -447,8 +450,9 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                    score_w_en <= 1;")
         lines.append(f"                    score_write_addr <= score_idx + 1;")
         lines.append(f"                    acc_clear <= 1;")
-        lines.append(f"                    if (score_idx >= N-2) state <= S_OUTPUT;")
-        lines.append(f"                    else begin score_idx <= score_idx + {stride}; state <= S_COMPUTE; end")
+        # Key-parallel: step by W*stride each iteration. Exit when next step would exceed N.
+        lines.append(f"                    if (score_idx + W * {stride} >= N) state <= S_OUTPUT;")
+        lines.append(f"                    else begin score_idx <= score_idx + W * {stride}; state <= S_COMPUTE; end")
     else:
         # Feed log_sum to DPE (packed, {packed_d} words per score)
         # SRAM has 1-cycle read latency, so we set address on cycle i
@@ -474,8 +478,9 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                        score_w_en <= 1;")
         lines.append(f"                        score_write_addr <= score_idx;")
         lines.append(f"                        acc_clear <= 1;")
-        lines.append(f"                        if (score_idx == N-1) state <= S_OUTPUT;")
-        lines.append(f"                        else begin score_idx <= score_idx + 1; state <= S_COMPUTE; end")
+        # Key-parallel (non-dual): step by W each iteration.
+        lines.append(f"                        if (score_idx + W >= N) state <= S_OUTPUT;")
+        lines.append(f"                        else begin score_idx <= score_idx + W; state <= S_COMPUTE; end")
         lines.append(f"                    end")
 
     lines.append(f"                end")
