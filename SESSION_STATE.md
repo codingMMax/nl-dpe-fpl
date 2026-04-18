@@ -1,6 +1,34 @@
-# SESSION_STATE.md — Last updated: 2026-03-21
+# SESSION_STATE.md — Last updated: 2026-04-18
 
-## Current Phase
+## Current Phase (2026-04-18)
+
+**Phase H–N (W=16 full DIMM verification) CLOSED.** RTL↔simulator
+per-stage and end-to-end cycles aligned within the plan's ≤20 cycle
+tolerance for NL-DPE at N=128, d=64:
+
+| Stage | RTL | Sim | Δ |
+|---|---:|---:|---:|
+| score  | 260 | 267 | 7  ✓ |
+| softmax|  27 |  26 | 1  ✓ |
+| wsum   | 274 | 257 | 17 ✓ |
+| **E2E**| **561** | **550** | **11 ✓** |
+
+VTR 3-seed runs complete: NL-DPE DPE=**64 exact** (4 stages × 16 lanes)
+at 90.1 MHz; Azure-Lily DSP=68 (≈32 int_sop_4 + packing drift) at
+94.0 MHz. Final plot
+`fc_verification/results/dimm_architecture_comparison.pdf` regenerated
+at VTR-measured Fmax. Details: `fc_verification/VERIFICATION.md`
+and rolling log
+`fc_verification/results/dimm_top_w16_alignment_log.txt`.
+
+**P4 open TODOs (multi-pass pipelined DPE model, opened 2026-04-18):**
+T30 (sim gemm_log change) → T31 (transpose block) → T32 (FC+GEMM RTL
+re-verify) → T33 (DIMM re-align). See `CLAUDE.md` "Active TODO Tracks"
+for one-hop access to model doc, verification baseline, and memory.
+
+---
+
+## Prior phase (2026-03-21, historical)
 **All DSE experiments COMPLETE (2026-03-21). Four sweeps done: Round 1 (72 runs), Round 2 FC bare GEMV (900 runs), Round 2 Attention (240 runs), Round 2 FC+BN+Softmax (720 runs). Key findings: 512×128 is the robust balanced config across all workload types; DSP bottleneck confirmed for complete inference pipelines; BRAM wall for attention. Writing materials and plots consolidated.**
 
 ## BERT-Tiny Workload (NEW — Main Result, 2026-03-20)
