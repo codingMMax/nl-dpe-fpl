@@ -27,6 +27,9 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + BERT-Tiny end-to
 | `azurelily/nn/embedding_layer.py` | Embedding layer class for scheduler dispatch |
 | `dse_experiment_plan.md` | Full methodology spec (authoritative) |
 | `paper_outline.md` | Paper structure and narrative |
+| `paper/methodology/attention_dimm_mapping.md` | Attention → DPE/DSP mapping, K-identity, W=16 lane spec |
+| `paper/methodology/dpe_pipeline_model.md` | Per-pass DPE dataflow model (Layout A vs B, transpose, multi-pass pipelining) — §8.1 has open TODOs |
+| `fc_verification/VERIFICATION.md` | RTL↔sim verification story, Phase H-N results |
 | `dse/results/` | CSVs, JSONs, plots, analysis (DSE outputs) |
 | `dse/round1/<config>/<workload>/` | Per-run VTR outputs (Round 1) |
 | `dse/round2_proto/` | Per-run VTR outputs (Round 2 prototype, fc_2048_256 only) |
@@ -75,3 +78,9 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + BERT-Tiny end-to
 - Do NOT re-run VTR on already-completed configs (check `dse/round1/`)
 - SESSION_STATE.md is ground truth for project status — update it after every milestone
 - TASKS.md is ground truth for what to do next — update after completing each task
+
+## Active TODO Tracks
+- **P4 — multi-pass pipelined DPE model** (opened 2026-04-18):
+  `gemm_log` sum-over-passes → `L + max(L,O)·(M−1) + O`. Sequence:
+  T30 (sim) → T31 (transpose block) → T32 (FC+GEMM RTL re-verify) → T33 (DIMM re-align).
+  Full details: `paper/methodology/dpe_pipeline_model.md` §8.1; task breakdown in `TASKS.md` §P4.
