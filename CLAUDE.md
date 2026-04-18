@@ -5,9 +5,13 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + BERT-Tiny end-to
 
 ## Session Start Protocol
 1. Read SESSION_STATE.md → understand where we are
-2. Read TASKS.md → pick the top unblocked task
+2. Read this file's "Active TODO Tracks" section below → current in-flight work
 3. Run `git status` to see uncommitted changes
-4. If DSE is running or was interrupted: check `dse/results/` for CSVs and `dse/round1/` for partial VTR outputs
+4. (If touching DSE) check `dse/results/` for CSVs and `dse/round1/` for partial VTR outputs
+
+Note: `TASKS.md` is the **prior-submission** sprint log (historical only as of
+2026-04-18). Do not treat its open `[ ]` items as active without cross-checking
+the live tracks below.
 
 ## Key Paths
 | Path | Role |
@@ -77,7 +81,10 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + BERT-Tiny end-to
 - Do NOT re-read paper_outline.md or dse_experiment_plan.md unless working on paper narrative or methodology changes
 - Do NOT re-run VTR on already-completed configs (check `dse/round1/`)
 - SESSION_STATE.md is ground truth for project status — update it after every milestone
-- TASKS.md is ground truth for what to do next — update after completing each task
+- TASKS.md is the **prior-submission** sprint log (historical). Current work
+  is tracked in the "Active TODO Tracks" section of this file, the relevant
+  methodology docs (`paper/methodology/*.md` §TODOs), and user memory
+  (`project_multipass_dpe_todos.md` for the P4 track).
 
 ## Active TODO Tracks
 - **P4 — multi-pass pipelined DPE model** (opened 2026-04-18):

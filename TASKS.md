@@ -1,6 +1,24 @@
 # TASKS.md — NL-DPE Research Pipeline
 
-## Active Sprint
+> **Status (2026-04-18):** this file is the **prior-submission sprint log**.
+> Most of §P0–P3 reflects the state at the previous paper submission and is
+> kept here as historical context, not active ground truth. The live work
+> tracks live in these places instead:
+>
+> - **`CLAUDE.md` → "Active TODO Tracks"** — one-line pointer to the
+>   current in-flight track.
+> - **`paper/methodology/dpe_pipeline_model.md` §8.1** — authoritative
+>   detail for the current P4 track (multi-pass pipelined DPE model).
+> - **Memory `project_multipass_dpe_todos.md`** — session-recoverable
+>   sequencing of the P4 TODOs (T30 → T31 → T32 → T33).
+>
+> Post-submission work (e.g. the W=16 full DIMM verification, Phase H–N)
+> was tracked via in-session TaskList and the
+> `fc_verification/results/dimm_top_w16_alignment_log.txt` rolling log,
+> not here. New tracks should follow that pattern or live in methodology
+> docs; treat this file as append-only and historical.
+
+## Prior-submission Sprint
 
 ### P0 — BERT-Tiny End-to-End Workload (Main Result)
 
@@ -134,47 +152,18 @@
 - [ ] Delete `dse/round2_proto/` (1.9GB, superseded by round2_full)
 - [ ] Azure-Lily Round 2 equivalent (for fair comparison baseline)
 
-### P4 — Multi-pass pipelined DPE model (opened 2026-04-18)
+### Post-submission work (not tracked here)
 
-Introduced in `paper/methodology/dpe_pipeline_model.md`. Current sim and
-RTL serialise DPE passes within a stage; switching to the pipelined
-model `T = L + max(L,O)·(M−1) + O` shortens multi-pass workloads
-substantially (see §6 of the doc for analytical numbers). Sequencing
-is strict: **TODO 1 → TODO 2.1 → TODO 2 → TODO 3.**
-
-- [ ] **T30 — TODO 1 (sim):** change `gemm_log` in
-  `azurelily/IMC/peripherals/fpga_fabric.py` from
-  `M · cycles_per_pass` to `L + max(L, O)·(M − 1) + O`. Preserve M=1
-  behaviour (`L + O = cycles_per_pass` today). Verify analytically on
-  a GEMV case and a GEMM case — both spatial mappings, with
-  hand-computed expected cycle counts. Blocks T31 and T32.
-
-- [ ] **T31 — TODO 2.1 (RTL prereq):** design and implement the
-  transpose / corner-turn block described in
-  `paper/methodology/dpe_pipeline_model.md` §4.2. Shift-register array
-  of `R × N_in_bits` FFs per DPE input; sits between natural-int8
-  producers and Layout-B read-BRAM consumers. Blocks T32.
-
-- [ ] **T32 — TODO 2 (RTL re-verify):** once T30 and T31 are green,
-  add a GEMM RTL workload to the verification set and re-run FC
-  verification under the pipelined sim model. Expect the per-pass
-  cycle numbers in
-  `fc_verification/VERIFICATION.md` Phase I.1/I.2 to shift under the
-  new model — update in place.
-
-- [ ] **T33 — TODO 3 (DIMM propagation):** after T30 + T32 are green,
-  propagate the pipelined model to `mac_qk` and `mac_sv` in both sim
-  and RTL. (`softmax` is already ~1 pass/lane → no change.) RTL
-  change: double-buffer the DPE input register so pass `k+1` loads
-  during pass `k`'s output phase. Sim change: use
-  `stage_steady = max(L_intra, O_intra)` per stage. Re-measure end-
-  to-end attention, re-align all stages to the ≤20 cycle tolerance.
-  Baseline to beat: score 260 / softmax 27 / wsum 274 / E2E 561 cyc.
-
-See also:
-- `paper/methodology/dpe_pipeline_model.md` §8.1 (authoritative detail)
-- `paper/methodology/attention_dimm_mapping.md` §10 (scope note)
-- `fc_verification/VERIFICATION.md` (Phase I.2 "Tracked TODOs")
+The W=16 full DIMM verification (Phases H–N), the multi-pass pipelined
+DPE model (P4), and any follow-on DSE work are **not** tracked in this
+file. See:
+- `CLAUDE.md` → "Active TODO Tracks" for the current in-flight track.
+- `paper/methodology/dpe_pipeline_model.md` §8.1 for the multi-pass
+  model TODOs (sim, transpose, FC/GEMM re-verify, DIMM propagation).
+- `fc_verification/results/dimm_top_w16_alignment_log.txt` for the
+  rolling DIMM-verification progress log.
+- Memory `project_multipass_dpe_todos.md` for session-recoverable
+  sequencing of the current track.
 
 ## Completed
 - [x] fc.py (azurelily/models/) — FC+activation IMC model
