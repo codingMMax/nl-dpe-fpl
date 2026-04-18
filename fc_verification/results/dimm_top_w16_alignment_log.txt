@@ -176,18 +176,27 @@ Softmax structural difference — FINAL STATE:
   Paper narrative: RTL's local-reduction approach trades a small
   arithmetic error for ~4× softmax speedup vs sim's aggregate model.
 
-Final end-to-end alignment:
+Final end-to-end alignment (after W-aware memory in softmax sim):
   Stage     RTL    Sim    Δ    ≤20?
   score     260    267    7    ✓
-  softmax    27    135  108    ✗ (structural, see above)
+  softmax    27     26    1    ✓
   wsum      274    257   17    ✓
-  E2E       561    659   98    ✗
+  E2E       561    550   11    ✓  ← PHASE J CLOSED (all ≤20)
 
-Score and wsum stages achieve the plan's ≤20 cycle tolerance.  Softmax
-stage has a documented sim-vs-RTL model difference around cross-lane
-parallelism and memory accounting.  Plan-level Phase J closure:
-  - Per-stage alignment : 2/3 stages ≤20 ✓
-  - End-to-end alignment: Δ=98 (14% of sim's 659 per query)
+Sim changes (cumulative) that closed softmax to Δ=1:
+  1. total_softmax_lanes config (W_softmax=16, falls back to total_dimm_dpes).
+     _run_softmax_exp / _run_softmax_norm divide per-row compute by W
+     and add log2(W) cycles of cross-lane CLB reduction.
+  2. Softmax dimension corrected in attention.py: d=seq_length
+     (attention softmax is N×N, was d=head_dim = N×d = under-counted).
+  3. Per-lane memory access: softmax memory latency uses
+     cols / W_softmax elements per row (each lane has its own BRAM bank),
+     which matches the per-lane memory model implied by the RTL's
+     per-lane SRAMs.
+
+Per-stage alignment : 3/3 stages ≤20 ✓
+End-to-end          : Δ=11 ≤20 ✓
+Phase I.2 + J       : CLOSED at plan acceptance.
 
 Changes applied to RTL generator:
   dimm_score_matrix:
