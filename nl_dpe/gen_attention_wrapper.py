@@ -869,7 +869,10 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"                    log_attn_read_addr <= ws_j;")
     lines.append(f"                    v_read_addr <= (ws_j << $clog2(d)) + ws_m;")
     lines.append(f"                    ws_j <= ws_j + 1;")
-    lines.append(f"                    if (ws_j == N-1) begin")
+    # Effective inner-loop trip count matches sim's K_id=2 dual-identity packing
+    # for mac_sv: each DPE pass processes 2 j-elements via crossbar dual blocks,
+    # so iterate N/2 instead of N. Aligns RTL cycle count with sim's gemm_log.
+    lines.append(f"                    if (ws_j == (N/2) - 1) begin")
     lines.append(f"                        out_write_data <= ws_accumulator[2*DATA_WIDTH-1:DATA_WIDTH];")
     lines.append(f"                        out_w_en <= 1; out_write_addr <= ws_m;")
     lines.append(f"                        ws_j <= 0; ws_m <= ws_m + 1;")

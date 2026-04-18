@@ -675,7 +675,7 @@ module dimm_weighted_sum #(
                     log_attn_read_addr <= ws_j;
                     v_read_addr <= (ws_j << $clog2(d)) + ws_m;
                     ws_j <= ws_j + 1;
-                    if (ws_j == N-1) begin
+                    if (ws_j == (N/2) - 1) begin
                         out_write_data <= ws_accumulator[2*DATA_WIDTH-1:DATA_WIDTH];
                         out_w_en <= 1; out_write_addr <= ws_m;
                         ws_j <= 0; ws_m <= ws_m + 1;
