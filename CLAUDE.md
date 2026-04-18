@@ -90,4 +90,12 @@ the live tracks below.
 - **P4 — multi-pass pipelined DPE model** (opened 2026-04-18):
   `gemm_log` sum-over-passes → `L + max(L,O)·(M−1) + O`. Sequence:
   T30 (sim) → T31 (transpose block) → T32 (FC+GEMM RTL re-verify) → T33 (DIMM re-align).
-  Full details: `paper/methodology/dpe_pipeline_model.md` §8.1; task breakdown in `TASKS.md` §P4.
+  - **Model & assumptions:** `paper/methodology/dpe_pipeline_model.md`
+    §§1–7 (analog IMC primer, Layout A vs B, transpose logic,
+    multi-pass timing, analytical formulas with 512×128 worked example)
+  - **What is implemented today:** same doc §8
+  - **Open TODOs with detail:** same doc §8.1
+  - **Mapping-doc scope of changes:** `paper/methodology/attention_dimm_mapping.md` §10
+  - **Verification baseline to beat:** `fc_verification/VERIFICATION.md`
+    Phase I.2 (score 260 / softmax 27 / wsum 274 / E2E 561 cyc, Layout A)
+  - **Session-recoverable sequencing:** memory `project_multipass_dpe_todos.md`
