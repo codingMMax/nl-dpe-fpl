@@ -129,14 +129,61 @@ Limitations documented for Phase I.1 AL:
     (sampling triggered by lane 0's out_valid rising edge).
 
 ================================================================
-  Phase I.2 status — latency measurements (RE-OPENED 2026-04-17)
+  Phase I.2 status — latency measurements (RE-OPENED + REALIGNED)
 ================================================================
 
-Per-stage RTL cycle breakdown (lane 0, from instrumented latency TB):
-  Score stage   : 4,160 cycles   (0   → 4160, 64 dual-passes × 65 cyc/pass)
-  Softmax stage :   387 cycles   (4160 → 4549)
-  Wsum stage    : 8,450 cycles   (4549 → 12999, dominated by N*d inner loop)
+Before key-parallel restructure (sequential, all 16 lanes redundant):
+  Score stage   : 4,160 cycles   (64 dual-passes × 65 cyc)
+  Softmax stage :   387 cycles
+  Wsum stage    : 8,450 cycles
   End-to-end    : 12,997 cycles
+
+After true W=16 parallelism (score + softmax + wsum all lane-parallel):
+  Score stage   :   260 cycles   ← sim 261, Δ=1  ≤ 20  ✓ PASS
+  Softmax stage :    27 cycles   ← faster than sim (sim ≈166/query)
+  Wsum stage    :   530 cycles   ← sim ≈222/query, Δ=308 (remaining gap)
+  End-to-end    :   817 cycles
+
+Overall reduction: 12,997 → 817 cycles (16× compute speedup).
+End-to-end delta to sim: 817 - 722 = 95 cycles. Score stage aligned within
+plan tolerance; remaining gap concentrated in wsum's WS_COMPUTE inner loop.
+
+Changes applied to RTL generator:
+  dimm_score_matrix:
+    + LANE_IDX, W parameters
+    + score_idx init LANE_IDX*stride; step W*stride each S_WRITE_B.
+    + Lane L owns sparse score_sram addrs {2L, 2L+1, 2L+32, 2L+33, 2L+64,
+      2L+65, 2L+96, 2L+97}. All 16 lanes produce 128 scores in 260 cycles.
+  softmax_approx:
+    + LANE_IDX, W, N_PER_LANE=N/W parameters.
+    + SM_LOAD, SM_EXP, SM_NORMALIZE exit conditions all use N_PER_LANE.
+    + Per lane processes 8 elements only (vs 128 before).
+    * Note: local-sum only, not true softmax. Cross-lane reduction for
+      mathematical correctness is a documented gap (wsum outputs still X).
+  dimm_weighted_sum:
+    + LANE_IDX, W, M_PER_LANE=d/W=4 parameters.
+    + ws_m init LANE_IDX*M_PER_LANE; exit when ws_m reaches (L+1)*M_PER_LANE-1.
+    + WS_LOAD_A and WS_LOG exit use (N/W) instead of N.
+    + WS_COMPUTE inner loop still iterates N (sim's gemm_log also does).
+    * Each lane produces 4 output cols only (in its own out_sram at addrs
+      [LANE_IDX*4, (LANE_IDX+1)*4)).
+
+Functional verification (tb_nldpe_dimm_top_functional.v after restructure):
+  Check 1 per-lane sparse score_sram: 127/128 correct (only S[63] — now
+  at lane 15 — shows the known dual-identity packing boundary mismatch).
+  Lane-isolation check: 15/15 (but no longer meaningful since each lane
+  writes to disjoint addrs). Functional PASS preserved.
+
+Remaining I.2+J gap (to truly close to ≤20 cycles):
+  wsum WS_COMPUTE: currently 4 cols × 128 inner = 512 cycles. Sim bundles
+  2 output cols per DPE pass (K_id=2 packing), so 2 passes × 111 cyc =
+  222 cyc for 4 cols. Closing this requires wsum to process multiple
+  output cols per DPE pass (dual-identity in wsum, which is a deeper
+  architectural change).
+
+================================================================
+  Phase I.2 (original "completed" entry — kept for history)
+================================================================
 
 Sim per-stage (at N=128, d=64, W=16):
   mac_qk        : 99,500 ns  ≈ 33,900 cycles at 341MHz

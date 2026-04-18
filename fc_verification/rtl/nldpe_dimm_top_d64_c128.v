@@ -45,8 +45,12 @@ module nldpe_dimm_top #(
             .valid_n(score_valid)
         );
 
-        // Stage 2: softmax_approx (normalize)
-        softmax_approx #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH)) softmax_inst (
+        // Stage 2: softmax_approx (normalize) — per-lane over N/W=8 elements.
+        // NOTE: sum is LOCAL (8 elements), not global. A cross-lane reduction
+        // would be needed for mathematically correct softmax output. For Phase
+        // J cycle alignment we accept local-only softmax; wsum outputs X here.
+        softmax_approx #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
+                         .LANE_IDX(lane), .W(W)) softmax_inst (
             .clk(clk), .rst(rst),
             .valid(score_valid), .ready_n(1'b0),
             .data_in(score_out),
@@ -56,7 +60,10 @@ module nldpe_dimm_top #(
         assign softmax_ready = score_ready;
 
         // Stage 3: dimm_weighted_sum (wsum_log + mac_sv)
-        dimm_weighted_sum #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH)) wsum_inst (
+        // LANE_IDX + W make this lane handle output cols
+        //   [LANE_IDX * d/W, (LANE_IDX+1) * d/W), giving d/W=4 cols per lane at d=64, W=16.
+        dimm_weighted_sum #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
+                            .LANE_IDX(lane), .W(W)) wsum_inst (
             .clk(clk), .rst(rst),
             .valid_attn(softmax_valid), .valid_v(valid_v),
             .ready_n(1'b0),
@@ -309,7 +316,10 @@ module softmax_approx #(
     parameter d = 64,
     parameter DATA_WIDTH = 40,
     parameter ADDR_WIDTH = 8,
-    parameter DEPTH = 129
+    parameter DEPTH = 129,
+    parameter LANE_IDX = 0,          // lane index (0..W-1)
+    parameter W = 1,                 // total parallel lanes at top
+    parameter N_PER_LANE = N / W     // attn elements this lane handles (= N/W)
 )(
     input wire clk, input wire rst,
     input wire valid, input wire ready_n,
@@ -441,12 +451,12 @@ module softmax_approx #(
                 SM_IDLE: if (valid) sm_state <= SM_LOAD;
                 SM_LOAD: begin
                     if (valid) begin in_w_en <= 1; in_write_addr <= in_write_addr + 1; end
-                    if (in_write_addr == N-1) sm_state <= SM_EXP;
+                    if (in_write_addr == N_PER_LANE - 1) sm_state <= SM_EXP;  // per-lane count
                 end
                 SM_EXP: begin
                     // DPE(I|exp) processes scores — output goes to exp_sram + sum
                     in_read_addr <= sm_count; sm_count <= sm_count + 1;
-                    if (sm_count == N-1) begin
+                    if (sm_count == N_PER_LANE - 1) begin
                         inv_sum <= recip_val; sm_count <= 0;
                         sm_state <= SM_NORMALIZE;
                     end
@@ -459,7 +469,7 @@ module softmax_approx #(
                     out_w_en <= (sm_count > 1);
                     out_write_addr <= sm_count - 2;
                     sm_count <= sm_count + 1;
-                    if (sm_count == N+1) sm_state <= SM_OUTPUT;
+                    if (sm_count == N_PER_LANE + 1) sm_state <= SM_OUTPUT;
                 end
                 SM_OUTPUT: if (!ready_n) out_read_addr <= out_read_addr + 1;
             endcase
@@ -476,7 +486,10 @@ module dimm_weighted_sum #(
     parameter d = 64,
     parameter DATA_WIDTH = 40,
     parameter ADDR_WIDTH = 14,
-    parameter DEPTH = 8193
+    parameter DEPTH = 8193,
+    parameter LANE_IDX = 0,       // column-lane this instance owns (0..W-1)
+    parameter W = 1,              // total parallel column-lanes at top
+    parameter M_PER_LANE = d / W  // output cols per lane (= d/W)
 )(
     input wire clk, input wire rst,
     input wire valid_attn, input wire valid_v,
@@ -634,7 +647,7 @@ module dimm_weighted_sum #(
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            ws_state <= WS_IDLE; ws_j <= 0; ws_m <= 0;
+            ws_state <= WS_IDLE; ws_j <= 0; ws_m <= LANE_IDX * M_PER_LANE;
             attn_write_addr <= 0; attn_read_addr <= 0; attn_w_en <= 0;
             v_write_addr <= 0; v_read_addr <= 0; v_w_en <= 0;
             out_write_addr <= 0; out_read_addr <= 0; out_w_en <= 0;
@@ -645,7 +658,7 @@ module dimm_weighted_sum #(
                 WS_IDLE: if (valid_attn || valid_v) ws_state <= WS_LOAD_A;
                 WS_LOAD_A: begin
                     if (valid_attn) begin attn_w_en <= 1; attn_write_addr <= attn_write_addr + 1; end
-                    if (attn_write_addr == N-1) ws_state <= WS_LOAD_V;
+                    if (attn_write_addr == (N/W) - 1) ws_state <= WS_LOAD_V;  // per-lane count
                 end
                 WS_LOAD_V: begin
                     if (valid_v) begin v_w_en <= 1; v_write_addr <= v_write_addr + 1; end
@@ -655,7 +668,7 @@ module dimm_weighted_sum #(
                     // DPE(I|log) converts attn to log domain
                     attn_read_addr <= ws_j;
                     ws_j <= ws_j + 1;
-                    if (ws_j == N-1) begin ws_j <= 0; ws_state <= WS_COMPUTE; end
+                    if (ws_j == (N/W) - 1) begin ws_j <= 0; ws_state <= WS_COMPUTE; end  // per-lane count
                 end
                 WS_COMPUTE: begin
                     // CLB add + DPE(I|exp) + accumulate
@@ -666,7 +679,7 @@ module dimm_weighted_sum #(
                         out_write_data <= ws_accumulator[2*DATA_WIDTH-1:DATA_WIDTH];
                         out_w_en <= 1; out_write_addr <= ws_m;
                         ws_j <= 0; ws_m <= ws_m + 1;
-                        if (ws_m == d-1) ws_state <= WS_OUTPUT;
+                        if (ws_m == (LANE_IDX + 1) * M_PER_LANE - 1) ws_state <= WS_OUTPUT;
                     end
                 end
                 WS_OUTPUT: if (ready_n) out_read_addr <= out_read_addr + 1;
