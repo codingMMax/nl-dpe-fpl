@@ -29,7 +29,8 @@ module tb_dpe_vmm;
         .KERNEL_WIDTH(4),
         .NUM_COLS(2),
         .DPE_BUF_WIDTH(8),    // 1 byte per strobe for simple test
-        .COMPUTE_CYCLES(8)    // 8-cycle compute for simple test
+        .COMPUTE_CYCLES(8),   // 8-cycle compute for simple test
+        .ACAM_MODE(0)         // pure VMM (no ACAM nonlinearity)
     ) uut (
         .clk(clk), .reset(reset),
         .data_in(data_in),

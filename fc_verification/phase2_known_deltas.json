@@ -1,0 +1,26 @@
+{
+    "_description": "Residual latency deltas between the FC RTL and the sim's analytical model, annotated with their root cause. Entries here are accepted as modelling-granularity deltas (FSM handshake cycles the analytical model does not track). A stage with a non-empty root_cause is allowed to fail the exact-equality check without breaking Phase 2.",
+    "_schema": {
+        "stage": "one of: feed, compute, output, reduction, activation",
+        "delta_cycles": "RTL - sim (positive means RTL slower than sim)",
+        "applies_to": "list of setups and workloads this delta is known to apply to, or 'all'",
+        "root_cause": "short description with file:line citation",
+        "classification": "modelling_granularity | structural | activation_policy"
+    },
+    "deltas": [
+        {
+            "stage": "compute",
+            "delta_cycles": 4,
+            "applies_to": "all",
+            "root_cause": "conv_controller FSM handshake: reg_full -> dpe_exec_signal -> nl_dpe_control=2'b11 -> DPE fires in S_WAIT_EXEC. Three pipeline flops (nl_dpe/gemv_1_channel.v lines 488-510) + 1 cycle S_WAIT_EXEC check in dpe_stub.v lines 171-198. The analytical sim (imc_core._core_bit_pipeline_row_latency) counts only the bit-serial analog pipeline, not the control handshake. The 4 cycles are purely FSM overhead, independent of bus width, crossbar size, or conversion type.",
+            "classification": "modelling_granularity"
+        },
+        {
+            "stage": "reduction_plus_activation",
+            "delta_cycles": 1,
+            "applies_to": "all",
+            "root_cause": "controller_scalable valid_n handshake: dpe_done -> (register) -> valid_n in controller_scalable (nl_dpe/gemv_1_channel.v controller_scalable always-block driving valid_n). The reduction adder tree and activation LUT inside fc_layer are physically streaming-pipelined with the DPE output serialize stage (26/64 cycles) so their analytical depth (log2(V)+1) is fully hidden (output >> log2(V)+1). The residual +1 cycle measured at T_validn - T_done_first is the controller_scalable FSM's dpe_done -> valid_n latching, not the reduction/activation path. Classifies as FSM modelling granularity identical in spirit to the +4 compute handshake entry above.",
+            "classification": "modelling_granularity"
+        }
+    ]
+}
