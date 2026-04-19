@@ -87,15 +87,42 @@ the live tracks below.
   (`project_multipass_dpe_todos.md` for the P4 track).
 
 ## Active TODO Tracks
-- **P4 — multi-pass pipelined DPE model** (opened 2026-04-18):
-  `gemm_log` sum-over-passes → `L + max(L,O)·(M−1) + O`. Sequence:
-  T30 (sim) → T31 (transpose block) → T32 (FC+GEMM RTL re-verify) → T33 (DIMM re-align).
+- **P4 — multi-pass pipelined DPE model** (opened 2026-04-18, scope
+  reduced 2026-04-19 to Layout A + Regime B only):
+  the P4 track is now three phases, all under the committed
+  **Layout A + Regime B** path. Today's RTL already runs Regime B
+  (single-buffered input + output, Layout A), so no RTL architecture
+  change is needed. Phase 1 updates only the simulator; Phases 2 and
+  3 are RTL/TB bug-fix passes under a tighter tolerance (≤ 3 per
+  stage / ≤ 5 end-to-end, replacing the legacy ≤ 20).
+
+  **Phases:**
+  - **Phase 1 — sim Regime B swap (Layout A):** change `gemm_log` in
+    `azurelily/IMC/peripherals/fpga_fabric.py` from `M · cycles_per_pass`
+    (Regime A) to `T(M) = L_A · M + O` under Layout A. At 512×128
+    this is `111·M + 26`.
+  - **Phase 2 — FC RTL re-verify under ≤ 3 / ≤ 5:** no RTL
+    architecture change. Fix any TB / generator bugs surfaced by
+    the tighter tolerance.
+  - **Phase 3 — DIMM RTL re-verify under ≤ 3 / ≤ 5:** no RTL
+    architecture change. Re-align `mac_qk`, `softmax`, `mac_sv`
+    against the Regime-B sim.
+
+  **Out of scope — retired / archived** (design-space reference only
+  in the model doc §§3.2, 4, 5.4, 5.7): Layout B as an active
+  alternative (archived), the transpose block (retired, was TODO 2.1),
+  and Regime C / double-buffering (retired, was TODO 3 — archived as
+  reference only).
+
   - **Model & assumptions:** `paper/methodology/dpe_pipeline_model.md`
-    §§1–7 (analog IMC primer, Layout A vs B, transpose logic,
-    multi-pass timing, analytical formulas with 512×128 worked example)
-  - **What is implemented today:** same doc §8
-  - **Open TODOs with detail:** same doc §8.1
+    §§1–7 (analog IMC primer, Layout A vs B design-space references,
+    multi-pass timing, Layout A 512×128 walkthrough in §5.3.1, committed
+    layout choice in §5.7)
+  - **What is implemented today:** same doc §8 (RTL = Layout A +
+    Regime B; sim = Regime A pre-Phase 1, Regime B post-Phase 1)
+  - **Phase definitions with detail:** same doc §8.1
   - **Mapping-doc scope of changes:** `paper/methodology/attention_dimm_mapping.md` §10
   - **Verification baseline to beat:** `fc_verification/VERIFICATION.md`
-    Phase I.2 (score 260 / softmax 27 / wsum 274 / E2E 561 cyc, Layout A)
+    Phase I.2 (score 260 / softmax 27 / wsum 274 / E2E 561 cyc,
+    Layout A, Regime A sim — post-Phase 1 sim moves to Regime B)
   - **Session-recoverable sequencing:** memory `project_multipass_dpe_todos.md`

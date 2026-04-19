@@ -560,20 +560,46 @@ wsum=WS_OUTPUT).
 **Layout A** (natural-packed int8 + load-then-compute, `W_BRAM = W_DPE =
 40 bits`) as defined in `paper/methodology/dpe_pipeline_model.md` §3.1.
 Moving to Layout B (bit-plane transposed with a wide read-BRAM) would
-reduce the score and wsum load portions roughly 13× at R=512, with a
+reduce the score and wsum load portions roughly 12× at R=512, with a
 corresponding transpose-buffer area cost — see the per-pass model doc
 for formulas and the design-choice table.
 
-**Tracked TODOs (2026-04-18) from `dpe_pipeline_model.md` §8.1:**
+**Pipeline regime** (revised 2026-04-19, see `dpe_pipeline_model.md`
+§§5.3.1, 8.1): the cycle numbers below come from the simulator
+running **Regime A** (pre-Phase 1, fully serial —
+`T = M·cycles_per_pass`). The RTL is already running **Regime B**
+under Layout A (single-buffered input + single shift-add/output, the
+committed path). For Layout A at 512×128 the steady-state per-pass
+increment is `max(L_A, O) = L_A = 111` because `L_A > O` — see
+§5.3.1 of the model doc for the pass-boundary derivation. Phase 1
+moves the sim to Regime B under Layout A (`T(M) = 111·M + 26`) so
+sim and RTL agree; the legacy ≤ 20-cycle tolerance then tightens to
+**≤ 3 per stage / ≤ 5 end-to-end** (Phase 2/3 close any residual
+deltas). No RTL architecture change is needed — today's RTL is
+already the target.
 
-- **TODO 2** — Re-run FC verification against the pipelined-multi-pass sim
-  model (TODO 1) and add a new GEMM RTL workload to the verification set.
-- **TODO 2.1** — Prerequisite for TODO 2: design and implement the
-  transpose module (corner-turn buffer, `R × N_in_bits` FFs per DPE
-  input) so Layout B dataflow can be exercised in RTL.
-- **TODO 3** — Re-align DIMM Phase I.2 + J end-to-end under the pipelined
-  model once TODOs 1 and 2 are closed. The current 260/27/274/561
-  numbers above are the baseline to beat.
+**Layout.** Today's RTL is **Layout A** (monolithic `R`-int8 fill
+into the input buffer, then 8 internal bit-serial fires) and this is
+the committed path. Layout B is archived as a design-space reference
+in `dpe_pipeline_model.md` §§3.2, 4, 5.7; it is not on the active
+verification plan.
+
+**Tracked Phases (2026-04-18, revised 2026-04-19) from
+`dpe_pipeline_model.md` §8.1:**
+
+- **Phase 1** — Change sim `gemm_log` from Regime A
+  (`M·cycles_per_pass`) to the Regime B Layout A formula:
+  `T(M) = L_A · M + O` = `111·M + 26` at 512×128. Full derivation
+  in `dpe_pipeline_model.md` §§5.3.1 and 6.3.
+- **Phase 2** — FC RTL re-verify under ≤ 3 per stage / ≤ 5 E2E.
+  No RTL architecture changes. Fix any TB / generator bugs
+  surfaced by the tighter tolerance (e.g. the wsum-probe NBA race
+  noted in Phase J).
+- **Phase 3** — DIMM RTL re-verify (`mac_qk`, `softmax`, `mac_sv`)
+  under the same ≤ 3 / ≤ 5 tolerance. No RTL architecture changes.
+  The current 260 / 27 / 274 / 561 numbers above are the Regime-A
+  sim baseline; post-Phase 1 the sim moves to Regime B (Layout A)
+  and Phases 2–3 fix any residual RTL / TB deltas.
 
 **NL-DPE per-stage (post-restructure, lane 0):**
 

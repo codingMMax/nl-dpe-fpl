@@ -21,10 +21,27 @@ at VTR-measured Fmax. Details: `fc_verification/VERIFICATION.md`
 and rolling log
 `fc_verification/results/dimm_top_w16_alignment_log.txt`.
 
-**P4 open TODOs (multi-pass pipelined DPE model, opened 2026-04-18):**
-T30 (sim gemm_log change) → T31 (transpose block) → T32 (FC+GEMM RTL
-re-verify) → T33 (DIMM re-align). See `CLAUDE.md` "Active TODO Tracks"
-for one-hop access to model doc, verification baseline, and memory.
+**P4 open phases (multi-pass pipelined DPE model, opened 2026-04-18,
+scope reduced 2026-04-19 to Layout A + Regime B only):** the track is
+three phases under the committed **Layout A + Regime B** path. Today's
+RTL already runs Regime B (single-buffered input + output, Layout A),
+so no RTL architecture change is needed.
+
+- **Phase 1 — sim Regime B swap:** change `gemm_log` from
+  `M · cycles_per_pass` (Regime A) to `T(M) = L_A · M + O` under
+  Layout A. At 512×128: `111·M + 26`.
+- **Phase 2 — FC RTL re-verify** under ≤ 3 per stage / ≤ 5 E2E.
+  No RTL architecture change; TB / generator bug fixes only.
+- **Phase 3 — DIMM RTL re-verify** (`mac_qk`, `softmax`, `mac_sv`)
+  under the same ≤ 3 / ≤ 5 tolerance. No RTL architecture change.
+
+Retired / archived: Regime C / double-buffering (was T33, archived
+as reference only) and the transpose block for Layout B (was T31,
+retired) — archived in `paper/methodology/dpe_pipeline_model.md`
+§§3.2, 4, 5.4, 5.7 as design-space reference only. Authoritative
+reference: `paper/methodology/dpe_pipeline_model.md` §§5.3.1, 5.7,
+8.1. See `CLAUDE.md` "Active TODO Tracks" for one-hop access to
+model doc, verification baseline, and memory.
 
 ---
 

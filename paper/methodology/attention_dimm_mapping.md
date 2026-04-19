@@ -341,23 +341,38 @@ mapping structure in §§1–8 is unchanged, but the per-pass cycle
 numbers in §5 and the scaling in §7 should be re-derived from
 `dpe_pipeline_model.md` §6 formulas.
 
-## 10. Outstanding TODOs (2026-04-18)
+## 10. Phases (2026-04-18, revised 2026-04-19)
 
-The multi-pass pipelined DPE model opened by `dpe_pipeline_model.md` has
-three tracked TODOs that affect this document once complete:
+The P4 track is three phases, all under the committed
+**Layout A + Regime B** path. See
+`paper/methodology/dpe_pipeline_model.md` §§5.3.1, 5.7, and 8.1 for
+the authoritative framing. Layout B is archived as design-space
+reference (§§3.2, 4 of the model doc) but is not a separately-costed
+alternative in the active plan.
 
-- **TODO 1** (sim): update `gemm_log` to `L + max(L, O)·(M−1) + O`. When
-  done, the "realistic per-pass cycles" table in §5 gains a pipelined
-  variant row for each layout.
-- **TODO 2** (RTL): FC re-verification + new GEMM workload, gated by
-  **TODO 2.1** transpose module. Does not change this document's
-  mapping claims (K-identity, W=16 lane counts) but validates them
-  under the pipelined model.
-- **TODO 3** (DIMM): propagate the pipelined model to mac_qk and
-  mac_sv. The peak-bandwidth table in §5 is unchanged (it is the
-  architectural ceiling). The realistic per-pass table gains a
-  "pipelined Layout B" row reflecting the new attention cycle count;
-  numbers will be refreshed after Phase I.2+J is re-aligned under
-  the pipelined model.
+At 512×128 under Regime B, Layout A: `T(M) = 111·M + 26`, i.e.
+`T(M=8) = 914` cycles — the committed Phase 1 target for the
+simulator. Today's RTL already runs this regime, so no RTL
+architecture change is needed.
 
-Full TODO detail lives in `dpe_pipeline_model.md` §8.1.
+The three phases that affect this document once complete:
+
+- **Phase 1 — Simulator Regime B swap.** Update `gemm_log` from
+  `M · cycles_per_pass` (Regime A) to `T(M) = L_A · M + O` under
+  Layout A. The "realistic per-pass cycles" table in §5 updates to
+  the Regime B Layout A row.
+- **Phase 2 — FC RTL re-verify.** No RTL architecture changes. Fix
+  any TB / generator bugs that surface under the tighter ≤ 3 per
+  stage / ≤ 5 end-to-end tolerance. Does not change this document's
+  mapping claims (K-identity, W=16 lane counts); validates them
+  under the Regime B simulator.
+- **Phase 3 — DIMM RTL re-verify.** No RTL architecture changes.
+  Re-align DIMM Phase I.2 + J (`mac_qk`, `softmax`, `mac_sv`)
+  against the Regime-B sim under the same ≤ 3 / ≤ 5 tolerance.
+  Peak-bandwidth table in §5 is unchanged. Realistic per-pass
+  numbers refresh after re-alignment.
+
+Full derivation and the 512×128 worked example for Layout A live in
+`dpe_pipeline_model.md` §§5.3.1 and 6.3. The archived Layout B
+alternative (transpose block, wide-BRAM port, cycle tables) lives in
+the same doc §§3.2, 4, 5.7 as reference material only.
