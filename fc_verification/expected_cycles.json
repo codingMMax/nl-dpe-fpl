@@ -1,0 +1,41 @@
+{
+  "source": "Live sim refresh (Regime B, Layout A) on 2026-04-19",
+  "regime": "B",
+  "layout": "A",
+  "updated": "2026-04-19",
+  "note": "Regenerate via gen_expected_cycles.py after any sim-model change.",
+  "tolerance_cycles": {
+    "per_stage": 3,
+    "e2e": 5
+  },
+  "configs": {
+    "nldpe_dimm_top_d64_c128": {
+      "params": {
+        "N": 128,
+        "d": 64,
+        "C": 128,
+        "W": 16
+      },
+      "stages": {
+        "score": 150,
+        "softmax": 7,
+        "wsum": 142,
+        "e2e": 299
+      }
+    },
+    "azurelily_dimm_top_d64_c128": {
+      "params": {
+        "N": 128,
+        "d": 64,
+        "C": 128,
+        "W": 16,
+        "total_dsp": 16
+      },
+      "stages": {
+        "mac_qk": null,
+        "e2e": null
+      },
+      "todo": "Populate from gemm_dsp() path in a future phase."
+    }
+  }
+}
