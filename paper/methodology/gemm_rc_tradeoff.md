@@ -16,8 +16,8 @@ Symbols used throughout:
 |---|---|---|
 | $R$ | crossbar rows (input length) | $\{128, 256, 512, 1024\}$ |
 | $C$ | crossbar cols (output length) | $\{64, 128, 256\}$ |
-| $W_{\text{DPE}}$ | DPE-to-fabric bus width | $40$ bits (= $5$ int8/cycle) |
-| $N_{\text{in\_bits}}$ | input precision | $8$ |
+| $W_{DPE}$ | DPE-to-fabric bus width | $40$ bits (= $5$ int8/cycle) |
+| $N_b$ | input precision | $8$ |
 | $K$ | GEMM inner (reduction) dimension | workload-dependent |
 | $N$ | GEMM output dimension | workload-dependent |
 | $M$ | GEMM outer (batch/sequence) dimension | workload-dependent |
@@ -28,106 +28,67 @@ Symbols used throughout:
 
 ## 1. Per-pass cycle cost (Layout A)
 
-A single DPE pass under Layout A is:
-$$
-\text{Load} \;\to\; \text{Analog fire} \;\to\; \text{Output}
-$$
+A single DPE pass under Layout A is: $\text{Load} \to \text{Analog fire} \to \text{Output}$.
 
 - **Load (feed)**: stream $R$ int8 values into the on-die input buffer
-  through the $W_{\text{DPE}}$-bit bus. Once full, the DPE bit-slices
-  the buffer internally and fires $N_{\text{in\_bits}}$ analog cycles.
-$$
-L_{\text{feed}} \;=\; \left\lceil \frac{R \cdot 8}{W_{\text{DPE}}} \right\rceil
-$$
-- **Compute (analog fires + digital post)**: $N_{\text{in\_bits}}$
-  bit-serial fires through the crossbar plus ADC/ACAM:
-$$
-L_{\text{compute}} \;=\; N_{\text{in\_bits}} \;+\; t_{\text{ADC/ACAM}}
-$$
-  Typically $t_{\text{ACAM}} \approx 3$ and $t_{\text{ADC}} \approx 44$
-  cycles.
+  through the $W_{DPE}$-bit bus. Once full, the DPE bit-slices the
+  buffer internally and fires $N_b$ analog cycles. Load cycles:
+  $L_{feed} = \lceil R \cdot 8 / W_{DPE} \rceil$.
+- **Compute (analog fires + digital post)**: $N_b$ bit-serial fires
+  plus ADC/ACAM, giving $L_{comp} = N_b + t_{ADC/ACAM}$. Typically
+  $t_{ACAM} \approx 3$ and $t_{ADC} \approx 44$ cycles.
 - **Output (drain)**: stream $C$ int8 outputs through the bus:
-$$
-O \;=\; \left\lceil \frac{C \cdot 8}{W_{\text{DPE}}} \right\rceil
-$$
+  $O = \lceil C \cdot 8 / W_{DPE} \rceil$.
 
 Define the **load-side cost** (load + fire, before the drain stage):
-$$
-L_A \;\equiv\; L_{\text{feed}} \;+\; L_{\text{compute}}
-      \;=\; \left\lceil \frac{R \cdot 8}{W_{\text{DPE}}} \right\rceil
-      \;+\; N_{\text{in\_bits}} \;+\; t_{\text{ADC/ACAM}}
-$$
+$L_A \equiv L_{feed} + L_{comp} = \lceil R \cdot 8 / W_{DPE} \rceil + N_b + t_{ADC/ACAM}$.
 
-Single-pass latency:
-$$
-T_{\text{single}} \;=\; L_A \;+\; O
-$$
+Single-pass latency: $T_{single} = L_A + O$.
 
 ---
 
 ## 2. Multi-pass composition (Regime B)
 
-For $M$ back-to-back passes under **Regime B** (single-buffered input +
-output), the next pass's load begins only after the current pass's
+For $M$ back-to-back passes under **Regime B** (single-buffered input
++ output), the next pass's load begins only after the current pass's
 fires complete (single input buffer), and the next pass's fire is
 blocked until the current pass's drain releases the shift-add register
 (single output register). When $L_A$ and $O$ are compared, the
 inter-pass steady-state interval is:
 
-$$
-\boxed{\;
-\text{steady}_B \;=\; \max(L_A,\, O)
-\;}
-$$
+$\text{steady}_B = \max(L_A, O)$
 
 Total $M$-pass latency:
-$$
-\boxed{\;
-T(M) \;=\; L_A \;+\; \text{steady}_B \cdot (M - 1) \;+\; O
-\;}
-$$
+
+$T(M) = L_A + \max(L_A, O) \cdot (M - 1) + O$
 
 ---
 
-## 3. Two pipeline regimes, one model: **feed-bound vs drain-bound**
+## 3. Two pipeline regimes, one model: feed-bound vs drain-bound
 
 The behaviour of $\text{steady}_B = \max(L_A, O)$ splits the $(R, C)$
 design space into two regions.
 
-**Feed-bound** ($L_A > O$):
-$$
-\text{steady}_B = L_A \quad \Longleftrightarrow \quad
-\left\lceil \frac{R \cdot 8}{W_{\text{DPE}}} \right\rceil + N_{\text{in\_bits}} + t_{\text{ADC/ACAM}}
-> \left\lceil \frac{C \cdot 8}{W_{\text{DPE}}} \right\rceil
-$$
+**Feed-bound** ($L_A > O$): occurs when
+$\lceil R \cdot 8 / W_{DPE} \rceil + N_b + t_{ADC/ACAM} > \lceil C \cdot 8 / W_{DPE} \rceil$.
+Then $\text{steady}_B = L_A$, so **smaller $R$ means smaller $L_A$
+means faster per-pass**. The drain is fully hidden by the next
+pass's feed; output hardware is partly idle.
 
-In this region, **smaller $R$ means smaller $L_A$, which means faster
-per-pass**. The drain is fully hidden by the next pass's feed; output
-hardware is partly idle.
+**Drain-bound** ($O > L_A$): occurs when
+$\lceil C \cdot 8 / W_{DPE} \rceil > \lceil R \cdot 8 / W_{DPE} \rceil + N_b + t_{ADC/ACAM}$.
+Then $\text{steady}_B = O$, so **smaller $C$ is faster per-pass** (the
+drain dominates). The feed is partly idle.
 
-**Drain-bound** ($O > L_A$):
-$$
-\text{steady}_B = O \quad \Longleftrightarrow \quad
-\left\lceil \frac{C \cdot 8}{W_{\text{DPE}}} \right\rceil
-> \left\lceil \frac{R \cdot 8}{W_{\text{DPE}}} \right\rceil + N_{\text{in\_bits}} + t_{\text{ADC/ACAM}}
-$$
+**Balanced point** ($L_A \approx O$): when
+$\lceil R \cdot 8 / W_{DPE} \rceil \approx \lceil C \cdot 8 / W_{DPE} \rceil + N_b + t_{ADC/ACAM}$,
+both feed and drain hardware are fully utilised, but further reducing
+either one no longer reduces $\text{steady}_B$. Balance is the
+**local minimum** of $\text{steady}_B$ for a given $(L_A, O)$ pair;
+it's the best the pipeline can do at that geometry.
 
-In this region, **smaller $C$ is faster per-pass** (the drain
-dominates). The feed is partly idle.
-
-**Balanced point** ($L_A \approx O$):
-$$
-\left\lceil \frac{R \cdot 8}{W_{\text{DPE}}} \right\rceil
-\;\approx\; \left\lceil \frac{C \cdot 8}{W_{\text{DPE}}} \right\rceil + N_{\text{in\_bits}} + t_{\text{ADC/ACAM}}
-$$
-
-At balance, both feed and drain hardware are fully utilised, but
-further reducing either one no longer reduces $\text{steady}_B$.
-Balance is the **local minimum** of $\text{steady}_B$ for a given
-$(L_A, O)$ pair; it's the best the pipeline can do at that geometry.
-
-For concrete numbers at $W_{\text{DPE}}=40$, $N_{\text{in\_bits}}=8$,
-ACAM ($t_{\text{ADC/ACAM}}=3$):
+For concrete numbers at $W_{DPE}=40$, $N_b=8$, ACAM
+($t_{ADC/ACAM}=3$):
 
 | $R$ | $L_A$ (cyc) | Drain-bound threshold $C^\star$ |
 |---:|---:|---:|
@@ -136,9 +97,8 @@ ACAM ($t_{\text{ADC/ACAM}}=3$):
 | 512 | $103 + 8 + 3 = 114$ | $C^\star \approx 565$ |
 | 1024 | $205 + 8 + 3 = 216$ | $C^\star \approx 1070$ |
 
-So under ACAM + $W_{\text{DPE}}=40$, only the corner
-$(R=128,\, C=256)$ of our standard DSE grid is drain-bound; every
-other cell is feed-bound.
+So under ACAM + $W_{DPE}=40$, only the corner $(R=128, C=256)$ of our
+standard DSE grid is drain-bound; every other cell is feed-bound.
 
 ---
 
@@ -148,33 +108,29 @@ The $(R, C)$ sweep has **two competing pressures**:
 
 ### (a) Cycle-throughput pull — prefer small $R$ (feed-bound) or small $C$ (drain-bound)
 
-- Feed-bound: $T(M) \sim L_A \cdot M = (\lceil R \cdot 8 / W_{\text{DPE}} \rceil + \text{const}) \cdot M$. Linear in $R$.
-- Drain-bound: $T(M) \sim O \cdot M = \lceil C \cdot 8 / W_{\text{DPE}} \rceil \cdot M$. Linear in $C$.
+- Feed-bound: $T(M) \sim L_A \cdot M$, which is linear in $R$ through
+  $L_A = \lceil R \cdot 8 / W_{DPE} \rceil + \text{const}$.
+- Drain-bound: $T(M) \sim O \cdot M$, linear in $C$.
 
 Either way, shrinking the binding dimension wins per-pass cycles.
 
-### (b) Resource / reduction / activation pull — prefer large $R$ (fewer V tiles)
+### (b) Resource / reduction / activation pull — prefer large $R$ (fewer $V$ tiles)
 
 A GEMM with reduction dimension $K$ is vertically tiled as
 $V = \lceil K/R \rceil$. Larger $R$ means:
 
 - **Fewer DPE hard blocks**: total DPE count scales as $V \cdot H$.
-- **Smaller CLB reduction tree**: adder-tree depth is
-  $\lceil \log_2 V \rceil$; width is $V - 1$ adder cells per output col.
-  This tree is pipelined with the drain stage (fits when
-  $\lceil \log_2 V \rceil < O$, which holds in all our configs).
-  Even so, it consumes CLB area and routing.
+- **Smaller CLB reduction tree**: adder-tree depth is $\lceil \log_2 V \rceil$;
+  width is $V - 1$ adder cells per output col. This tree is pipelined
+  with the drain stage (fits when $\lceil \log_2 V \rceil < O$, which
+  holds in all our configs). Even so, it consumes CLB area and
+  routing.
 - **In-place activation**: when $V = 1$ on ACAM hardware, the ACAM
   inside the DPE *absorbs* the activation function at zero extra CLB
   cost. When $V > 1$, a CLB LUT activation must be added after the
-  reduction tree. This is a step-change, not smooth:
-$$
-\text{act\_cost}(V, \text{hw}) =
-\begin{cases}
-0 & \text{if } V = 1 \text{ and hw} = \text{ACAM} \\
-\text{CLB LUT (1 cycle, $N$ LUT entries)} & \text{otherwise}
-\end{cases}
-$$
+  reduction tree. The activation cost is a step function: $0$ if
+  $V = 1$ and hw $= \text{ACAM}$, otherwise a CLB LUT (1 cycle,
+  $N$ LUT entries).
 
 So the $V = 1$ regime — requiring $R \geq K$ — is architecturally
 *special*: it eliminates both the reduction tree and the CLB
@@ -210,54 +166,35 @@ For a GEMM of shape $M \times K \times N$ tiled as $V \times H$ DPEs:
 
 - Each output row requires $H$ DPE-passes worth of work in parallel
   across $H$ output column tiles, each of which handles
-  $\text{cols\_per\_DPE} = \lceil N / (H \cdot C) \rceil$
-  output cols. The $V$ vertical tiles run in parallel and their
-  partial sums feed the CLB reduction tree.
-- Total pass count per output row across the $H$ parallel lanes
-  is $\text{cols\_per\_DPE}$ (what the sim calls `cols_per_dpe`), and
-  the outer batch gives $M$ such rows — so the total sequential
-  pass count per DPE is:
-$$
-M_{\text{eff}} \;=\; M \cdot \text{cols\_per\_DPE} \;=\; M \cdot \left\lceil \frac{N}{H \cdot C} \right\rceil
-$$
+  $\text{cols\_per\_DPE} = \lceil N / (H \cdot C) \rceil$ output cols.
+  The $V$ vertical tiles run in parallel and their partial sums feed
+  the CLB reduction tree.
+- Total pass count per output row across the $H$ parallel lanes is
+  $\text{cols\_per\_DPE}$ (the sim calls it `cols_per_dpe`), and the
+  outer batch gives $M$ such rows — so the total sequential pass count
+  per DPE is $M_{eff} = M \cdot \lceil N / (H \cdot C) \rceil$.
 
 Plugging into the Regime-B formula:
-$$
-\boxed{\;
-T_{\text{GEMM}} \;=\; L_A \;+\; \max(L_A,\, O) \cdot (M_{\text{eff}} - 1) \;+\; O
-\;}
-$$
+
+$T_{GEMM} = L_A + \max(L_A, O) \cdot (M_{eff} - 1) + O$
 
 In the (typical) feed-bound regime this simplifies to:
-$$
-T_{\text{GEMM}} \;\approx\; L_A \cdot M_{\text{eff}} \;+\; O
-\;=\; \left(\left\lceil \tfrac{R \cdot 8}{W_{\text{DPE}}} \right\rceil + N_{\text{in\_bits}} + t_{\text{ADC/ACAM}}\right) \cdot M \cdot \left\lceil \tfrac{N}{H C} \right\rceil \;+\; \left\lceil \tfrac{C \cdot 8}{W_{\text{DPE}}} \right\rceil
-$$
+
+$T_{GEMM} \approx L_A \cdot M_{eff} + O = (\lceil R \cdot 8 / W_{DPE} \rceil + N_b + t_{ADC/ACAM}) \cdot M \cdot \lceil N / (HC) \rceil + \lceil C \cdot 8 / W_{DPE} \rceil$
 
 ---
 
 ## 6. Resource cost (per-inference, Regime B, Layout A)
 
-Let $\text{CLB}_{\text{reduce}}(V)$ and $\text{CLB}_{\text{act}}(V,\text{hw})$
-be the CLB contribution from the reduction tree and the activation
-stage. Then per GEMM:
+Per GEMM:
 
-- **DPE hard blocks**:
-$$
-\#\text{DPE} \;=\; V \cdot H \;=\; \left\lceil \tfrac{K}{R} \right\rceil \cdot \left\lceil \tfrac{N}{C} \right\rceil
-$$
+- **DPE hard blocks**: $\#\text{DPE} = V \cdot H = \lceil K/R \rceil \cdot \lceil N/C \rceil$.
 - **CLB reduction tree**: pipelined with drain; area proportional to
-$$
-\#\text{CLB}_{\text{reduce}} \;\sim\; (V - 1) \cdot H
-$$
-  and logical depth $\lceil \log_2 V \rceil$.
-- **CLB activation LUT** (on ACAM hardware only exists when $V > 1$):
-$$
-\#\text{CLB}_{\text{act}} \;=\; \begin{cases}
-0 & V = 1 \land \text{hw} = \text{ACAM} \\
-O(N) & \text{otherwise (LUT per output element)}
-\end{cases}
-$$
+  $\#\text{CLB}_{reduce} \sim (V - 1) \cdot H$ and logical depth
+  $\lceil \log_2 V \rceil$.
+- **CLB activation LUT** (on ACAM hardware, exists only when $V > 1$):
+  $\#\text{CLB}_{act} = 0$ if $V = 1$ and hw $= \text{ACAM}$, else
+  $O(N)$ (LUT per output element).
 - **BRAM**: partial-sum storage scales with $V \cdot H$ and $M$.
 
 ---
@@ -266,42 +203,38 @@ $$
 
 ### FC workload shapes
 
-Reuse the six FC shapes from Round-1 DSE
-(`dse_experiment_plan.md` §3), extended from $M = 1$ (GEMV) to
-$M > 1$ (GEMM) so Regime B's $L_A \cdot M + O$ benefit is visible.
+Reuse the six FC shapes from Round-1 DSE (`dse_experiment_plan.md`
+§3), extended from $M = 1$ (GEMV) to $M > 1$ (GEMM) so Regime B's
+$L_A \cdot M + O$ benefit is visible.
 
 | Shape | $K$ | $N$ | Origin |
 |---|---:|---:|---|
 | `fc_64_64` | 64 | 64 | small FC |
-| `fc_128_128` | 128 | 128 | attention projection proxy ($d_{\text{model}}=128$) |
+| `fc_128_128` | 128 | 128 | attention projection proxy ($d_{model}=128$) |
 | `fc_512_128` | 512 | 128 | medium FC |
 | `fc_512_512` | 512 | 512 | large-wide FC |
 | `fc_256_512` | 256 | 512 | wide FC |
 | `fc_2048_256` | 2048 | 256 | large FC (worst-case DPE count) |
 
-**Batch / sequence axis** $M$: sweep $M \in \{8,\, 16,\, 32\}$ for each shape.
-
-This gives enough multi-pass amortisation to expose the Regime-B
-$L_A \cdot M + O$ dependence on $(R, C)$ without blowing up the run
-matrix. Each $M$ triples the effective pass count
-$M_{\text{eff}} = M \cdot \lceil N / (H C) \rceil$.
+**Batch / sequence axis** $M$: sweep $M \in \{8, 16, 32\}$ for each
+shape. This gives enough multi-pass amortisation to expose the
+Regime-B $L_A \cdot M + O$ dependence on $(R, C)$ without blowing up
+the run matrix. Each $M$ triples the effective pass count
+$M_{eff} = M \cdot \lceil N / (H C) \rceil$.
 
 ### $(R, C)$ axes
 
 Match the existing Round-1 12-config grid:
-$$
-R \in \{128,\, 256,\, 512,\, 1024\}, \qquad C \in \{64,\, 128,\, 256\}
-$$
-
+$R \in \{128, 256, 512, 1024\}$ and $C \in \{64, 128, 256\}$.
 Total grid points: $4 \times 3 = 12$ crossbar geometries, swept per
 workload.
 
 ### Metrics per $(R, C, \text{workload})$
 
-1. **Analytical per-pass cost** $L_A, O, \text{steady}_B$ — from the
+1. **Analytical per-pass cost** $L_A$, $O$, $\text{steady}_B$ — from the
    current sim (post-Phase-1, Regime B).
-2. **Analytical total GEMM latency** $T_{\text{GEMM}}(M)$ in cycles
-   and in ns (scaled by VTR Fmax).
+2. **Analytical total GEMM latency** $T_{GEMM}(M)$ in cycles and in ns
+   (scaled by VTR $F_{\max}$).
 3. **Regime diagnostic**: is this config feed-bound, drain-bound, or
    balanced?
 4. **Resource counts** from VTR synthesis:
@@ -314,8 +247,8 @@ workload.
 
 ### Expected Pareto front
 
-Plot $T_{\text{GEMM}}$ (cycles or ns) versus total CLB count (or total
-area). The Pareto front should expose:
+Plot $T_{GEMM}$ (cycles or ns) versus total CLB count (or total area).
+The Pareto front should expose:
 
 - **$V = 1$ configs** (large $R$): lower CLB count due to no reduction
   tree and ACAM-absorbed activation, but higher per-pass cost.
@@ -332,45 +265,22 @@ activation CLB cost of the resulting $V > 1$ tiling.
 
 ## 8. Summary equations (presentation-ready)
 
-Per-pass:
-$$
-L_A = \left\lceil \frac{R \cdot 8}{W_{\text{DPE}}} \right\rceil + N_{\text{in\_bits}} + t_{\text{ADC/ACAM}} \qquad
-O = \left\lceil \frac{C \cdot 8}{W_{\text{DPE}}} \right\rceil
-$$
+Per-pass: $L_A = \lceil R \cdot 8 / W_{DPE} \rceil + N_b + t_{ADC/ACAM}$
+and $O = \lceil C \cdot 8 / W_{DPE} \rceil$.
 
-Regime B steady-state:
-$$
-\text{steady}_B = \max(L_A,\, O)
-$$
+Regime B steady-state: $\text{steady}_B = \max(L_A, O)$.
 
-Total $M$-pass:
-$$
-T(M) = L_A + \max(L_A,\, O) \cdot (M - 1) + O
-$$
+Total $M$-pass: $T(M) = L_A + \max(L_A, O) \cdot (M - 1) + O$.
 
-Tiling:
-$$
-V = \left\lceil \frac{K}{R} \right\rceil, \qquad H = \left\lceil \frac{N}{C} \right\rceil, \qquad M_{\text{eff}} = M \cdot \left\lceil \frac{N}{H \cdot C} \right\rceil
-$$
+Tiling: $V = \lceil K/R \rceil$, $H = \lceil N/C \rceil$, and
+$M_{eff} = M \cdot \lceil N / (H \cdot C) \rceil$.
 
-GEMM total (feed-bound approximation):
-$$
-T_{\text{GEMM}} \;\approx\; L_A \cdot M_{\text{eff}} + O
-$$
+GEMM total (feed-bound approximation): $T_{GEMM} \approx L_A \cdot M_{eff} + O$.
 
-DPE count:
-$$
-\#\text{DPE} = V \cdot H = \left\lceil \frac{K}{R} \right\rceil \cdot \left\lceil \frac{N}{C} \right\rceil
-$$
+DPE count: $\#\text{DPE} = V \cdot H = \lceil K/R \rceil \cdot \lceil N/C \rceil$.
 
-Activation cost step function:
-$$
-\text{act\_cost}(V, \text{hw}) =
-\begin{cases}
-0 & V = 1 \land \text{hw} = \text{ACAM} \\
-\text{CLB LUT} & \text{otherwise}
-\end{cases}
-$$
+Activation cost: $\text{act\_cost} = 0$ if $V = 1$ and hw $= \text{ACAM}$,
+else CLB LUT.
 
 The $(R, C)$ DSE sweeps these quantities for each workload and exposes
 the Pareto front between cycle-throughput (small $R$) and resource
