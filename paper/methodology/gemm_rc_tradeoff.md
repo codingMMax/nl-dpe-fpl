@@ -264,15 +264,11 @@ $$
 
 ## 7. DSE grid for Phase 2.1 — GEMM on $(R, C)$
 
-### FC workload shapes (extended from the existing DSE spec)
+### FC workload shapes
 
-The existing Round-1 DSE
-(`dse_experiment_plan.md` §3) sweeps six FC shapes as $K \times N$ GEMV
-($M = 1$). Phase 2.1 extends those to GEMM by adding a batch /
-sequence dimension $M > 1$, because Regime B's $L_A \cdot M + O$
-benefit is only visible for $M \gg 1$.
-
-**Baseline FC shapes** (reused from Round-1):
+Reuse the six FC shapes from Round-1 DSE
+(`dse_experiment_plan.md` §3), extended from $M = 1$ (GEMV) to
+$M > 1$ (GEMM) so Regime B's $L_A \cdot M + O$ benefit is visible.
 
 | Shape | $K$ | $N$ | Origin |
 |---|---:|---:|---|
@@ -283,22 +279,12 @@ benefit is only visible for $M \gg 1$.
 | `fc_256_512` | 256 | 512 | wide FC |
 | `fc_2048_256` | 2048 | 256 | large FC (worst-case DPE count) |
 
-**Extended for general DNN:**
+**Batch / sequence axis** $M$: sweep $M \in \{8,\, 16,\, 32\}$ for each shape.
 
-| Shape | $K$ | $N$ | Origin |
-|---|---:|---:|---|
-| `fc_768_3072` | 768 | 3072 | Transformer-base FFN1 up-projection |
-| `fc_3072_768` | 3072 | 768 | Transformer-base FFN2 down-projection |
-| `fc_1024_4096` | 1024 | 4096 | GPT-2 medium FFN1 |
-| `fc_4096_1024` | 4096 | 1024 | GPT-2 medium FFN2 |
-
-**Batch / sequence axis** $M$:
-
-| $M$ | Intent |
-|---|---|
-| $1$ | latency-critical single inference (= GEMV, Regime B reduces to Regime A) |
-| $128$ | typical sequence length in BERT-tiny / transformer inference |
-| $1024$ | long-context / large-batch throughput |
+This gives enough multi-pass amortisation to expose the Regime-B
+$L_A \cdot M + O$ dependence on $(R, C)$ without blowing up the run
+matrix. Each $M$ triples the effective pass count
+$M_{\text{eff}} = M \cdot \lceil N / (H C) \rceil$.
 
 ### $(R, C)$ axes
 
