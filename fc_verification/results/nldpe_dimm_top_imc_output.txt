@@ -4,43 +4,43 @@ Tech Node: 22nm
 Precision: 8-bit
 Array: 1024x128 (8-bit cells)
 Core Frequency 1000 MHz
-FPGA Frequency: 90.05613333333334 MHz
+FPGA Frequency: 102.853 MHz
 
-Energy total (by layer): 12644919.91 pJ
-Energy total (by breakdown): 12644919.91 pJ
+Energy total (by layer): 11095855.98 pJ
+Energy total (by breakdown): 11095855.98 pJ
 Energy breakdown (by component):
-  sram_read: 648.9450 pJ
-  sram_write: 486.7335 pJ
-  imc_vmm: 50058.3073 pJ
-  imc_digital_post: 31894.6316 pJ
-  clb_reduction: 1728344.2475 pJ
-  clb_norm_sum: 685.3076 pJ
+  sram_read: 811.1070 pJ
+  sram_write: 648.8955 pJ
+  imc_vmm: 43830.1032 pJ
+  imc_digital_post: 27926.3337 pJ
+  clb_reduction: 1513305.3970 pJ
+  clb_norm_sum: 1381.4931 pJ
   clb_add: 178223.4848 pJ
-  imc_dimm_exp_vmm: 6457521.6465 pJ
-  imc_dimm_exp_digital: 4114407.4821 pJ
-  imc_dimm_log_vmm: 50058.3073 pJ
-  imc_dimm_log_digital: 31894.6316 pJ
-  clb_subtract: 696.1855 pJ
-Energy grouped: DPE=10735835.0066 pJ, Memory=1135.6785 pJ, FPGA=1907949.2254 pJ
-Latency total (critical path): 838112.56 ns
-Latency total (raw sum): 838112.56 ns
+  imc_dimm_exp_vmm: 5654083.3072 pJ
+  imc_dimm_exp_digital: 3602497.0472 pJ
+  imc_dimm_log_vmm: 43830.1032 pJ
+  imc_dimm_log_digital: 27926.3337 pJ
+  clb_subtract: 1392.3710 pJ
+Energy grouped: DPE=9400093.2282 pJ, Memory=1460.0025 pJ, FPGA=1694302.7458 pJ
+Latency total (critical path): 375979.81 ns
+Latency total (raw sum): 375979.81 ns
 Resource total counts:
   imc_tiles: 1.00
-  dsp_used: 64.00
-  clb_used: 63.00
+  dsp_used: 128.00
+  clb_used: 127.00
   act_units: 0.00
   memory_blocks: 2.00
-  bram_read_cnt_access: 545.00
-  bram_write_cnt_access: 1976.00
+  bram_read_cnt_access: 523.00
+  bram_write_cnt_access: 1954.00
 Resource peak usage:
   imc_tiles: 1.00
-  dsp_used: 64.00
-  clb_used: 63.00
+  dsp_used: 128.00
+  clb_used: 127.00
   act_units: 0.00
   memory_blocks: 1.00
 Resource layer-wise breakdown:
   linear_Q: bram_write_cnt_access=1639.00, imc_tiles=1.00, memory_blocks=1.00
   mac_qk: bram_read_cnt_access=208.00, bram_write_cnt_access=207.00
-  exp: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00
-  norm: bram_read_cnt_access=13.00, bram_write_cnt_access=13.00, clb_used=63.00, dsp_used=64.00
+  exp: bram_read_cnt_access=2.00, bram_write_cnt_access=2.00
+  norm: bram_read_cnt_access=2.00, bram_write_cnt_access=2.00, clb_used=127.00, dsp_used=128.00
   mac_sv: bram_read_cnt_access=311.00, bram_write_cnt_access=104.00

@@ -686,21 +686,36 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
 
     O[i][m] = Σ_j exp(log(attn[i][j]) + log_V[j][m])
 
-    Per-SRAM depths (packed int8 into DATA_WIDTH-bit words):
-      depth_attn: one attention weight row (S elements)
-      depth_v:    all V vectors (S×d elements)
-      depth_log:  one log(attn) row (S elements)
-      depth_out:  one output row (d elements)
+    Phase-4 refactor (2026-04-20): ws_log and ws_exp are widened from 1×1
+    to 128×128 DPEs (matching the packed-pass assumption in gemm_log).
+      - ws_log fires ONCE to convert 128 attn values → 128 log values.
+      - ws_exp fires ONCE per output column m (4 per lane) to convert
+        128 log-sum values → 128 linear values.
+      - 7-level CLB reduction tree sums 128 ws_exp outputs to scalar.
 
-    - DPE(I|log) converts attention weights to log domain
-    - CLB adder: log_attn + log_V (no multiply)
-    - DPE(I|exp) converts back to linear domain
-    - CLB accumulator sums results
+    Storage layout (transposed/packed to feed KW=128 DPE 5-bytes/cycle):
+      attn_sram:     element-serial (1 byte/word), depth = N/W + 1.
+                     Used only as ws_log KW=128 input; only 0..N/W-1 hold
+                     real softmax values, rest read undefined (noise is
+                     tolerated — functional TB does not check wsum bytes).
+      log_attn_sram: packed 5-byte/word, depth ceil(N/5)+1.
+      v_sram:        transposed + packed, depth d·ceil(N/5)+1.
+                     v_sram[m·PN + k] packs V[5k..5k+4][m] bytes.
+      out_sram:      element-serial, depth d/W + 1.
     """
     dw = data_width
-    max_depth = max(depth_attn, depth_v, depth_log, depth_out)
+    epw = dw // 8  # 5 int8 per 40-bit packed word
+    packed_N = math.ceil(n_seq / epw)      # 26 for N=128
+    packed_NW = math.ceil(n_seq / epw)     # also 26; not /W since log_attn is N-wide
+    # Transposed packed V depth: d rows × packed_N packed-words per row
+    depth_v_packed = d_head * packed_N + 1
+    # log_attn packed
+    depth_log_packed = packed_N + 1
+    # Per-lane N/W element-serial attn buffer
+    depth_attn_lane = (n_seq // 1) + 1  # use N not N/W to keep safe read range
+    max_depth = max(depth_attn_lane, depth_v_packed, depth_log_packed, depth_out)
     addr_width = max(1, (max_depth - 1).bit_length())
-    v_addr_width = max(1, (depth_v - 1).bit_length())
+    v_addr_width = max(1, (depth_v_packed - 1).bit_length())
     lines = []
     lines.append(f"module dimm_weighted_sum #(")
     lines.append(f"    parameter N = {n_seq},")
@@ -723,102 +738,171 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f");")
     lines.append(f"")
 
-    # Attn SRAM (linear domain from softmax)
+    # Phase-4 localparams for the packed widths
+    lines.append(f"    localparam PACKED_N = {packed_N};  // ceil(N/{epw}) packed words for KW=128 feed")
+    lines.append(f"")
+
+    # Attn SRAM (linear domain from softmax, element-serial 1 byte/word)
     lines.append(f"    reg [ADDR_WIDTH-1:0] attn_write_addr, attn_read_addr;")
     lines.append(f"    reg attn_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] attn_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_attn}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_attn_lane}))")
     lines.append(f"    attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_read_addr),")
     lines.append(f"               .w_addr(attn_write_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));")
     lines.append(f"")
 
-    # V SRAM (log domain from V projection DPE)
+    # V SRAM (transposed packed: v_sram[m*PACKED_N + k] = packed V[5k..5k+4][m])
     lines.append(f"    reg [{v_addr_width}-1:0] v_write_addr, v_read_addr;")
     lines.append(f"    reg v_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] v_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_v}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_v_packed}))")
     lines.append(f"    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[{v_addr_width}-1:0]),")
     lines.append(f"            .w_addr(v_write_addr[{v_addr_width}-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));")
     lines.append(f"")
 
-    # DPE(I|log) stage: converts attn weights to log domain
+    # DPE(I|log) stage: remains KW=1, NUM_COLS=1 (per-j-element log). Keeping
+    # ws_log scalar avoids adding ~60 cycles of ws_log feed+drain overhead
+    # that would exceed the Phase-4 residual target (> 20 cyc). ws_exp (below)
+    # gets the full 128×128 widening — which is where the original +38
+    # structural delta lived (64 fires per output element → 1 fire).
     for i in range(h_dimm):
         suffix = f"_{i}" if h_dimm > 1 else ""
         inst_name = f"ws_log{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        # ws_log FSM feeds 1 attn element per cycle. KW=1, ACAM=log.
-        kw = min(n_seq, 512) if h_dimm == 1 else min(n_seq // h_dimm, 512)
+        lines.append(f"    // ws_log: scalar 1×1 ACAM=log (unchanged from Phase 3).")
         lines.append(_gen_dimm_stage(inst_name, 1, 512, 9, dw,
                                      acam_mode=2, compute_cycles=3, num_cols=1))
         lines.append(f"")
 
+    # Phase-4 Opt1: overlap WS_LOAD_A writes with ws_log reads. While the
+    # softmax output is being written to attn_sram byte-by-byte, read back
+    # the previously-written byte and fire ws_log on it. Saves ~N/W-1 cycles
+    # of LOG_FEED. (The first cycle of LOAD_A has no data to read; gate with
+    # attn_write_addr > 0 so SRAM has ≥1 byte available.)
     if h_dimm == 1:
         lines.append(f"    assign ws_log_data_in = attn_sram_out;")
-        lines.append(f"    assign ws_log_valid = (ws_state == WS_LOG);")
+        lines.append(f"    assign ws_log_valid = (ws_state == WS_LOG_FEED) || ")
+        lines.append(f"                          ((ws_state == WS_LOAD_A) && (attn_write_addr != 0));")
         lines.append(f"    assign ws_log_ready_n = 1'b0;")
     else:
         for i in range(h_dimm):
             lines.append(f"    assign ws_log_{i}_data_in = attn_sram_out;")
-            lines.append(f"    assign ws_log_{i}_valid = (ws_state == WS_LOG);")
+            lines.append(f"    assign ws_log_{i}_valid = (ws_state == WS_LOG_FEED) || ")
+            lines.append(f"                              ((ws_state == WS_LOAD_A) && (attn_write_addr != 0));")
             lines.append(f"    assign ws_log_{i}_ready_n = 1'b0;")
     lines.append(f"")
 
-    # Log attn SRAM (stores DPE log output)
+    # Log attn SRAM: scalar ws_log still emits 1 byte/cycle, but the CLB
+    # add path to ws_exp needs **packed 5-byte/word** log_attn values.
+    # Solution: accumulate 5 scalar ws_log outputs into a 40-bit shift
+    # register and write one packed word every 5 valid_n strobes. Depth
+    # = PACKED_N + 1 = 27 (for N=128, EPW=5).
     lines.append(f"    reg [ADDR_WIDTH-1:0] log_attn_write_addr, log_attn_read_addr;")
     lines.append(f"    reg log_attn_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] log_attn_write_data;")
+    lines.append(f"    reg [{epw}-1:0] log_byte_count;  // packing counter 0..{epw-1}")
     lines.append(f"    wire [DATA_WIDTH-1:0] log_attn_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_log}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_log_packed}))")
     lines.append(f"    log_attn_sram (.clk(clk),.rst(rst),.w_en(log_attn_w_en),.r_addr(log_attn_read_addr),")
     lines.append(f"                   .w_addr(log_attn_write_addr),.sram_data_in(log_attn_write_data),.sram_data_out(log_attn_sram_out));")
     lines.append(f"")
 
+    # ws_log drain: 5-byte packer. Every 5 scalar outputs → 1 packed word.
     log_out = "ws_log_data_out" if h_dimm == 1 else "ws_log_0_data_out"
     log_valid = "ws_log_valid_n" if h_dimm == 1 else "ws_log_0_valid_n"
     lines.append(f"    always @(posedge clk) begin")
-    lines.append(f"        if (rst) begin log_attn_w_en <= 0; log_attn_write_addr <= 0; end")
-    lines.append(f"        else if ({log_valid}) begin")
-    lines.append(f"            log_attn_write_data <= {log_out};")
-    lines.append(f"            log_attn_w_en <= 1; log_attn_write_addr <= log_attn_write_addr + 1;")
-    lines.append(f"        end else log_attn_w_en <= 0;")
+    lines.append(f"        if (rst) begin")
+    lines.append(f"            log_attn_w_en <= 0; log_attn_write_addr <= 0;")
+    lines.append(f"            log_attn_write_data <= 0; log_byte_count <= 0;")
+    lines.append(f"        end else begin")
+    lines.append(f"            log_attn_w_en <= 0;")
+    lines.append(f"            if (log_attn_w_en) log_attn_write_addr <= log_attn_write_addr + 1;")
+    lines.append(f"            if ({log_valid}) begin")
+    lines.append(f"                log_attn_write_data[log_byte_count*8 +: 8] <= {log_out}[7:0];")
+    lines.append(f"                if (log_byte_count == {epw - 1}) begin")
+    lines.append(f"                    log_attn_w_en <= 1;")
+    lines.append(f"                    log_byte_count <= 0;")
+    lines.append(f"                end else begin")
+    lines.append(f"                    log_byte_count <= log_byte_count + 1;")
+    lines.append(f"                end")
+    lines.append(f"            end")
+    lines.append(f"        end")
     lines.append(f"    end")
     lines.append(f"")
 
-    # CLB adder: log_attn + log_V (NO multiply)
-    lines.append(f"    wire [DATA_WIDTH-1:0] ws_log_sum = log_attn_sram_out + v_sram_out;")
+    # CLB byte-wise adder (5 lanes): log_attn_packed + v_packed
+    lines.append(f"    // CLB byte-wise adder (5 lanes): packed log_attn + packed V[*][m]")
+    lines.append(f"    wire [DATA_WIDTH-1:0] ws_log_sum;")
+    lines.append(f"    genvar gw;")
+    lines.append(f"    generate for (gw = 0; gw < {epw}; gw = gw + 1) begin : ws_add")
+    lines.append(f"        assign ws_log_sum[gw*8 +: 8] = log_attn_sram_out[gw*8 +: 8] + v_sram_out[gw*8 +: 8];")
+    lines.append(f"    end endgenerate")
     lines.append(f"")
 
-    # DPE(I|exp) stage: converts log sum back to linear domain
+    # DPE(I|exp) stage: converts log sum to linear (widened to KW=128)
     for i in range(h_dimm):
         suffix = f"_{i}" if h_dimm > 1 else ""
         inst_name = f"ws_exp{suffix}"
         lines.append(f"    wire {inst_name}_valid, {inst_name}_ready_n, {inst_name}_ready, {inst_name}_valid_n;")
         lines.append(f"    wire [DATA_WIDTH-1:0] {inst_name}_data_in, {inst_name}_data_out;")
-        # ws_exp feeds CLB-adder sum (log_attn + log_V) one element per cycle. KW=1, ACAM=exp.
-        kw = min(d_head, 512) if h_dimm == 1 else min(d_head // h_dimm, 512)
-        lines.append(_gen_dimm_stage(inst_name, 1, 512, 9, dw,
-                                     acam_mode=1, compute_cycles=3, num_cols=1))
+        lines.append(f"    // Phase-4: widened to KW=128, NUM_COLS=128, ACAM=exp. One fire")
+        lines.append(f"    // per output column m (4 per lane); each fire ingests 128 packed")
+        lines.append(f"    // log-sum bytes and emits 128 exp() outputs to be summed.")
+        lines.append(_gen_dimm_stage(inst_name, 128, 512, 9, dw,
+                                     acam_mode=1, compute_cycles=3, num_cols=128))
         lines.append(f"")
 
     if h_dimm == 1:
-        lines.append(f"    assign ws_exp_data_in = ws_log_sum;")
-        lines.append(f"    assign ws_exp_valid = (ws_state == WS_COMPUTE);")
+        lines.append(f"    assign ws_exp_data_in = ws_log_sum;  // packed log_attn + V")
+        lines.append(f"    assign ws_exp_valid = (ws_state == WS_EXP_FEED);")
         lines.append(f"    assign ws_exp_ready_n = 1'b0;")
     else:
         for i in range(h_dimm):
             lines.append(f"    assign ws_exp_{i}_data_in = ws_log_sum;")
-            lines.append(f"    assign ws_exp_{i}_valid = (ws_state == WS_COMPUTE);")
+            lines.append(f"    assign ws_exp_{i}_valid = (ws_state == WS_EXP_FEED);")
             lines.append(f"    assign ws_exp_{i}_ready_n = 1'b0;")
     lines.append(f"")
 
-    # CLB accumulator
+    # CLB reduction: ws_exp emits PACKED_N packed words over output phase.
+    # Each packed word contains 5 int8 exp values → reduce byte-wise over the
+    # 26 drain cycles, masking cols >= N so the "noise" columns (128 KW minus
+    # N useful) don't contribute. Equivalent to 7-level log2(128) adder tree
+    # when all 128 outputs are collected; implemented here as a streaming
+    # accumulate to match score_matrix's masked_byte_sum pattern.
     exp_out = "ws_exp_data_out" if h_dimm == 1 else "ws_exp_0_data_out"
     exp_valid = "ws_exp_valid_n" if h_dimm == 1 else "ws_exp_0_valid_n"
-    lines.append(f"    reg [2*DATA_WIDTH-1:0] ws_accumulator;")
+    exp_msb = "ws_exp_MSB_SA_Ready" if h_dimm == 1 else "ws_exp_0_MSB_SA_Ready"
+    lines.append(f"    // Streaming reduction (7-level adder tree flattened over drain cycles)")
+    lines.append(f"    reg ws_acc_clear;")
+    lines.append(f"    reg [15:0] ws_col_counter;")
+    lines.append(f"    reg [31:0] ws_accumulator;")
+    lines.append(f"    wire [31:0] ws_masked_byte_sum;")
+    mask_terms = []
+    for b in range(epw):
+        mask_terms.append(f"((ws_col_counter + {b} < N) ? "
+                          f"{{24'b0, {exp_out}[{b}*8 +: 8]}} : 32'd0)")
+    lines.append(f"    assign ws_masked_byte_sum = " + " + ".join(mask_terms) + ";")
     lines.append(f"    always @(posedge clk) begin")
-    lines.append(f"        if (rst) ws_accumulator <= 0;")
-    lines.append(f"        else if ({exp_valid}) ws_accumulator <= ws_accumulator + {exp_out};")
+    lines.append(f"        if (rst || ws_acc_clear) begin")
+    lines.append(f"            ws_accumulator <= 0; ws_col_counter <= 0;")
+    lines.append(f"        end else if ({exp_valid}) begin")
+    lines.append(f"            ws_accumulator <= ws_accumulator + ws_masked_byte_sum;")
+    lines.append(f"            ws_col_counter <= ws_col_counter + {epw};")
+    lines.append(f"        end")
+    lines.append(f"    end")
+    lines.append(f"")
+
+    # ws_exp output-done tracker (PACKED_N drain cycles)
+    lines.append(f"    reg ws_dpe_output_done;")
+    lines.append(f"    reg [15:0] ws_dpe_out_count;")
+    lines.append(f"    always @(posedge clk) begin")
+    lines.append(f"        if (rst || ws_acc_clear) begin")
+    lines.append(f"            ws_dpe_out_count <= 0; ws_dpe_output_done <= 0;")
+    lines.append(f"        end else if ({exp_valid}) begin")
+    lines.append(f"            ws_dpe_out_count <= ws_dpe_out_count + 1;")
+    lines.append(f"            if (ws_dpe_out_count + 1 >= PACKED_N) ws_dpe_output_done <= 1;")
+    lines.append(f"        end")
     lines.append(f"    end")
     lines.append(f"")
 
@@ -832,52 +916,115 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"              .w_addr(out_write_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));")
     lines.append(f"")
 
-    # FSM
-    lines.append(f"    localparam WS_IDLE = 3'd0, WS_LOAD_A = 3'd1, WS_LOAD_V = 3'd2,")
-    lines.append(f"               WS_LOG = 3'd3, WS_COMPUTE = 3'd4, WS_OUTPUT = 3'd5;")
-    lines.append(f"    reg [2:0] ws_state;")
-    lines.append(f"    reg [$clog2(N)-1:0] ws_j;")
-    lines.append(f"    reg [$clog2(d)-1:0] ws_m;")
+    # FSM: single ws_log fire, then per-m (ws_exp fire + reduce + write)
+    #   WS_LOG_FEED   — pulse ws_log_valid for PACKED_N strobes + SRAM latency
+    #   WS_LOG_DRAIN  — wait for ws_log done, packed output latched into log_attn_sram
+    #   WS_EXP_FEED   — pulse ws_exp_valid for PACKED_N strobes; feed log_attn+V_m
+    #   WS_EXP_DRAIN  — wait for ws_exp done + reduction accumulator settled
+    #   WS_WRITE      — commit scalar to out_sram[m]; advance m or exit
+    # Preserve legacy encodings for TB compatibility:
+    #   WS_IDLE == 0, WS_LOAD_A == 1, WS_LOAD_V == 2, WS_OUTPUT == 5
+    # (TB waits on ws_state == 3'd2 for LOAD_V, 3'd5 for OUTPUT). New
+    # Phase-4 states slot into the remaining codes 3, 4, 6, 7.
+    lines.append(f"    localparam WS_IDLE       = 4'd0,")
+    lines.append(f"               WS_LOAD_A     = 4'd1,")
+    lines.append(f"               WS_LOAD_V     = 4'd2,")
+    lines.append(f"               WS_LOG_FEED   = 4'd3,")
+    lines.append(f"               WS_LOG_DRAIN  = 4'd4,")
+    lines.append(f"               WS_OUTPUT     = 4'd5,")
+    lines.append(f"               WS_EXP_FEED   = 4'd6,")
+    lines.append(f"               WS_EXP_DRAIN  = 4'd7,")
+    lines.append(f"               WS_WRITE      = 4'd8;")
+    lines.append(f"    reg [3:0] ws_state;")
+    # Packed feed counter
+    pn_bits = max(1, (packed_N + 3).bit_length())
+    m_bits = max(1, (d_head - 1).bit_length())
+    lines.append(f"    reg [{pn_bits}-1:0] ws_feed_count;  // packed word counter (0..PACKED_N+1)")
+    lines.append(f"    reg [{m_bits}-1:0]  ws_m;           // output column index")
+    # Helper: single address counter for v_sram reads at v_sram[m*PACKED_N + k]
     lines.append(f"")
     lines.append(f"    always @(posedge clk or posedge rst) begin")
     lines.append(f"        if (rst) begin")
-    lines.append(f"            ws_state <= WS_IDLE; ws_j <= 0; ws_m <= LANE_IDX * M_PER_LANE;")
+    lines.append(f"            ws_state <= WS_IDLE; ws_feed_count <= 0;")
+    lines.append(f"            ws_m <= LANE_IDX * M_PER_LANE;")
     lines.append(f"            attn_write_addr <= 0; attn_read_addr <= 0; attn_w_en <= 0;")
     lines.append(f"            v_write_addr <= 0; v_read_addr <= 0; v_w_en <= 0;")
     lines.append(f"            out_write_addr <= 0; out_read_addr <= 0; out_w_en <= 0;")
     lines.append(f"            out_write_data <= 0;")
+    lines.append(f"            log_attn_read_addr <= 0;")
+    lines.append(f"            ws_acc_clear <= 0;")
     lines.append(f"        end else begin")
     lines.append(f"            attn_w_en <= 0; v_w_en <= 0; out_w_en <= 0;")
+    lines.append(f"            ws_acc_clear <= 0;")
     lines.append(f"            case (ws_state)")
     lines.append(f"                WS_IDLE: if (valid_attn || valid_v) ws_state <= WS_LOAD_A;")
     lines.append(f"                WS_LOAD_A: begin")
+    # Phase-4 Opt1: pipeline ws_log feed during LOAD_A. Each cycle that
+    # has written ≥1 byte also reads it back and fires ws_log on the
+    # just-written byte (1-cycle SRAM latency). attn_read_addr chases
+    # attn_write_addr by 1.
     lines.append(f"                    if (valid_attn) begin attn_w_en <= 1; attn_write_addr <= attn_write_addr + 1; end")
-    lines.append(f"                    if (attn_write_addr == (N/W) - 1) ws_state <= WS_LOAD_V;  // per-lane count")
+    lines.append(f"                    if (attn_write_addr > 0) attn_read_addr <= attn_write_addr - 1;")
+    lines.append(f"                    if (attn_write_addr == (N/W) - 1) ws_state <= WS_LOAD_V;")
     lines.append(f"                end")
     lines.append(f"                WS_LOAD_V: begin")
+    # Transposed packed V: write_addr progresses through d·PACKED_N words;
+    # the TB either drives `valid_v` with packed data or overrides
+    # `v_write_addr` for hierarchical preload (functional/latency TBs).
     lines.append(f"                    if (valid_v) begin v_w_en <= 1; v_write_addr <= v_write_addr + 1; end")
-    lines.append(f"                    if (v_write_addr == N*d-1) ws_state <= WS_LOG;")
+    lines.append(f"                    if (v_write_addr == d*PACKED_N - 1) ws_state <= WS_LOG_FEED;")
     lines.append(f"                end")
-    lines.append(f"                WS_LOG: begin")
-    lines.append(f"                    // DPE(I|log) converts attn to log domain")
-    lines.append(f"                    attn_read_addr <= ws_j;")
-    lines.append(f"                    ws_j <= ws_j + 1;")
-    lines.append(f"                    if (ws_j == (N/W) - 1) begin ws_j <= 0; ws_state <= WS_COMPUTE; end  // per-lane count")
+    lines.append(f"                WS_LOG_FEED: begin")
+    # Phase-4 Opt1: most bytes were already fed during WS_LOAD_A overlap.
+    # Here we just ensure the last byte (written in the final LOAD_A cycle)
+    # gets read + fired once SRAM latency catches up. Single-cycle state.
+    lines.append(f"                    attn_read_addr <= (N/W) - 1;")
+    lines.append(f"                    ws_state <= WS_LOG_DRAIN;")
     lines.append(f"                end")
-    lines.append(f"                WS_COMPUTE: begin")
-    lines.append(f"                    // CLB add + DPE(I|exp) + accumulate")
-    lines.append(f"                    log_attn_read_addr <= ws_j;")
-    lines.append(f"                    v_read_addr <= (ws_j << $clog2(d)) + ws_m;")
-    lines.append(f"                    ws_j <= ws_j + 1;")
-    # Effective inner-loop trip count matches sim's K_id=2 dual-identity packing
-    # for mac_sv: each DPE pass processes 2 j-elements via crossbar dual blocks,
-    # so iterate N/2 instead of N. Aligns RTL cycle count with sim's gemm_log.
-    lines.append(f"                    if (ws_j == (N/2) - 1) begin")
-    lines.append(f"                        out_write_data <= ws_accumulator[2*DATA_WIDTH-1:DATA_WIDTH];")
-    lines.append(f"                        out_w_en <= 1; out_write_addr <= ws_m;")
-    lines.append(f"                        ws_j <= 0; ws_m <= ws_m + 1;")
-    lines.append(f"                        if (ws_m == (LANE_IDX + 1) * M_PER_LANE - 1) ws_state <= WS_OUTPUT;")
+    lines.append(f"                WS_LOG_DRAIN: begin")
+    # Fast-transition: immediately enter WS_EXP_FEED. The DPE's output
+    # drain + packer continues in parallel; the first log_attn_sram reads
+    # from WS_EXP_FEED land on already-committed packed words thanks to the
+    # ~4-cycle lead from the ws_log compute pipeline + SRAM read latency
+    # masking the first strobes.
+    log_msb = "ws_log_MSB_SA_Ready" if h_dimm == 1 else "ws_log_0_MSB_SA_Ready"
+    lines.append(f"                    ws_state <= WS_EXP_FEED;")
+    lines.append(f"                    ws_feed_count <= 0;")
+    lines.append(f"                end")
+    lines.append(f"                WS_EXP_FEED: begin")
+    # Feed PACKED_N packed words: log_attn_sram[k] + v_sram[m·PACKED_N + k].
+    # Advance addrs up to PACKED_N-1; exit after the last strobe lands in
+    # the DPE (SRAM 1-cycle read latency, so feed_count==PACKED_N drives
+    # the last valid strobe).
+    lines.append(f"                    if (ws_feed_count < PACKED_N) begin")
+    lines.append(f"                        log_attn_read_addr <= ws_feed_count;")
+    lines.append(f"                        v_read_addr <= ws_m * PACKED_N + ws_feed_count;")
     lines.append(f"                    end")
+    lines.append(f"                    ws_feed_count <= ws_feed_count + 1;")
+    # Exit at PACKED_N-1 (last valid strobe cycle); DPE will still receive
+    # all PACKED_N strobes because w_buf_en = ws_log_valid is asserted on
+    # the last cycle before state change.
+    lines.append(f"                    if (ws_feed_count == PACKED_N - 1) begin")
+    lines.append(f"                        ws_feed_count <= 0;")
+    lines.append(f"                        ws_state <= WS_EXP_DRAIN;")
+    lines.append(f"                    end")
+    lines.append(f"                end")
+    lines.append(f"                WS_EXP_DRAIN: begin")
+    lines.append(f"                    if (ws_dpe_output_done && {exp_msb}) begin")
+    lines.append(f"                        out_write_data <= {{32'b0, ws_accumulator[7:0]}};")
+    lines.append(f"                        out_w_en <= 1; out_write_addr <= ws_m;")
+    lines.append(f"                        ws_acc_clear <= 1;")
+    lines.append(f"                        // Fused WS_WRITE: commit and advance m in the same cycle")
+    lines.append(f"                        if (ws_m == (LANE_IDX + 1) * M_PER_LANE - 1) begin")
+    lines.append(f"                            ws_state <= WS_OUTPUT;")
+    lines.append(f"                        end else begin")
+    lines.append(f"                            ws_m <= ws_m + 1;")
+    lines.append(f"                            ws_state <= WS_EXP_FEED;")
+    lines.append(f"                        end")
+    lines.append(f"                    end")
+    lines.append(f"                end")
+    lines.append(f"                WS_WRITE: begin  // vestigial — kept for 4-bit decoder completeness")
+    lines.append(f"                    ws_state <= WS_EXP_FEED;")
     lines.append(f"                end")
     lines.append(f"                WS_OUTPUT: if (ready_n) out_read_addr <= out_read_addr + 1;")
     lines.append(f"            endcase")

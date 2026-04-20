@@ -485,8 +485,8 @@ module dimm_weighted_sum #(
     parameter N = 128,
     parameter d = 64,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 14,
-    parameter DEPTH = 8193,
+    parameter ADDR_WIDTH = 11,
+    parameter DEPTH = 1665,
     parameter LANE_IDX = 0,       // column-lane this instance owns (0..W-1)
     parameter W = 1,              // total parallel column-lanes at top
     parameter M_PER_LANE = d / W  // output cols per lane (= d/W)
@@ -501,6 +501,8 @@ module dimm_weighted_sum #(
     output wire valid_n
 );
 
+    localparam PACKED_N = 26;  // ceil(N/5) packed words for KW=128 feed
+
     reg [ADDR_WIDTH-1:0] attn_write_addr, attn_read_addr;
     reg attn_w_en;
     wire [DATA_WIDTH-1:0] attn_sram_out;
@@ -508,15 +510,16 @@ module dimm_weighted_sum #(
     attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_read_addr),
                .w_addr(attn_write_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));
 
-    reg [14-1:0] v_write_addr, v_read_addr;
+    reg [11-1:0] v_write_addr, v_read_addr;
     reg v_w_en;
     wire [DATA_WIDTH-1:0] v_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(8193))
-    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[14-1:0]),
-            .w_addr(v_write_addr[14-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(1665))
+    v_sram (.clk(clk),.rst(rst),.w_en(v_w_en),.r_addr(v_read_addr[11-1:0]),
+            .w_addr(v_write_addr[11-1:0]),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));
 
     wire ws_log_valid, ws_log_ready_n, ws_log_ready, ws_log_valid_n;
     wire [DATA_WIDTH-1:0] ws_log_data_in, ws_log_data_out;
+    // ws_log: scalar 1×1 ACAM=log (unchanged from Phase 3).
     // DPE direct instantiation (no conv_controller/SRAM wrapper)
     wire ws_log_dpe_done, ws_log_reg_full;
     wire ws_log_MSB_SA_Ready, ws_log_shift_add_done, ws_log_shift_add_bypass_ctrl;
@@ -558,29 +561,50 @@ module dimm_weighted_sum #(
     assign ws_log_valid_n = ws_log_dpe_done;
 
     assign ws_log_data_in = attn_sram_out;
-    assign ws_log_valid = (ws_state == WS_LOG);
+    assign ws_log_valid = (ws_state == WS_LOG_FEED) || 
+                          ((ws_state == WS_LOAD_A) && (attn_write_addr != 0));
     assign ws_log_ready_n = 1'b0;
 
     reg [ADDR_WIDTH-1:0] log_attn_write_addr, log_attn_read_addr;
     reg log_attn_w_en;
     reg [DATA_WIDTH-1:0] log_attn_write_data;
+    reg [5-1:0] log_byte_count;  // packing counter 0..4
     wire [DATA_WIDTH-1:0] log_attn_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(27))
     log_attn_sram (.clk(clk),.rst(rst),.w_en(log_attn_w_en),.r_addr(log_attn_read_addr),
                    .w_addr(log_attn_write_addr),.sram_data_in(log_attn_write_data),.sram_data_out(log_attn_sram_out));
 
     always @(posedge clk) begin
-        if (rst) begin log_attn_w_en <= 0; log_attn_write_addr <= 0; end
-        else if (ws_log_valid_n) begin
-            log_attn_write_data <= ws_log_data_out;
-            log_attn_w_en <= 1; log_attn_write_addr <= log_attn_write_addr + 1;
-        end else log_attn_w_en <= 0;
+        if (rst) begin
+            log_attn_w_en <= 0; log_attn_write_addr <= 0;
+            log_attn_write_data <= 0; log_byte_count <= 0;
+        end else begin
+            log_attn_w_en <= 0;
+            if (log_attn_w_en) log_attn_write_addr <= log_attn_write_addr + 1;
+            if (ws_log_valid_n) begin
+                log_attn_write_data[log_byte_count*8 +: 8] <= ws_log_data_out[7:0];
+                if (log_byte_count == 4) begin
+                    log_attn_w_en <= 1;
+                    log_byte_count <= 0;
+                end else begin
+                    log_byte_count <= log_byte_count + 1;
+                end
+            end
+        end
     end
 
-    wire [DATA_WIDTH-1:0] ws_log_sum = log_attn_sram_out + v_sram_out;
+    // CLB byte-wise adder (5 lanes): packed log_attn + packed V[*][m]
+    wire [DATA_WIDTH-1:0] ws_log_sum;
+    genvar gw;
+    generate for (gw = 0; gw < 5; gw = gw + 1) begin : ws_add
+        assign ws_log_sum[gw*8 +: 8] = log_attn_sram_out[gw*8 +: 8] + v_sram_out[gw*8 +: 8];
+    end endgenerate
 
     wire ws_exp_valid, ws_exp_ready_n, ws_exp_ready, ws_exp_valid_n;
     wire [DATA_WIDTH-1:0] ws_exp_data_in, ws_exp_data_out;
+    // Phase-4: widened to KW=128, NUM_COLS=128, ACAM=exp. One fire
+    // per output column m (4 per lane); each fire ingests 128 packed
+    // log-sum bytes and emits 128 exp() outputs to be summed.
     // DPE direct instantiation (no conv_controller/SRAM wrapper)
     wire ws_exp_dpe_done, ws_exp_reg_full;
     wire ws_exp_MSB_SA_Ready, ws_exp_shift_add_done, ws_exp_shift_add_bypass_ctrl;
@@ -597,7 +621,7 @@ module dimm_weighted_sum #(
         end
     end
     // dpe instantiation — no #() params (arch XML model is parameterless)
-    // Intended: KERNEL_WIDTH=1, NUM_COLS=1,
+    // Intended: KERNEL_WIDTH=128, NUM_COLS=128,
     //           ACAM_MODE=1, COMPUTE_CYCLES=3
     dpe ws_exp (
         .clk(clk), .reset(rst),
@@ -621,14 +645,34 @@ module dimm_weighted_sum #(
     );
     assign ws_exp_valid_n = ws_exp_dpe_done;
 
-    assign ws_exp_data_in = ws_log_sum;
-    assign ws_exp_valid = (ws_state == WS_COMPUTE);
+    assign ws_exp_data_in = ws_log_sum;  // packed log_attn + V
+    assign ws_exp_valid = (ws_state == WS_EXP_FEED);
     assign ws_exp_ready_n = 1'b0;
 
-    reg [2*DATA_WIDTH-1:0] ws_accumulator;
+    // Streaming reduction (7-level adder tree flattened over drain cycles)
+    reg ws_acc_clear;
+    reg [15:0] ws_col_counter;
+    reg [31:0] ws_accumulator;
+    wire [31:0] ws_masked_byte_sum;
+    assign ws_masked_byte_sum = ((ws_col_counter + 0 < N) ? {24'b0, ws_exp_data_out[0*8 +: 8]} : 32'd0) + ((ws_col_counter + 1 < N) ? {24'b0, ws_exp_data_out[1*8 +: 8]} : 32'd0) + ((ws_col_counter + 2 < N) ? {24'b0, ws_exp_data_out[2*8 +: 8]} : 32'd0) + ((ws_col_counter + 3 < N) ? {24'b0, ws_exp_data_out[3*8 +: 8]} : 32'd0) + ((ws_col_counter + 4 < N) ? {24'b0, ws_exp_data_out[4*8 +: 8]} : 32'd0);
     always @(posedge clk) begin
-        if (rst) ws_accumulator <= 0;
-        else if (ws_exp_valid_n) ws_accumulator <= ws_accumulator + ws_exp_data_out;
+        if (rst || ws_acc_clear) begin
+            ws_accumulator <= 0; ws_col_counter <= 0;
+        end else if (ws_exp_valid_n) begin
+            ws_accumulator <= ws_accumulator + ws_masked_byte_sum;
+            ws_col_counter <= ws_col_counter + 5;
+        end
+    end
+
+    reg ws_dpe_output_done;
+    reg [15:0] ws_dpe_out_count;
+    always @(posedge clk) begin
+        if (rst || ws_acc_clear) begin
+            ws_dpe_out_count <= 0; ws_dpe_output_done <= 0;
+        end else if (ws_exp_valid_n) begin
+            ws_dpe_out_count <= ws_dpe_out_count + 1;
+            if (ws_dpe_out_count + 1 >= PACKED_N) ws_dpe_output_done <= 1;
+        end
     end
 
     reg [ADDR_WIDTH-1:0] out_write_addr, out_read_addr;
@@ -639,48 +683,78 @@ module dimm_weighted_sum #(
     out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),
               .w_addr(out_write_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));
 
-    localparam WS_IDLE = 3'd0, WS_LOAD_A = 3'd1, WS_LOAD_V = 3'd2,
-               WS_LOG = 3'd3, WS_COMPUTE = 3'd4, WS_OUTPUT = 3'd5;
-    reg [2:0] ws_state;
-    reg [$clog2(N)-1:0] ws_j;
-    reg [$clog2(d)-1:0] ws_m;
+    localparam WS_IDLE       = 4'd0,
+               WS_LOAD_A     = 4'd1,
+               WS_LOAD_V     = 4'd2,
+               WS_LOG_FEED   = 4'd3,
+               WS_LOG_DRAIN  = 4'd4,
+               WS_OUTPUT     = 4'd5,
+               WS_EXP_FEED   = 4'd6,
+               WS_EXP_DRAIN  = 4'd7,
+               WS_WRITE      = 4'd8;
+    reg [3:0] ws_state;
+    reg [5-1:0] ws_feed_count;  // packed word counter (0..PACKED_N+1)
+    reg [6-1:0]  ws_m;           // output column index
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            ws_state <= WS_IDLE; ws_j <= 0; ws_m <= LANE_IDX * M_PER_LANE;
+            ws_state <= WS_IDLE; ws_feed_count <= 0;
+            ws_m <= LANE_IDX * M_PER_LANE;
             attn_write_addr <= 0; attn_read_addr <= 0; attn_w_en <= 0;
             v_write_addr <= 0; v_read_addr <= 0; v_w_en <= 0;
             out_write_addr <= 0; out_read_addr <= 0; out_w_en <= 0;
             out_write_data <= 0;
+            log_attn_read_addr <= 0;
+            ws_acc_clear <= 0;
         end else begin
             attn_w_en <= 0; v_w_en <= 0; out_w_en <= 0;
+            ws_acc_clear <= 0;
             case (ws_state)
                 WS_IDLE: if (valid_attn || valid_v) ws_state <= WS_LOAD_A;
                 WS_LOAD_A: begin
                     if (valid_attn) begin attn_w_en <= 1; attn_write_addr <= attn_write_addr + 1; end
-                    if (attn_write_addr == (N/W) - 1) ws_state <= WS_LOAD_V;  // per-lane count
+                    if (attn_write_addr > 0) attn_read_addr <= attn_write_addr - 1;
+                    if (attn_write_addr == (N/W) - 1) ws_state <= WS_LOAD_V;
                 end
                 WS_LOAD_V: begin
                     if (valid_v) begin v_w_en <= 1; v_write_addr <= v_write_addr + 1; end
-                    if (v_write_addr == N*d-1) ws_state <= WS_LOG;
+                    if (v_write_addr == d*PACKED_N - 1) ws_state <= WS_LOG_FEED;
                 end
-                WS_LOG: begin
-                    // DPE(I|log) converts attn to log domain
-                    attn_read_addr <= ws_j;
-                    ws_j <= ws_j + 1;
-                    if (ws_j == (N/W) - 1) begin ws_j <= 0; ws_state <= WS_COMPUTE; end  // per-lane count
+                WS_LOG_FEED: begin
+                    attn_read_addr <= (N/W) - 1;
+                    ws_state <= WS_LOG_DRAIN;
                 end
-                WS_COMPUTE: begin
-                    // CLB add + DPE(I|exp) + accumulate
-                    log_attn_read_addr <= ws_j;
-                    v_read_addr <= (ws_j << $clog2(d)) + ws_m;
-                    ws_j <= ws_j + 1;
-                    if (ws_j == (N/2) - 1) begin
-                        out_write_data <= ws_accumulator[2*DATA_WIDTH-1:DATA_WIDTH];
-                        out_w_en <= 1; out_write_addr <= ws_m;
-                        ws_j <= 0; ws_m <= ws_m + 1;
-                        if (ws_m == (LANE_IDX + 1) * M_PER_LANE - 1) ws_state <= WS_OUTPUT;
+                WS_LOG_DRAIN: begin
+                    ws_state <= WS_EXP_FEED;
+                    ws_feed_count <= 0;
+                end
+                WS_EXP_FEED: begin
+                    if (ws_feed_count < PACKED_N) begin
+                        log_attn_read_addr <= ws_feed_count;
+                        v_read_addr <= ws_m * PACKED_N + ws_feed_count;
                     end
+                    ws_feed_count <= ws_feed_count + 1;
+                    if (ws_feed_count == PACKED_N - 1) begin
+                        ws_feed_count <= 0;
+                        ws_state <= WS_EXP_DRAIN;
+                    end
+                end
+                WS_EXP_DRAIN: begin
+                    if (ws_dpe_output_done && ws_exp_MSB_SA_Ready) begin
+                        out_write_data <= {32'b0, ws_accumulator[7:0]};
+                        out_w_en <= 1; out_write_addr <= ws_m;
+                        ws_acc_clear <= 1;
+                        // Fused WS_WRITE: commit and advance m in the same cycle
+                        if (ws_m == (LANE_IDX + 1) * M_PER_LANE - 1) begin
+                            ws_state <= WS_OUTPUT;
+                        end else begin
+                            ws_m <= ws_m + 1;
+                            ws_state <= WS_EXP_FEED;
+                        end
+                    end
+                end
+                WS_WRITE: begin  // vestigial — kept for 4-bit decoder completeness
+                    ws_state <= WS_EXP_FEED;
                 end
                 WS_OUTPUT: if (ready_n) out_read_addr <= out_read_addr + 1;
             endcase

@@ -77,15 +77,19 @@ module tb_nldpe_dimm_top_latency;
     end
 
     // Identity-weight preload for all 64 DPE instances per lane.
+    // Phase 4: ws_exp widened to KW=128, NUM_COLS=128 — preload 128-diagonal
+    // identity. ws_log remains scalar (KW=1) — weights[0][0] = 1.
     `define LOAD_WEIGHTS(L) begin \
         for (ww = 0; ww < 128; ww = ww + 1) \
             dut.dimm_lane[L].score_inst.dimm_exp.weights[ww][ww] = 1; \
         dut.dimm_lane[L].softmax_inst.sm_exp.weights[0][0] = 1; \
         dut.dimm_lane[L].wsum_inst.ws_log.weights[0][0] = 1; \
-        dut.dimm_lane[L].wsum_inst.ws_exp.weights[0][0] = 1; \
+        for (ww = 0; ww < 128; ww = ww + 1) \
+            dut.dimm_lane[L].wsum_inst.ws_exp.weights[ww][ww] = 1; \
     end
 
-    // Preload Q/K/V SRAMs with one-hot Q + identity K/V.
+    // Preload Q/K/V SRAMs with one-hot Q + identity K + transposed/packed V.
+    // Phase-4 v_sram layout: v_sram[m*26 + (j/EPW)][(j%EPW)*8 +: 8] = V[j][m].
     `define PRELOAD_SRAMS(L) begin \
         for (i = 0; i < 14; i = i + 1) \
             dut.dimm_lane[L].score_inst.q_sram.mem[i] = 0; \
@@ -93,19 +97,22 @@ module tb_nldpe_dimm_top_latency;
         for (i = 0; i < 1665; i = i + 1) begin \
             dut.dimm_lane[L].score_inst.k_sram_a.mem[i] = 0; \
             dut.dimm_lane[L].score_inst.k_sram_b.mem[i] = 0; \
+            dut.dimm_lane[L].wsum_inst.v_sram.mem[i] = 0; \
         end \
         for (j = 0; j < D; j = j + 1) begin \
             dut.dimm_lane[L].score_inst.k_sram_a.mem[j*PD + (j/EPW)][(j%EPW)*8 +: 8] = 1; \
             dut.dimm_lane[L].score_inst.k_sram_b.mem[j*PD + (j/EPW)][(j%EPW)*8 +: 8] = 1; \
         end \
-        for (j = 0; j < N; j = j + 1) \
+        for (j = 0; j < D; j = j + 1) \
             for (m = 0; m < D; m = m + 1) \
-                dut.dimm_lane[L].wsum_inst.v_sram.mem[j*D + m] = (j < D && j == m) ? 40'd1 : 40'd0; \
+                if (j == m) \
+                    dut.dimm_lane[L].wsum_inst.v_sram.mem[m*26 + (j/EPW)][(j%EPW)*8 +: 8] = 8'd1; \
     end
 
     // Force FSM into COMPUTE + past all LOAD states so we only measure
     // compute+output time.  Also pre-advance address counters so FSM doesn't
     // get stuck on LOAD exit checks.
+    // Phase-4: wsum v_write_addr target is d*PACKED_N - 1 = 1663 (was N*D-1).
     `define FORCE_FSM(L) begin \
         dut.dimm_lane[L].score_inst.state = 3;       /* S_COMPUTE */ \
         dut.dimm_lane[L].score_inst.q_write_addr = 13; \
@@ -114,28 +121,28 @@ module tb_nldpe_dimm_top_latency;
         dut.dimm_lane[L].score_inst.mac_count = 0; \
         dut.dimm_lane[L].score_inst.feed_half = 0; \
         dut.dimm_lane[L].score_inst.feed_phase = 0; \
-        dut.dimm_lane[L].wsum_inst.v_write_addr = N*D - 1; \
+        dut.dimm_lane[L].wsum_inst.v_write_addr = D*26 - 1; \
     end
 
     // Force v_write_addr each cycle while in WS_LOAD_V so state exits quickly.
     always @(posedge clk) begin
         if (!rst && dut.dimm_lane[0].wsum_inst.ws_state == 3'd2) begin
-            dut.dimm_lane[ 0].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 1].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 2].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 3].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 4].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 5].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 6].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 7].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 8].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[ 9].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[10].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[11].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[12].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[13].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[14].wsum_inst.v_write_addr = N*D - 1;
-            dut.dimm_lane[15].wsum_inst.v_write_addr = N*D - 1;
+            dut.dimm_lane[ 0].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 1].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 2].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 3].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 4].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 5].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 6].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 7].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 8].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[ 9].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[10].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[11].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[12].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[13].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[14].wsum_inst.v_write_addr = D*26 - 1;
+            dut.dimm_lane[15].wsum_inst.v_write_addr = D*26 - 1;
         end
     end
 

@@ -7,8 +7,8 @@
         "root_cause": "file:line citation of the structural or FSM-handshake source of the residual",
         "classification": "modelling_granularity | structural"
     },
-    "updated": "2026-04-19",
-    "note": "Phase 3 (2026-04-19) residual stage deltas between NL-DPE DIMM-top RTL and the Regime-B sim after the cycles_per_pass*cols_per_dpe + 4 cycle/pass FSM-handshake extraction fix in gen_expected_cycles.py::_compute_sim_per_row. The DPE stub uses ACAM COMPUTE_CYCLES=3 (dpe_stub.v:35) whereas gemm_log clips compute_cycles to 1 (fpga_fabric.py:395); the outer dimm_score_matrix/dimm_weighted_sum FSMs also add S_WAIT_DPE + S_WRITE_B handshakes (nldpe_dimm_top_d64_c128.v:285-301). The wsum residual is structural: the RTL uses a 1x1 DPE (ws_log/ws_exp with KERNEL=NUM_COLS=1) that fires once per ws_j iteration (N/2=64 fires per output element, nldpe_dimm_top_d64_c128.v:673-684) whereas gemm_log models a single packed 128-wide pass per output element.",
+    "updated": "2026-04-20",
+    "note": "Phase 4 (2026-04-20) — wsum structural delta closed by widening ws_exp from KW=NUM_COLS=1 to KW=NUM_COLS=128 in gen_attention_wrapper.py::_gen_dimm_weighted_sum. The N/2=64 fires-per-output-element inner loop is replaced by a single DPE fire per output column m (4 fires per lane at d=64, W=16), and a streaming 7-level-equivalent reduction tree sums the 128 packed ws_exp outputs into a scalar. ws_log remains scalar (KW=1) and overlaps with WS_LOAD_A to avoid a ~60-cyc widening overhead on the log preprocessing path. Residual wsum Δ dropped from +38 structural → +16 modelling_granularity (FSM boundaries around WS_LOG_FEED/WS_LOG_DRAIN/WS_EXP_FEED/WS_EXP_DRAIN, plus the packer latency). Phase 3 (2026-04-19) residual stage deltas pre-Phase-4: score +16, softmax +10, wsum +38, e2e +64.",
     "configs": {
         "nldpe_dimm_top_d64_c128": {
             "deltas": [
@@ -28,17 +28,17 @@
                 },
                 {
                     "stage": "wsum",
-                    "delta_cycles": 38,
-                    "tolerance": 8,
-                    "root_cause": "Structural: the wsum module's ws_log/ws_exp DPEs are 1x1 (KERNEL_WIDTH=1, NUM_COLS=1 per comments at nldpe_dimm_top_d64_c128.v:536,600). WS_COMPUTE fires the DPE N/2=64 times per output element (ws_j loop, line 673-684) whereas gemm_log models a single packed cols=128-wide pass (cycles_per_pass=55). The RTL-effective per-element count = N/2 + write + state transitions ~= 68 cyc, vs sim's (cycles_per_pass + 4) = 59 cyc. Over M_PER_LANE=4 output elements, structural delta = 4 * (68-59) = ~36 cyc; with bootstrap WS_LOG warmup (~2 cyc) this totals ~38 cyc.",
-                    "classification": "structural"
+                    "delta_cycles": 16,
+                    "tolerance": 6,
+                    "root_cause": "Phase-4 modelling_granularity residual after widening ws_exp from 1x1 to 128x128 (gen_attention_wrapper.py::_gen_dimm_weighted_sum). Per-m cost matches sim at ~60 cyc (27-cyc feed + 33-cyc drain ≈ cycles_per_pass+4), but wsum also incurs a one-time pre-m setup not counted by gemm_log: 1 cyc IDLE→LOAD_A + 8 cyc LOAD_A (byte-serial attn_sram write from softmax output, overlapped with ws_log feed) + 1 cyc LOG_FEED + 1 cyc LOG_DRAIN + 1 cyc LOAD_V ≈ 12 cyc. With 4-cyc accumulator-clear handoff between m iterations, the residual totals ~16 cyc. Not structural: arises from FSM state transitions and SRAM packer latency, both of which gemm_log rolls into steady-state assumptions.",
+                    "classification": "modelling_granularity"
                 },
                 {
                     "stage": "e2e",
-                    "delta_cycles": 64,
-                    "tolerance": 15,
-                    "root_cause": "Sum of per-stage residuals: score (16) + softmax (10) + wsum (38) = 64 cyc. Each stage's residual is independently documented above. E2E = end_cyc - feed_qk_cyc in the TB (tb_nldpe_dimm_top_latency.v:204) so per-stage residuals compose additively.",
-                    "classification": "structural"
+                    "delta_cycles": 42,
+                    "tolerance": 10,
+                    "root_cause": "Sum of per-stage residuals: score (16) + softmax (10) + wsum (16) = 42 cyc. Post-Phase-4 e2e delta is no longer structural — all components are modelling_granularity (FSM handshakes, SRAM packer latencies, DPE stub COMPUTE_CYCLES=3 vs sim's 1).",
+                    "classification": "modelling_granularity"
                 }
             ]
         }

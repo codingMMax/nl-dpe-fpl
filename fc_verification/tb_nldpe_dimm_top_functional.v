@@ -64,24 +64,31 @@ module tb_nldpe_dimm_top_functional;
     // DPEs per lane:
     //   dimm_exp   KW=128, NUM_COLS=128 → weights[0..127][0..127] diagonal = 1
     //   sm_exp     KW=1,   NUM_COLS=1   → weights[0][0] = 1
-    //   ws_log     KW=1,   NUM_COLS=1   → weights[0][0] = 1
-    //   ws_exp     KW=1,   NUM_COLS=1   → weights[0][0] = 1
-    // V (identity on d×d block, zero outside): dut.dimm_lane[i].wsum_inst.v_sram.mem[j*d+m] = δ(j,m).
-    // Also force v_write_addr = N*d-1 = 8191 so WS_LOAD_V exits on first entry.
+    //   ws_log     KW=1,   NUM_COLS=1   → weights[0][0] = 1 (scalar retained)
+    //   ws_exp     KW=128, NUM_COLS=128 (Phase 4) → weights[0..127][0..127] diagonal = 1
+    // V (identity on d×d block, transposed + packed for Phase-4 wsum layout):
+    //   v_sram[m*26 + (j/EPW)][(j%EPW)*8 +: 8] = V[j][m] (packed transposed).
+    // Also force v_write_addr = d*PACKED_N - 1 = 1663 so WS_LOAD_V exits
+    // on first entry (PACKED_N = ceil(N/EPW) = 26 for N=128, EPW=5).
     `define LOAD_LANE(L) begin \
         for (ww = 0; ww < 128; ww = ww + 1) \
             dut.dimm_lane[L].score_inst.dimm_exp.weights[ww][ww] = 1; \
         dut.dimm_lane[L].softmax_inst.sm_exp.weights[0][0] = 1; \
         dut.dimm_lane[L].wsum_inst.ws_log.weights[0][0] = 1; \
-        dut.dimm_lane[L].wsum_inst.ws_exp.weights[0][0] = 1; \
-        for (j = 0; j < N; j = j + 1) \
+        for (ww = 0; ww < 128; ww = ww + 1) \
+            dut.dimm_lane[L].wsum_inst.ws_exp.weights[ww][ww] = 1; \
+        for (i = 0; i < 1665; i = i + 1) \
+            dut.dimm_lane[L].wsum_inst.v_sram.mem[i] = 40'd0; \
+        for (j = 0; j < D; j = j + 1) \
             for (m = 0; m < D; m = m + 1) \
-                dut.dimm_lane[L].wsum_inst.v_sram.mem[j*D + m] = (j < D && j == m) ? 40'd1 : 40'd0; \
+                if (j == m) \
+                    dut.dimm_lane[L].wsum_inst.v_sram.mem[m*26 + (j/EPW)][(j%EPW)*8 +: 8] = 8'd1; \
     end
 
     // Force v_write_addr once lane enters WS_LOAD_V, so its exit check fires.
+    // Phase 4: d*PACKED_N - 1 = 64*26 - 1 = 1663.
     `define FORCE_VWADDR(L) \
-        dut.dimm_lane[L].wsum_inst.v_write_addr = (N*D - 1);
+        dut.dimm_lane[L].wsum_inst.v_write_addr = (D * 26 - 1);
 
     // Convenience: compute expected Score[0][j] per formula above
     function [7:0] expected_score;

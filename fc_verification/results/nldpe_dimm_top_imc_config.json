@@ -25,12 +25,12 @@
         "t_analoge": 1,
         "t_conv": 1,
         "t_digital": 1,
-        "e_analoge_pj": 48.88506575898588,
+        "e_analoge_pj": 42.8028351141921,
         "e_conv_pj": 0,
-        "e_digital_pj": 1.9466938259618818
+        "e_digital_pj": 1.704488140841784
     },
     "fpga_specs": {
-        "freq": 90.05613333333334,
+        "freq": 102.853,
         "bram_width": 40,
         "dpe_buf_width": 40,
         "mem_bw_utilization": 1,

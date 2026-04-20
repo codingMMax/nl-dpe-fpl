@@ -723,3 +723,62 @@ iff `|delta − expected_delta| ≤ stage_tolerance`, and every residual
 has a file:line-cited root cause.
 
 Full per-delta root causes: `fc_verification/phase3_known_deltas.json`.
+
+### Phase 4 — wsum RTL widening (2026-04-20)
+
+The wsum module's `ws_exp` DPE was widened from 1×1 to 128×128
+(`gen_attention_wrapper.py::_gen_dimm_weighted_sum`, acam_mode=1) to
+match the sim's packed-pass assumption in `gemm_log`. The firing
+count dropped from N/2 = 64 per output column to **1**. A streaming
+byte-wise reduction (equivalent to a 7-level adder tree flattened over
+the 26-cycle DPE output drain, with `col_counter`-masked byte sums that
+zero out padding columns beyond N) replaces the scalar inner-loop
+accumulator. A new 5-byte packer between the scalar `ws_log`'s output
+and a packed `log_attn_sram` (depth 27 × 40-bit words) provides the
+packed input to `ws_exp`'s CLB byte-wise adder.
+
+**ws_log retained scalar (1×1)**: widening ws_log too would have added
+~60 cyc of extra feed+drain overhead for the per-row log preprocessing
+step — well above the Phase-4 residual target. The N/W = 8 per-lane
+`ws_log` fires are instead pipelined with `WS_LOAD_A` (the byte-serial
+attn_sram writes from softmax), so ws_log completes in ~1 extra cycle
+after the last softmax byte lands.
+
+**V storage transposed + packed**: `v_sram` depth changed from
+`N*d + 1 = 8193` (row-major element-serial) to `d · PACKED_N + 1 =
+1665` (transposed packed: `v_sram[m·26 + k]` = packed V[5k..5k+4][m]).
+This lets `ws_exp` consume 5 V bytes per feed cycle alongside the
+packed log_attn. TB preloads updated to match
+(`tb_nldpe_dimm_top_{functional,latency}.v`).
+
+**Per-stage cycle table (NL-DPE DIMM top, N=128, d=64, W=16):**
+
+| Stage | Pre-Phase-4 RTL | Sim | Pre-Phase-4 Δ | Post-Phase-4 RTL | Post-Phase-4 Δ | Classification |
+|---|---:|---:|---:|---:|---:|---|
+| score   | 260 | 244 | +16 | 260 | +16 | modelling_granularity (unchanged) |
+| softmax |  27 |  17 | +10 |  27 | +10 | modelling_granularity (unchanged) |
+| wsum    | 274 | 236 | +38 | **252** | **+16** | **modelling_granularity (was structural)** |
+| e2e     | 561 | 497 | +64 | **539** | **+42** | **modelling_granularity (was structural)** |
+
+The +16 wsum residual is the FSM's pre-m setup
+(IDLE→LOAD_A→LOAD_V→LOG_FEED→LOG_DRAIN + inter-m accumulator-clear
+handoff) which `gemm_log` rolls into steady-state assumptions. State
+transition trace: WS_IDLE(1 cyc) → WS_LOAD_A(8) → WS_LOAD_V(1) →
+WS_LOG_FEED(1) → WS_LOG_DRAIN(1) → 4×(WS_EXP_FEED(27) + WS_EXP_DRAIN(33))
+→ WS_OUTPUT.
+
+**VTR 3-seed re-synth (2026-04-20, fresh after RTL regeneration):**
+- DPE count: **64** (unchanged, same slot count)
+- Fmax avg: **102.9 MHz** (seeds 99.1 / 111.3 / 98.1); **+14% vs Phase-L
+  baseline 90.1 MHz** — net speedup from simpler inner-loop logic.
+- CLB: **1419** (was 1582 in Phase-L; −10% thanks to removed scalar
+  inner-loop accumulator / loop unrolled into reduction tree).
+- BRAM: **448** (was 896; halved thanks to transposed-packed `v_sram`
+  going from depth 8193 → 1665).
+- DSP: 44 (unchanged CLB adder paths).
+- Full JSON: `results/nldpe_dimm_top_vtr_imc_results.json`.
+
+References:
+- Generator: `nl_dpe/gen_attention_wrapper.py::_gen_dimm_weighted_sum`
+- Regenerated RTL: `fc_verification/rtl/nldpe_dimm_top_d64_c128.v`
+- Residual annotation: `phase3_known_deltas.json`
