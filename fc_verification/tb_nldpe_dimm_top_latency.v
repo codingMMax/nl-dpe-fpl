@@ -188,6 +188,13 @@ module tb_nldpe_dimm_top_latency;
         // Force score_start_cyc = FSM force time (everyone starts after force).
         score_start_cyc = feed_qk_cyc;
 
+        // Sample NBA-assigned end_cyc registers: the always-block at line 52
+        // updates *_end_cyc via non-blocking assignments.  Without an extra
+        // clock edge between WS_OUTPUT detection and the $display below, the
+        // wsum_end_cyc NBA from the current timestep has not yet been
+        // committed, producing spurious "end=0" readings (Phase 3 TB fix).
+        @(posedge clk);
+
         $display("");
         $display("=== Per-Stage Latency Report (lane 0) ===");
         $display("  Score stage   : %0d cycles  (start=%0d  end=%0d)",

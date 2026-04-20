@@ -81,13 +81,27 @@ def _reconstruct_cycles_per_pass(cfg, imc_core, K):
 def _compute_sim_per_row(fpga, imc_core, M, K, N, n_parallel_dpes):
     """Call gemm_log and return per-row timing details.
 
-    RTL latency TB reports single-row stage cycles = time for ONE row to
-    transit the DPE lane from LOAD-start to DRAIN-end. In Regime B
-    (Layout A) that is `cycles_per_pass · cols_per_dpe` (load + fires +
-    drain, not the steady-state interval). We therefore report this
-    "single-row" value in the expected_cycles JSON rather than
-    `per_row_compute` (which under Regime B reflects the steady interval
-    = cycles_per_load · cols_per_dpe).
+    Phase 3 semantics — the RTL DIMM-top TB probes measure the first row's
+    end-to-end stage latency through ONE lane. That is a Regime-A-like
+    serial composition of ``cols_per_dpe`` DPE passes (each pass = feed +
+    compute + drain; no inter-pass overlap because the lane is
+    single-DPE). The gemm_log Regime-B field `per_row_compute` assumes
+    drain overlaps the next load; for one row through the RTL lane this
+    under-counts by (cols_per_dpe - 1) · drain cycles.
+
+    Therefore extraction uses:
+
+        single_row_compute_cyc = cycles_per_pass · cols_per_dpe
+
+    where ``cycles_per_pass`` = cycles_per_load + cycles_per_drain from
+    gemm_log (fpga_fabric.py:409).  This corresponds to the RTL TB's
+    probe window: ``t(S_COMPUTE entry) → t(first S_OUTPUT)`` for the
+    score / wsum FSMs (nldpe_dimm_top_d64_c128.v lines 260–303 for
+    score, 673–685 for wsum).  Residual deltas come from
+    per-iteration FSM handshakes (S_WAIT_DPE + S_WRITE_B, ~2 cyc/pass)
+    plus the DPE stub's ACAM COMPUTE_CYCLES=3 vs gemm_log's compute
+    minus-output clipping to 1 (dpe_stub.v:35 vs fpga_fabric.py:395).
+    These are documented in phase2_known_deltas.json.
     """
     cfg = fpga.cfg
     t_total_ns, _, row_timing = fpga.gemm_log(M, K, N, n_parallel_dpes=n_parallel_dpes)
@@ -95,11 +109,20 @@ def _compute_sim_per_row(fpga, imc_core, M, K, N, n_parallel_dpes):
     K_id_lat = pass_info["K_id_lat"]
     effective_parallel = n_parallel_dpes * K_id_lat
     cols_per_dpe = math.ceil(N / effective_parallel)
-    # Single-row compute cycles (RTL-equivalent): load + drain per cols_per_dpe
+    # Regime-A-like single-row compute: serial cycles_per_pass per column
+    # (matches RTL DIMM-top FSM which serialises passes, not pipelines them).
+    # Per-pass FSM handshake overhead — not in gemm_log (which tracks the
+    # analog IMC pipeline only). Two contributions, both annotated in
+    # phase3_known_deltas.json:
+    #   1) ACAM COMPUTE_CYCLES=3 in the DPE stub (dpe_stub.v:35) vs
+    #      gemm_log's floor-clamp to 1 cycle (fpga_fabric.py:395) when
+    #      core_ns - output·t_clk < t_clk. Delta = +2 cycles/pass.
+    #   2) S_WAIT_DPE + S_WRITE_B handshake per iteration
+    #      (nldpe_dimm_top_d64_c128.v:285-301). Delta = +2 cycles/pass.
+    fsm_handshake_per_pass = 4
     single_row_compute_cyc = (
-        pass_info["cycles_per_load"] * cols_per_dpe
-        + pass_info["cycles_per_drain"]
-    )
+        pass_info["cycles_per_pass"] + fsm_handshake_per_pass
+    ) * cols_per_dpe
     # Regime B steady-state per-row interval (Layout A): cycles_per_load · cols_per_dpe
     per_row_steady_cyc = pass_info["cycles_per_load"] * cols_per_dpe
     return {
@@ -184,31 +207,41 @@ def refresh_from_sim() -> dict | None:
     wsum_cycles = wsum["single_row_compute_cyc"]
 
     # --- Softmax row-rate ---
-    # Replicates _run_softmax_exp + _run_softmax_norm per-row cycles.
-    # cols = N for the N×N softmax (each row has N scores).
+    # Phase 3 semantics: the RTL TB's Softmax probe window is from the
+    # score stage's first S_OUTPUT (softmax_start_cyc) to the softmax
+    # FSM's first SM_OUTPUT (softmax_end_cyc). That window covers
+    # SM_EXP (N_per_lane cycles, one DPE(I|exp) fire per score element)
+    # plus SM_NORMALIZE (N_per_lane + 1 cycles for the CLB multiply +
+    # output commit lag — softmax_approx @ nldpe_dimm_top_d64_c128.v
+    # lines 456–472). Each lane processes N/W_softmax elements.
+    #
+    # Previous extraction used `max(exp_row_ns, norm_row_ns) / W_softmax`
+    # which models a hypothetical parallel softmax path; the physical
+    # RTL is serial per-lane, so we use the additive form below.
     cols = N
+    cols_per_lane = max(1, cols // W_softmax)
 
-    # Exp per-row: dimm_nonlinear(cols, op="exp") / W_softmax + log2(W) cycles
-    exp_lat_per_row_ns, _ = imc_core.dimm_nonlinear(cols, op="exp", record_breakdown=False)
+    # SM_EXP: one cycle per element in the lane (DPE fires once per cycle).
+    exp_cycles_per_lane = cols_per_lane
+    # SM_NORMALIZE: N_per_lane + 1 (the trailing cycle commits the last write).
+    norm_cycles_per_lane = cols_per_lane + 1
+    # The sm_state transition SM_LOAD -> SM_EXP is overlapped with score
+    # writes, so within the probe window the SM_LOAD residual contributes
+    # the interval between score's first S_OUTPUT and softmax's SM_EXP
+    # entry — bounded above by cols_per_lane but typically much less
+    # (see phase3 root-cause note in phase2_known_deltas.json).
+    softmax_cycles = exp_cycles_per_lane + norm_cycles_per_lane
+
+    # Keep the row_ns fields for downstream consumers of row_timing.
+    exp_lat_per_row_ns, _ = imc_core.dimm_nonlinear(cols, op="exp",
+                                                   record_breakdown=False)
     reduction_ns = math.ceil(math.log2(max(2, W_softmax))) * t_clk_ns
     exp_row_ns = exp_lat_per_row_ns / W_softmax + reduction_ns
-
-    # Norm per-row: fpga.norm_fpga(cols) / W_softmax + reduction.
-    cols_per_lane_norm = max(1, cols // W_softmax)
-    norm_mem_read_row_ns = fpga.memory.latency(cols_per_lane_norm)
-    norm_mem_write_row_ns = fpga.memory.latency(cols_per_lane_norm, read=False)
     if cfg.analoge_nonlinear_support and getattr(cfg, 'log_softmax_fusion', False):
         norm_lat_ns, _, _, _, _ = fpga.norm_fpga(cols)
         norm_row_ns = norm_lat_ns / W_softmax + reduction_ns
     else:
         norm_row_ns = 0.0
-
-    # The RTL's "Softmax stage" single-row cycles reflect the exp+norm per-row
-    # combined compute (the bottleneck cycle within the softmax lane). Take
-    # the larger of the two compute terms so we match the scheduler's
-    # per_row_steady for the softmax sub-pipeline.
-    softmax_row_ns = max(exp_row_ns, norm_row_ns)
-    softmax_cycles = _cycles(softmax_row_ns, freq)
 
     # --- End-to-end for ONE output row through 3 stages ---
     # The RTL TB measures `end_cyc - feed_qk_cyc` — time from FSM force to

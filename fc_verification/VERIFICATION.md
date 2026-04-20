@@ -678,3 +678,48 @@ Phase H-N progress.
 The per-stage W=1 files listed at the top of this doc have
 DEPRECATED headers pointing to the W=16 full-DIMM tops as the authoritative
 verification. The old files remain in the tree for git-history continuity.
+
+### Phase 3 — DIMM Re-Verify (Regime B, 2026-04-19)
+
+Post-Phase-1 the DIMM sim runs Regime B (`gemm_log`'s multi-pass
+composition = `L_A · (rows·cols) + O`). This subsection records the
+per-stage sim↔RTL alignment under the new sim plus the Phase-3
+extraction fix in `gen_expected_cycles.py::_compute_sim_per_row`.
+The Phase J tables above remain untouched as the historical
+Regime-A baseline (267 / 26 / 257 / 550 sim vs 260 / 27 / 274 / 561 RTL).
+
+**Per-stage comparison (NL-DPE DIMM top, N=128, d=64, W=16):**
+
+| Stage | RTL | Sim (Regime B) | Δ = RTL − Sim | Annotation |
+|---|---:|---:|---:|---|
+| score   | 260 | 244 | +16 | Residual FSM overhead beyond baked-in +4 cyc/pass handshake: 4 iter × ~4 cyc of SRAM read-pipeline fill inside S_COMPUTE (`nldpe_dimm_top_d64_c128.v:112-118`, `260-284`). `modelling_granularity`. |
+| softmax | 27  | 17  | +10 | Probe opens at score's first S_OUTPUT; softmax FSM is still mid-SM_LOAD at that moment (`nldpe_dimm_top_d64_c128.v:452-454`). Residual = trailing SM_LOAD (≤N/W=8) + two single-cycle state transitions (`:454,:472`). `modelling_granularity`. |
+| wsum    | 274 | 236 | +38 | Structural: `ws_log`/`ws_exp` are 1×1 DPEs (KERNEL_WIDTH=NUM_COLS=1 per `nldpe_dimm_top_d64_c128.v:536,600`). WS_COMPUTE fires the DPE N/2=64 times per output element (`:673-684`) whereas `gemm_log` models a packed 128-wide single pass (`cycles_per_pass=55`). Per-element RTL ≈ 68 cyc vs sim ≈ 59 cyc over M_PER_LANE=4 elements ≈ 36 cyc + 2 cyc WS_LOG warmup. `structural`. |
+| E2E     | 561 | 497 | +64 | Additive composition of the three per-stage residuals (16 + 10 + 38). E2E in the TB is `end_cyc − feed_qk_cyc` (`tb_nldpe_dimm_top_latency.v:204`). `structural`. |
+
+**Pipeline regime**: RTL remains Regime B (single-buffered input +
+output, Layout A) at the whole-lane level. Sim's `gemm_log` now emits
+Regime B directly (was Regime A pre-Phase-1). The
+`gen_expected_cycles.py::_compute_sim_per_row` extraction was updated
+to match the RTL TB's probe semantics: `single_row_compute_cyc =
+(cycles_per_pass + 4_fsm_handshake) · cols_per_dpe`, where the +4
+absorbs the documented DPE-stub ACAM `COMPUTE_CYCLES=3` vs gemm_log's
+clip-to-1 (`dpe_stub.v:35` vs `fpga_fabric.py:395`) plus the outer
+S_WAIT_DPE + S_WRITE_B FSM handshake. The softmax extraction was
+switched from a parallel-max model to the additive serial form
+`(N_per_lane SM_EXP) + (N_per_lane+1 SM_NORMALIZE)` reflecting the
+physical RTL (one DPE fire per lane-element per cycle).
+
+**TB fix applied**: `tb_nldpe_dimm_top_latency.v` wsum probe NBA
+race resolved by inserting `@(posedge clk);` before the per-stage
+`$display` block (previously `wsum_end_cyc <=` NBA was unsampled
+when `$display` read it, producing the `end=0 wsum=-289` nonsense).
+Pre-fix the wsum stage reported `RTL TB did not report a cycle
+count`; post-fix it consistently reports 274 cycles.
+
+**Harness extension**: `run_checks.py` loads per-config per-stage
+annotated residuals from `phase3_known_deltas.json`. A stage passes
+iff `|delta − expected_delta| ≤ stage_tolerance`, and every residual
+has a file:line-cited root cause.
+
+Full per-delta root causes: `fc_verification/phase3_known_deltas.json`.

@@ -1,8 +1,8 @@
 {
-  "source": "Live sim refresh (Regime B, Layout A) on 2026-04-19",
+  "source": "Live sim refresh (Regime B, Layout A) on 2026-04-20",
   "regime": "B",
   "layout": "A",
-  "updated": "2026-04-19",
+  "updated": "2026-04-20",
   "note": "Regenerate via gen_expected_cycles.py after any sim-model change.",
   "tolerance_cycles": {
     "per_stage": 3,
@@ -17,10 +17,10 @@
         "W": 16
       },
       "stages": {
-        "score": 150,
-        "softmax": 7,
-        "wsum": 142,
-        "e2e": 299
+        "score": 244,
+        "softmax": 17,
+        "wsum": 236,
+        "e2e": 497
       }
     },
     "azurelily_dimm_top_d64_c128": {

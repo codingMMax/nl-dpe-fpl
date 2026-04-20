@@ -1,0 +1,46 @@
+{
+    "_description": "Phase 3 DIMM-top residual cycle deltas between the Regime-B sim and the cycle-accurate RTL, annotated with FSM-level root causes. A per-stage delta present here is accepted by run_checks.py (DIMM latency path) as long as |delta - expected_delta_cycles| <= expected_delta_tolerance.",
+    "_schema": {
+        "stage": "score | softmax | wsum | e2e",
+        "delta_cycles": "RTL - sim (positive = RTL slower than sim)",
+        "tolerance": "allowed wiggle around delta_cycles (per-stage)",
+        "root_cause": "file:line citation of the structural or FSM-handshake source of the residual",
+        "classification": "modelling_granularity | structural"
+    },
+    "updated": "2026-04-19",
+    "note": "Phase 3 (2026-04-19) residual stage deltas between NL-DPE DIMM-top RTL and the Regime-B sim after the cycles_per_pass*cols_per_dpe + 4 cycle/pass FSM-handshake extraction fix in gen_expected_cycles.py::_compute_sim_per_row. The DPE stub uses ACAM COMPUTE_CYCLES=3 (dpe_stub.v:35) whereas gemm_log clips compute_cycles to 1 (fpga_fabric.py:395); the outer dimm_score_matrix/dimm_weighted_sum FSMs also add S_WAIT_DPE + S_WRITE_B handshakes (nldpe_dimm_top_d64_c128.v:285-301). The wsum residual is structural: the RTL uses a 1x1 DPE (ws_log/ws_exp with KERNEL=NUM_COLS=1) that fires once per ws_j iteration (N/2=64 fires per output element, nldpe_dimm_top_d64_c128.v:673-684) whereas gemm_log models a single packed 128-wide pass per output element.",
+    "configs": {
+        "nldpe_dimm_top_d64_c128": {
+            "deltas": [
+                {
+                    "stage": "score",
+                    "delta_cycles": 16,
+                    "tolerance": 6,
+                    "root_cause": "Residual FSM overhead beyond the +4 cyc/pass handshake already baked into _compute_sim_per_row. Score FSM iterations = cols_per_dpe = 4 passes (nldpe_dimm_top_d64_c128.v:300-301); per pass the probe window additionally includes ~4 cycles of SRAM-read pipeline fill before the first w_buf_en strobe (q_sram/k_sram registered reads, nldpe_dimm_top_d64_c128.v:112-118) that gemm_log rolls into `feed_cycles` but the RTL serialises behind S_COMPUTE entry. Total residual 4 iter x 4 cyc = 16 cyc.",
+                    "classification": "modelling_granularity"
+                },
+                {
+                    "stage": "softmax",
+                    "delta_cycles": 10,
+                    "tolerance": 5,
+                    "root_cause": "Softmax probe starts at score's first S_OUTPUT but the softmax FSM at that moment is still mid-SM_LOAD (softmax_approx @ nldpe_dimm_top_d64_c128.v:452-454). The sim extraction assumes the probe opens exactly at SM_EXP entry; the residual is the trailing SM_LOAD duration (bounded above by N/W=8 cycles) plus the two one-cycle state transitions SM_LOAD->SM_EXP and SM_NORMALIZE->SM_OUTPUT (nldpe_dimm_top_d64_c128.v:454,472). Total ~10 cyc.",
+                    "classification": "modelling_granularity"
+                },
+                {
+                    "stage": "wsum",
+                    "delta_cycles": 38,
+                    "tolerance": 8,
+                    "root_cause": "Structural: the wsum module's ws_log/ws_exp DPEs are 1x1 (KERNEL_WIDTH=1, NUM_COLS=1 per comments at nldpe_dimm_top_d64_c128.v:536,600). WS_COMPUTE fires the DPE N/2=64 times per output element (ws_j loop, line 673-684) whereas gemm_log models a single packed cols=128-wide pass (cycles_per_pass=55). The RTL-effective per-element count = N/2 + write + state transitions ~= 68 cyc, vs sim's (cycles_per_pass + 4) = 59 cyc. Over M_PER_LANE=4 output elements, structural delta = 4 * (68-59) = ~36 cyc; with bootstrap WS_LOG warmup (~2 cyc) this totals ~38 cyc.",
+                    "classification": "structural"
+                },
+                {
+                    "stage": "e2e",
+                    "delta_cycles": 64,
+                    "tolerance": 15,
+                    "root_cause": "Sum of per-stage residuals: score (16) + softmax (10) + wsum (38) = 64 cyc. Each stage's residual is independently documented above. E2E = end_cyc - feed_qk_cyc in the TB (tb_nldpe_dimm_top_latency.v:204) so per-stage residuals compose additively.",
+                    "classification": "structural"
+                }
+            ]
+        }
+    }
+}
