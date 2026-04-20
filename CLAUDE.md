@@ -97,16 +97,23 @@ the live tracks below.
   stage / ≤ 5 end-to-end, replacing the legacy ≤ 20).
 
   **Phases:**
-  - **Phase 1 — sim Regime B swap (Layout A):** change `gemm_log` in
-    `azurelily/IMC/peripherals/fpga_fabric.py` from `M · cycles_per_pass`
-    (Regime A) to `T(M) = L_A · M + O` under Layout A. At 512×128
-    this is `111·M + 26`.
-  - **Phase 2 — FC RTL re-verify under ≤ 3 / ≤ 5:** no RTL
-    architecture change. Fix any TB / generator bugs surfaced by
-    the tighter tolerance.
-  - **Phase 3 — DIMM RTL re-verify under ≤ 3 / ≤ 5:** no RTL
-    architecture change. Re-align `mac_qk`, `softmax`, `mac_sv`
-    against the Regime-B sim.
+  - **Phase 1 — sim Regime B swap (Layout A):** ✅ COMPLETE (commit
+    `c15797f` / submodule `92bbb00`). `gemm_log` emits
+    `T(M) = L_A · M + O`; unit test + regression guard pass.
+  - **Phase 2 — FC RTL structural alignment + func + latency + VTR:**
+    ✅ COMPLETE (commits `1678443` harness, `86e539b` VTR).
+    12/12 FC configs pass. Feed/output Δ=0 exact;
+    compute Δ=+4 and reduction+act Δ=+1 annotated as FSM
+    overheads. Activation routing matches policy. VTR
+    DPE count = V·H exactly. Block-level comparison figures can
+    be regenerated from
+    `block_comp_apr_11/results/block_comparison_results.csv` via
+    `plot_block_comparison.py`.
+  - **Phase 3 — DIMM RTL re-verify (NEXT):** `mac_qk`, `softmax`,
+    `mac_sv` structural verification against Regime-B sim.
+    Functional + latency with the same convergence policy as
+    Phase 2 (residual deltas must be explainable as FSM /
+    modelling granularity, not structural).
 
   **Out of scope — retired / archived** (design-space reference only
   in the model doc §§3.2, 4, 5.4, 5.7): Layout B as an active

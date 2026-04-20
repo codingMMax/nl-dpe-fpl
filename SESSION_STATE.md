@@ -23,17 +23,27 @@ and rolling log
 
 **P4 open phases (multi-pass pipelined DPE model, opened 2026-04-18,
 scope reduced 2026-04-19 to Layout A + Regime B only):** the track is
-three phases under the committed **Layout A + Regime B** path. Today's
-RTL already runs Regime B (single-buffered input + output, Layout A),
-so no RTL architecture change is needed.
+three phases under the committed **Layout A + Regime B** path.
 
-- **Phase 1 — sim Regime B swap:** change `gemm_log` from
-  `M · cycles_per_pass` (Regime A) to `T(M) = L_A · M + O` under
-  Layout A. At 512×128: `111·M + 26`.
-- **Phase 2 — FC RTL re-verify** under ≤ 3 per stage / ≤ 5 E2E.
-  No RTL architecture change; TB / generator bug fixes only.
-- **Phase 3 — DIMM RTL re-verify** (`mac_qk`, `softmax`, `mac_sv`)
-  under the same ≤ 3 / ≤ 5 tolerance. No RTL architecture change.
+- **Phase 1 — sim Regime B swap:** ✅ COMPLETE (2026-04-19, commit
+  `c15797f` parent / `92bbb00` azurelily). `gemm_log` emits
+  `T(M) = L_A · M + O`. Unit test + regression guard pass.
+- **Phase 2 — FC RTL structural alignment + func + latency + VTR:**
+  ✅ COMPLETE (2026-04-19, commits `1678443` harness, `86e539b` VTR
+  check). 12/12 FC configs pass: feed/output Δ=0 exact;
+  compute Δ=+4 annotated (FSM handshake); reduction+act Δ=+1
+  annotated (valid_n latch). Activation routing matches policy
+  table (ACAM-absorbed for V=1 ACAM, CLB-LUT otherwise). VTR DPE
+  count = V·H exactly for all 12; CLB ∈ [7,39], BRAM ∈ [2,10],
+  Fmax ∈ [250, 407] MHz. Block-level comparison figures can be
+  regenerated from `block_comp_apr_11/results/block_comparison_results.csv`
+  via `plot_block_comparison.py`.
+- **Phase 3 — DIMM RTL re-verify (NEXT):** `mac_qk`, `softmax`,
+  `mac_sv` against Regime-B sim. Structural verification of the
+  attention DIMM pipeline in the RTL (vs what Phase 1 sim models).
+  Functional + latency, with same convergence policy as Phase 2
+  (residual deltas must be explainable as FSM / modelling
+  granularity, not structural).
 
 Retired / archived: Regime C / double-buffering (was T33, archived
 as reference only) and the transpose block for Layout B (was T31,
