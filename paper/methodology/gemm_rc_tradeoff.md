@@ -201,26 +201,37 @@ Per GEMM:
 
 ## 7. DSE grid for Phase 2.1 — GEMM on $(R, C)$
 
-### FC workload shapes
+### GEMM workload shapes (6 real layers from target benchmarks)
 
-Reuse the six FC shapes from Round-1 DSE (`dse_experiment_plan.md`
-§3), extended from $M = 1$ (GEMV) to $M > 1$ (GEMM) so Regime B's
-$L_A \cdot M + O$ benefit is visible.
+Each workload is a concrete GEMM shape $(M, K, N)$ drawn from a layer
+in our four target benchmarks (BERT-Tiny, Swin-Tiny, ResNet-9,
+VGG-16). This replaces the earlier batch-sweep proposal: every
+workload now has a clear network-layer provenance, and the six
+together span the diversity of real DNN GEMM shapes we care about
+(square / wide / tall, small / large reduction, small / large output).
 
-| Shape | $K$ | $N$ | Origin |
-|---|---:|---:|---|
-| `fc_64_64` | 64 | 64 | small FC |
-| `fc_128_128` | 128 | 128 | attention projection proxy ($d_{model}=128$) |
-| `fc_512_128` | 512 | 128 | medium FC |
-| `fc_512_512` | 512 | 512 | large-wide FC |
-| `fc_256_512` | 256 | 512 | wide FC |
-| `fc_2048_256` | 2048 | 256 | large FC (worst-case DPE count) |
+Convolutions are listed in their im2col GEMM form
+$M = H_{out} \cdot W_{out}$, $K = C_{in} \cdot k_h \cdot k_w$,
+$N = C_{out}$.
 
-**Batch / sequence axis** $M$: sweep $M \in \{8, 16, 32\}$ for each
-shape. This gives enough multi-pass amortisation to expose the
-Regime-B $L_A \cdot M + O$ dependence on $(R, C)$ without blowing up
-the run matrix. Each $M$ triples the effective pass count
-$M_{eff} = M \cdot \lceil N / (H C) \rceil$.
+| # | Benchmark | Layer | $(M, K, N)$ | Character |
+|---|---|---|---|---|
+| 1 | BERT-Tiny | Q/K/V/O projection ($d_{model}{=}128$, seq${=}128$) | $(128, 128, 128)$ | small square; $V{=}1$ for $R{\ge}128$ |
+| 2 | BERT-Tiny | FFN1 up-projection ($d_{ff}{=}512$) | $(128, 128, 512)$ | wide output, stresses $H$ sweep |
+| 3 | BERT-Tiny | FFN2 down-projection | $(128, 512, 128)$ | tall reduction, forces $V{>}1$ for $R{<}512$ |
+| 4 | Swin-Tiny | stage-3 MLP up-projection (window${=}7{\times}7$, dim${=}384$, ratio${=}4$) | $(49, 384, 1536)$ | big $N$, stresses $H$ and per-pass drain |
+| 5 | ResNet-9 | mid conv (3×3, 256→256, 16×16 spatial) — im2col | $(256, 2304, 256)$ | very large $K$, stresses $V$ even at $R{=}1024$ |
+| 6 | VGG-16 | block-4 conv (3×3, 512→512, 14×14 spatial) — im2col | $(196, 4608, 512)$ | largest $K \cdot N$, worst-case DPE count |
+
+Together these cover:
+
+- **$K$ range**: 128 → 4608 (factor of 36). Exercises $V$ across the
+  full $(R, C)$ grid.
+- **$N$ range**: 128 → 1536 (factor of 12). Exercises $H$.
+- **$M$ range**: 49 → 256. All $M \gg 1$ so Regime B amortisation is
+  visible; no synthetic batch sweep needed.
+- **Aspect ratios**: square ($d$-model), wide (FFN1), tall (FFN2),
+  very wide (Swin MLP), balanced big (ResNet), widest (VGG).
 
 ### $(R, C)$ axes
 
