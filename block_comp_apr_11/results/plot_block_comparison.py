@@ -207,7 +207,13 @@ for ax in [ax_e_bot, ax_e_top]:
                edgecolor='white', linewidth=0.5, label=label)
         bottoms_e += np.array(vals)
 
-# 
+# Broken axis cosmetics
+ax_e_top.spines['bottom'].set_visible(False)
+ax_e_bot.spines['top'].set_visible(False)
+ax_e_top.tick_params(bottom=False)
+ax_e_top.set_xticks([])
+
+# Diagonal break marks
 d = 0.02
 for sp in ['left', 'right']:
     kwargs = dict(transform=ax_e_top.transAxes, color='k', clip_on=False, linewidth=0.8)
