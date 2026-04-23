@@ -88,32 +88,43 @@ the live tracks below.
 
 ## Active TODO Tracks
 - **P4 — multi-pass pipelined DPE model** (opened 2026-04-18, scope
-  reduced 2026-04-19 to Layout A + Regime B only):
-  the P4 track is now three phases, all under the committed
-  **Layout A + Regime B** path. Today's RTL already runs Regime B
-  (single-buffered input + output, Layout A), so no RTL architecture
-  change is needed. Phase 1 updates only the simulator; Phases 2 and
-  3 are RTL/TB bug-fix passes under a tighter tolerance (≤ 3 per
-  stage / ≤ 5 end-to-end, replacing the legacy ≤ 20).
+  reduced 2026-04-19 to Layout A + Regime B only): **ALL PHASES CLOSED
+  2026-04-20.** Layout A + Regime B committed path; sim and RTL
+  aligned with annotated FSM-granularity residuals. No structural
+  deltas remain.
 
-  **Phases:**
-  - **Phase 1 — sim Regime B swap (Layout A):** ✅ COMPLETE (commit
-    `c15797f` / submodule `92bbb00`). `gemm_log` emits
-    `T(M) = L_A · M + O`; unit test + regression guard pass.
-  - **Phase 2 — FC RTL structural alignment + func + latency + VTR:**
-    ✅ COMPLETE (commits `1678443` harness, `86e539b` VTR).
-    12/12 FC configs pass. Feed/output Δ=0 exact;
-    compute Δ=+4 and reduction+act Δ=+1 annotated as FSM
-    overheads. Activation routing matches policy. VTR
-    DPE count = V·H exactly. Block-level comparison figures can
-    be regenerated from
-    `block_comp_apr_11/results/block_comparison_results.csv` via
-    `plot_block_comparison.py`.
-  - **Phase 3 — DIMM RTL re-verify (NEXT):** `mac_qk`, `softmax`,
-    `mac_sv` structural verification against Regime-B sim.
-    Functional + latency with the same convergence policy as
-    Phase 2 (residual deltas must be explainable as FSM /
-    modelling granularity, not structural).
+  **Final DIMM-top alignment** (NL-DPE, N=128 d=64 W=16):
+  score 260/244 Δ+16 · softmax 27/17 Δ+10 · wsum 252/236 Δ+16 ·
+  E2E 539/497 Δ+42 — all classified `modelling_granularity` with
+  file:line citations in `fc_verification/phase3_known_deltas.json`.
+
+  **Phases (all closed):**
+  - **Phase 1 — sim Regime B swap (Layout A):** ✅ `c15797f` / `92bbb00`.
+    `gemm_log` emits `T(M) = L_A · M + O`.
+  - **Phase 2 — FC RTL re-verify + func + latency + VTR:** ✅
+    `1678443`, `86e539b`. 12/12 FC configs pass; +4 compute /
+    +1 valid_n annotated. Block-level comparison figures regenerable
+    from `block_comp_apr_11/results/block_comparison_results.csv`
+    via `plot_block_comparison.py`.
+  - **Phase 2.1 — GEMM DSE smoke:** ✅ `81b2517`, `7431af0`. 48-point
+    DSE on 4 real-benchmark GEMM shapes; winner **512×128** (matches
+    Round-1). PDFs in `dse/gemm_phase2_1/results/`.
+  - **Phase 3 — DIMM RTL re-verify under Regime-B sim:** ✅ `145a85e`.
+    TB NBA race fixed; stage extraction updated; all residuals
+    annotated as modelling_granularity.
+  - **Phase 4 — wsum RTL widening (1×1 → 128×128):** ✅ `844b4a8`.
+    Closed the last structural delta. Fmax +14% (90.1 → 102.9 MHz),
+    CLB −10%, BRAM −50% on DIMM top.
+  - **Docs — apple-to-apple pipeline comparison:** ✅ `3cceca7`.
+    `fc_verification/DIMM_pipeline_model_vs_rtl.md` shows sim and RTL
+    in a shared 5-phase notation (L / F / D / S / W) with per-cycle
+    delta attribution.
+
+  **Follow-ups (non-blocking):**
+  - Phase 2.1 full sweep — extend 4 workloads to 6 (BERT FFN1,
+    VGG-16 block-4 conv) for paper-wide GEMM DSE coverage.
+  - Softmax probe-placement tidy — cosmetic, +10 Δ is probe-convention.
+  - Azure-Lily DIMM functional parser regex — pre-existing, orthogonal.
 
   **Out of scope — retired / archived** (design-space reference only
   in the model doc §§3.2, 4, 5.4, 5.7): Layout B as an active

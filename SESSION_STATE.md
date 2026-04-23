@@ -1,57 +1,87 @@
-# SESSION_STATE.md — Last updated: 2026-04-18
+# SESSION_STATE.md — Last updated: 2026-04-20
 
-## Current Phase (2026-04-18)
+## Current Phase (2026-04-20)
 
-**Phase H–N (W=16 full DIMM verification) CLOSED.** RTL↔simulator
-per-stage and end-to-end cycles aligned within the plan's ≤20 cycle
-tolerance for NL-DPE at N=128, d=64:
+**P4 track — multi-pass pipelined DPE model — ALL PHASES CLOSED.**
+Layout A + Regime B committed path; sim and RTL aligned with annotated
+FSM-granularity residuals. No structural deltas remain.
 
-| Stage | RTL | Sim | Δ |
+### Phase J baseline (Regime-A sim, historical)
+
+| Stage | RTL | Sim (Regime A) | Δ |
 |---|---:|---:|---:|
-| score  | 260 | 267 | 7  ✓ |
-| softmax|  27 |  26 | 1  ✓ |
+| score  | 260 | 267 |  7 ✓ |
+| softmax|  27 |  26 |  1 ✓ |
 | wsum   | 274 | 257 | 17 ✓ |
 | **E2E**| **561** | **550** | **11 ✓** |
 
-VTR 3-seed runs complete: NL-DPE DPE=**64 exact** (4 stages × 16 lanes)
-at 90.1 MHz; Azure-Lily DSP=68 (≈32 int_sop_4 + packing drift) at
-94.0 MHz. Final plot
-`fc_verification/results/dimm_architecture_comparison.pdf` regenerated
-at VTR-measured Fmax. Details: `fc_verification/VERIFICATION.md`
-and rolling log
-`fc_verification/results/dimm_top_w16_alignment_log.txt`.
+### Post-P4 alignment (Regime-B sim, post-Phase-4 wsum widening)
 
-**P4 open phases (multi-pass pipelined DPE model, opened 2026-04-18,
-scope reduced 2026-04-19 to Layout A + Regime B only):** the track is
-three phases under the committed **Layout A + Regime B** path.
+| Stage | RTL | Sim (Regime B) | Δ | Classification |
+|---|---:|---:|---:|---|
+| score  | 260 | 244 | +16 | modelling_granularity |
+| softmax|  27 |  17 | +10 | modelling_granularity |
+| wsum   | 252 | 236 | +16 | modelling_granularity |
+| **E2E**| **539** | **497** | **+42** | modelling_granularity |
 
-- **Phase 1 — sim Regime B swap:** ✅ COMPLETE (2026-04-19, commit
-  `c15797f` parent / `92bbb00` azurelily). `gemm_log` emits
-  `T(M) = L_A · M + O`. Unit test + regression guard pass.
-- **Phase 2 — FC RTL structural alignment + func + latency + VTR:**
-  ✅ COMPLETE (2026-04-19, commits `1678443` harness, `86e539b` VTR
-  check). 12/12 FC configs pass: feed/output Δ=0 exact;
-  compute Δ=+4 annotated (FSM handshake); reduction+act Δ=+1
-  annotated (valid_n latch). Activation routing matches policy
-  table (ACAM-absorbed for V=1 ACAM, CLB-LUT otherwise). VTR DPE
-  count = V·H exactly for all 12; CLB ∈ [7,39], BRAM ∈ [2,10],
-  Fmax ∈ [250, 407] MHz. Block-level comparison figures can be
-  regenerated from `block_comp_apr_11/results/block_comparison_results.csv`
-  via `plot_block_comparison.py`.
-- **Phase 3 — DIMM RTL re-verify (NEXT):** `mac_qk`, `softmax`,
-  `mac_sv` against Regime-B sim. Structural verification of the
-  attention DIMM pipeline in the RTL (vs what Phase 1 sim models).
-  Functional + latency, with same convergence policy as Phase 2
-  (residual deltas must be explainable as FSM / modelling
-  granularity, not structural).
+Every +Δ cycle has a file:line citation in
+`fc_verification/phase3_known_deltas.json`; apple-to-apple 5-phase
+breakdown in `fc_verification/DIMM_pipeline_model_vs_rtl.md`.
 
-Retired / archived: Regime C / double-buffering (was T33, archived
-as reference only) and the transpose block for Layout B (was T31,
-retired) — archived in `paper/methodology/dpe_pipeline_model.md`
-§§3.2, 4, 5.4, 5.7 as design-space reference only. Authoritative
-reference: `paper/methodology/dpe_pipeline_model.md` §§5.3.1, 5.7,
-8.1. See `CLAUDE.md` "Active TODO Tracks" for one-hop access to
-model doc, verification baseline, and memory.
+### VTR 3-seed re-synth (post-Phase-4 DIMM top)
+
+NL-DPE DPE = **64 exact**, Fmax **90.1 → 102.9 MHz (+14%)**, CLB
+1582 → **1419 (−10%)**, BRAM 896 → **448 (−50%)** (transposed
+V-SRAM packing). Azure-Lily DSP baseline unchanged.
+
+### P4 phases (all CLOSED)
+
+- **Phase 1 — sim Regime B swap (Layout A)**: ✅ `c15797f` / `92bbb00`.
+  `gemm_log` emits `T(M) = L_A · M + O`.
+- **Phase 2 — FC RTL re-verify**: ✅ `1678443`, `86e539b`. 12/12 FC
+  configs pass; +4 compute / +1 valid_n annotated.
+- **Phase 2.1 — GEMM DSE smoke**: ✅ `81b2517`, `7431af0`. 48-point
+  DSE across 4 real-benchmark GEMM shapes; winner **512×128** (matches
+  Round-1 FC ranking). PDFs in `dse/gemm_phase2_1/results/`.
+- **Phase 3 — DIMM RTL re-verify under Regime-B sim**: ✅ `145a85e`.
+  TB NBA race fixed; stage extraction updated; all residuals
+  annotated as modelling_granularity.
+- **Phase 4 — wsum RTL widening (1×1 → 128×128)**: ✅ `844b4a8`.
+  Closed the last structural delta (pre-Phase-4 +38 → +16
+  modelling_granularity). Fmax bumped +14%, CLB −10%, BRAM −50%.
+- **Docs — apple-to-apple pipeline comparison**: ✅ `3cceca7`.
+  `fc_verification/DIMM_pipeline_model_vs_rtl.md` shows sim and RTL
+  in a shared 5-phase notation (L / F / D / S / W) with per-cycle
+  delta attribution.
+
+Retired / archived (out of scope, for design-space reference only in
+`paper/methodology/dpe_pipeline_model.md` §§3.2, 4, 5.4, 5.7): Regime
+C / double-buffering, Layout B, transpose block.
+
+### Regression guards (all green, 2026-04-20)
+
+```
+python3 azurelily/IMC/test_gemm_log_regime_b.py          # Phase 1
+python3 fc_verification/run_fc_phase2.py --skip-vtr       # Phase 2
+python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128   # Phases 3 + 4
+```
+All exit 0.
+
+### Open items (none blocking)
+
+- Phase 2.1 full sweep — smoke covered 4/6 workloads (BERT QKV/FFN2,
+  Swin MLP, ResNet-9 conv). Remaining: BERT FFN1 (128,128,512),
+  VGG-16 block-4 conv (196,4608,512). ~30 min extension when wanted.
+- Azure-Lily DIMM functional parser regex — pre-existing
+  `run_checks.py` issue, Azure-Lily TB output format doesn't match
+  the NL-DPE regex. Orthogonal to P4.
+- Softmax probe-placement tidy — +10 Δ is a probe-opens-mid-`SM_LOAD`
+  convention artifact; moving the probe to `SM_EXP` entry would
+  collapse Δ to ~0. Cosmetic.
+- BERT-Tiny end-to-end RTL (pre-existing, see "BERT-Tiny Workload"
+  section below) — LayerNorm, Residual Add, Embedding Add (all CLB)
+  plus Q/K/V/O / FFN1 / FFN2 RTL are still `[ ]`. Attention DIMM is
+  satisfied by Phase 3+4's `nldpe_dimm_top_d64_c128.v`.
 
 ---
 
