@@ -782,3 +782,113 @@ References:
 - Generator: `nl_dpe/gen_attention_wrapper.py::_gen_dimm_weighted_sum`
 - Regenerated RTL: `fc_verification/rtl/nldpe_dimm_top_d64_c128.v`
 - Residual annotation: `phase3_known_deltas.json`
+
+### Phase 5 — Azure-Lily DIMM Parity (2026-04-20)
+
+Brings the Azure-Lily DSP-baseline DIMM top through the same
+functional + latency + VTR verification coverage that NL-DPE
+received in Phases 3+4. No Azure-Lily RTL architecture change —
+pure sim/harness/TB-probe/doc work.
+
+**Motivation.** Prior to Phase 5 the AL DIMM top had only partial
+coverage: the functional TB emitted an ad-hoc summary format that
+`run_checks.py::RE_NLDPE_SCORE` couldn't parse; the latency TB only
+measured `mac_qk`; `expected_cycles.json` left every Azure-Lily
+stage `null`; and no annotated residual schema existed. This broke
+apple-to-apple symmetry with NL-DPE in paper claims.
+
+**Changes.**
+
+1. **Functional TB format** — `tb_azurelily_dimm_top_functional.v`
+   now emits `Score PASS : N / 128 (err=M)` / `Lane isolate : X / 15`
+   / `Overall : PASS|FAIL` lines. "Score correct" = mac_qk accum
+   matches expected per lane; the 128 denominator is a label
+   constant (16 lanes × 8 prorated slots) mirroring NL-DPE's
+   convention so the shared harness regex matches unchanged.
+
+2. **Latency TB per-stage probes** —
+   `tb_azurelily_dimm_top_latency.v` now probes first-valid-pulse
+   on lane 0 for each of `mac_qk_inst.out_valid`,
+   `softmax_inst.valid_n`, `mac_sv_inst.out_valid` and emits
+   `Score / Softmax / Wsum stage` lines with the same regex hooks
+   as NL-DPE. NL-DPE's Phase-3 NBA-commit fix (extra
+   `@(posedge clk)` before `$display`) applied. Stage-name mapping:
+   Score → `mac_qk`, Softmax → `clb_softmax`, Wsum → `mac_sv`.
+
+3. **Sim extraction** —
+   `gen_expected_cycles.py::refresh_from_sim` populates Azure-Lily
+   stages from a Regime-A serial model:
+   `score = k_tile_qk`,
+   `softmax = (N−1)·k_tile_qk + 2`,
+   `wsum = k_tile_sv`,
+   `e2e = Σ`, where `k_tile_X = ⌈X / DSP_WDITH⌉` with
+   `DSP_WDITH = 4` (scheduler_stats/common.py). The sim's pre-Phase-5
+   `{"mac_qk": null, "e2e": null}` placeholder is replaced.
+
+4. **Annotated residuals** —
+   `fc_verification/phase5_known_deltas.json` (new) mirrors the
+   Phase-3 schema. `run_checks.py` loads it via the new
+   `_load_known_deltas(config_name)` dispatcher, parallel to the
+   existing `_load_phase3_known_deltas`.
+
+**Pre/post per-stage table (Azure-Lily DIMM top, N=128, d=64, W=16):**
+
+| Stage   | Pre-Phase-5 sim | Pre-Phase-5 RTL | Post-Phase-5 sim | Post-Phase-5 RTL | Δ (RTL−sim) | Classification          |
+|---------|----------------:|----------------:|-----------------:|-----------------:|------------:|-------------------------|
+| score   | null            | unprobed        | 16               | 15               | −1          | modelling_granularity   |
+| softmax | null            | unprobed        | 2034             | 1908             | −126        | structural (DSP fusion) |
+| wsum    | null            | unprobed        | 32               | 26               | −6          | structural (DSP fusion) |
+| e2e     | null            | unprobed        | 2082             | 1950             | −132        | structural              |
+
+**Residual root-cause summary** (see `phase5_known_deltas.json` for
+full file:line citations):
+
+- **Score (−1 cyc, modelling_granularity)** — sim k_tile_qk = 16
+  over-counts by one relative to RTL's K=13 + 2-cyc SRAM prime
+  window because the sim's k_tile formula assumes a pure-compute
+  window while the RTL pipelines one prime cycle inside K.
+- **Softmax (−126 cyc, structural)** — dominant delta from the RTL's
+  5-products-per-cycle DSP fusion (4 int_sop_4 + 1 CLB multiply,
+  `dsp_mac @ azurelily_dimm_top_d64_c128.v:152-215`) vs sim's strict
+  DSP_WDITH=4. Across the (N−1) = 127 remaining mac_qk rows in the
+  softmax probe window, 127 × (16 − 13) cyc ≈ 126 cyc.
+- **Wsum (−6 cyc, structural)** — same DSP-fusion root cause as Score
+  applied to mac_sv (K = ⌈N/5⌉ = 26 RTL vs k_tile_sv = 32 sim).
+- **E2E (−132 cyc, structural)** — additive (Regime A serial stages).
+
+The deltas are all **negative** (RTL faster than sim): the sim
+conservatively under-predicts Azure-Lily's performance. This is
+the opposite sign from the NL-DPE deltas (which are positive —
+FSM overhead + probe-placement residuals the sim omits).
+
+**VTR 3-seed re-synth (cached — RTL architecturally unchanged):**
+
+- DSP count: **68** (= 64 int_sop_4 + 4 packing drift; matches
+  pre-P4 baseline exactly).
+- Fmax avg: **94.04 MHz** (seeds 93.1 / 94.4 / 94.6).
+- CLB: **516**, BRAM: **41**, DPE (wc): 0.
+- Full JSON: `results/azurelily_dimm_top_vtr_imc_results.json`.
+
+**Gate commands** (every one exits 0):
+
+```
+python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1
+python3 fc_verification/run_fc_phase2.py --skip-vtr                       # Phase 2
+python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # Phase 3+4
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128 --skip-latency
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128
+```
+
+**Apple-to-apple NL-DPE ↔ Azure-Lily per-stage comparison:** see
+`DIMM_pipeline_model_vs_rtl.md §9` for the full 5-phase
+(L / F / D / S / W) decomposition applied to Azure-Lily, plus the
+side-by-side sim/RTL tables aligned with the §2–§5 NL-DPE layout.
+
+References:
+- TBs (edited): `tb_azurelily_dimm_top_functional.v`,
+  `tb_azurelily_dimm_top_latency.v`
+- Sim extraction (edited): `gen_expected_cycles.py`
+- Harness dispatcher (edited): `run_checks.py`
+- Residual annotation (new): `phase5_known_deltas.json`
+- Apple-to-apple doc (edited): `DIMM_pipeline_model_vs_rtl.md §9`
+- VTR results: `results/azurelily_dimm_top_vtr_imc_results.json`

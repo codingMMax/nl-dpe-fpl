@@ -33,6 +33,16 @@ STUB = FC_DIR / "dpe_stub.v"
 EXPECTED_JSON = FC_DIR / "expected_cycles.json"
 WHITELIST_JSON = FC_DIR / "functional_whitelist.json"
 PHASE3_KNOWN_DELTAS_JSON = FC_DIR / "phase3_known_deltas.json"
+PHASE5_KNOWN_DELTAS_JSON = FC_DIR / "phase5_known_deltas.json"
+
+# Phase-specific known-delta JSON selector. NL-DPE configs load Phase 3
+# deltas; Azure-Lily configs load Phase 5. The schema is identical — only
+# the file differs so each architecture's residual provenance stays
+# self-contained.
+PHASE_DELTA_FILES = {
+    "nldpe_dimm_top_d64_c128":      PHASE3_KNOWN_DELTAS_JSON,
+    "azurelily_dimm_top_d64_c128":  PHASE5_KNOWN_DELTAS_JSON,
+}
 
 # Map of config name → (rtl file, functional TB, latency TB).
 CONFIG_REGISTRY = {
@@ -172,6 +182,35 @@ def _load_phase3_known_deltas(config_name: str) -> dict:
     return by_stage
 
 
+def _load_known_deltas(config_name: str) -> dict:
+    """Dispatch to the phase-specific known-delta JSON for *config_name*.
+
+    NL-DPE DIMM-top configs use phase3_known_deltas.json (established by
+    Phases 3+4). Azure-Lily DIMM-top uses phase5_known_deltas.json (added
+    in Phase 5). Schema is identical — each file keeps its architecture's
+    residual provenance self-contained.
+    """
+    delta_path = PHASE_DELTA_FILES.get(config_name, PHASE3_KNOWN_DELTAS_JSON)
+    if not delta_path.exists():
+        return {}
+    try:
+        data = json.loads(delta_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    cfg_entry = data.get("configs", {}).get(config_name, {})
+    by_stage = {}
+    for entry in cfg_entry.get("deltas", []):
+        stage = entry.get("stage")
+        if stage:
+            by_stage[stage] = {
+                "delta_cycles": entry.get("delta_cycles", 0),
+                "tolerance":    entry.get("tolerance", 0),
+                "root_cause":   entry.get("root_cause", ""),
+                "classification": entry.get("classification", ""),
+            }
+    return by_stage
+
+
 def check_latency(config_name: str, expected: dict) -> CheckResult:
     cfg = CONFIG_REGISTRY[config_name]
     rc, out = run_iverilog([STUB, cfg["rtl"], cfg["tb_lat"]])
@@ -192,10 +231,12 @@ def check_latency(config_name: str, expected: dict) -> CheckResult:
     tol_stage = tol["per_stage"]
     tol_e2e   = tol["e2e"]
 
-    # Phase 3: per-stage annotated residuals (documented FSM / structural
-    # deltas). A stage with a known-delta entry passes iff
-    # |(RTL - sim) - delta_cycles| <= tolerance.
-    known_deltas = _load_phase3_known_deltas(config_name)
+    # Per-stage annotated residuals (documented FSM / structural deltas).
+    # A stage with a known-delta entry passes iff
+    # |(RTL - sim) - delta_cycles| <= tolerance. NL-DPE configs load from
+    # phase3_known_deltas.json; Azure-Lily from phase5_known_deltas.json
+    # (selected by PHASE_DELTA_FILES in _load_known_deltas).
+    known_deltas = _load_known_deltas(config_name)
 
     deltas = {}
     reasons = []
@@ -214,7 +255,8 @@ def check_latency(config_name: str, expected: dict) -> CheckResult:
             if abs(d - expected_delta) > tol_known:
                 reasons.append(
                     f"{s}: RTL={rtl_val} sim={exp_val} Δ={d} "
-                    f"(expected Δ={expected_delta}±{tol_known} per phase3_known_deltas)"
+                    f"(expected Δ={expected_delta}±{tol_known} per "
+                    f"{PHASE_DELTA_FILES.get(config_name, PHASE3_KNOWN_DELTAS_JSON).name})"
                 )
             continue
         threshold = tol_e2e if s == "e2e" else tol_stage

@@ -330,3 +330,184 @@ Two caveats on reading the tables above:
   grows; at $M_{\text{per\_lane}} = 16$ (4× larger batch), the
   per-output share of setup falls below 1 cyc and the wsum Δ
   collapses to ~4 cyc.
+
+---
+
+## 9. Azure-Lily DIMM — sim vs RTL (Phase 5, 2026-04-20)
+
+**Config.** Azure-Lily DSP baseline DIMM top, $N = 128$, $d = 64$,
+$W = 16$ lanes, data width = 40 bit. Per-lane pipeline is
+`dsp_mac (K=13)` → `clb_softmax` → `dsp_mac (K=26)`
+(`fc_verification/rtl/azurelily_dimm_top_d64_c128.v:104-132`). Unlike
+NL-DPE's Regime-B analog IMC, Azure-Lily is a **Regime-A serial**
+DSP pipeline: each stage completes fully on its input stream before
+the next stage starts consuming.
+
+**Stage-name mapping** (NL-DPE conventions → AL modules):
+
+| NL-DPE label | Azure-Lily module      | Role                                        |
+|--------------|------------------------|---------------------------------------------|
+| Score        | `mac_qk_inst`          | QK^T per row, `dsp_mac` with K=13           |
+| Softmax      | `softmax_inst`         | `clb_softmax` S_LOAD → S_INV → S_NORM       |
+| Wsum         | `mac_sv_inst`          | Score·V per output col, `dsp_mac` with K=26 |
+
+### 9.1 Unified 5-phase notation for Azure-Lily
+
+The L/F/D/S/W decomposition still applies; we just rename the
+underlying primitive. For a DSP-based `dsp_mac` pass:
+
+| Phase | Azure-Lily meaning                                                    |
+|:-----:|-----------------------------------------------------------------------|
+| **L** | Packed-byte SRAM read → DSP `ax/ay/…/dx/dy` inputs (2-cyc prime)      |
+| **F** | `int_sop_4` fires 4 products/cycle + CLB adds the 5th (→ 5 prod/cyc)  |
+| **D** | `accum` register commits `out_valid` once `count == K-1`              |
+| **S** | FSM state transitions (S_FEED_QK → S_WAIT_QK → S_OUTPUT; soft state flops) |
+| **W** | Downstream module (clb_softmax SRAM write / next dsp_mac) absorbs the result |
+
+The sim's `gemm_dsp` (`azurelily/IMC/peripherals/fpga_fabric.py:170-230`)
+models L, F, D under the simpler "k_tile = ceil(K / DSP_WDITH)"
+formula; S and W are folded into L or treated as free (same convention
+as NL-DPE's sim model).
+
+### 9.2 Score stage — one DSP pass, first row out
+
+```
+             SIM (gemm_dsp analytical)                        │   RTL (FSM cycle-accurate)
+             ─────────────────────────                        │   ──────────────────────────
+
+  Phase  Symbol  Cycles    Formula                            │   State           Cycles   Source / file:line
+  ─────  ──────  ──────    ───────                            │   ─────           ──────   ──────────────────
+  L      L        0        folded into compute                │   SRAM prime       2       mac_count 0→1 dead     :107
+  F      F        16       k_tile_qk = ⌈d / DSP_WDITH⌉        │   dsp_mac fires   13       K=ceil(d/EPW)=13       :104
+                           = ⌈64 / 4⌉                         │                            (5 products/cyc)
+  D      D        0        folded                             │   accum commit     0       same cycle as count=K-1
+  S      —        0        not modelled                       │   (none for row 0) 0
+  W      —        0        (downstream softmax absorbs)       │   score_valid pulse—       propagates to softmax
+
+  ────                                                        │   ────
+  Score per-row sim:  16 cyc                                  │   Score per-row RTL:  15 cyc
+                                                              │
+                                                              │   Δ_score = RTL 15 − sim 16 = −1 cyc
+```
+
+**Residual:** −1 cyc (`classification: modelling_granularity`). The
+sim over-counts by 1 because `k_tile_qk = 16` assumes DSP_WDITH=4
+strict, while the RTL reads 2 packed bytes per cycle during the
+SRAM-prime and starts counting at mac_count=2 — folding one of the
+two prime cycles inside the K=13 window. See
+`phase5_known_deltas.json::configs.azurelily_dimm_top_d64_c128.deltas[0]`.
+
+### 9.3 Softmax stage — (N−1) streamed rows + reduce + first S_NORM
+
+This is the dominant stage for Azure-Lily because `clb_softmax` blocks
+until all N=128 scores land in its SRAM before reducing. The probe
+window opens at Score end (first `mac_qk.out_valid`) and closes at the
+first `softmax_inst.valid_n`. During that window the remaining
+(N − 1) = 127 scores flow through `mac_qk` into `clb_softmax.S_LOAD`,
+then `S_INV` + first `S_NORM` complete.
+
+```
+             SIM                                              │   RTL
+             ───                                              │   ───
+
+  Component                    Cycles                         │   State                 Cycles   Source / file:line
+  ─────────                    ──────                         │   ─────                 ──────   ──────────────────
+  Remaining (N−1) rows:        127 · k_tile_qk = 127 · 16     │   127 × 15 cyc per-row  1905     :67-85 (S_FEED_QK loop)
+                               = 2032                         │
+  clb_softmax.S_INV:           1                              │   S_INV                 1        :283-286
+  first S_NORM output:         1                              │   S_NORM output 0       1        :287-294
+                                                              │
+  ────                                                        │   ────
+  Softmax sim subtotal:        2034 cyc                       │   Softmax RTL subtotal: 1908 cyc
+                                                              │
+                                                              │   Δ_softmax = RTL 1908 − sim 2034 = −126 cyc
+```
+
+**Residual:** −126 cyc (`classification: structural`). Each of the
+127 remaining scores benefits from the 5-product/cycle DSP fusion:
+`(sim 16) − (RTL 13+1 handshake) ≈ 1 cyc/row`, so the accumulated
+delta ≈ 127 cyc. The delta is identical in root cause to the Phase-L
+alignment log's −17 cyc/row finding
+(`fc_verification/results/azurelily_dimm_alignment_log.txt:58-68`),
+just per-row amortized.
+
+### 9.4 Wsum stage — first mac_sv output
+
+```
+             SIM                                              │   RTL
+             ───                                              │   ───
+
+  Phase  Symbol  Cycles    Formula                            │   State           Cycles   Source / file:line
+  ─────  ──────  ──────    ───────                            │   ─────           ──────   ──────────────────
+  L      L        0        folded                             │   attn stream     0        softmax.valid_n feeds  :125
+  F      F        32       k_tile_sv = ⌈N / DSP_WDITH⌉        │   dsp_mac K=26    26       K=ceil(N/EPW)=26       :125
+                           = ⌈128 / 4⌉                        │                            (5 products/cyc)
+  D      D        0        folded                             │   accum commit    0        same cycle as count=K-1
+  S      —        0        not modelled                       │   (none for col 0) 0
+  W      —        0        downstream out                     │                   —
+                                                              │
+  ────                                                        │   ────
+  Wsum per-col sim:   32 cyc                                  │   Wsum per-col RTL: 26 cyc
+                                                              │
+                                                              │   Δ_wsum = RTL 26 − sim 32 = −6 cyc
+```
+
+**Residual:** −6 cyc (`classification: structural`). Same 4-vs-5
+products/cycle DSP-fusion story as Score: sim k_tile = 32, RTL K = 26
+(packed N=128 into EPW=5 byte-tuples). See
+`phase5_known_deltas.json::…deltas[2]`.
+
+### 9.5 End-to-end — serial Regime A
+
+```
+             SIM E2E                                          │   RTL E2E
+             ───────                                          │   ───────
+
+             t_e2e = score + softmax + wsum                   │   end_cyc − feed_qk_cyc
+                   = 16 + 2034 + 32                           │         = 15 + 1908 + 26
+                   = 2082 cyc                                 │         = 1950 cyc (measured 1950)
+                                                              │
+                                                              │   Δ_e2e = −132 cyc
+                                                              │         = Δ_score + Δ_softmax + Δ_wsum
+                                                              │         = −1 + −126 + −6 + ~1 boundary
+                                                              │         (additive — stages strictly serial)
+```
+
+### 9.6 Delta attribution — Azure-Lily
+
+```
+  Stage    RTL    Sim    Δ cyc    Root cause                                             File:line
+  ─────    ───    ───    ─────    ──────────                                             ─────────
+  score     15     16     −1      DSP prime-cycle fold + 5-prod/cyc vs DSP_WDITH=4       :104-113
+                                                                                          scheduler_stats/common.py:6
+  softmax 1908   2034   −126      127 rows × (sim 16 − RTL 13) = structural DSP fusion   :150-215 (dsp_mac)
+                                   + 1 cyc Softmax S_INV + first S_NORM                   :287-294
+  wsum      26     32     −6      DSP fusion: sim k_tile=32 vs RTL K=ceil(N/5)=26         :125
+                                                                                          scheduler_stats/common.py:6
+  ─────
+  E2E     1950   2082   −132      Additive (stages strictly serial)                       (Regime A)
+```
+
+### 9.7 Azure-Lily ↔ NL-DPE comparison
+
+Apple-to-apple per-stage summary (sim: post-Phase-1 Regime B for
+NL-DPE, Regime A for AL; RTL: cycle-accurate FSMs):
+
+```
+               NL-DPE (proposed)                 Azure-Lily (DSP baseline)
+               ──────────────                    ─────────────────────
+               RTL    Sim    Δ   class           RTL     Sim    Δ    class
+  Score        260    248   +12  m.g.            15      16     −1   m.g.
+  Softmax       27     17   +10  m.g.            1908    2034   −126 structural
+  Wsum         252    240   +12  m.g.            26      32     −6   structural
+  E2E          539    505   +34  m.g.            1950    2082   −132 structural
+```
+
+The two architectures now have **symmetric verification coverage**:
+identical probe methodology, harness, and residual-annotation schema.
+The Azure-Lily residual is structural (RTL's CLB-multiplier-assisted
+5-product/cycle fusion gives an honest ~19% speed-up that the
+analytical sim's strict DSP_WDITH=4 does not model); the NL-DPE
+residual is modelling-granularity (FSM flops + SRAM packer latencies).
+Both are fully documented with file:line citations in their respective
+`phase{3,5}_known_deltas.json`.

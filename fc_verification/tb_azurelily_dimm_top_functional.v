@@ -182,17 +182,49 @@ module tb_azurelily_dimm_top_functional;
         $display("  %0d / %0d lanes match lane 0", lane_ok, W-1);
 
         // ==== Summary ====
-        $display("");
-        $display("=== Summary ===");
-        $display("  Total cycles : %0d", cycle);
-        $display("  Check 1 (lane 0 mac_qk)  : %s",
-                 (accum_lane0 === accum_expected) ? "PASS" : "FAIL");
-        $display("  Check 2 (lane iso, %0d/%0d): %s", lane_ok, W-1,
-                 (lane_ok == W-1) ? "PASS" : "FAIL");
-        if ((accum_lane0 === accum_expected) && (lane_ok == W-1))
-            $display("  Overall      : PASS");
-        else
-            $display("  Overall      : FAIL");
+        //
+        // Emitted in NL-DPE-compatible format so `run_checks.py::RE_NLDPE_SCORE`
+        // matches without harness changes:
+        //   Score PASS   : N / 128 (err=M)
+        //   Lane isolate : X / 15 lanes match lane 0
+        //   Overall      : PASS / FAIL
+        //
+        // Azure-Lily "Score correct" semantics: count lanes whose mac_qk
+        // accumulator matches the per-lane expected value (lane_idx XOR 1 via
+        // the anti-merge XOR constant). Lane 0 is counted directly from
+        // Check 1 (accum == 1). The denominator 128 is a label-only constant
+        // mirroring NL-DPE's 128-score-per-row probe; `err` = count of lanes
+        // that fail the accum check.
+        begin : nl_dpe_summary
+            integer lane_pass_cnt;
+            integer lane_fail_cnt;
+            integer score_ok;
+            integer score_err;
+            integer score_total;
+            // Azure-Lily exposes one mac_qk score per lane (16 lanes). We
+            // report using NL-DPE's 128-denominator convention: PASS when
+            // every lane is correct; each failing lane prorates 8 of the
+            // 128 slots (128/16 = 8).
+            score_total = 128;
+            lane_pass_cnt = ((accum_lane0 === accum_expected) ? 1 : 0) + lane_ok;
+            lane_fail_cnt = W - lane_pass_cnt;
+            score_ok  = lane_pass_cnt * (score_total / W);
+            score_err = lane_fail_cnt * (score_total / W);
+
+            $display("");
+            $display("=== Summary ===");
+            $display("  Total cycles : %0d", cycle);
+            $display("  Score PASS   : %0d / %0d (err=%0d)",
+                     score_ok, score_total, score_err);
+            $display("  Lane isolate : %0d / %0d lanes match lane 0",
+                     lane_ok, W-1);
+            if ((accum_lane0 === accum_expected) && (lane_ok == W-1))
+                $display("  Overall      : PASS");
+            else
+                $display("  Overall      : FAIL (check1=%s, lane_ok=%0d/%0d)",
+                         (accum_lane0 === accum_expected) ? "PASS" : "FAIL",
+                         lane_ok, W-1);
+        end
 
         $finish;
     end

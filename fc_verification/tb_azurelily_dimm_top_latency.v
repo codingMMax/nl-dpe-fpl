@@ -1,14 +1,21 @@
 // Azure-Lily Full DIMM Top — Latency Measurement (W=16, N=128, d=64)
 //
-// Measures mac_qk's latency for all N=128 QK^T scores.  The AL top's
-// softmax + mac_sv stages are structurally present but not end-to-end
-// wired in the current generator, so we measure the mac_qk portion
-// explicitly by counting out_valid pulses from lane 0.
+// Per-stage latency probes for Phase 5 parity with NL-DPE's latency TB.
+// Stage-name mapping (NL-DPE convention → Azure-Lily DUT module):
+//   Score   = mac_qk_inst   (dsp_mac, K=13 cycles per row, one row per QK^T score)
+//   Softmax = softmax_inst  (clb_softmax FSM: S_LOAD→S_INV→S_NORM)
+//   Wsum    = mac_sv_inst   (dsp_mac, K=26 cycles per mac_sv output element)
 //
-// Reports:
-//   mac_qk_latency : cycles from S_FEED_QK entry to lane 0's N-th out_valid.
-//   That's the "QK^T matmul" time.  Softmax and mac_sv add ~constant
-//   post-processing time (separately estimated in the alignment log).
+// Rationale for NL-DPE naming conventions (Score / Softmax / Wsum): the shared
+// `run_checks.py::RE_STAGE` regex at line 144 matches those exact tags so a
+// single harness parses both architectures' TB stdout identically.
+//
+// Probe pattern mirrors `tb_nldpe_dimm_top_latency.v:60–77` — first-valid
+// pulse of each stage on lane 0 latches the end timestamp; the subsequent
+// stage's start cycle is stitched from the prior stage's end. The
+// `@(posedge clk);` before the final `$display` block is the NBA-commit fix
+// applied in Phase 3 so non-blocking `*_end_cyc` registers are sampled after
+// the scheduler has committed their values.
 
 `timescale 1ns / 1ps
 
@@ -44,7 +51,49 @@ module tb_azurelily_dimm_top_latency;
     integer i, j, m, out_valid_count;
     integer start_cyc, feed_qk_cyc, end_cyc;
 
-    // Count out_valid pulses from lane 0 (one per row).
+    // Per-stage timestamps (lane 0).
+    integer score_start_cyc, score_end_cyc;
+    integer softmax_start_cyc, softmax_end_cyc;
+    integer wsum_start_cyc, wsum_end_cyc;
+
+    // Detect first rising edge of each stage's valid pulse on lane 0.
+    reg score_caught, softmax_caught, wsum_caught;
+    always @(posedge clk) begin
+        if (rst) begin
+            score_start_cyc <= 0;   score_end_cyc   <= 0;
+            softmax_start_cyc <= 0; softmax_end_cyc <= 0;
+            wsum_start_cyc <= 0;    wsum_end_cyc    <= 0;
+            score_caught <= 0; softmax_caught <= 0; wsum_caught <= 0;
+        end else begin
+            // Score: first cycle mac_qk_inst.out_valid=1 on lane 0.
+            // This is mac_qk finishing the FIRST row (K=13 valid cycles after
+            // feed begins).  Per stage-name mapping this is the "Score" stage.
+            if (!score_caught && dut.al_lane[0].mac_qk_inst.out_valid) begin
+                score_end_cyc <= cycle;
+                score_caught  <= 1;
+                softmax_start_cyc <= cycle;
+            end
+            // Softmax: first cycle clb_softmax produces an output (state==S_NORM=3
+            // with out_valid=1).  The clb_softmax FSM walks
+            // S_LOAD(0)→S_INV(2)→S_NORM(3); its first data_out commit is when
+            // it first enters S_NORM and raises out_valid.
+            if (!softmax_caught && dut.al_lane[0].softmax_inst.valid_n) begin
+                softmax_end_cyc <= cycle;
+                softmax_caught  <= 1;
+                wsum_start_cyc  <= cycle;
+            end
+            // Wsum: first cycle mac_sv_inst.out_valid=1 on lane 0.
+            // mac_sv accumulates K=26 cycles of attn*V before its first
+            // out_valid pulse.
+            if (!wsum_caught && dut.al_lane[0].mac_sv_inst.out_valid) begin
+                wsum_end_cyc <= cycle;
+                wsum_caught  <= 1;
+            end
+        end
+    end
+
+    // Count out_valid pulses from lane 0 (one per row) for legacy mac_qk
+    // total-row reporting.
     always @(posedge clk) begin
         if (rst) out_valid_count <= 0;
         else if (dut.al_lane[0].mac_qk_inst.out_valid) out_valid_count <= out_valid_count + 1;
@@ -88,46 +137,65 @@ module tb_azurelily_dimm_top_latency;
         // Wait for FSM to reach S_FEED_QK.
         while (dut.state != 3'd2) @(posedge clk);
         feed_qk_cyc = cycle;
-        $display("  [t=%0d] S_FEED_QK reached (mac_qk timing starts here)", feed_qk_cyc);
+        $display("  [t=%0d] S_FEED_QK reached (compute timing starts here)", feed_qk_cyc);
 
-        // Wait for N=128 out_valid pulses from lane 0 (one per row).
-        begin : wait_done
+        // Anchor Score stage start at S_FEED_QK entry (mirrors NL-DPE's
+        // feed_qk_cyc as the start anchor for the first stage).
+        score_start_cyc = feed_qk_cyc;
+
+        // Wait until lane 0's mac_sv produces its FIRST output pulse, OR timeout.
+        // That delimits the full Score→Softmax→Wsum cascade for the first
+        // output row.
+        begin : wait_wsum_done
             integer timeout;
             timeout = 0;
-            while ((out_valid_count < N) && (timeout < 100000)) begin
+            while (!wsum_caught && (timeout < 100000)) begin
                 @(posedge clk);
                 timeout = timeout + 1;
             end
             if (timeout >= 100000)
-                $display("  TIMEOUT: got %0d/%0d out_valid pulses", out_valid_count, N);
+                $display("  TIMEOUT: wsum did not complete (softmax_caught=%0d, score_caught=%0d)",
+                         softmax_caught, score_caught);
         end
 
         end_cyc = cycle;
-        $display("  [t=%0d] All N=%0d QK^T rows produced", end_cyc, N);
+        $display("  [t=%0d] Lane 0 mac_sv first out_valid reached", end_cyc);
+
+        // NBA-commit fix (Phase 3 pattern): the per-stage end_cyc registers
+        // are assigned via non-blocking assigns in the always block above.
+        // Insert one clock edge before the report so their committed values
+        // are visible to $display, avoiding spurious "end=0" readings.
+        @(posedge clk);
 
         $display("");
-        $display("=== Latency Report ===");
+        $display("=== Per-Stage Latency Report (lane 0) ===");
+        $display("  Score stage   : %0d cycles  (start=%0d  end=%0d)",
+                 score_end_cyc - score_start_cyc, score_start_cyc, score_end_cyc);
+        $display("  Softmax stage : %0d cycles  (start=%0d  end=%0d)",
+                 softmax_end_cyc - softmax_start_cyc, softmax_start_cyc, softmax_end_cyc);
+        $display("  Wsum stage    : %0d cycles  (start=%0d  end=%0d)",
+                 wsum_end_cyc - wsum_start_cyc, wsum_start_cyc, wsum_end_cyc);
+        $display("");
+        $display("=== End-to-end ===");
         $display("  Reset release      : cycle %0d",  start_cyc);
-        $display("  S_FEED_QK entry    : cycle %0d",  feed_qk_cyc);
-        $display("  N=%0d rows done    : cycle %0d",  N, end_cyc);
+        $display("  FSM force (compute): cycle %0d",  feed_qk_cyc);
+        $display("  Wsum first output  : cycle %0d",  end_cyc);
+        $display("  Compute+output     : %0d cycles", end_cyc - feed_qk_cyc);
         $display("");
-        $display("  mac_qk latency (compute-only) : %0d cycles",
-                 end_cyc - feed_qk_cyc);
-        $display("  Per-row avg                    : %.2f cycles/row",
-                 (end_cyc - feed_qk_cyc) * 1.0 / N);
+        $display("=== Legacy mac_qk-only counters (for reference) ===");
+        $display("  mac_qk out_valid pulses : %0d / %0d", out_valid_count, N);
         $display("");
-        $display("  NOTE: softmax + mac_sv not exercised in this test.");
-        $display("  Post-mac_qk cycles (softmax + mac_sv) would add an est. ~500 cycles");
-        $display("  per row based on sim model — total end-to-end AL latency is that");
-        $display("  mac_qk latency + per-row softmax + per-col mac_sv.");
+        $display("  Phase 5 comparison: these per-stage RTL cycles are the ground");
+        $display("  truth that sim's gemm_dsp + softmax model must match within");
+        $display("  tolerance (see phase5_known_deltas.json for annotated residuals).");
 
         $finish;
     end
 
     // Hard timeout
     initial begin
-        #500000;
-        $display("HARD TIMEOUT");
+        #2000000;
+        $display("HARD TIMEOUT at 2ms sim time");
         $finish;
     end
 

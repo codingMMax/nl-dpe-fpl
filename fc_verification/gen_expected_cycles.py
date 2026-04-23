@@ -12,7 +12,22 @@ Stage → sim call mapping for the NL-DPE DIMM top (N=128, d=64):
   wsum    = gemm_log(M=N, K=N, N=d, n_parallel_dpes=d) compute-cycles only
   e2e     = t_fill + (S-1)·t_steady + t_drain  (scheduler.py §_run_attention_pipeline)
 
-Azure-Lily stages remain null (gemm_dsp path not in Phase 1 scope).
+Phase 5 — Azure-Lily DIMM top (N=128, d=64, DSP baseline):
+  Per-lane serial Regime A, matching the AL top FSM
+  (azurelily_dimm_top_d64_c128.v:67-88).  Stages (NL-DPE-named for
+  harness compatibility):
+    score   = k_tile_qk                                  (first mac_qk row)
+    softmax = (N-1) * k_tile_qk + S_INV + first S_NORM   (wait for all rows
+                                                          to stream into
+                                                          softmax SRAM, then
+                                                          reduce + emit)
+    wsum    = k_tile_sv                                  (first mac_sv out)
+    e2e     = score + softmax + wsum
+  where k_tile_qk = ceil(d / DSP_WDITH)   (= 16 with DSP_WDITH=4, d=64)
+        k_tile_sv = ceil(N / DSP_WDITH)   (= 32 with DSP_WDITH=4, N=128)
+  The RTL uses 5 products/cycle (4 DSP int_sop_4 + 1 CLB multiply) giving
+  K=13 / K=26 per row — the resulting 5-product vs 4-product delta is
+  annotated as `structural` in phase5_known_deltas.json.
 """
 
 from __future__ import annotations
@@ -42,8 +57,8 @@ FROZEN_BASELINE = {
         },
         "azurelily_dimm_top_d64_c128": {
             "params": {"N": 128, "d": 64, "C": 128, "W": 16, "total_dsp": 16},
-            "stages": {"mac_qk": None, "e2e": None},
-            "todo": "Populate from gemm_dsp() path in a future phase.",
+            "stages": {"score": 16, "softmax": 2034, "wsum": 32, "e2e": 2082},
+            "todo": "Stage names map to Azure-Lily modules: score=mac_qk, softmax=clb_softmax, wsum=mac_sv.",
         },
     },
 }
@@ -250,6 +265,49 @@ def refresh_from_sim() -> dict | None:
     # e2e = score + softmax + wsum.
     e2e_cycles = score_cycles + softmax_cycles + wsum_cycles
 
+    # ── Azure-Lily DIMM top extraction (DSP baseline, Regime A) ─────────
+    # The AL top serialises: mac_qk produces N=128 scores into clb_softmax's
+    # S_LOAD SRAM; after all scores land, clb_softmax does S_INV then S_NORM;
+    # mac_sv then consumes softmax outputs (K=N packed) to produce d output
+    # elements per lane.  The RTL per-stage probe window for lane 0 captures:
+    #   Score   : cycle(S_FEED_QK entry) → cycle(first mac_qk out_valid)
+    #   Softmax : cycle(score end)       → cycle(first softmax valid_n)
+    #   Wsum    : cycle(softmax end)     → cycle(first mac_sv out_valid)
+    #
+    # Sim-side (Regime A) expected values — DSP_WIDTH=4 granularity:
+    #   k_tile_qk = ceil(d / DSP_WDITH)  → mac_qk cycles per output row
+    #   k_tile_sv = ceil(N / DSP_WDITH)  → mac_sv cycles per output row
+    # Score stage   = k_tile_qk            (first row fills the K-accumulator)
+    # Softmax stage = (N-1) * k_tile_qk    (remaining rows stream into S_LOAD,
+    #                                       overlapped with softmax SRAM write)
+    #                 + 1 cyc S_INV        (softmax reciprocal)
+    #                 + 1 cyc first S_NORM (first normalized output)
+    # Wsum stage    = k_tile_sv            (first mac_sv output element)
+    # E2E           = Score + Softmax + Wsum
+    #
+    # Residuals:
+    #   - The RTL uses 5 products/cycle (4 DSP int_sop_4 + 1 CLB multiply,
+    #     dsp_mac @ azurelily_dimm_top_d64_c128.v:152-215); sim uses
+    #     DSP_WDITH=4 strict (scheduler_stats/common.py:6). RTL per-row
+    #     cycles = ceil(d / 5) = 13 (mac_qk) and ceil(N / 5) = 26 (mac_sv)
+    #     — each ~18.75% faster than sim. Classification: structural.
+    #   - Softmax residual also inherits the (N-1) × (k_tile_qk - 13)
+    #     accumulated speed-up.
+    #   - Classification: all residuals `structural`; see
+    #     phase5_known_deltas.json for per-stage root-cause citations.
+    try:
+        from scheduler_stats.common import DSP_WDITH
+    except Exception:  # noqa: BLE001
+        DSP_WDITH = 4  # fallback consistent with gemm_dsp
+
+    al_N, al_d = 128, 64
+    k_tile_qk = math.ceil(al_d / DSP_WDITH)
+    k_tile_sv = math.ceil(al_N / DSP_WDITH)
+    al_score_cycles   = k_tile_qk
+    al_softmax_cycles = (al_N - 1) * k_tile_qk + 1 + 1  # stream + S_INV + 1st S_NORM
+    al_wsum_cycles    = k_tile_sv
+    al_e2e_cycles     = al_score_cycles + al_softmax_cycles + al_wsum_cycles
+
     # --- Build the JSON payload ---
     today = _dt.date.today().isoformat()
     data = {
@@ -270,9 +328,18 @@ def refresh_from_sim() -> dict | None:
                 },
             },
             "azurelily_dimm_top_d64_c128": {
-                "params": {"N": N, "d": d, "C": 128, "W": W_softmax, "total_dsp": 16},
-                "stages": {"mac_qk": None, "e2e": None},
-                "todo": "Populate from gemm_dsp() path in a future phase.",
+                "params": {"N": al_N, "d": al_d, "C": 128,
+                           "W": W_softmax, "total_dsp": 16,
+                           "DSP_WDITH": DSP_WDITH},
+                "stages": {
+                    "score":   al_score_cycles,
+                    "softmax": al_softmax_cycles,
+                    "wsum":    al_wsum_cycles,
+                    "e2e":     al_e2e_cycles,
+                },
+                "todo": ("Stage names map to Azure-Lily modules: "
+                         "score=mac_qk, softmax=clb_softmax (S_LOAD+S_INV+S_NORM), "
+                         "wsum=mac_sv. Residuals annotated in phase5_known_deltas.json."),
             },
         },
     }
@@ -293,6 +360,8 @@ def main() -> int:
     print(f"[expected-cycles] wrote {OUT_PATH} (regime={data['regime']}, layout={data['layout']})")
     stages = data["configs"]["nldpe_dimm_top_d64_c128"]["stages"]
     print(f"[expected-cycles] nldpe_dimm_top stages: {stages}")
+    al_stages = data["configs"]["azurelily_dimm_top_d64_c128"]["stages"]
+    print(f"[expected-cycles] azurelily_dimm_top stages: {al_stages}")
     return 0
 
 
