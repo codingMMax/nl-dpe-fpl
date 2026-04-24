@@ -512,3 +512,161 @@ Azure-Lily residuals (0 / +1 / 0 / +2 cyc) are now well below the
 NL-DPE granularity band (+10..+12 per-stage). Both are fully
 documented with file:line citations in their respective
 `phase{3,5}_known_deltas.json`.
+
+---
+
+## 10. Structural narrative — what the sim models vs what the RTL does
+
+A consolidated architecture-level view. For each architecture, we
+describe (a) what the sim structurally models, (b) what the RTL
+structurally implements, and (c) where the two structures diverge.
+The §§1–9 per-stage tables back every claim below with cycle
+numbers + file:line citations.
+
+### 10.1 NL-DPE DIMM
+
+**Sim structure (`gemm_log` analytical).** Closed-form per-pass cost
+under Regime B, Layout A:
+
+| Phase | Sim models | Cycles |
+|:-----:|---|---|
+| $L$ | SRAM→DPE buffer via $W_{\text{DPE}}=40$ bit bus + SRAM pipeline latency | $\lceil C \cdot 8 / W_{\text{DPE}} \rceil + k_\text{sram\_lat} \cdot K_{\text{id}}$ |
+| $F$ | Bit-serial ACAM compute (clipped to 1 cyc because drain >> compute) | $\max(1, \lceil (\text{core\_ns} - O \cdot t_{\text{clk}}) / t_{\text{clk}} \rceil)$ |
+| $D$ | DPE output serialize + CLB reduction tree (reduction hides in drain) | $\max(O, \lceil \log_2 K \rceil)$ |
+| $S$ | ⟨folded into $L$⟩ | 0 |
+| $W$ | ⟨folded into $L$⟩ | 0 |
+
+Multi-pass composition: `T(M) = L_A · M + O` (Regime B, Layout A).
+Stage composition via scheduler's `fill + (S−1)·steady + drain`
+formula. **No FSM model** — every "pass" is an indivisible
+analytical unit.
+
+**RTL structure.** Explicit cycle-accurate FSMs per lane + per
+module. Each `nldpe_dimm_top_d64_c128.v` lane contains three
+sub-modules with their own state machines:
+
+| Module | States | Cycles per stage |
+|---|---|---|
+| `score_inst` (`dimm_score_matrix`) | `S_IDLE → S_LOAD_Q → S_LOAD_K → S_COMPUTE → S_WAIT_DPE → S_WRITE_B → S_OUTPUT` (loop) | `cols_per_dpe` iterations × `(feed + compute + drain + 2 transition flops)` |
+| `softmax_inst` (`softmax_approx`) | `SM_IDLE → SM_LOAD → SM_EXP → SM_NORMALIZE → SM_OUTPUT` | `8 load + 9 exp + 9 norm + 2 transitions` |
+| `wsum_inst` (`dimm_weighted_sum`) | `WS_IDLE → WS_LOAD_A → WS_LOAD_V → WS_LOG_FEED → WS_LOG_DRAIN → (WS_EXP_FEED → WS_EXP_DRAIN) × M → WS_OUTPUT` | `12 setup + 4 × 60 per-col + 4 handoffs` |
+
+DPE is a hard block (`dpe_stub.v`) with its own internal pipeline
+(S_LOAD → S_WAIT_EXEC → S_COMPUTE → S_OUTPUT → S_DRAIN). Stages
+serialize on `ready_n = 0` hardwired: softmax waits for score's first
+write, wsum waits for softmax's valid_n.
+
+**Key structural divergences sim ↔ RTL:**
+
+1. **SRAM read pipeline.** Sim folds $k_\text{sram\_lat} = 2$ cyc into
+   `feed_cycles` once. RTL spends the first 2 cycles of *every* S_COMPUTE
+   iteration filling the address→SRAM register pipeline before
+   `w_buf_en` can strobe (`nldpe_dimm_top_d64_c128.v:193`:
+   `mac_count >= 2` gate). Contributes **4 × 4 = 16 cyc** of the score
+   residual across 4 iterations.
+
+2. **FSM state flops.** Sim has no notion of state transitions. RTL
+   spends 1 cyc on `S_COMPUTE → S_WAIT_DPE` and 1 cyc on
+   `S_WAIT_DPE → S_WRITE_B` every iteration. Already baked into the
+   extractor's `fsm_handshake_per_pass = 4`.
+
+3. **Softmax probe placement.** Sim computes per-row softmax cost.
+   RTL probe opens at score's first `S_OUTPUT`, which falls
+   **inside** `SM_LOAD` rather than at `SM_EXP`. The 8-cyc trailing
+   `SM_LOAD` + 2 state-transition flops show up in the probe window
+   as **+10 cyc**. This is a measurement convention, not a real cost.
+
+4. **Wsum one-time stage setup.** Sim amortises a one-time attn /
+   V-SRAM fill into the per-column cost. RTL has explicit
+   `WS_LOAD_A → WS_LOG_FEED → WS_LOG_DRAIN` setup before the first
+   `WS_EXP_FEED`. Contributes **+12 cyc**.
+
+5. **Wsum per-m accumulator-clear handoff.** Sim assumes zero-cost
+   state reset between output columns. RTL spends 1 cyc per
+   column clearing the scalar accumulator before feeding the next
+   128-wide vector. Contributes **4 × 1 = +4 cyc**.
+
+**Net:** Δ = 16 + 10 + 16 = +42 cyc E2E, classified
+`modelling_granularity`. The sim structurally models the same
+pipeline the RTL implements; the residual is purely state-flop +
+probe-placement bookkeeping.
+
+### 10.2 Azure-Lily DIMM
+
+**Sim structure (`gemm_dsp` analytical).** Even simpler than NL-DPE —
+no Regime B, no multi-pass overlap:
+
+| Phase | Sim models | Cycles |
+|:-----:|---|---|
+| $L$ | ⟨folded; Phase-6A adds +2 for per-row SRAM prime⟩ | 2 per-row (P6A) |
+| $F$ | `int_sop_4` 4-wide DSP MACs | $k_\text{tile} = \lceil K / \text{DSP\_WDITH} \rceil = \lceil K / 4 \rceil$ |
+| $D$ | ⟨accum commit fuses with last F cycle⟩ | 0 |
+| $S$ | ⟨not modelled⟩ | 0 |
+| $W$ | ⟨downstream absorbs⟩ | 0 |
+
+Stage composition is strictly serial: each stage fully completes on
+its input stream before the next starts. No overlap.
+
+**RTL structure.** Per-lane chain of three sub-modules:
+
+| Module | States | Cycles per operation |
+|---|---|---|
+| `mac_qk_inst` (`dsp_mac`, K=16) | Internal `dsp_mac` count 0..K-1, `out_valid` pulse at K-1 | 2 SRAM-prime + 16 firing |
+| `softmax_inst` (`clb_softmax`) | `S_IDLE → S_LOAD → S_INV → S_NORM` | 128 streamed-in-loads + 1 inv + 1 first-norm |
+| `mac_sv_inst` (`dsp_mac`, K=32) | Same pattern as mac_qk but K=32 | 32 firing (attn stream drives directly) |
+
+Top FSM (`dimm_top`):
+`S_IDLE → S_LOAD_Q → S_LOAD_K → S_FEED_QK → S_WAIT_QK → S_FEED_SOFTMAX → S_FEED_SV → S_OUTPUT`.
+
+**Key structural divergences sim ↔ RTL** (post-Phase-6A):
+
+1. **Per-row SRAM prime**. Sim's `gemm_dsp` originally didn't model the
+   2-cyc SRAM read pipeline; `gen_expected_cycles.py` now adds
+   `feed_setup_per_row = 2` to score and softmax streaming formulas,
+   matching `dsp_mac`'s `mac_count >= 2` gate. Residual = **0**.
+
+2. **Softmax's streaming dominance**. The 127 remaining rows of mac_qk
+   output stream through clb_softmax's `S_LOAD` during the softmax
+   probe window — **2286 cyc** of the softmax total. Sim models this
+   exactly via `(N-1) × (k_tile_qk + setup)`.
+
+3. **S_INV + first S_NORM NBA boundary**. Sim adds 1 cyc for
+   `clb_softmax.S_INV` (reciprocal LUT) and 1 cyc for the first
+   `S_NORM` output. RTL spends **+1 extra cyc** on the NBA-commit of
+   the first `S_NORM` output — that's the sole remaining residual.
+
+4. **No structural primitive-width divergence** (post-Phase-6A).
+   Before 6A, RTL FSM iterated as if packing 5 elements/cycle while
+   dsp_mac consumed only 4/cycle, causing a 20% cycle under-count
+   (−132 E2E). Fix hardcoded `EPW_DSP = 4` in the FSM's K-sizing
+   paths so the control path matches the data path's actual
+   throughput. Post-6A residual is **0 / +1 / 0 / +2 cyc** total.
+
+**Net:** Δ = +2 cyc E2E, classified `modelling_granularity`. The sim
+structurally models the same DSP pipeline the RTL implements.
+
+### 10.3 Cross-architecture — where NL-DPE and Azure-Lily structurally differ
+
+Not a sim ↔ RTL question, but worth a parallel view since the paper
+compares the two:
+
+| Dimension | NL-DPE | Azure-Lily |
+|---|---|---|
+| Core primitive | Analog crossbar + ACAM (`dpe` hard block) | 4-wide DSP MAC (`int_sop_4` + `dsp_mac` wrapper) |
+| QK^T compute | Log-domain: CLB add + `dimm_exp` (ACAM mode 1) | Linear-domain: 4-wide DSP MAC across K=16 packed |
+| Softmax exp | `sm_exp` (ACAM mode 1) | CLB-based exp LUT + S_NORM |
+| Score·V compute | Log-domain: CLB add + `ws_exp` (ACAM) | 4-wide DSP MAC across K=32 packed |
+| K_id packing | `floor(C/d) = 2` (fuses 2 scores per DPE pass) | None — DSP processes K scalars |
+| Reduction | Hidden in DPE output shift-add | Accumulator in dsp_mac |
+| Parallelism | W=16 lanes × 4 stages × K_id=2 = 64 DPEs | W=16 lanes × 4 stages × 1 DSP/lane = 68 DSPs |
+| Per-row cost (RTL) | ~65 cyc (analog pipeline depth) | ~18 cyc (4 MAC/cyc × K=16 = 4 firing + overhead) |
+| Full-attention cost (RTL, 128 rows × 128 cols) | 539 cyc first row (then steady-state amortises) | 2340 cyc strict serial (no pipeline overlap) |
+| Softmax throughput bottleneck | ACAM fires 1 pass per row | CLB S_LOAD serialises 128 scores |
+
+**Summary.** NL-DPE's sim-RTL structural match is *per-pass* with
+Regime-B multi-pass composition; its residual (42 cyc E2E) is all FSM
+flops + probe placement. Azure-Lily's sim-RTL match is *per-DSP-tile*
+strictly serial; post-Phase-6A its residual (2 cyc E2E) is literally
+one NBA-boundary cycle in softmax. Both sims faithfully model their
+respective RTL architectures, and the residuals are bounded,
+explainable, and architectural-scale-independent.
