@@ -68,3 +68,11 @@ dse/gemm_phase2_1/configs/
 dse/gemm_phase2_1/rtl/
 benchmarks/vtr_runs_seqlen/
 azurelily/IMC/logs/
+
+# Compiled iverilog testbench executables — regenerable via run_alignment.sh
+block_comp_apr_11/tb/tb_*
+!block_comp_apr_11/tb/tb_*.v
+!block_comp_apr_11/tb/tb_*.sh
+
+# VCD waveform dumps — regenerable from testbench runs
+*.vcd
