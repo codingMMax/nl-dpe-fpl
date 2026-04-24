@@ -20,8 +20,9 @@ the live tracks below.
 | `nl_dpe/gen_arch_xml.py` | VTR arch XML generator (auto / fixed_clb_replace / fixed_dsp_bram / fixed_dsp_clb_replace) |
 | `nl_dpe/gen_gemv_wrappers.py` | Verilog RTL generator (GEMV and FC modes) |
 | `nl_dpe/gen_gemm_wrapper.py` | P-replica GEMM wrapper generator (Round 2, imports from gen_gemv_wrappers) |
-| `nl_dpe/gen_attention_wrapper.py` | Parameterized attention head RTL generator |
-| `nl_dpe/attention_head_1_channel.v` | Hand-written attention head RTL (N=128, d=128, 3 DPEs) |
+| `nl_dpe/gen_attention_wrapper.py` | Parameterized attention head RTL generator (DIMM stages) |
+| `nl_dpe/gen_azurelily_fc_wrapper.py` | Azure-Lily FC wrapper generator (dsp_mac, AH track T1) |
+| `fc_verification/rtl/{nldpe,azurelily}_attn_head_d64_c128.v` | Composed attention-head top RTL (FC_QKV + DIMM + FC_O), AH track T2 |
 | `nl_dpe/area_power.py` | DPE physical specs: `dpe_specs(rows, cols)` → tile W/H/area/power |
 | `nl_dpe/run_vtr.py` | VTR flow runner (called by gemv_dse.py) |
 | `azurelily/IMC/test.py` | IMC energy/latency simulator (supports `fc`, `attention`, `bert_tiny` models) |
