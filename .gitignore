@@ -58,3 +58,13 @@ dse/results/plots/**/*.pdf
 
 # Staging for cleanup
 */to_delete/
+
+# AH-track additions (2026-04-24)
+fc_verification/vtr_runs/
+block_comp_apr_11/vtr_runs/
+block_comp_apr_11/results/*.log
+dse/gemm_phase2_1/vtr_runs/
+dse/gemm_phase2_1/configs/
+dse/gemm_phase2_1/rtl/
+benchmarks/vtr_runs_seqlen/
+azurelily/IMC/logs/
