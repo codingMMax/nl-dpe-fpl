@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ACAM / Crossbar Noise — Advisor Briefing</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    color: #1a1a1a;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 32px 28px 64px;
+    background: #fafafa;
+  }
+  h1 {
+    font-size: 24px;
+    margin: 0 0 4px;
+    color: #0d2847;
+  }
+  .subtitle {
+    color: #5a6b7d;
+    font-size: 14px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid #d0d7de;
+    padding-bottom: 12px;
+  }
+  h2 {
+    font-size: 17px;
+    color: #0d2847;
+    margin: 28px 0 10px;
+    padding-bottom: 3px;
+    border-bottom: 2px solid #2b5b9c;
+  }
+  h3 {
+    font-size: 14px;
+    color: #2b5b9c;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0 12px;
+    font-size: 13.5px;
+  }
+  th, td {
+    border: 1px solid #d0d7de;
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #eaf1fb;
+    color: #0d2847;
+    font-weight: 600;
+  }
+  tr:nth-child(even) td { background: #f5f7fa; }
+  .callout {
+    background: #fff7d6;
+    border-left: 4px solid #e3a705;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  .good {
+    background: #e4f6e1;
+    border-left: 4px solid #2f8b1e;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  .bad {
+    background: #fde0e0;
+    border-left: 4px solid #c93636;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  code, .mono {
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    background: #eceff3;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .eq {
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 14px;
+    background: #eef2f7;
+    padding: 8px 12px;
+    border-radius: 4px;
+    display: block;
+    margin: 8px 0;
+  }
+  .pill {
+    display: inline-block;
+    background: #2b5b9c;
+    color: white;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pill.gray { background: #8a94a0; }
+  .pill.green { background: #2f8b1e; }
+  .pill.red { background: #c93636; }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 2px 0; }
+  .footnote {
+    font-size: 12px;
+    color: #5a6b7d;
+    margin-top: 24px;
+    padding-top: 12px;
+    border-top: 1px solid #d0d7de;
+  }
+</style>
+</head>
+<body>
+
+<h1>ACAM / Crossbar Noise — Hardware SNR Analysis</h1>
+<div class="subtitle">
+  Advisor briefing · DSE R = 128 – 1024 · ACAM = 130 rows (8-bit)
+</div>
+
+<h2>1. The question</h2>
+<p>
+As we sweep crossbar rows <code>R</code> in the DSE, does the
+<strong>hardware</strong> still support the 8-bit output precision the
+NL-DPE paper relies on? If not, at what <code>R</code> does it break,
+and what's the dominant mechanism?
+</p>
+
+<h2>2. Setup — three ACAM modes, two need study</h2>
+<table>
+  <tr><th>Mode</th><th>Where it's used</th><th>In scope?</th></tr>
+  <tr><td>log ↔ exp (paired)</td>
+      <td>Attention core (score, softmax, wsum)</td>
+      <td><span class="pill gray">NO</span> — paired inverses cancel errors; softmax scale-invariance</td></tr>
+  <tr><td>Activation (ReLU/GELU)</td>
+      <td>When done inline with ACAM</td>
+      <td><span class="pill gray">NO</span> — function-specific noise-aware training</td></tr>
+  <tr><td>ADC (identity quantiser)</td>
+      <td>FC, Q/K/V, FFN1/FFN2 — general-purpose</td>
+      <td><span class="pill">YES</span> — output feeds CLB reduction + activation</td></tr>
+</table>
+<p>
+Only ADC mode is "general purpose" — its output is just a number that
+goes into CLB reduction and then an external activation. The other
+modes are function-specific and can be trained offline to tolerate noise.
+</p>
+
+<h2>3. The four noise terms and why they scale differently</h2>
+<table>
+  <tr><th>Term</th><th>Scaling</th><th>Physical reason</th></tr>
+  <tr><td><strong>σ<sub>ideal</sub></strong> (per-cell programming)</td>
+      <td><code>√R</code></td>
+      <td>Independent errors — variances add, σ grows as √N (central limit theorem)</td></tr>
+  <tr><td><strong>σ<sub>sneak</sub></strong> (OFF-state leakage)</td>
+      <td><code>√R</code></td>
+      <td>Same family as ideal — independent per cell</td></tr>
+  <tr><td><strong>σ<sub>correlated</sub></strong> (driver / supply / thermal)</td>
+      <td><code>R</code></td>
+      <td>Errors move together — σ's add linearly instead of in quadrature</td></tr>
+  <tr><td><strong>IR drop</strong> (systematic signal loss)</td>
+      <td><code>R²</code></td>
+      <td>Wire resistance × wire current — both ∝ R, their product is R²</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Why R² for IR drop, but √R for noise?</strong><br>
+  Noise = sum of independent random errors → variances add → σ scales as √R.<br>
+  IR drop = (wire resistance ∝ R) × (wire current ∝ R) → deterministic product → ΔV scales as R².
+</div>
+
+<h2>4. The counter-intuitive result</h2>
+<div class="good">
+  <strong>Under ideal physics, more rows = LESS relative noise.</strong><br>
+  Signal grows ∝ <code>R</code>; independent noise grows ∝ <code>√R</code>; ratio SNR ∝ <code>√R</code>.
+  Same reason longer camera exposures give cleaner images.
+</div>
+<p>
+The "big crossbar is noisy" intuition in the IMC literature traces back
+to <strong>IR drop specifically</strong> — the only effect that scales
+faster than the ideal √R SNR gain.
+</p>
+
+<h2>5. Realistic coefficients (first-principles derivation)</h2>
+<table>
+  <tr><th>Coefficient</th><th>Formula</th><th>Typical value</th><th>At R = 1024</th></tr>
+  <tr><td>α (IR drop)</td>
+      <td><code>r_wire · g_avg · 3/8</code></td>
+      <td>3 × 10<sup>-7</sup> (r_wire = 0.01 Ω/cell)</td>
+      <td>f<sub>IR</sub> ≈ 31 %</td></tr>
+  <tr><td>σ₀ (sneak per-cell)</td>
+      <td><code>σ_g_off · V_read</code></td>
+      <td>0.05 nA/cell (2T2R cells)</td>
+      <td>σ ≈ 1.6 nA</td></tr>
+  <tr><td>δ (correlated per-row)</td>
+      <td><code>σ_V_read · g_avg</code></td>
+      <td>0.05 nA/row (driver ≈ 0.7 mV RMS)</td>
+      <td>σ ≈ 51 nA</td></tr>
+</table>
+
+<h2>6. Tool output at R ∈ [32, 4096]</h2>
+<table>
+  <tr><th>R</th><th>I_col_max</th><th>σ_total</th><th>σ/LSB</th><th>Effective bits</th><th>Status</th></tr>
+  <tr><td>128</td><td>5.8 μA</td><td>6.6 nA</td><td>0.29</td><td>8.00</td><td><span class="pill green">PASS</span></td></tr>
+  <tr><td>256</td><td>11.5 μA</td><td>13.0 nA</td><td>0.29</td><td>8.00</td><td><span class="pill green">PASS</span></td></tr>
+  <tr><td>512</td><td>23.0 μA</td><td>25.8 nA</td><td>0.29</td><td>8.00</td><td><span class="pill green">PASS</span></td></tr>
+  <tr><td>1024</td><td>46.1 μA</td><td>51.4 nA</td><td>0.29</td><td>8.00</td><td><span class="pill green">PASS</span></td></tr>
+  <tr><td>2048</td><td>92.2 μA</td><td>102 nA</td><td>0.28</td><td>0.00</td><td><span class="pill red">IR drop cliff</span></td></tr>
+</table>
+<p>
+σ/LSB is <strong>constant ≈ 0.29</strong> across R (correlated noise
+scales with R, same as LSB, so the ratio is R-independent). Effective
+output is capped by the ACAM's 8-bit quantizer — not by noise — up to
+the IR-drop cliff.
+</p>
+
+<h2>7. The "cliff" behavior of IR drop</h2>
+<table>
+  <tr><th>R</th><th>IR drop</th><th>eff_bits</th><th>Regime</th></tr>
+  <tr><td>1024</td><td>31 %</td><td>8.00</td><td>Clean</td></tr>
+  <tr><td>1400</td><td>59 %</td><td>8.00</td><td>Still OK (headroom absorbs)</td></tr>
+  <tr><td>1545</td><td>72 %</td><td>~8.00</td><td>Knee</td></tr>
+  <tr><td>1700</td><td>87 %</td><td>7.2</td><td>Dropping</td></tr>
+  <tr><td>1826</td><td>100 %</td><td>0</td><td>Signal saturated</td></tr>
+</table>
+<p>
+The transition window is <strong>only ~280 rows wide</strong>. Precision
+stays flat at the ACAM cap, then falls off suddenly. It's a cliff, not
+a slope.
+</p>
+
+<h2>8. Quantization precision after CLB reduction (separate from analog noise)</h2>
+<p>
+Even with <em>perfectly clean</em> analog (no noise), the ACAM is still a
+fixed 8-bit quantiser. When V partial sums are summed in CLB, each one
+contributes its own ±½-LSB quantisation error.
+</p>
+<div class="eq">
+σ<sub>quant</sub>(per pass) = LSB / √12 &nbsp;&nbsp;|&nbsp;&nbsp; LSB ∝ R<br>
+Cumulative after V passes: σ<sub>total</sub> = √V · LSB / √12 &nbsp;∝&nbsp; √R · √V<br>
+At fixed K (= V·R): σ<sub>total</sub> ∝ √(R·K) &nbsp;⟹&nbsp; <strong>scales as √R</strong>
+</div>
+
+<p>For an FC layer with K = 1024 inputs:</p>
+<table>
+  <tr><th>R</th><th>V (passes)</th><th>Per-pass LSB</th><th>Cumulative σ</th><th>Eff. bits at FC output</th></tr>
+  <tr><td>128</td><td>8</td><td>0.50</td><td>0.41</td><td><strong>11.3</strong></td></tr>
+  <tr><td>256</td><td>4</td><td>1.00</td><td>0.58</td><td>10.8</td></tr>
+  <tr><td>512</td><td>2</td><td>2.00</td><td>0.82</td><td>10.3</td></tr>
+  <tr><td>1024</td><td>1</td><td>4.00</td><td>1.15</td><td><strong>9.8</strong></td></tr>
+</table>
+
+<div class="callout">
+  <strong>Going R = 128 → 1024 costs ~1.5 bits of FC-output precision</strong>,
+  even with zero analog noise. The reason: per-pass LSB grows linearly with R,
+  but cumulative quantisation error only averages by √V, so the LSB-growth wins.
+</div>
+
+<div class="good">
+  <strong>Both R extremes are still above 8 bits</strong> — adequate for 8-bit
+  inference targets after the activation requantises. Quantization-aware
+  fine-tuning easily handles the residual ~1.5-bit headroom loss at R=1024.
+</div>
+
+<h3>Two distinct R-dependent precision concerns</h3>
+<table>
+  <tr><th>Concern</th><th>Per-pass</th><th>Cumulative (at fixed K)</th><th>Trend</th></tr>
+  <tr><td>Analog noise (σ/LSB)</td><td>improves with R as 1/√R</td><td>R-independent</td><td>Stays clean</td></tr>
+  <tr><td>Quantization noise</td><td>LSB grows with R</td><td>Scales as √R</td><td>Gets worse</td></tr>
+</table>
+<p>
+Both are real. Both stay manageable in our DSE range. The quantization
+side (this section) was previously uncovered by the SNR tool; it has been
+added as the <code>--K</code> flag.
+</p>
+
+<h2>9. Key takeaways</h2>
+<div class="good">
+  <strong>1. Within the DSE range (R = 128–1024), hardware SNR supports 8-bit output.</strong>
+  The 130-row ACAM quantizer, not analog noise, is the binding constraint.
+</div>
+<div class="good">
+  <strong>2. Reduction doesn't amplify noise in relative terms.</strong>
+  V·H partial sums average: signal grows linearly, noise as √(V·H) → relative SNR improves.
+</div>
+<div class="callout">
+  <strong>3. The only R-dependent degradation mechanism is IR drop.</strong>
+  It's a cliff, not a slope. Default α puts it near R ≈ 1800; aggressive wires (α = 10<sup>-6</sup>) move it to R ≈ 1024.
+</div>
+<div class="callout">
+  <strong>4. Tool measures hardware SNR only; end-to-end accuracy depends on NAF.</strong>
+  Noise-aware fine-tuning is orthogonal to this analysis and handles activation kink sensitivity, quantisation-after-reduction, and cross-layer drift.
+</div>
+
+<h2>10. Open questions for follow-up</h2>
+<ul>
+  <li><strong>Calibrate α, σ₀, δ against SPICE</strong> of the NL-DPE layout — the cliff location depends on α.</li>
+  <li><strong>Run accuracy-vs-R in <code>azurelily/IMC/</code></strong> with the paper's noise model injected. Compare pre/post NAF.</li>
+  <li><strong>Confirm NAF envelope holds across R</strong>. If per-R retraining is needed, quantify the retraining cost in the paper.</li>
+</ul>
+
+<h2>11. What to cite in the paper</h2>
+<p style="font-style: italic; background: #eef2f7; padding: 10px 14px; border-radius: 4px; border-left: 4px solid #2b5b9c;">
+"Under typical process parameters, hardware SNR at the ACAM output
+supports 8-bit discrimination across <code>R ∈ [128, 1024]</code> — the
+130-cell ACAM quantiser is the binding constraint, not the analog noise
+floor. Cumulative quantisation noise after CLB reduction scales as
+√R at fixed K, costing ~1.5 bits of FC-output precision going from
+R = 128 to R = 1024 but staying above the 8-bit inference target.
+Analog SNR at the ACAM is R-independent in relative terms; the only
+hard R-dependent degradation mechanism is IR drop, which exhibits
+cliff-like behaviour around an α-dependent critical R. Final task
+accuracy is compensated by noise-aware fine-tuning as demonstrated in
+the NL-DPE paper."
+</p>
+
+<div class="footnote">
+  Artifacts in repo: <code>paper/methodology/acam_crossbar_noise_analysis.md</code> (methodology),
+  <code>paper/methodology/acam_noise_takeaways.md</code> (one-pager),
+  <code>paper/scripts/acam_crossbar_snr.py</code> (projection tool).
+  Reference: Zhao et al., NL-DPE (arXiv:2511.13950).
+</div>
+
+</body>
+</html>
