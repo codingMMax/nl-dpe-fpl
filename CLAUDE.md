@@ -87,6 +87,77 @@ the live tracks below.
   (`project_multipass_dpe_todos.md` for the P4 track).
 
 ## Active TODO Tracks
+
+- **AH — Attention Head RTL verification + latency alignment**
+  (opened 2026-04-24, pre-implementation): **Stage 1 (T1) ready to
+  start.** Ultimate goal: end-to-end RTL↔sim cycle-accurate alignment
+  for a composed attention head (FC_Q/K/V → DIMM top → FC_O), both
+  architectures, all residuals classified `modelling_granularity`.
+
+  **Scope anchor (frozen):** single config point N=128, d=64, C=128,
+  W=16, W_DPE=40, K_id=2 — inherits verified DIMM-top surface.
+  Configs: `nldpe_attn_head_d64_c128`, `azurelily_attn_head_d64_c128`.
+
+  **Prerequisites:** NL-DPE FC ✓ (12/12 Phase 2), Azure-Lily FC ✗
+  (T1 closes this gap). NL-DPE DIMM top ✓ (P3/4, +42 E2E m.g.),
+  Azure-Lily DIMM top ✓ (P5/6A, +2 E2E m.g.).
+
+  **Stages:**
+  - **T1 — Azure-Lily FC Phase-2 harness** (prerequisite for T4 only;
+    independent of T2, can run in parallel or either order). New
+    `tb_azurelily_fc_{512_128,2048_256}.v`, extend
+    `phase2_known_deltas.json` and `run_fc_phase2.py`. Gate: unified
+    Phase-2 report shows 12/12 PASS for both archs.
+  - **T2 — Attention-head top generator + RTL.** New
+    `nl_dpe/gen_{nldpe,azurelily}_attn_head_top.py` (mirrors
+    `gen_dimm_*_top.py`), emits RTLs in `fc_verification/rtl/`.
+    Wire Q/K/V FC → DIMM top → O FC with shared valid/ready_n
+    interface, `ready_n=1'b0` hardwired. Retire the stale hand-written
+    `nl_dpe/attention_head_1_channel.v`. Gate: iverilog clean +
+    resource sanity (NL-DPE ≈ 96 DPE, AL ≈ 40 DSP per head).
+  - **T3 — Functional TBs.** Scaled-identity Q/K/V projections +
+    identity V-matrix + one-hot input → hand-computable output. Gate:
+    cross-arch equivalence within int8 tolerance (first cross-arch
+    functional equivalence check in the project).
+  - **T4 — Latency TBs + sim extractor + known-deltas.** Per-stage
+    timestamps on 5 stages (FC_Q, DIMM_score, DIMM_softmax, DIMM_wsum,
+    FC_O) + 2 handoff boundaries. Extend `gen_expected_cycles.py` to
+    wrap `_run_attention_pipeline`. New `phase7_known_deltas.json`.
+    Residual budget: NL-DPE E2E ≤ +50 cyc (≈ 42 DIMM + 2×~4 handoff),
+    AL E2E ≤ +10 cyc (≈ 2 DIMM + 2×~4 handoff), all
+    `modelling_granularity`. Gate: both `run_checks.py --config
+    *_attn_head_d64_c128` exit 0.
+  - **T5 — VTR + regression gate extension.** 3-seed VTR per arch,
+    strict DPE=96 / DSP≈40 counts, append two new lines to
+    `VERIFICATION.md §Phase 5` gate list. Gate: all 7 regression
+    commands exit 0.
+
+  **Dependency DAG:** T1 ∥ T2 are independent (no shared files, no
+  artifact dependency — T2 can emit the head-top RTL without T1's
+  verification having passed). T3 needs T2 only (functional test uses
+  identity projections). **T4 needs both T1 and T2** — the real join
+  point, where AL FC known-deltas from T1 are needed to attribute
+  head-level residuals cleanly. T5 needs T4. Soft guidance: T1 PASS
+  also improves T3 diagnostic clarity (isolates any functional blame
+  to DIMM or handoff rather than FC).
+
+  **Explicitly deferred (out of this plan):**
+  - Multi-N attention head — re-emit DIMM + head at N ∈ {256, 512,
+    1024} and re-run Phase 3/5 per N before composing. Separate
+    track after Stage 5 closes; prerequisite for paper-wide seq_len
+    scaling story.
+  - Multi-head + BERT-block composition (2 heads, LayerNorm,
+    residual, embedding). Partly covered by monolithic
+    `benchmarks/rtl/bert_tiny_*.v` (VTR-only, no cycle alignment).
+  - d ≠ 64 regime (d=128 → K_id=1, d=32 → K_id=4) — FSM paths
+    untested.
+
+  **Authoritative plan:**
+  `fc_verification/plans/ATTENTION_HEAD_VERIFICATION_PLAN.md`
+  **Upstream plan (closed):**
+  `fc_verification/plans/DIMM_FULL_VERIFICATION_PLAN.md`
+  **Session-recovery memory:** `project_attention_head_todos.md`
+
 - **P4 — multi-pass pipelined DPE model** (opened 2026-04-18, scope
   reduced 2026-04-19 to Layout A + Regime B only): **ALL PHASES CLOSED
   2026-04-20.** Layout A + Regime B committed path; sim and RTL
