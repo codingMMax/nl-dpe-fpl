@@ -149,7 +149,7 @@ for i, name in enumerate(arch_names):
         ax_bot.text(x[i], r["total"] + 5, ratio_str,
                     ha='center', va='bottom', fontsize=6.5, fontweight='bold')
 
-ax_top.set_title('(a) Block Energy Breakdown', fontsize=8, fontweight='bold')
+ax_top.set_title('Energy Breakdown', fontsize=8, fontweight='bold')
 ax1 = ax_bot  # keep reference
 
 # ── Right side: 3 area-scaled pie charts ─────────────────────────────────
@@ -173,7 +173,7 @@ pie_y_center = 0.50
 max_pie_size = 0.30
 
 # Title for pie section
-fig.text(0.72, 0.90, '(b) IMC Area Breakdown', ha='center', fontsize=8, fontweight='bold')
+fig.text(0.72, 0.90, 'Area Breakdown', ha='center', fontsize=8, fontweight='bold')
 
 for i, (name, cfg_name, R, C) in enumerate(ARCHS):
     s = dpe_specs(R, C)
