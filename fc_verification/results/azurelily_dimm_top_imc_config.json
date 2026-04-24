@@ -31,7 +31,7 @@
         "e_digital_pj": 0.0
     },
     "fpga_specs": {
-        "freq": 94.03616666666666,
+        "freq": 87.92293333333333,
         "bram_width": 40,
         "dpe_buf_width": 40,
         "mem_bw_utilization": 1,

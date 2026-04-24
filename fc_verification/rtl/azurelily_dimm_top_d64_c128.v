@@ -24,9 +24,9 @@ module azurelily_dimm_top #(
     wire [DATA_WIDTH-1:0] lane_data [0:W-1];
 
     // Shared Q/K/V SRAMs (broadcast to all lanes)
-    reg [4-1:0] q_w_addr;
-    reg [11-1:0] k_w_addr;
-    reg [11-1:0] v_w_addr;
+    reg [5-1:0] q_w_addr;
+    reg [12-1:0] k_w_addr;
+    reg [12-1:0] v_w_addr;
     always @(posedge clk or posedge rst) begin
         if (rst) begin q_w_addr <= 0; k_w_addr <= 0; v_w_addr <= 0; end
         else begin
@@ -37,16 +37,16 @@ module azurelily_dimm_top #(
     end
 
     wire [DATA_WIDTH-1:0] q_sram_out, k_sram_out, v_sram_out;
-    reg [4-1:0] q_r_addr;
-    reg [11-1:0] k_r_addr;
-    reg [11-1:0] v_r_addr;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(14))
+    reg [5-1:0] q_r_addr;
+    reg [12-1:0] k_r_addr;
+    reg [12-1:0] v_r_addr;
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(17))
         q_sram (.clk(clk),.rst(rst),.w_en(valid_q),.r_addr(q_r_addr),
                 .w_addr(q_w_addr),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(1665))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(2049))
         k_sram (.clk(clk),.rst(rst),.w_en(valid_k),.r_addr(k_r_addr),
                 .w_addr(k_w_addr),.sram_data_in(data_in_k),.sram_data_out(k_sram_out));
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(1665))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(2049))
         v_sram (.clk(clk),.rst(rst),.w_en(valid_v),.r_addr(v_r_addr),
                 .w_addr(v_w_addr),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));
 
@@ -68,12 +68,12 @@ module azurelily_dimm_top #(
                 // Per-row: set r_addr for mac_count 0..packed_d-1. dsp_mac.valid
                 // gated to mac_count >= 2 (2-cycle SRAM latency). Total duration
                 // per row = packed_d + 2 cycles; iterate row_count 0..N-1 for all scores.
-                if (mac_count < 13) begin
+                if (mac_count < 16) begin
                     q_r_addr <= mac_count;
-                    k_r_addr <= row_count * 13 + mac_count;
+                    k_r_addr <= row_count * 16 + mac_count;
                 end
                 mac_count <= mac_count + 1;
-                if (mac_count == 13 + 1) begin
+                if (mac_count == 16 + 1) begin
                     mac_count <= 0;
                     if (row_count == 128 - 1) begin
                         state <= S_WAIT_QK;
@@ -94,17 +94,17 @@ module azurelily_dimm_top #(
         wire [DATA_WIDTH-1:0] score, attn, sv_out;
         wire score_valid, attn_valid, sv_valid;
 
-        // Stage 1: mac_qk (dsp_mac, K=13)
+        // Stage 1: mac_qk (dsp_mac, K=16)
         // Per-lane XOR anti-merge: each lane uses a unique constant derived
         // from the lane index so VTR cannot merge the 16 mac_qk instances.
         // For functional tests the lane 0 constant is 0 so outputs are
         // unmodified; lanes 1..15 have non-zero constants but the TB uses
         // lane 0 (+ the lane-isolation check is against shared-input equivalence).
         wire [DATA_WIDTH-1:0] lane_k_qk = k_sram_out ^ lane[DATA_WIDTH-1:0];
-        dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(13)) mac_qk_inst (
+        dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(16)) mac_qk_inst (
             .clk(clk), .rst(rst),
             // valid gated to skip 2-cycle SRAM read latency + stop after packed_d valid cycles
-            .valid((state == 3'd2 /*S_FEED_QK*/) && (mac_count >= 2) && (mac_count <= 13 + 1)),
+            .valid((state == 3'd2 /*S_FEED_QK*/) && (mac_count >= 2) && (mac_count <= 16 + 1)),
             .ready_n(1'b0),
             .data_a(q_sram_out),
             .data_b(lane_k_qk),
@@ -121,8 +121,8 @@ module azurelily_dimm_top #(
             .ready(), .valid_n(attn_valid)
         );
 
-        // Stage 3: mac_sv (dsp_mac, K=26)
-        dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(26)) mac_sv_inst (
+        // Stage 3: mac_sv (dsp_mac, K=32)
+        dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(32)) mac_sv_inst (
             .clk(clk), .rst(rst),
             .valid(attn_valid), .ready_n(1'b0),
             .data_a(attn),
@@ -343,6 +343,13 @@ module sram #(
 
     // Memory array with parameterized depth and width
     reg [DATA_WIDTH-1:0] mem [DEPTH-1:0];
+
+    // Phase 6A: zero-init memory for iverilog behavioral sim.
+    integer _sram_init_i;
+    initial begin
+        for (_sram_init_i = 0; _sram_init_i < DEPTH; _sram_init_i = _sram_init_i + 1)
+            mem[_sram_init_i] = {DATA_WIDTH{1'b0}};
+    end
 
     // Read/Write operations
     always @(posedge clk) begin

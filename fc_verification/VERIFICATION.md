@@ -892,3 +892,103 @@ References:
 - Residual annotation (new): `phase5_known_deltas.json`
 - Apple-to-apple doc (edited): `DIMM_pipeline_model_vs_rtl.md §9`
 - VTR results: `results/azurelily_dimm_top_vtr_imc_results.json`
+
+### Phase 6A — Azure-Lily dsp_mac 4-wide fix (2026-04-23)
+
+Closes the Phase-5 `structural` E2E delta (−132 cyc) so every Azure-Lily
+residual is now `modelling_granularity`, symmetric with NL-DPE.
+Generator-only edit (no TB, no sim, no NL-DPE touch).
+
+**Motivation.** The committed `gen_dimm_azurelily_top.py` header states
+the dsp_mac is a pure 4-wide `int_sop_4` (no CLB 5th-MAC), and the module
+body follows that — but the top-level generator still sized the dsp_mac
+K parameter from the **legacy** `epw = dw // 8 = 5` packing, giving
+K = ⌈d/5⌉ = 13 and K = ⌈N/5⌉ = 26. The dsp_mac therefore fired 13 (or 26)
+times while multiplying only 4 pairs/cycle, silently dropping the 5th
+element of each packed word AND making the RTL look ~19 % faster than
+the sim's DSP_WDITH=4 model. Phase 6A re-sizes K to `⌈*/EPW_DSP=4⌉`
+(16 / 32), consistent with the dsp_mac's actual 4-pair/cycle throughput.
+
+**Generator edit** (nl_dpe/gen_dimm_azurelily_top.py,
+`_gen_dimm_top_azurelily` header + body):
+
+- `epw_dsp = 4` (was `dw // 8 = 5`) drives the dsp_mac K and the FSM
+  iteration count.
+- `packed_d` / `packed_N` now compute from EPW_DSP=4 (16 / 32).
+- SRAM depths grow to `packed_d + 1 = 17` and `N·packed_d + 1 = 2049`
+  so `q_r_addr = 0..15` and `k_r_addr = 0..2047` return valid zeros, not
+  `'x'`.
+- S_LOAD entry threshold is kept at the **legacy** packed values
+  (`q_w_addr >= 13`, `k/v_w_addr >= 1664`) so the pristine TB
+  shortcut `dut.q_w_addr = 13; dut.k/v_w_addr = 1664` still triggers
+  S_FEED_QK. Not a probe semantics change — purely a plumbing constant
+  kept at its pre-Phase-6A value.
+- SRAM module gets an `initial` block that zero-inits `mem` (previously
+  uninitialized cells could return `'x'` in iverilog and propagate
+  through dsp_mac.accum).
+
+**Pre/post per-stage table (Azure-Lily DIMM top, N=128, d=64, W=16):**
+
+| Stage   | Pre-Phase-6A sim | Pre-Phase-6A RTL | Post-Phase-6A sim | Post-Phase-6A RTL | Δ (RTL−sim) | Classification        |
+|---------|-----------------:|-----------------:|------------------:|------------------:|------------:|-----------------------|
+| score   | 16               | 15               | 18                | 18                | 0           | modelling_granularity |
+| softmax | 2034             | 1908             | 2288              | 2289              | +1          | modelling_granularity |
+| wsum    | 32               | 26               | 32                | 32                | 0           | modelling_granularity |
+| e2e     | 2082             | 1950             | 2338              | 2340              | +2          | modelling_granularity |
+
+Post-Phase-6A, the **sim** extraction in `gen_expected_cycles.py` folds
+the 2-cycle per-row SRAM-prime setup into `k_tile_qk`
+(`feed_setup_per_row = 2`), matching the RTL's dsp_mac.valid gating on
+`mac_count >= 2`. This drops every residual to single-cycle boundary
+rounding — the two architectures now have **symmetric**, near-zero
+residuals.
+
+**Residual root-cause summary** (see `phase5_known_deltas.json` post-update):
+
+- **Score (0 cyc)** — exact match: sim = k_tile_qk + feed_setup = 16 + 2
+  = 18 cyc = RTL.
+- **Softmax (+1 cyc)** — 1-cyc boundary rounding on the softmax probe's
+  first S_NORM output NBA-commit.
+- **Wsum (0 cyc)** — exact: RTL K=32 = sim k_tile_sv = 32. No
+  setup-gating on mac_sv (attn_valid directly drives dsp_mac.valid), so
+  the `feed_setup_per_row` offset does NOT apply here.
+- **E2E (+2 cyc)** — additive: 0 + 1 + 0 + ~1 boundary rounding.
+
+**Sign flip vs Phase 5.** Phase-5 deltas were all negative (RTL
+"faster" than sim) because the K-sizing bug dropped 1 MAC per packed
+word. Post-Phase-6A the deltas are all ≥ 0 — the sim slightly
+under-predicts AL walltime because it omits the single-cycle NBA-commit
+rounding on the softmax probe, same direction as every NL-DPE
+residual. Residual magnitudes (0 / +1 / 0 / +2 cyc) are now tighter
+than NL-DPE's (+10..+12 per stage, +34 e2e).
+
+**VTR 3-seed re-synth:**
+
+| Metric | Pre-Phase-6A | Post-Phase-6A | Δ                       |
+|--------|-------------:|--------------:|-------------------------|
+| DSP    | 68           | 67            | −1 (packing drift)      |
+| Fmax   | 94.04 MHz    | 87.9 MHz      | −6.1 MHz (FSM added 3 cyc/row → marginally longer critical path) |
+| CLB    | 516          | 524           | +8 (wider counters/regs) |
+| BRAM   | 41           | 45            | +4 (larger Q/K/V SRAMs)  |
+
+Full JSON: `results/azurelily_dimm_top_vtr_imc_results.json` (regenerated,
+seeds 89.7 / 88.1 / 86.0 MHz).
+
+**Gate commands** (every one exits 0 post-Phase-6A):
+
+```
+python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1
+python3 fc_verification/run_fc_phase2.py --skip-vtr                       # Phase 2
+python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # Phase 3+4
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128 --skip-latency
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128
+```
+
+References:
+- Generator (edited): `nl_dpe/gen_dimm_azurelily_top.py`
+  (`_gen_dimm_top_azurelily` + `_get_sram_module_only` initial-block
+  injection)
+- RTL (regenerated): `rtl/azurelily_dimm_top_d64_c128.v`
+- Residual annotation (updated): `phase5_known_deltas.json`
+- Sim extraction (docstring refresh): `gen_expected_cycles.py`
+- VTR results (regenerated): `results/azurelily_dimm_top_vtr_imc_results.json`

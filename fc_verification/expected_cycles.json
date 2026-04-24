@@ -33,10 +33,10 @@
         "DSP_WDITH": 4
       },
       "stages": {
-        "score": 16,
-        "softmax": 2034,
+        "score": 18,
+        "softmax": 2288,
         "wsum": 32,
-        "e2e": 2082
+        "e2e": 2338
       },
       "todo": "Stage names map to Azure-Lily modules: score=mac_qk, softmax=clb_softmax (S_LOAD+S_INV+S_NORM), wsum=mac_sv. Residuals annotated in phase5_known_deltas.json."
     }

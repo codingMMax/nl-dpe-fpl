@@ -2,43 +2,43 @@
     "_description": "Phase 5 Azure-Lily DIMM-top residual cycle deltas between the Regime-A analytical sim (gemm_dsp with DSP_WDITH=4) and the cycle-accurate RTL, annotated with file:line root causes. A per-stage delta present here is accepted by run_checks.py (DIMM latency path) as long as |delta - expected_delta_cycles| <= expected_delta_tolerance.",
     "_schema": {
         "stage": "score | softmax | wsum | e2e",
-        "delta_cycles": "RTL - sim (negative = RTL faster than sim)",
+        "delta_cycles": "RTL - sim (negative = RTL faster than sim, positive = RTL slower = conservative sim)",
         "tolerance": "allowed wiggle around delta_cycles (per-stage)",
         "root_cause": "file:line citation of the structural or FSM-handshake source of the residual",
         "classification": "modelling_granularity | structural"
     },
-    "updated": "2026-04-20",
-    "note": "Phase 5 (2026-04-20) — Azure-Lily DIMM parity with NL-DPE Phase 3+4. The mac_qk / mac_sv stages share a structural residual: RTL dsp_mac (azurelily_dimm_top_d64_c128.v:152-215) fires 5 products/cycle (4 int_sop_4 DSP + 1 CLB multiply, documented in gen_dimm_azurelily_top.py's dsp_mac generator), so per-row cycles = ceil(d/5)=13 (mac_qk) and ceil(N/5)=26 (mac_sv). Sim's gemm_dsp (azurelily/IMC/peripherals/fpga_fabric.py:170-230) uses DSP_WDITH=4 strict (scheduler_stats/common.py:6), yielding k_tile=16 and k_tile=32 respectively. RTL is therefore ~18.75% faster than sim on every DSP stage; the softmax stage inherits this speed-up across (N-1)=127 streamed scores giving its dominant contribution. Stage-name mapping to AL modules: Score→mac_qk, Softmax→clb_softmax (S_LOAD+S_INV+S_NORM), Wsum→mac_sv.",
+    "updated": "2026-04-23",
+    "note": "Phase 6A (2026-04-23) — Azure-Lily dsp_mac 4-wide fix. Pre-Phase-6A the generator emitted dsp_mac with K=ceil(d_head/EPW=5)=13 (mac_qk) and K=ceil(N/EPW=5)=26 (mac_sv) while the dsp_mac body only multiplied 4 int8 pairs/cycle (bytes 0..3 of the 40-bit bus). That K-sizing bug made the RTL look ~19% faster than the sim's gemm_dsp (DSP_WDITH=4; azurelily/IMC/peripherals/fpga_fabric.py:181), producing a structural -132 cyc E2E delta (-1 score / -126 softmax / -6 wsum). Phase 6A re-sizes K to ceil(d/EPW_DSP=4)=16 (mac_qk) and ceil(N/EPW_DSP=4)=32 (mac_sv) (nl_dpe/gen_dimm_azurelily_top.py::_gen_dimm_top_azurelily), and updates the sim extraction (gen_expected_cycles.py) to fold the 2-cyc per-row SRAM-prime setup into k_tile_qk. Post-Phase-6A all residuals drop to 0..+1 cyc (pure modelling granularity). All four entries are modelling_granularity, none structural.",
     "configs": {
         "azurelily_dimm_top_d64_c128": {
             "deltas": [
                 {
                     "stage": "score",
-                    "delta_cycles": -1,
+                    "delta_cycles": 0,
                     "tolerance": 3,
-                    "root_cause": "Minor 1-cycle residual between RTL's 15-cyc first-row window (K=13 valid cycles in dsp_mac @ azurelily_dimm_top_d64_c128.v:104-113 + 2-cyc SRAM read pipeline fill, gated by mac_count>=2 on v:107) and sim's k_tile_qk=ceil(d/DSP_WDITH)=16 cyc per-row compute. The sim over-counts by one because it models k_tile as a pure compute window, whereas the RTL pipelines the SRAM read during the first 2 cycles before dsp_mac.valid asserts.",
+                    "root_cause": "Exact match after Phase 6A sim extraction update. The sim extraction now adds a 2-cyc per-row SRAM-prime setup (feed_setup_per_row=2 in gen_expected_cycles.py), matching the RTL's dsp_mac.valid gating on mac_count>=2 (azurelily_dimm_top_d64_c128.v:107). Sim = k_tile_qk + 2 = 16 + 2 = 18; RTL also = 18.",
                     "classification": "modelling_granularity"
                 },
                 {
                     "stage": "softmax",
-                    "delta_cycles": -126,
-                    "tolerance": 8,
-                    "root_cause": "Dominant structural delta from the 5-product/cycle fusion in dsp_mac (azurelily_dimm_top_d64_c128.v:150-215: int_sop_4 DSP fires 4 products/cycle at lines 179-189, plus the implicit CLB multiplier's 5th product packed into the 40-bit word format documented in the module header, lines 6-7). RTL per-row = 13+2 setup = 15 cyc; sim per-row = k_tile_qk=16 cyc. Across the softmax probe window the remaining (N-1)=127 rows stream into clb_softmax's S_LOAD (clb_softmax @ azurelily_dimm_top_d64_c128.v:274-282), so the accumulated delta = 127 * (sim_per_row - RTL_per_row) ≈ 127 * 1 = 127 cyc faster on RTL. The +1 cycle from the score stage delta re-enters here because sim's softmax_start anchors at sim's (longer) score end, not at the actual mac_qk first-row-out moment. Residual ~126 cyc matches this within the ±8 tolerance.",
-                    "classification": "structural"
+                    "delta_cycles": 1,
+                    "tolerance": 3,
+                    "root_cause": "1-cyc boundary rounding on the softmax probe's first S_NORM output (clb_softmax @ azurelily_dimm_top_d64_c128.v:287-294). Sim formula = (N-1) * (k_tile_qk + feed_setup) + S_INV + first_S_NORM = 127 * 18 + 1 + 1 = 2288 cyc; RTL measured 2289 cyc (1-cyc NBA-commit on the probe latch).",
+                    "classification": "modelling_granularity"
                 },
                 {
                     "stage": "wsum",
-                    "delta_cycles": -6,
+                    "delta_cycles": 0,
                     "tolerance": 3,
-                    "root_cause": "Structural DSP-width residual on mac_sv. RTL dsp_mac with K=26 (azurelily_dimm_top_d64_c128.v:125, K = ceil(N/EPW=5) = 26 packed pairs per output element) produces first out_valid after 26 valid cycles; sim models k_tile_sv = ceil(N/DSP_WDITH) = ceil(128/4) = 32 cycles per output. Delta = RTL 26 - sim 32 = -6 cycles, matching the same 4-vs-5-products-per-cycle mismatch as the score / softmax stages. Classification structural: aligned with fc_verification/results/azurelily_dimm_alignment_log.txt \"=== Phase E — mac_sv ===\" (RTL 28 vs sim 64 per-col under a slightly different compile-time configuration; same root cause).",
-                    "classification": "structural"
+                    "root_cause": "Exact match: RTL dsp_mac with K=ceil(N/EPW_DSP=4)=32 (azurelily_dimm_top_d64_c128.v:125) produces first out_valid after 32 valid cycles; sim k_tile_sv = ceil(N/DSP_WDITH=4) = 32 (azurelily/IMC/peripherals/fpga_fabric.py:181). No setup-gating on mac_sv (valid=attn_valid directly from softmax), so no 2-cyc SRAM-prime offset applies here.",
+                    "classification": "modelling_granularity"
                 },
                 {
                     "stage": "e2e",
-                    "delta_cycles": -132,
-                    "tolerance": 12,
-                    "root_cause": "Additive sum of per-stage residuals: score (-1) + softmax (-126) + wsum (-6) + ~1 cyc rounding at stage boundaries = -132 cyc. Classification follows the dominant component (softmax), which is structural. For the paper the Azure-Lily RTL is ~6.3% faster than the sim predicts on end-to-end DIMM latency — the sim conservatively under-predicts Azure-Lily's performance when translating DSP_WDITH=4 cycles into wall-clock time.",
-                    "classification": "structural"
+                    "delta_cycles": 2,
+                    "tolerance": 5,
+                    "root_cause": "Additive sum of per-stage residuals: score (0) + softmax (+1) + wsum (0) + ~1 cyc probe latch rounding = +2 cyc. Classification modelling_granularity. For the paper the Azure-Lily RTL cycles match the sim prediction within 0.1% on end-to-end DIMM latency at N=128, d=64 — near-perfect parity with the NL-DPE's Phase 3+4 +34 cyc residual (both architectures now within FSM handshake granularity of their respective sims).",
+                    "classification": "modelling_granularity"
                 }
             ]
         }

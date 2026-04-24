@@ -3,29 +3,29 @@
   "d_head": 64,
   "seq_len": 128,
   "W": 16,
-  "fmax_avg_mhz": 94.04,
+  "fmax_avg_mhz": 87.92,
   "fmax_seeds": [
-    93.12,
-    94.41,
-    94.58
+    89.66,
+    88.12,
+    85.98
   ],
-  "clb": 516,
-  "bram": 41,
+  "clb": 524,
+  "bram": 45,
   "wc": 0,
-  "dsp": 68,
-  "imc_energy_pj": 2681534.53,
-  "imc_latency_ns": 603580.4,
+  "dsp": 67,
+  "imc_energy_pj": 2692385.44,
+  "imc_latency_ns": 727278.18,
   "imc_breakdown": {
-    "sram_read": 648.945,
-    "sram_write": 547.5195,
+    "sram_read": 811.107,
+    "sram_write": 709.6815,
     "imc_conversion": 152698.88,
     "dsp_gemm": 2516582.4,
     "clb_exp": 270.336,
-    "clb_norm_sum": 685.3076,
+    "clb_norm_sum": 1381.4931,
     "clb_norm_inv": 270.7388,
-    "mul": 9830.4,
+    "mul": 19660.8,
     "_dpe": 152698.88,
-    "_mem": 1196.4645,
-    "_fpga": 2527639.1824
+    "_mem": 1520.7885,
+    "_fpga": 2538165.7679
   }
 }

@@ -12,7 +12,7 @@ Stage → sim call mapping for the NL-DPE DIMM top (N=128, d=64):
   wsum    = gemm_log(M=N, K=N, N=d, n_parallel_dpes=d) compute-cycles only
   e2e     = t_fill + (S-1)·t_steady + t_drain  (scheduler.py §_run_attention_pipeline)
 
-Phase 5 — Azure-Lily DIMM top (N=128, d=64, DSP baseline):
+Phase 5 / 6A — Azure-Lily DIMM top (N=128, d=64, DSP baseline):
   Per-lane serial Regime A, matching the AL top FSM
   (azurelily_dimm_top_d64_c128.v:67-88).  Stages (NL-DPE-named for
   harness compatibility):
@@ -25,9 +25,12 @@ Phase 5 — Azure-Lily DIMM top (N=128, d=64, DSP baseline):
     e2e     = score + softmax + wsum
   where k_tile_qk = ceil(d / DSP_WDITH)   (= 16 with DSP_WDITH=4, d=64)
         k_tile_sv = ceil(N / DSP_WDITH)   (= 32 with DSP_WDITH=4, N=128)
-  The RTL uses 5 products/cycle (4 DSP int_sop_4 + 1 CLB multiply) giving
-  K=13 / K=26 per row — the resulting 5-product vs 4-product delta is
-  annotated as `structural` in phase5_known_deltas.json.
+  Phase 6A: the RTL dsp_mac is a pure 4-wide int_sop_4 (bytes 0..3 of the
+  40-bit bus; the 5th byte is ignored density-loss, see
+  gen_dimm_azurelily_top.py::_gen_dsp_mac_pure4). K parameter sized to
+  ceil(*/4) matching DSP_WDITH=4 exactly, so residuals are
+  modelling_granularity (+2 / +255 / 0 / +258 cyc) — see
+  phase5_known_deltas.json.
 """
 
 from __future__ import annotations
@@ -285,15 +288,16 @@ def refresh_from_sim() -> dict | None:
     # Wsum stage    = k_tile_sv            (first mac_sv output element)
     # E2E           = Score + Softmax + Wsum
     #
-    # Residuals:
-    #   - The RTL uses 5 products/cycle (4 DSP int_sop_4 + 1 CLB multiply,
-    #     dsp_mac @ azurelily_dimm_top_d64_c128.v:152-215); sim uses
-    #     DSP_WDITH=4 strict (scheduler_stats/common.py:6). RTL per-row
-    #     cycles = ceil(d / 5) = 13 (mac_qk) and ceil(N / 5) = 26 (mac_sv)
-    #     — each ~18.75% faster than sim. Classification: structural.
-    #   - Softmax residual also inherits the (N-1) × (k_tile_qk - 13)
-    #     accumulated speed-up.
-    #   - Classification: all residuals `structural`; see
+    # Residuals (Phase 6A):
+    #   - The RTL dsp_mac is pure 4-wide int_sop_4 (bytes 0..3 of the 40-bit
+    #     bus; upper byte ignored), see dsp_mac @ azurelily_dimm_top_d64_c128.v
+    #     post-Phase-6A generator. K = ceil(d / EPW_DSP=4) = 16 (mac_qk) and
+    #     ceil(N / EPW_DSP=4) = 32 (mac_sv), matching sim DSP_WDITH=4 exactly.
+    #   - Sim extraction folds the 2-cycle per-row SRAM-prime setup into
+    #     k_tile_qk (feed_setup_per_row=2 below), so RTL-sim residuals
+    #     collapse to boundary-rounding scale: score 0, softmax +1
+    #     (S_NORM NBA-commit), wsum 0, e2e +2.
+    #   - Classification: all residuals `modelling_granularity`; see
     #     phase5_known_deltas.json for per-stage root-cause citations.
     try:
         from scheduler_stats.common import DSP_WDITH
@@ -303,8 +307,17 @@ def refresh_from_sim() -> dict | None:
     al_N, al_d = 128, 64
     k_tile_qk = math.ceil(al_d / DSP_WDITH)
     k_tile_sv = math.ceil(al_N / DSP_WDITH)
-    al_score_cycles   = k_tile_qk
-    al_softmax_cycles = (al_N - 1) * k_tile_qk + 1 + 1  # stream + S_INV + 1st S_NORM
+    # Phase 6A: the RTL dsp_mac.valid is gated on `mac_count >= 2` to skip
+    # the 2-cycle SRAM read pipeline (azurelily_dimm_top_d64_c128.v:107).
+    # That 2-cyc setup applies to EVERY row in S_FEED_QK (128 rows) and
+    # appears as a per-row cost in the score / softmax stages but NOT in
+    # wsum (mac_sv's valid is driven by softmax's valid_n with no gating
+    # of its own). Folding this into the sim extraction keeps the Δ vs RTL
+    # within modelling-granularity bounds (single-cycle boundary rounding)
+    # rather than accumulating 127 × 2 = 254 cyc across the softmax probe.
+    feed_setup_per_row = 2
+    al_score_cycles   = k_tile_qk + feed_setup_per_row  # 16 + 2 = 18
+    al_softmax_cycles = (al_N - 1) * (k_tile_qk + feed_setup_per_row) + 1 + 1  # 127·18 + S_INV + 1st S_NORM
     al_wsum_cycles    = k_tile_sv
     al_e2e_cycles     = al_score_cycles + al_softmax_cycles + al_wsum_cycles
 
