@@ -41,6 +41,11 @@ TB_DPE = FC_VERIF / "tb_dpe_vmm.v"
 KNOWN_DELTAS_PATH = FC_VERIF / "phase2_known_deltas.json"
 RESULTS_DIR = FC_VERIF / "results"
 
+# Azure-Lily FC verification artifacts (T1 of AH track)
+AL_FC_RTL_DIR = FC_VERIF / "rtl" / "azurelily"
+AL_FC_STUBS = AL_FC_RTL_DIR / "azurelily_fc_stubs.v"
+TB_AL_FC = FC_VERIF / "tb_azurelily_fc.v"
+
 # Make azurelily/IMC importable (simulator, imc_core, scheduler_stats,
 # peripherals).
 AZURELILY_IMC = REPO_ROOT / "azurelily" / "IMC"
@@ -442,9 +447,15 @@ def load_known_deltas() -> dict:
 
 
 def is_known_delta(deltas: dict, stage: str, delta: int,
-                   cfg: FCConfig) -> Optional[dict]:
-    """Return the matching known-delta entry if delta is accepted; else None."""
+                   cfg: FCConfig, arch: str = "nl_dpe") -> Optional[dict]:
+    """Return the matching known-delta entry if delta is accepted; else None.
+
+    Filters by ``arch`` so NL-DPE and Azure-Lily entries don't cross-match.
+    Entries without an explicit ``arch`` field default to nl_dpe (legacy).
+    """
     for d in deltas.get("deltas", []):
+        if d.get("arch", "nl_dpe") != arch:
+            continue
         if d.get("stage") != stage:
             continue
         if int(d.get("delta_cycles", 0)) != int(delta):
@@ -453,15 +464,190 @@ def is_known_delta(deltas: dict, stage: str, delta: int,
         if applies == "all":
             pass
         else:
-            label = cfg.label
+            label = cfg.label if cfg is not None else "all"
             if not isinstance(applies, list):
                 applies = [applies]
-            if label not in applies and f"setup{cfg.setup}" not in applies:
+            if cfg is not None and label not in applies and f"setup{cfg.setup}" not in applies:
                 continue
         if not d.get("root_cause", "").strip():
             continue
         return d
     return None
+
+
+# ---------------------------------------------------------------------------
+# Azure-Lily FC verification (T1 of AH track)
+# ---------------------------------------------------------------------------
+EPW_DSP = 4   # 4 int8 pairs per dsp_mac cycle (pure int_sop_4, P6A canonical)
+
+
+@dataclass
+class AlFCConfig:
+    """Single Azure-Lily FC verification config — matches the two NL-DPE
+    Phase-2 workloads at the same (K, N) shapes for side-by-side comparison."""
+    K: int
+    N: int
+
+    @property
+    def label(self) -> str:
+        return f"al/fc_{self.K}_{self.N}"
+
+    @property
+    def workload(self) -> str:
+        return f"fc_{self.K}_{self.N}"
+
+    @property
+    def packed_k(self) -> int:
+        return math.ceil(self.K / EPW_DSP)
+
+    @property
+    def rtl_path(self) -> Path:
+        return AL_FC_RTL_DIR / f"azurelily_fc_{self.K}_{self.N}.v"
+
+
+def build_al_fc_configs() -> list[AlFCConfig]:
+    return [AlFCConfig(K=512, N=128), AlFCConfig(K=2048, N=256)]
+
+
+@dataclass
+class AlSimStages:
+    """Per-output sim oracle for AL FC (with serial dsp_mac scheduling).
+
+    Per-output cost = 2 SRAM-prime + PACKED_K dsp.valid + 1 latch
+                    = PACKED_K + 3 cycles.
+    Aggregate compute = N * (PACKED_K + 3).
+    Output drain = N cycles (S_OUTPUT phase, one int8 per cycle).
+    """
+    per_output: int
+    compute_aggregate: int
+    output_drain: int
+    compute_first_out: int   # PACKED_K + 3 (same as per_output)
+
+
+def sim_oracle_al_fc(cfg: AlFCConfig) -> AlSimStages:
+    pk = cfg.packed_k
+    per_out = pk + 3
+    return AlSimStages(
+        per_output=per_out,
+        compute_aggregate=cfg.N * per_out,
+        output_drain=cfg.N,
+        compute_first_out=per_out,
+    )
+
+
+@dataclass
+class AlRtlStages:
+    """Per-output and aggregate cycle counts measured from tb_azurelily_fc.v."""
+    compute_first_out: int      # T_first_out - T_compute_start + 1
+    compute_aggregate: int      # T_last_out - T_compute_start + 1
+    per_output_steady: int      # (T_last_out - T_first_out) / (N - 1)
+    output_drain: int           # T_validn_last - T_validn_first + 1
+    dsp_valid_count: int
+    dsp_out_count: int
+    top_validn_count: int
+    func_pass: bool
+
+
+# Regexes for tb_azurelily_fc.v output
+RE_AL_FIRST_OUT = re.compile(r"compute_first_out\s*=\s*(\d+)")
+RE_AL_AGG = re.compile(r"compute_aggregate\s*=\s*(\d+)")
+RE_AL_PER = re.compile(r"per_output_steady\s*=\s*(\d+)")
+RE_AL_DRAIN = re.compile(r"output_drain\s*=\s*(\d+)")
+RE_AL_DSPV = re.compile(r"dsp valid pulses\s*=\s*(\d+)")
+RE_AL_DSPO = re.compile(r"dsp out pulses\s*=\s*(\d+)")
+RE_AL_TOPV = re.compile(r"top valid_n pulses\s*=\s*(\d+)")
+RE_AL_FUNC_PASS = re.compile(r"FUNC PASS")
+
+
+def parse_al_rtl_stages(vvp_out: str) -> Optional[AlRtlStages]:
+    m1 = RE_AL_FIRST_OUT.search(vvp_out)
+    m2 = RE_AL_AGG.search(vvp_out)
+    m3 = RE_AL_PER.search(vvp_out)
+    m4 = RE_AL_DRAIN.search(vvp_out)
+    m5 = RE_AL_DSPV.search(vvp_out)
+    m6 = RE_AL_DSPO.search(vvp_out)
+    m7 = RE_AL_TOPV.search(vvp_out)
+    if not all((m1, m2, m3, m4, m5, m6, m7)):
+        return None
+    return AlRtlStages(
+        compute_first_out=int(m1.group(1)),
+        compute_aggregate=int(m2.group(1)),
+        per_output_steady=int(m3.group(1)),
+        output_drain=int(m4.group(1)),
+        dsp_valid_count=int(m5.group(1)),
+        dsp_out_count=int(m6.group(1)),
+        top_validn_count=int(m7.group(1)),
+        func_pass=bool(RE_AL_FUNC_PASS.search(vvp_out)),
+    )
+
+
+def run_al_fc_latency(cfg: AlFCConfig, tmpdir: Path) -> tuple[Optional[AlRtlStages], str]:
+    """Compile and run the AL FC alignment TB for one config."""
+    bin_path = tmpdir / f"al_fc_{cfg.K}_{cfg.N}"
+    defs = [f"K_TB={cfg.K}", f"N_TB={cfg.N}"]
+    if cfg.K == 2048 and cfg.N == 256:
+        defs.append("DUT_2048_256")
+    srcs = [AL_FC_STUBS, cfg.rtl_path, TB_AL_FC]
+    rc, compile_out = _run_iverilog(defs, srcs, bin_path)
+    if rc != 0:
+        return None, f"iverilog failed (rc={rc}):\n{compile_out[-500:]}"
+    timeout = 60 if cfg.K == 512 else 300
+    rc, vvp_out = _run_vvp(bin_path, timeout_s=timeout)
+    stages = parse_al_rtl_stages(vvp_out)
+    if stages is None:
+        return None, f"parse failed:\n{vvp_out[-500:]}"
+    return stages, vvp_out
+
+
+@dataclass
+class AlConfigResult:
+    cfg: AlFCConfig
+    rtl: Optional[AlRtlStages]
+    sim: AlSimStages
+    per_stage_delta: dict = field(default_factory=dict)
+    per_stage_annotation: dict = field(default_factory=dict)
+    func_pass: bool = False
+    overall_pass: bool = False
+
+
+def compare_stages_al_fc(r: AlRtlStages, s: AlSimStages, deltas: dict,
+                         cfg: AlFCConfig) -> tuple[dict, dict, bool]:
+    stage_pairs = [
+        ("compute_first_out", r.compute_first_out, s.compute_first_out),
+        ("compute_aggregate", r.compute_aggregate, s.compute_aggregate),
+        ("output_drain",      r.output_drain,      s.output_drain),
+    ]
+    # per_output_steady is always exact match — track for reporting only
+    per_delta = {}
+    per_ann = {}
+    all_ok = True
+    # Map stage name to known-deltas key
+    KNOWN_KEY = {
+        "compute_first_out": "compute_first_out",
+        "compute_aggregate": "compute_aggregate",
+        "output_drain": "output_drain",
+    }
+    for name, rtl_v, sim_v in stage_pairs:
+        delta = rtl_v - sim_v
+        per_delta[name] = delta
+        if delta == 0:
+            per_ann[name] = "exact"
+            continue
+        known = is_known_delta(deltas, KNOWN_KEY[name], delta, cfg, arch="azurelily")
+        if known is not None:
+            per_ann[name] = f"annotated: {known['root_cause'][:120]}"
+        else:
+            per_ann[name] = f"UNEXPLAINED: +{delta} cyc"
+            all_ok = False
+    # Steady-state per_output should always be exact; flag if not
+    steady_delta = r.per_output_steady - s.per_output
+    per_delta["per_output_steady"] = steady_delta
+    if steady_delta == 0:
+        per_ann["per_output_steady"] = "exact"
+    else:
+        per_ann["per_output_steady"] = f"UNEXPLAINED: +{steady_delta} cyc (steady-state must be 0)"
+        all_ok = False
+    return per_delta, per_ann, all_ok
 
 
 # ---------------------------------------------------------------------------
@@ -532,13 +718,14 @@ def compare_stages(r: RtlStages, s: SimStages, deltas: dict,
 
 
 def render_report(results: list[ConfigResult], dpe_func: tuple[bool, str],
-                  deltas: dict, gate_pass: bool) -> str:
+                  deltas: dict, gate_pass: bool,
+                  al_results: Optional[list["AlConfigResult"]] = None) -> str:
     lines = []
     lines.append("# Phase 2 FC RTL verification report\n")
     lines.append(f"**Gate:** {'PASS' if gate_pass else 'FAIL'}\n\n")
     lines.append(f"- tb_dpe_vmm (DPE stub VMM correctness): "
                  f"{'PASS' if dpe_func[0] else 'FAIL'} — {dpe_func[1]}\n")
-    lines.append("\n## 12-config matrix\n\n")
+    lines.append("\n## 12-config matrix (NL-DPE)\n\n")
     lines.append("| # | Setup | Workload | Func | Route | Feed Δ | Comp Δ | Out Δ | Red+Act Δ | Sim | RTL | Verdict |\n")
     lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|\n")
     for r in results:
@@ -572,9 +759,48 @@ def render_report(results: list[ConfigResult], dpe_func: tuple[bool, str],
         lines.append(f"- Activation routing RTL={r.activation_route_rtl} / "
                      f"sim={r.sim.activation_route} → "
                      f"{'MATCH' if r.activation_route_ok else 'MISMATCH'}\n")
+    # ── Azure-Lily FC section ──────────────────────────────────────────────
+    if al_results:
+        lines.append("\n## Azure-Lily FC (T1 of AH track)\n\n")
+        lines.append("Single-DSP serialised FC (dsp_mac, pure 4-wide int_sop_4, "
+                     "Phase 6A canonical). Per-output cost = PACKED_K + 3 cycles "
+                     "(2 SRAM-prime + PACKED_K dsp.valid + 1 latch).\n\n")
+        lines.append("| Workload | K | N | PACKED_K | per_output Δ | first_out Δ | aggregate Δ | drain Δ | Verdict |\n")
+        lines.append("|---|---|---|---|---|---|---|---|---|\n")
+        for r in al_results:
+            cfg = r.cfg
+            pd = r.per_stage_delta
+            verdict = "PASS" if r.overall_pass else "FAIL"
+            if r.rtl is None:
+                lines.append(f"| {cfg.workload} | {cfg.K} | {cfg.N} | {cfg.packed_k} | "
+                             f"- | - | - | - | LAT-PARSE |\n")
+                continue
+            lines.append(
+                f"| {cfg.workload} | {cfg.K} | {cfg.N} | {cfg.packed_k} | "
+                f"{pd.get('per_output_steady', '-')} | "
+                f"{pd.get('compute_first_out', '-')} | "
+                f"{pd.get('compute_aggregate', '-')} | "
+                f"{pd.get('output_drain', '-')} | "
+                f"{verdict} |\n"
+            )
+        lines.append("\n### Per-stage annotations (AL FC)\n")
+        for r in al_results:
+            lines.append(f"\n#### {r.cfg.label}\n")
+            if r.rtl is None:
+                lines.append(f"- compile/parse failure\n")
+                continue
+            for k, v in r.per_stage_annotation.items():
+                delta = r.per_stage_delta.get(k, "?")
+                lines.append(f"- `{k}`: Δ={delta} cyc — {v}\n")
+            lines.append(f"- functional: {'PASS' if r.func_pass else 'FAIL'} "
+                         f"(dsp_out={r.rtl.dsp_out_count}, "
+                         f"top_valid_n={r.rtl.top_validn_count}, "
+                         f"expected={r.cfg.N})\n")
+
     lines.append("\n## Known deltas (phase2_known_deltas.json)\n")
     for d in deltas.get("deltas", []):
-        lines.append(f"- stage=`{d['stage']}`, Δ={d['delta_cycles']}, "
+        arch_tag = d.get("arch", "nl_dpe")
+        lines.append(f"- [{arch_tag}] stage=`{d['stage']}`, Δ={d['delta_cycles']}, "
                      f"applies_to={d.get('applies_to','all')}\n  "
                      f"Root: {d['root_cause'][:200]}\n")
     return "".join(lines)
@@ -589,6 +815,9 @@ def main() -> int:
                     help="Filter to setups like '0,2,5'")
     ap.add_argument("--workload", type=str, default=None,
                     help="Filter to workload (fc_512_128 / fc_2048_256)")
+    ap.add_argument("--arch", type=str, default="both",
+                    choices=["nldpe", "azurelily", "both"],
+                    help="Which architecture(s) to verify (default both).")
     args = ap.parse_args()
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -607,12 +836,20 @@ def main() -> int:
     tmpdir = Path("/tmp") / "fc_phase2"
     tmpdir.mkdir(exist_ok=True)
 
-    # Standalone DPE VMM functional
-    dpe_func = run_dpe_vmm_functional(tmpdir)
-    if args.verbose:
-        print(f"[DPE VMM] {dpe_func[1]}")
+    run_nldpe = args.arch in ("nldpe", "both")
+    run_al    = args.arch in ("azurelily", "both")
+
+    # Standalone DPE VMM functional (NL-DPE only)
+    if run_nldpe:
+        dpe_func = run_dpe_vmm_functional(tmpdir)
+        if args.verbose:
+            print(f"[DPE VMM] {dpe_func[1]}")
+    else:
+        dpe_func = (True, "skipped (--arch azurelily)")
 
     results: list[ConfigResult] = []
+    if not run_nldpe:
+        cfgs = []  # skip NL-DPE config loop
     for cfg in cfgs:
         if args.verbose:
             print(f"--- {cfg.label} ({cfg.conversion}, dw{cfg.dpe_bw}, "
@@ -670,18 +907,59 @@ def main() -> int:
                 print(f"  activation: RTL={rtl_route} sim={sim.activation_route} "
                       f"-> {'MATCH' if route_ok else 'MISMATCH'}")
 
-    # Verdict
-    gate_pass = all(r.overall_pass for r in results) and dpe_func[0]
+    # Azure-Lily FC verification (T1 of AH track)
+    al_results: list[AlConfigResult] = []
+    if run_al:
+        al_cfgs = build_al_fc_configs()
+        for cfg in al_cfgs:
+            if args.verbose:
+                print(f"--- {cfg.label} (AL FC, K={cfg.K} N={cfg.N}) ---")
+            sim = sim_oracle_al_fc(cfg)
+            rtl, lat_out = run_al_fc_latency(cfg, tmpdir)
+            if rtl is None:
+                al_results.append(AlConfigResult(
+                    cfg=cfg, rtl=None, sim=sim,
+                    per_stage_delta={}, per_stage_annotation={"_latency": "compile/parse failure"},
+                    func_pass=False, overall_pass=False,
+                ))
+                if args.verbose:
+                    print(f"  latency: FAIL — {lat_out[:400]}")
+            else:
+                per_delta, per_ann, stage_ok = compare_stages_al_fc(rtl, sim, deltas, cfg)
+                func = rtl.func_pass and rtl.dsp_out_count == cfg.N and rtl.top_validn_count == cfg.N
+                overall = func and stage_ok
+                al_results.append(AlConfigResult(
+                    cfg=cfg, rtl=rtl, sim=sim,
+                    per_stage_delta=per_delta,
+                    per_stage_annotation=per_ann,
+                    func_pass=func, overall_pass=overall,
+                ))
+                if args.verbose:
+                    print(f"  per_output={rtl.per_output_steady} (sim {sim.per_output}) "
+                          f"agg={rtl.compute_aggregate} (sim {sim.compute_aggregate}) "
+                          f"drain={rtl.output_drain} (sim {sim.output_drain})")
+                    print(f"  func: {'PASS' if func else 'FAIL'}")
 
-    report = render_report(results, dpe_func, deltas, gate_pass)
+    # Verdict
+    nldpe_pass = (not run_nldpe) or (all(r.overall_pass for r in results) and dpe_func[0])
+    al_pass    = (not run_al)    or all(r.overall_pass for r in al_results)
+    gate_pass  = nldpe_pass and al_pass
+
+    report = render_report(results, dpe_func, deltas, gate_pass, al_results=al_results)
     out_report = RESULTS_DIR / "phase2_fc_report.md"
     out_report.write_text(report)
 
     print(f"\n=== Phase 2 FC verification summary ===")
-    print(f"DPE VMM functional: {'PASS' if dpe_func[0] else 'FAIL'}")
-    total = len(results)
-    passed = sum(1 for r in results if r.overall_pass)
-    print(f"Per-config passes: {passed}/{total}")
+    if run_nldpe:
+        print(f"DPE VMM functional: {'PASS' if dpe_func[0] else 'FAIL'}")
+    nldpe_total = len(results)
+    nldpe_passed = sum(1 for r in results if r.overall_pass)
+    al_total = len(al_results)
+    al_passed = sum(1 for r in al_results if r.overall_pass)
+    if run_nldpe:
+        print(f"NL-DPE per-config passes : {nldpe_passed}/{nldpe_total}")
+    if run_al:
+        print(f"Azure-Lily per-config passes: {al_passed}/{al_total}")
     for r in results:
         tag = "PASS" if r.overall_pass else "FAIL"
         extra = []
@@ -689,6 +967,18 @@ def main() -> int:
             extra.append("FUNC")
         if not r.activation_route_ok:
             extra.append(f"ROUTE({r.activation_route_rtl} vs {r.sim.activation_route})")
+        if r.rtl is None:
+            extra.append("LAT-PARSE")
+        else:
+            for k, v in r.per_stage_annotation.items():
+                if v.startswith("UNEXPLAINED"):
+                    extra.append(f"{k}:{r.per_stage_delta.get(k)}")
+        print(f"  {r.cfg.label:<30} {tag}  {' '.join(extra)}")
+    for r in al_results:
+        tag = "PASS" if r.overall_pass else "FAIL"
+        extra = []
+        if not r.func_pass:
+            extra.append("FUNC")
         if r.rtl is None:
             extra.append("LAT-PARSE")
         else:
