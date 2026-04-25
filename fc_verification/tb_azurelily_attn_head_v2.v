@@ -163,131 +163,47 @@ module tb_azurelily_attn_head_v2;
         end
     end
 
-    // ─── DUT issue 1: FC.S_LOAD off-by-one workaround ────────────────────
-    // The head's S_LOAD_TOKEN runs PACKED_K=32 cycles, but the FC takes
-    // 1-2 cycles to transition S_IDLE→S_LOAD (depending on whether it's
-    // the first token, where global reset has already cleared FC, or a
-    // subsequent token where fc_rst_pulse fires in parallel with the
-    // head's S_LOAD_TOKEN entry). Net effect: FC sees only 30-31 valid
-    // pulses in S_LOAD, but its transition to S_COMPUTE requires the
-    // condition (iwa==31 && valid==1) which needs 32 pulses.  FC sits
-    // forever in S_LOAD with iwa∈{30,31}, head sits forever in S_WAIT_FC.
+    // ─── DUT issue 1 (AH RTL bug #1 — FC S_LOAD off-by-one): FIXED ───────
+    // Root cause: head's S_LOAD_TOKEN ran PACKED_K=32 cycles, but the FC
+    // took 1-2 cycles to transition S_IDLE->S_LOAD (async-reset settle on
+    // fc_rst_pulse between tokens, or global rst for token 0), so the FC
+    // only saw 30-31 valid pulses. S_LOAD->S_COMPUTE needs
+    // (i_w_addr==PACKED_K-1 && valid), which requires PACKED_K+1 valid
+    // pulses from the head.
     //
-    // Workaround: monitor the stuck condition (head==S_WAIT_FC && FC
-    // still in S_LOAD with iwa>=30) and apply a one-cycle hierarchical
-    // `force` pushing FC.state→S_COMPUTE.  Tokens 0 and 1+ both succeed.
+    // Fix (gen_azurelily_attn_head_top.py): extend S_LOAD_TOKEN window to
+    // PACKED_K+2 cycles (feed_count: 0..PACKED_K+1). Every FC arm now
+    // reaches S_COMPUTE without any hierarchical force. fc_force_count
+    // should remain 0 after the fix.
     //
-    // ─── DUT issue 2: DIMM Q SRAM addr wrap ──────────────────────────────
-    // The DIMM's q_w_addr is 5 bits (DEPTH=17), but the head streams
-    // valid_q for BUF_DEPTH-1=1664 cycles during S_DIMM_FIRE.  q_w_addr
-    // wraps every 32 cycles, so it almost never holds value >=13 long
-    // enough for the S_LOAD threshold (q_w_addr>=13 && k_w_addr>=1664
-    // && v_w_addr>=1664) to fire — k_w_addr only reaches 1664 long after
-    // q_w_addr has wrapped past 13.  DIMM stays in S_LOAD forever.
+    // ─── DUT issue 2 (AH RTL bug #2 — q_w_addr 5-bit wrap): FIXED ─────────
+    // Root cause: azurelily_dimm_top_d64_c128.v sized q_w_addr/q_r_addr
+    // from depth_q=17 (5 bits, max 31). The head drives valid_q for
+    // BUF_DEPTH-1=1664 cycles during S_DIMM_FIRE, so q_w_addr wrapped
+    // every 32 cycles and the S_LOAD threshold (q_w_addr>=13 &&
+    // k_w_addr>=1664 && v_w_addr>=1664) almost never held.
     //
-    // Workaround: once head enters S_DIMM_FIRE, force valid_q=0 after
-    // PD_AL=13 cycles so q_w_addr stops at 13 and the threshold holds.
-    // Q SRAM contents are valid for the first 13 entries (the actual Q
-    // data the DIMM needs).  Cost: zero RTL cycles (the force replaces
-    // erroneous writes that would corrupt Q SRAM, no skipped work).
+    // Fix (gen_dimm_azurelily_top.py): widen q_w_addr/q_r_addr to the
+    // shared addr width (12 bits, same as k/v). q_w_addr now grows
+    // monotonically and the threshold holds once k/v reach 1664.
+    //
+    // ─── DUT issue 3 (AH RTL bug #3 — clb_softmax out_valid stuck): FIXED ─
+    // Root cause: the generator patched out the `out_valid <= 0` clear in
+    // the S_NORM->S_LOAD transition of clb_softmax, so once the first
+    // softmax completed, out_valid stayed high indefinitely and mac_sv
+    // kept accumulating bogus attention outputs.
+    //
+    // Fix (gen_dimm_azurelily_top.py): skip that `.replace()` patch.
+    // out_valid now deasserts on the S_LOAD re-entry edge.
+    //
+    // Telemetry counters retained (should stay at 0 post-fix).
     integer fc_force_count = 0;
-    reg fc_q_force_active = 0, fc_k_force_active = 0, fc_v_force_active = 0;
-
-    // Wait for at least 1 cycle of head==S_WAIT_FC + FC stuck before forcing,
-    // so we don't race with the natural transition (token 0 case).
+    reg dimm_valid_q_force_active = 0;
     integer waitfc_streak;
     always @(posedge clk) begin
         if (rst) waitfc_streak <= 0;
         else if (head_state == S_WAIT_FC) waitfc_streak <= waitfc_streak + 1;
         else waitfc_streak <= 0;
-    end
-
-    // ─── DIMM valid_q gating (workaround for q_w_addr wrap) ──────────────
-    // Once q_w_addr reaches 13 in the DIMM (after first 13 streamed cycles
-    // in S_DIMM_FIRE), force the DIMM's input port valid_q to 0 so q_w_addr
-    // stops incrementing and Q SRAM contents stay valid.
-    reg dimm_valid_q_force_active = 0;
-    always @(posedge clk) begin
-        if (rst) begin
-            dimm_valid_q_force_active <= 0;
-        end else begin
-            if (head_state == S_DIMM_FIRE
-                && dut.dimm_inst.q_w_addr >= 5'd13
-                && !dimm_valid_q_force_active) begin
-                force dut.dimm_inst.valid_q = 1'b0;
-                dimm_valid_q_force_active <= 1;
-            end
-            // Once force active, keep it active for the duration of S_DIMM_FIRE.
-            // Release on rst path only.
-        end
-    end
-
-    always @(posedge clk) begin
-        if (rst) begin
-            fc_q_force_active <= 0;
-            fc_k_force_active <= 0;
-            fc_v_force_active <= 0;
-        end else begin
-            // Q FC nudge
-            if (head_state == S_WAIT_FC
-                && dut.fc_q_inst.state == 3'd1 /* S_LOAD */
-                && dut.fc_q_inst.i_w_addr >= 6'd30
-                && waitfc_streak >= 1
-                && !fc_q_force_active) begin
-                force dut.fc_q_inst.state    = 3'd2; /* S_COMPUTE */
-                force dut.fc_q_inst.i_w_addr = 6'd0;
-                force dut.fc_q_inst.mac_count = 6'd0;
-                force dut.fc_q_inst.out_count = 7'd0;
-                fc_q_force_active <= 1;
-                fc_force_count = fc_force_count + 1;
-            end else if (fc_q_force_active) begin
-                release dut.fc_q_inst.state;
-                release dut.fc_q_inst.i_w_addr;
-                release dut.fc_q_inst.mac_count;
-                release dut.fc_q_inst.out_count;
-                fc_q_force_active <= 0;
-            end
-
-            // K FC nudge
-            if (head_state == S_WAIT_FC
-                && dut.fc_k_inst.state == 3'd1
-                && dut.fc_k_inst.i_w_addr >= 6'd30
-                && waitfc_streak >= 1
-                && !fc_k_force_active) begin
-                force dut.fc_k_inst.state    = 3'd2;
-                force dut.fc_k_inst.i_w_addr = 6'd0;
-                force dut.fc_k_inst.mac_count = 6'd0;
-                force dut.fc_k_inst.out_count = 7'd0;
-                fc_k_force_active <= 1;
-                fc_force_count = fc_force_count + 1;
-            end else if (fc_k_force_active) begin
-                release dut.fc_k_inst.state;
-                release dut.fc_k_inst.i_w_addr;
-                release dut.fc_k_inst.mac_count;
-                release dut.fc_k_inst.out_count;
-                fc_k_force_active <= 0;
-            end
-
-            // V FC nudge
-            if (head_state == S_WAIT_FC
-                && dut.fc_v_inst.state == 3'd1
-                && dut.fc_v_inst.i_w_addr >= 6'd30
-                && waitfc_streak >= 1
-                && !fc_v_force_active) begin
-                force dut.fc_v_inst.state    = 3'd2;
-                force dut.fc_v_inst.i_w_addr = 6'd0;
-                force dut.fc_v_inst.mac_count = 6'd0;
-                force dut.fc_v_inst.out_count = 7'd0;
-                fc_v_force_active <= 1;
-                fc_force_count = fc_force_count + 1;
-            end else if (fc_v_force_active) begin
-                release dut.fc_v_inst.state;
-                release dut.fc_v_inst.i_w_addr;
-                release dut.fc_v_inst.mac_count;
-                release dut.fc_v_inst.out_count;
-                fc_v_force_active <= 0;
-            end
-        end
     end
 
     // ─── Stimulus task: drive one packed input word ──────────────────────

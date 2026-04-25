@@ -73,26 +73,27 @@
         "C": 128,
         "W": 16,
         "total_dsp": 16,
+        "total_dimm_dpes": 16,
         "DSP_WDITH": 4,
         "fmax_mhz": 87.9
       },
       "stages": {
         "linear_qkv": 4000,
         "mac_qk": 6661,
-        "softmax_exp": 1988,
-        "softmax_norm": 2550,
+        "softmax_exp": 188,
+        "softmax_norm": 750,
         "mac_sv": 6091,
-        "e2e": 21290
+        "e2e": 17689
       },
       "ns_breakdown": {
         "linear_qkv": 45506.56,
         "mac_qk": 75776.67,
-        "softmax_exp": 22613.33,
-        "softmax_norm": 29013.33,
+        "softmax_exp": 2133.33,
+        "softmax_norm": 8533.33,
         "mac_sv": 69293.33,
-        "e2e": 242203.23
+        "e2e": 201243.23
       },
-      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json. linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz)."
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json, post-fix (total_dimm_dpes=16 added to azure_lily.json). linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz). Pre-fix baseline (W_softmax=1 scalar fallback): softmax_exp=22613.33 ns, softmax_norm=29013.33 ns, e2e=242203.23 ns — that pre-fix case systematically overcounted softmax because AL config was missing total_dimm_dpes, defaulting to scalar lanes."
     }
   }
 }

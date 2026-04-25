@@ -186,8 +186,38 @@ module azurelily_attn_head_d64_c128 #(
                     end
                 end
                 S_LOAD_TOKEN: begin
-                    // FC.S_LOAD samples valid for PACKED_K cycles to fill input SRAM.
-                    if (feed_count == PACKED_K - 1) begin
+                    // BUG 1 FIX: extend the S_LOAD_TOKEN window from PACKED_K
+                    // to PACKED_K+2 cycles so the inner FC arms can actually
+                    // transition from S_IDLE->S_LOAD->S_COMPUTE.
+                    //
+                    // Pre-fix trace (PACKED_K=32):
+                    //   cycle k=1: head enters S_LOAD_TOKEN (feed_count=0),
+                    //              valid=1. FC still in S_IDLE (async rst
+                    //              cleared it on k=1 for subsequent tokens
+                    //              via fc_rst_pulse, or from global rst for
+                    //              token 0). FC transitions S_IDLE->S_LOAD at
+                    //              posedge of k=2.
+                    //   cycle k=2: FC enters S_LOAD, i_w_addr=0, valid=1.
+                    //              Writes mem[0], i_w_addr<=1.
+                    //   ...
+                    //   cycle k=32: FC i_w_addr=30, valid=1. Writes mem[30],
+                    //               i_w_addr<=31. head feed_count was 30
+                    //               going into this cycle; commits to 31.
+                    //   cycle k=33: head feed_count==PACKED_K-1=31 ->
+                    //               transitions to S_WAIT_FC. FC i_w_addr=31,
+                    //               BUT valid drops to 0 this cycle, so the
+                    //               (i_w_addr==31 && valid) condition never
+                    //               fires. FC is stuck in S_LOAD forever.
+                    //
+                    // Post-fix: head stays in S_LOAD_TOKEN for 2 more cycles
+                    // (feed_count 0..PACKED_K+1 = 0..33). At k=34, FC has
+                    // i_w_addr=31 and valid=1 -> S_COMPUTE, i_w_addr<=0.
+                    // mem[31] also gets written in that same cycle. Only
+                    // 1 extra valid cycle is strictly needed for the FSM
+                    // transition, but +2 gives one cycle of slack so we
+                    // also cover the case where the FC's async-reset from
+                    // fc_rst_pulse takes 2 NBA settle cycles to release.
+                    if (feed_count == PACKED_K + 1) begin
                         state      <= S_WAIT_FC;
                         feed_count <= 0;
                     end else begin

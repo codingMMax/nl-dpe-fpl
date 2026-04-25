@@ -24,7 +24,7 @@ module azurelily_dimm_top #(
     wire [DATA_WIDTH-1:0] lane_data [0:W-1];
 
     // Shared Q/K/V SRAMs (broadcast to all lanes)
-    reg [5-1:0] q_w_addr;
+    reg [12-1:0] q_w_addr;
     reg [12-1:0] k_w_addr;
     reg [12-1:0] v_w_addr;
     always @(posedge clk or posedge rst) begin
@@ -37,7 +37,7 @@ module azurelily_dimm_top #(
     end
 
     wire [DATA_WIDTH-1:0] q_sram_out, k_sram_out, v_sram_out;
-    reg [5-1:0] q_r_addr;
+    reg [12-1:0] q_r_addr;
     reg [12-1:0] k_r_addr;
     reg [12-1:0] v_r_addr;
     sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(17))
@@ -288,7 +288,7 @@ module clb_softmax #(
                 data_out <= norm_product;
                 out_valid <= 1;
                 if (r_addr == N-1) begin
-                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0;
+                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0; out_valid <= 0;
                 end else
                     r_addr <= r_addr + 1;
             end

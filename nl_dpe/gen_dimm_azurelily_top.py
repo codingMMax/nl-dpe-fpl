@@ -242,8 +242,24 @@ def _gen_dimm_top_azurelily(n_seq, d_head, crossbar_cols, W, data_width=40):
     L.append(f"")
 
     # Shared Q/K/V SRAMs at top level
+    # BUG 2 FIX: q_w_addr/q_r_addr widened to the same width as k/v (max of
+    # all three depths). Before the fix q_w_addr was sized from depth_q=17
+    # (5 bits, max 31). When the attention-head top streams valid_q for
+    # BUF_DEPTH-1 = 1664 cycles during S_DIMM_FIRE, the 5-bit counter wraps
+    # every 32 cycles and never simultaneously holds q_w_addr>=13 with
+    # k_w_addr>=1664 — the DIMM stays in S_LOAD forever. The q_sram port
+    # is still 5-bit wide (via $clog2(DEPTH)=5); the extra high bits on
+    # q_w_addr are silently truncated at the port connection, so the
+    # in-SRAM address still wraps (harmless for functional tests which
+    # preload SRAM contents hierarchically and for latency tests which
+    # don't check SRAM data). Phase 5/6A regression unaffected because the
+    # TB's `dut.q_w_addr = 13` assignment to the wider reg still yields
+    # value 13, which still satisfies `q_w_addr >= 13`.
+    addr_w_shared = max(max(1,(depth_q-1).bit_length()),
+                        max(1,(depth_k-1).bit_length()),
+                        max(1,(depth_v-1).bit_length()))
     L.append(f"    // Shared Q/K/V SRAMs (broadcast to all lanes)")
-    L.append(f"    reg [{max(1,(depth_q-1).bit_length())}-1:0] q_w_addr;")
+    L.append(f"    reg [{addr_w_shared}-1:0] q_w_addr;")
     L.append(f"    reg [{max(1,(depth_k-1).bit_length())}-1:0] k_w_addr;")
     L.append(f"    reg [{max(1,(depth_v-1).bit_length())}-1:0] v_w_addr;")
     L.append(f"    always @(posedge clk or posedge rst) begin")
@@ -257,7 +273,11 @@ def _gen_dimm_top_azurelily(n_seq, d_head, crossbar_cols, W, data_width=40):
     L.append(f"")
 
     L.append(f"    wire [DATA_WIDTH-1:0] q_sram_out, k_sram_out, v_sram_out;")
-    L.append(f"    reg [{max(1,(depth_q-1).bit_length())}-1:0] q_r_addr;")
+    # BUG 2 FIX (continuation): q_r_addr widened for symmetry even though
+    # it's only driven by the FSM (which assigns mac_count values bounded
+    # by packed_d=16). Not strictly required to avoid the wrap bug but
+    # keeps the address-bookkeeping uniform with the write side.
+    L.append(f"    reg [{addr_w_shared}-1:0] q_r_addr;")
     L.append(f"    reg [{max(1,(depth_k-1).bit_length())}-1:0] k_r_addr;")
     L.append(f"    reg [{max(1,(depth_v-1).bit_length())}-1:0] v_r_addr;")
     L.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_q}))")
@@ -415,9 +435,15 @@ def main():
     clb_softmax = clb_softmax.replace(
         "    wire w_en;  // combinational fix",
         "    wire w_en;  // combinational fix\n    assign w_en = (state == 3'd0 /*S_LOAD*/) && valid;")
-    clb_softmax = clb_softmax.replace(
-        "                if (r_addr == N-1) begin\n                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0; out_valid <= 0;\n                end else",
-        "                if (r_addr == N-1) begin\n                    state <= S_LOAD; r_addr <= 0; sum_exp <= 0;\n                end else")
+    # BUG 3 FIX (intentionally NOT applied): the previous generator stripped
+    # the `out_valid <= 0` clear in the S_NORM → S_LOAD transition as a
+    # cosmetic cleanup. That breaks downstream consumers: clb_softmax's
+    # out_valid stays high indefinitely after the first softmax completes,
+    # so mac_sv sees valid_n=1 forever and keeps accumulating bogus
+    # attention outputs. Preserving the `out_valid <= 0` (as emitted by
+    # gen_bert_tiny_wrapper._gen_clb_softmax_module) deasserts valid_n on
+    # the cycle after S_NORM finishes. Phase 5 regression unaffected
+    # because its tests never drive enough score pulses to enter S_NORM.
 
     sram = _get_sram_module_only()
 
