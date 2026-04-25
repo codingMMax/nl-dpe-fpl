@@ -1,9 +1,9 @@
 {
-  "source": "Live sim refresh (Regime B, Layout A) on 2026-04-23",
+  "source": "Live sim refresh (Regime B + intra-row pipelining, Layout A) on 2026-04-24",
   "regime": "B",
   "layout": "A",
   "updated": "2026-04-24",
-  "note": "Regenerate via gen_expected_cycles.py after any sim-model change.",
+  "note": "Regenerate via gen_expected_cycles.py after any sim-model change. AH configs (attn_head) are manually maintained — refresh after running test.py --model attention.",
   "tolerance_cycles": {
     "per_stage": 3,
     "e2e": 5
@@ -50,21 +50,21 @@
       },
       "stages": {
         "linear_qkv": 2424,
-        "mac_qk": 5690,
+        "mac_qk": 5428,
         "softmax_exp": 650,
         "softmax_norm": 376,
-        "mac_sv": 5339,
-        "e2e": 14480
+        "mac_sv": 5077,
+        "e2e": 13955
       },
       "ns_breakdown": {
         "linear_qkv": 23553.33,
-        "mac_qk": 55300.00,
+        "mac_qk": 52750.00,
         "softmax_exp": 6320.00,
         "softmax_norm": 3653.33,
-        "mac_sv": 51890.00,
-        "e2e": 140716.67
+        "mac_sv": 49340.00,
+        "e2e": 135616.67
       },
-      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/nl_dpe.json. linear_qkv = max(linear_Q, linear_K, linear_V) = 23553.33 ns (parallel arms, byte-identical Linear_Layer params). Cycles = round(ns / t_clk) with t_clk = 9.7182 ns (Fmax=102.9 MHz)."
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/nl_dpe.json post-2026-04-24 sim parallelism fix (gemm_log intra-row pipelining: feed of next pass overlaps current pass's compute+drain via intra_row_steady=max(feed,compute_chain,drain)). Pre-fix mac_qk=5690, mac_sv=5339, e2e=14480; post-fix smaller because the new sim correctly models the RTL DPE lane's intra-row pipelining behavior. linear_qkv = max(linear_Q, linear_K, linear_V) = 23553.33 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 9.7182 ns (Fmax=102.9 MHz)."
     },
     "azurelily_attn_head_d64_c128": {
       "params": {
@@ -79,21 +79,21 @@
       },
       "stages": {
         "linear_qkv": 4000,
-        "mac_qk": 6661,
+        "mac_qk": 815,
         "softmax_exp": 188,
         "softmax_norm": 750,
-        "mac_sv": 6091,
-        "e2e": 17689
+        "mac_sv": 1450,
+        "e2e": 7203
       },
       "ns_breakdown": {
         "linear_qkv": 45506.56,
-        "mac_qk": 75776.67,
+        "mac_qk": 9270.00,
         "softmax_exp": 2133.33,
         "softmax_norm": 8533.33,
-        "mac_sv": 69293.33,
-        "e2e": 201243.23
+        "mac_sv": 16493.33,
+        "e2e": 81936.56
       },
-      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json, post-fix (total_dimm_dpes=16 added to azure_lily.json). linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz). Pre-fix baseline (W_softmax=1 scalar fallback): softmax_exp=22613.33 ns, softmax_norm=29013.33 ns, e2e=242203.23 ns — that pre-fix case systematically overcounted softmax because AL config was missing total_dimm_dpes, defaulting to scalar lanes."
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json post-2026-04-24 sim parallelism fix (gemm_dsp n_parallel_outputs=N for DIMM parallel-row + intra-wave pipelining). Pre-fix mac_qk=6661, mac_sv=6091, e2e=17689; post-fix dramatically smaller because gemm_dsp now models the parallel-output DSP fabric (n_parallel_outputs=N=128) correctly rather than serialising along the DSP-pool axis with dsp_batch=8. linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz)."
     }
   }
 }
