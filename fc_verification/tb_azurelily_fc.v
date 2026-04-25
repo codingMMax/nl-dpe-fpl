@@ -28,8 +28,10 @@ module tb_azurelily_fc;
     parameter K = `K_TB;
     parameter N = `N_TB;
     parameter DATA_WIDTH = 40;
-    parameter EPW = 4;
-    parameter PACKED_K = (K + EPW - 1) / EPW;
+    parameter EPW       = 4;                      // input dsp_mac packing
+    parameter PACKED_K  = (K + EPW - 1) / EPW;
+    parameter EPW_OUT   = 5;                      // output drain packing
+    parameter PACKED_N  = (N + EPW_OUT - 1) / EPW_OUT;
 
     reg clk, rst, valid, ready_n;
     reg  [DATA_WIDTH-1:0] data_in;
@@ -75,8 +77,11 @@ module tb_azurelily_fc;
     integer dsp_out_count   = 0;
     integer top_validn_count = 0;
 
-    wire probe_dsp_valid = dut.dsp_inst.valid;
-    wire probe_dsp_outv  = dut.dsp_inst.valid_n;
+    // Refactored RTL: N parallel dsp_mac instances under generate-loop
+    // labelled g_out[i].dsp_inst.  Probe instance 0 — all instances share
+    // the same valid gate, so any one is representative for cycle counts.
+    wire probe_dsp_valid = dut.g_out[0].dsp_inst.valid;
+    wire probe_dsp_outv  = dut.g_out[0].dsp_inst.valid_n;
     wire [2:0] probe_state = dut.state;
 
     always @(posedge clk) begin
@@ -117,14 +122,17 @@ module tb_azurelily_fc;
         rst = 0;
         @(posedge clk);
 
-        $display("=== AL FC Alignment TB ===");
-        $display("  K=%0d, N=%0d, PACKED_K=%0d", K, N, PACKED_K);
-        $display("  Sim model:");
+        $display("=== AL FC Alignment TB (parallel-output streaming refactor) ===");
+        $display("  K=%0d, N=%0d, PACKED_K=%0d, PACKED_N=%0d (drain packed-%0d)",
+                 K, N, PACKED_K, PACKED_N, EPW_OUT);
+        $display("  Sim model (parallel-output, packed-EPW_O drain):");
         $display("    feed_load (S_LOAD)   = %0d cyc", PACKED_K);
-        $display("    per-output compute   = %0d cyc (2 SRAM prime + %0d dsp + 1 latch)",
+        $display("    compute first_out    = %0d cyc (2 SRAM prime + %0d dsp + 1 latch)",
                  PACKED_K + 3, PACKED_K);
-        $display("    compute aggregate    = %0d cyc", N * (PACKED_K + 3));
-        $display("    output drain         = %0d cyc", N);
+        $display("    compute aggregate    = %0d cyc (all %0d outputs latch in same cycle)",
+                 PACKED_K + 3, N);
+        $display("    output drain         = %0d cyc (packed %0d bytes/cyc)",
+                 PACKED_N, EPW_OUT);
 
         // ── Hierarchical pre-load: input SRAM ──
         // Input pattern: byte k of packed word (k mod EPW) = ((k + 1) & 8'h7F)
@@ -153,24 +161,25 @@ module tb_azurelily_fc;
             end
         end
 
-        // ── Force FSM directly to S_COMPUTE (skip S_LOAD) ──
-        // The S_LOAD phase is the user-driven input feed; per-output
+        // ── Force FSM directly to S_COMPUTE (skip S_LOAD_FIRST) ──
+        // The S_LOAD_FIRST phase is the user-driven input feed; per-output
         // verification doesn't need it. Pre-loaded input + weight SRAMs
         // suffice. T_compute_start probe will pick up the next clock edge.
-        dut.state     = 3'd2;  // S_COMPUTE
-        dut.mac_count = 0;
-        dut.out_count = 0;
-        dut.i_r_addr  = 0;
-        dut.w_r_addr  = 0;
-        dut.i_w_addr  = 0;
-        dut.o_w_addr  = 0;
-        dut.o_r_addr  = 0;
-        dut.o_w_en    = 0;
-        dut.valid_n   = 0;
-        // Also reset dsp_mac internal state so accum starts at 0
-        dut.dsp_inst.accum     = 40'sd0;
-        dut.dsp_inst.count     = 0;
-        dut.dsp_inst.out_valid = 0;
+        //
+        // Note: the N parallel dsp_mac instances under g_out[*] retain their
+        // post-rst state (accum=0, count=0, out_valid=0) since `valid` was 0
+        // throughout the rst-deassert window.  No per-instance reset needed.
+        dut.state            = 3'd2;  // S_COMPUTE (unified streaming)
+        dut.mac_count        = 0;
+        dut.i_r_addr         = 0;
+        dut.w_r_addr         = 0;
+        dut.i_w_addr         = 0;
+        dut.valid_n          = 0;
+        dut.drain_active     = 0;
+        dut.o_r_pkidx        = 0;
+        dut.o_drain_row      = 0;
+        dut.o_compute_row    = 0;
+        dut.o_count          = 0;
         valid   = 0;  // user no longer driving
         ready_n = 0;  // downstream always ready
 
@@ -196,10 +205,12 @@ module tb_azurelily_fc;
         $display("  T_validn_first    = %0d", T_validn_first);
         $display("  T_validn_last     = %0d", T_validn_last);
         $display("");
-        $display("=== Pulse Counts ===");
-        $display("  dsp valid pulses  = %0d (expect N*PACKED_K = %0d)", dsp_valid_count, N * PACKED_K);
-        $display("  dsp out pulses    = %0d (expect N = %0d)", dsp_out_count, N);
-        $display("  top valid_n pulses = %0d (expect N = %0d)", top_validn_count, N);
+        $display("=== Pulse Counts (parallel-output, packed drain: probe instance 0) ===");
+        $display("  dsp valid pulses  = %0d (expect PACKED_K = %0d for 1 row)",
+                 dsp_valid_count, PACKED_K);
+        $display("  dsp out pulses    = %0d (expect 1 for 1 row, parallel)", dsp_out_count);
+        $display("  top valid_n pulses = %0d (expect PACKED_N = %0d, packed-%0d drain)",
+                 top_validn_count, PACKED_N, EPW_OUT);
         $display("");
         $display("=== Per-Stage Cycle Counts (matches phase2 schema) ===");
         // For Phase-2 style reporting we report per-output values:
@@ -214,13 +225,14 @@ module tb_azurelily_fc;
                  T_compute_start - T_load_first, PACKED_K);
         $display("  compute_first_out    = %0d cyc  (sim PACKED_K+3 = %0d)",
                  T_first_out - T_compute_start + 1, PACKED_K + 3);
-        $display("  compute_aggregate    = %0d cyc  (sim N*(PACKED_K+3) = %0d)",
-                 T_last_out - T_compute_start + 1, N * (PACKED_K + 3));
-        if (N > 1)
-            $display("  per_output_steady    = %0d cyc  (sim PACKED_K+3 = %0d)",
-                     (T_last_out - T_first_out) / (N - 1), PACKED_K + 3);
-        $display("  output_drain         = %0d cyc  (sim N = %0d)",
-                 T_validn_last - T_validn_first + 1, N);
+        $display("  compute_aggregate    = %0d cyc  (sim PACKED_K+3 = %0d, parallel)",
+                 T_last_out - T_compute_start + 1, PACKED_K + 3);
+        // Parallel-output: all dsp_outs latch in the same cycle, so
+        // (T_last_out - T_first_out) = 0 by construction.  Report directly.
+        $display("  per_output_steady    = %0d cyc  (sim 0, parallel-output)",
+                 (T_last_out - T_first_out));
+        $display("  output_drain         = %0d cyc  (sim PACKED_N = %0d, packed-%0d)",
+                 T_validn_last - T_validn_first + 1, PACKED_N, EPW_OUT);
         $display("");
         $display("=== Phase-2 stage row (for runner parsing) ===");
         $display("AL_FC_STAGES feed=%0d compute=%0d output=%0d reduction=%0d activation=%0d",
@@ -230,16 +242,17 @@ module tb_azurelily_fc;
                  0,                                                // no reduction tree
                  0);                                               // saturation absorbed
 
-        // ── Functional sanity: spot-check first few outputs ──
-        // Expected output[i] = input[i] = ((i+1) & 8'h7F) for i < min(N, K).
-        // We can't easily read every output_sram word here, but valid_n pulse count
-        // confirms N outputs were produced.
-        if (dsp_out_count != N)
-            $display("FUNC FAIL: expected %0d dsp out pulses, got %0d", N, dsp_out_count);
-        else if (top_validn_count != N)
-            $display("FUNC FAIL: expected %0d top valid_n pulses, got %0d", N, top_validn_count);
+        // ── Functional sanity ──
+        // Parallel-output design with packed drain (EPW_O=5 bytes/cyc):
+        //   - dsp_out_count = 1 (one row, one parallel latch on probe[0])
+        //   - top_validn_count = PACKED_N = ceil(N/EPW_O) (packed drain)
+        if (dsp_out_count != 1)
+            $display("FUNC FAIL: expected 1 dsp out pulse (parallel), got %0d", dsp_out_count);
+        else if (top_validn_count != PACKED_N)
+            $display("FUNC FAIL: expected %0d top valid_n pulses (PACKED_N), got %0d",
+                     PACKED_N, top_validn_count);
         else
-            $display("FUNC PASS: %0d dsp outputs and %0d top valid_n pulses",
+            $display("FUNC PASS: %0d dsp out pulse (parallel) and %0d top valid_n pulses",
                      dsp_out_count, top_validn_count);
 
         #50;

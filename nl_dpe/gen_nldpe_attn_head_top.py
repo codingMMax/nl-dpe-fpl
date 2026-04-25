@@ -3,7 +3,7 @@
 
 Composition matches the IMC simulator's `attention_model` definition:
 
-    [valid_x, data_in_x] ──► fc_top_qkv ×3 (Q/K/V projections)
+    [valid_x, data_in_x] ──► fc_top_qkv_streaming ×3 (Q/K/V projections)
                                  │     │     │
                                  ▼     ▼     ▼
                               q_buf  k_buf  v_buf  (sram, depth = N×PACKED_NQ+1)
@@ -14,11 +14,15 @@ Composition matches the IMC simulator's `attention_model` definition:
                                        ▼
                                 [data_out, valid_n]
 
-For N=128 input tokens of d_model=128, the FCs are run N times in
-parallel (one Q vector / one K vector / one V vector per token,
-each PACKED_NQ = ceil(d_head/EPW) = 13 packed words). The buffered
-Q/K/V tensors are then replayed into the DIMM top, which fires once
-to produce the N × d_head packed attention output stream.
+For N=128 input tokens of d_model=128, the FCs run as streaming
+ping-pong pairs (2 DPEs per arm, dpe_a/dpe_b), absorbing one packed
+input word per cycle and producing one packed output word per cycle
+in steady state. Total linear-QKV stage cycles ≈ N × PACKED_KQ =
+3328 cyc + initial latency, well below the 4000-cyc bound.
+
+The buffered Q/K/V tensors are then replayed into the DIMM top,
+which fires once to produce the N × d_head packed attention
+output stream.
 
 Locked design parameters:
   d_model = 128
@@ -33,7 +37,8 @@ Locked design parameters:
   PACKED_NQ = ceil(d_head/EPW)  = 13 (output words per FC inference)
 
 Resource expectation (verified by grep on emitted RTL):
-  - 3 × fc_top_qkv (Q/K/V arms) — instances fc_q_inst, fc_k_inst, fc_v_inst
+  - 3 × fc_top_qkv_streaming (Q/K/V arms; 2 DPEs each) — instances
+                               fc_q_inst, fc_k_inst, fc_v_inst
   - 3 × sram (q/k/v buffers)    — instances q_buffer, k_buffer, v_buffer
   - 1 × nldpe_dimm_top          — instance dimm_inst
   - 0 × fc_top_o (NO output projection; sim's attention_model stops at mac_sv)
@@ -49,9 +54,9 @@ Top-level FSM (5 states):
   S_OUTPUT     → forward DIMM data_out / valid_n to top-level outputs
 
 iverilog smoke-compile target:
-  iverilog -o /tmp/smoke fc_verification/rtl/nldpe_attn_head_d64_c128.v \
-                         fc_verification/rtl/nldpe_dimm_top_d64_c128.v   \
-                         fc_verification/rtl/nldpe/fc_top_qkv.v          \
+  iverilog -o /tmp/smoke fc_verification/rtl/nldpe_attn_head_d64_c128.v   \
+                         fc_verification/rtl/nldpe_dimm_top_d64_c128.v    \
+                         fc_verification/rtl/nldpe/fc_top_qkv_streaming.v \
                          fc_verification/dpe_stub.v
 
 Usage:
@@ -102,7 +107,7 @@ def render_top_module(out_path: Path) -> None:
     rtl.append("//")
     rtl.append("// Composition (matches IMC sim's attention_model — no output projection):")
     rtl.append("//")
-    rtl.append("//   [valid_x, data_in_x] ──► fc_top_qkv ×3 (Q/K/V projections)")
+    rtl.append("//   [valid_x, data_in_x] ──► fc_top_qkv_streaming ×3 (Q/K/V; 2 DPEs each)")
     rtl.append("//                                │     │     │")
     rtl.append("//                                ▼     ▼     ▼")
     rtl.append("//                             q_buf k_buf v_buf  (sram)")
@@ -119,14 +124,15 @@ def render_top_module(out_path: Path) -> None:
     rtl.append(f"//   PACKED_NQ={PACKED_NQ} (output words/inference)")
     rtl.append("//")
     rtl.append("// Resource expectation:")
-    rtl.append("//   - 3 × fc_top_qkv         (instances: fc_q_inst, fc_k_inst, fc_v_inst)")
-    rtl.append("//   - 3 × sram               (instances: q_buffer, k_buffer, v_buffer)")
-    rtl.append("//   - 1 × nldpe_dimm_top     (instance:  dimm_inst)")
-    rtl.append("//   - 0 × fc_top_o           (NO output projection)")
+    rtl.append("//   - 3 × fc_top_qkv_streaming (instances: fc_q_inst, fc_k_inst, fc_v_inst;")
+    rtl.append("//                               2 DPEs each via ping-pong)")
+    rtl.append("//   - 3 × sram                 (instances: q_buffer, k_buffer, v_buffer)")
+    rtl.append("//   - 1 × nldpe_dimm_top       (instance:  dimm_inst)")
+    rtl.append("//   - 0 × fc_top_o             (NO output projection)")
     rtl.append("//")
     rtl.append("// Module dependencies (compile together with this file):")
     rtl.append("//   - fc_verification/rtl/nldpe_dimm_top_d64_c128.v")
-    rtl.append("//   - fc_verification/rtl/nldpe/fc_top_qkv.v")
+    rtl.append("//   - fc_verification/rtl/nldpe/fc_top_qkv_streaming.v")
     rtl.append("//   - fc_verification/dpe_stub.v")
     rtl.append("")
     rtl.append("`timescale 1ns / 1ps")
@@ -182,21 +188,21 @@ def render_top_module(out_path: Path) -> None:
     rtl.append("")
     rtl.append("    wire feed_x_now = (state == S_FEED_X) && valid_x;")
     rtl.append("")
-    rtl.append("    fc_top_qkv #(.DATA_WIDTH(DATA_WIDTH)) fc_q_inst (")
+    rtl.append("    fc_top_qkv_streaming #(.DATA_WIDTH(DATA_WIDTH)) fc_q_inst (")
     rtl.append("        .clk(clk), .rst(rst),")
     rtl.append("        .valid(feed_x_now), .ready_n(1'b0),")
     rtl.append("        .data_in(data_in_x),")
     rtl.append("        .data_out(q_fc_out),")
     rtl.append("        .ready(q_fc_ready), .valid_n(q_fc_valid_n)")
     rtl.append("    );")
-    rtl.append("    fc_top_qkv #(.DATA_WIDTH(DATA_WIDTH)) fc_k_inst (")
+    rtl.append("    fc_top_qkv_streaming #(.DATA_WIDTH(DATA_WIDTH)) fc_k_inst (")
     rtl.append("        .clk(clk), .rst(rst),")
     rtl.append("        .valid(feed_x_now), .ready_n(1'b0),")
     rtl.append("        .data_in(data_in_x),")
     rtl.append("        .data_out(k_fc_out),")
     rtl.append("        .ready(k_fc_ready), .valid_n(k_fc_valid_n)")
     rtl.append("    );")
-    rtl.append("    fc_top_qkv #(.DATA_WIDTH(DATA_WIDTH)) fc_v_inst (")
+    rtl.append("    fc_top_qkv_streaming #(.DATA_WIDTH(DATA_WIDTH)) fc_v_inst (")
     rtl.append("        .clk(clk), .rst(rst),")
     rtl.append("        .valid(feed_x_now), .ready_n(1'b0),")
     rtl.append("        .data_in(data_in_x),")

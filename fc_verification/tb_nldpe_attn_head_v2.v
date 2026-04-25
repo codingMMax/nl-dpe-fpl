@@ -51,16 +51,10 @@ module tb_nldpe_attn_head_v2;
     wire [DW-1:0] data_out;
     wire ready_x, valid_n;
 
-    // ─── Defparam: FC arm DPE shape (d_model -> d_head) ───────────────────
-    // Each fc_top_qkv -> conv_layer_single_dpe -> dpe_inst. KERNEL_WIDTH=128
-    // (d_model packed into 26 strobes of 5 elements each). NUM_COLS=64
-    // (d_head, packed into 13 output strobes of 5 elements each).
-    defparam dut.fc_q_inst.fc_layer_inst.dpe_inst.KERNEL_WIDTH = D_MODEL;
-    defparam dut.fc_q_inst.fc_layer_inst.dpe_inst.NUM_COLS    = D_HEAD;
-    defparam dut.fc_k_inst.fc_layer_inst.dpe_inst.KERNEL_WIDTH = D_MODEL;
-    defparam dut.fc_k_inst.fc_layer_inst.dpe_inst.NUM_COLS    = D_HEAD;
-    defparam dut.fc_v_inst.fc_layer_inst.dpe_inst.KERNEL_WIDTH = D_MODEL;
-    defparam dut.fc_v_inst.fc_layer_inst.dpe_inst.NUM_COLS    = D_HEAD;
+    // ─── FC arm DPE shape (d_model -> d_head) ─────────────────────────────
+    // Streaming FC variant uses 2 DPEs per arm (ping-pong: dpe_a_inst,
+    // dpe_b_inst). KERNEL_WIDTH=K=128 and NUM_COLS=N_OUT=64 are wired in
+    // at instantiation in fc_top_qkv_streaming.v (no defparam needed).
 
     // DUT instantiation (parameter values carried via defaults in the RTL)
     nldpe_attn_head_d64_c128 dut (
@@ -195,9 +189,13 @@ module tb_nldpe_attn_head_v2;
     // ─── FC arm DPE identity-weight preload ───────────────────────────────
     // For diagonal weights[c][c] = 1 (c=0..D_HEAD-1), the DPE computes
     // output[c] = input[c] for c < D_HEAD. Other columns weighted to 0.
+    // Streaming FC has 2 DPEs per arm (ping-pong); load BOTH so the
+    // output is identical regardless of which DPE handles a given token.
     `define LOAD_FC_ARM(NAME) begin \
-        for (ww = 0; ww < D_HEAD; ww = ww + 1) \
-            dut.NAME.fc_layer_inst.dpe_inst.weights[ww][ww] = 1; \
+        for (ww = 0; ww < D_HEAD; ww = ww + 1) begin \
+            dut.NAME.dpe_a_inst.weights[ww][ww] = 1; \
+            dut.NAME.dpe_b_inst.weights[ww][ww] = 1; \
+        end \
     end
 
     initial begin

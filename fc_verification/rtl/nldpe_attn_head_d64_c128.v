@@ -3,7 +3,7 @@
 //
 // Composition (matches IMC sim's attention_model — no output projection):
 //
-//   [valid_x, data_in_x] ──► fc_top_qkv ×3 (Q/K/V projections)
+//   [valid_x, data_in_x] ──► fc_top_qkv_streaming ×3 (Q/K/V; 2 DPEs each)
 //                                │     │     │
 //                                ▼     ▼     ▼
 //                             q_buf k_buf v_buf  (sram)
@@ -20,14 +20,15 @@
 //   PACKED_NQ=13 (output words/inference)
 //
 // Resource expectation:
-//   - 3 × fc_top_qkv         (instances: fc_q_inst, fc_k_inst, fc_v_inst)
-//   - 3 × sram               (instances: q_buffer, k_buffer, v_buffer)
-//   - 1 × nldpe_dimm_top     (instance:  dimm_inst)
-//   - 0 × fc_top_o           (NO output projection)
+//   - 3 × fc_top_qkv_streaming (instances: fc_q_inst, fc_k_inst, fc_v_inst;
+//                               2 DPEs each via ping-pong)
+//   - 3 × sram                 (instances: q_buffer, k_buffer, v_buffer)
+//   - 1 × nldpe_dimm_top       (instance:  dimm_inst)
+//   - 0 × fc_top_o             (NO output projection)
 //
 // Module dependencies (compile together with this file):
 //   - fc_verification/rtl/nldpe_dimm_top_d64_c128.v
-//   - fc_verification/rtl/nldpe/fc_top_qkv.v
+//   - fc_verification/rtl/nldpe/fc_top_qkv_streaming.v
 //   - fc_verification/dpe_stub.v
 
 `timescale 1ns / 1ps
@@ -83,21 +84,21 @@ module nldpe_attn_head_d64_c128 #(
 
     wire feed_x_now = (state == S_FEED_X) && valid_x;
 
-    fc_top_qkv #(.DATA_WIDTH(DATA_WIDTH)) fc_q_inst (
+    fc_top_qkv_streaming #(.DATA_WIDTH(DATA_WIDTH)) fc_q_inst (
         .clk(clk), .rst(rst),
         .valid(feed_x_now), .ready_n(1'b0),
         .data_in(data_in_x),
         .data_out(q_fc_out),
         .ready(q_fc_ready), .valid_n(q_fc_valid_n)
     );
-    fc_top_qkv #(.DATA_WIDTH(DATA_WIDTH)) fc_k_inst (
+    fc_top_qkv_streaming #(.DATA_WIDTH(DATA_WIDTH)) fc_k_inst (
         .clk(clk), .rst(rst),
         .valid(feed_x_now), .ready_n(1'b0),
         .data_in(data_in_x),
         .data_out(k_fc_out),
         .ready(k_fc_ready), .valid_n(k_fc_valid_n)
     );
-    fc_top_qkv #(.DATA_WIDTH(DATA_WIDTH)) fc_v_inst (
+    fc_top_qkv_streaming #(.DATA_WIDTH(DATA_WIDTH)) fc_v_inst (
         .clk(clk), .rst(rst),
         .valid(feed_x_now), .ready_n(1'b0),
         .data_in(data_in_x),

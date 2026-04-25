@@ -116,14 +116,14 @@ Single-DSP serialised FC (dsp_mac, pure 4-wide int_sop_4, Phase 6A canonical). P
 - `compute_aggregate`: Δ=1 cyc — annotated: Force-state probe convention in tb_azurelily_fc.v: T_compute_start is captured at cycle 0 (the simulation moment when st
 - `output_drain`: Δ=0 cyc — exact
 - `per_output_steady`: Δ=0 cyc — exact
-- functional: PASS (dsp_out=128, top_valid_n=128, expected=128)
+- functional: PASS (dsp_out=1 expect=1 parallel, top_valid_n=26, expected_drain=26 packed-5)
 
 #### al/fc_2048_256
 - `compute_first_out`: Δ=1 cyc — annotated: Same probe-convention root cause as compute_aggregate (force-state at cycle 0, real start at cycle 1). T_first_out - T_c
 - `compute_aggregate`: Δ=1 cyc — annotated: Force-state probe convention in tb_azurelily_fc.v: T_compute_start is captured at cycle 0 (the simulation moment when st
 - `output_drain`: Δ=0 cyc — exact
 - `per_output_steady`: Δ=0 cyc — exact
-- functional: PASS (dsp_out=256, top_valid_n=256, expected=256)
+- functional: PASS (dsp_out=1 expect=1 parallel, top_valid_n=52, expected_drain=52 packed-5)
 
 ## Known deltas (phase2_known_deltas.json)
 - [nl_dpe] stage=`compute`, Δ=4, applies_to=all

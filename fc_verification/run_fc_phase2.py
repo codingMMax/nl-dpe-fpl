@@ -511,12 +511,18 @@ def build_al_fc_configs() -> list[AlFCConfig]:
 
 @dataclass
 class AlSimStages:
-    """Per-output sim oracle for AL FC (with serial dsp_mac scheduling).
+    """Per-output sim oracle for AL FC (post streaming + N-parallel-output refactor).
 
-    Per-output cost = 2 SRAM-prime + PACKED_K dsp.valid + 1 latch
-                    = PACKED_K + 3 cycles.
-    Aggregate compute = N * (PACKED_K + 3).
-    Output drain = N cycles (S_OUTPUT phase, one int8 per cycle).
+    Architecture: N parallel dsp_macs (one per output column).  All N outputs
+    latch in the SAME cycle (parallel), after PACKED_K + 3 cycles of compute.
+
+    Per-output latency = 2 SRAM-prime + PACKED_K dsp.valid + 1 latch = PACKED_K + 3.
+    compute_aggregate (T_last_out - T_compute_start + 1):
+        all N outputs latch in same cycle, so T_last_out == T_first_out
+        → compute_aggregate == compute_first_out == PACKED_K + 3.
+    per_output_steady (T_last_out - T_first_out) / (N - 1) = 0
+        (all outputs in same cycle).
+    output_drain = N cycles (S_OUTPUT: one int8/cyc serial drain to data_out).
     """
     per_output: int
     compute_aggregate: int
@@ -527,10 +533,12 @@ class AlSimStages:
 def sim_oracle_al_fc(cfg: AlFCConfig) -> AlSimStages:
     pk = cfg.packed_k
     per_out = pk + 3
+    EPW_OUT = 5
+    packed_n = (cfg.N + EPW_OUT - 1) // EPW_OUT
     return AlSimStages(
-        per_output=per_out,
-        compute_aggregate=cfg.N * per_out,
-        output_drain=cfg.N,
+        per_output=0,                   # parallel: per-output steady = 0 cyc
+        compute_aggregate=per_out,      # parallel: all outputs in same cycle
+        output_drain=packed_n,          # packed drain: PACKED_N cycles per row
         compute_first_out=per_out,
     )
 
@@ -792,10 +800,12 @@ def render_report(results: list[ConfigResult], dpe_func: tuple[bool, str],
             for k, v in r.per_stage_annotation.items():
                 delta = r.per_stage_delta.get(k, "?")
                 lines.append(f"- `{k}`: Δ={delta} cyc — {v}\n")
+            EPW_OUT = 5
+            expected_top = (r.cfg.N + EPW_OUT - 1) // EPW_OUT
             lines.append(f"- functional: {'PASS' if r.func_pass else 'FAIL'} "
-                         f"(dsp_out={r.rtl.dsp_out_count}, "
+                         f"(dsp_out={r.rtl.dsp_out_count} expect=1 parallel, "
                          f"top_valid_n={r.rtl.top_validn_count}, "
-                         f"expected={r.cfg.N})\n")
+                         f"expected_drain={expected_top} packed-{EPW_OUT})\n")
 
     lines.append("\n## Known deltas (phase2_known_deltas.json)\n")
     for d in deltas.get("deltas", []):
@@ -926,7 +936,15 @@ def main() -> int:
                     print(f"  latency: FAIL — {lat_out[:400]}")
             else:
                 per_delta, per_ann, stage_ok = compare_stages_al_fc(rtl, sim, deltas, cfg)
-                func = rtl.func_pass and rtl.dsp_out_count == cfg.N and rtl.top_validn_count == cfg.N
+                # Parallel-output + packed-drain streaming refactor:
+                #   - g_out[0].dsp_inst.valid_n fires ONCE per row
+                #     (all N dsp_macs latch together; T1 feeds 1 row → 1 pulse).
+                #   - top valid_n fires PACKED_N = ceil(N/EPW_OUT) times per row
+                #     (each pulse carries EPW_OUT=5 packed int8 bytes).
+                EPW_OUT = 5
+                expected_top = (cfg.N + EPW_OUT - 1) // EPW_OUT
+                func = (rtl.func_pass and rtl.dsp_out_count == 1
+                        and rtl.top_validn_count == expected_top)
                 overall = func and stage_ok
                 al_results.append(AlConfigResult(
                     cfg=cfg, rtl=rtl, sim=sim,

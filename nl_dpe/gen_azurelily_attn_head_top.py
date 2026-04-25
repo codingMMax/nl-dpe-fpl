@@ -96,16 +96,13 @@ def gen_azurelily_attn_head_top(
 //   - 3 × sram (Q/K/V buffer)       (depth = N⌈d_head/5⌉ + 1 = {BUF_DEPTH})
 //   - 1 × azurelily_dimm_top        (W={w_lanes} lanes, fires once)
 //
-// Outer FSM (state names + transitions):
-//   S_IDLE          : await valid_x → S_LOAD_TOKEN
-//   S_LOAD_TOKEN    : forward {PACKED_K} packed input words/token to FC.valid
-//                     → S_WAIT_FC after PACKED_K cycles
-//   S_WAIT_FC       : assert FC valid quiet; collect FC valid_n stream into
-//                     pack5_buffer (handled combinationally from FC valid_n)
-//                     → S_FC_DRAIN once FC has emitted d_head valid_n bytes
-//   S_FC_DRAIN      : safety drain so packer flushes; → S_INTER_TOKEN_RST
-//   S_INTER_TOKEN_RST: pulse fc_rst high one cycle to reset FC FSMs; advance
-//                     token_count.  → S_LOAD_TOKEN if more tokens; else S_DIMM_FIRE
+// Outer FSM (post-streaming refactor):
+//   S_IDLE          : await valid_x → S_STREAM_TOKENS
+//   S_STREAM_TOKENS : hold fc_valid_in=1 continuously; FC processes rows
+//                     back-to-back (parallel-output dsp_macs, 1 byte/cyc drain
+//                     into pack5_buffer).  Track FC valid_n bytes; once
+//                     N_SEQ × D_HEAD bytes have flowed, transition to
+//                     S_DIMM_FIRE.  No fc_rst pulses between tokens.
 //   S_DIMM_FIRE     : DIMM auto-fires once thresholds met (handled inside
 //                     azurelily_dimm_top); we just gate ready_x = 0 here.
 //   S_DRAIN         : DIMM emits valid_n stream → output port.
@@ -136,26 +133,33 @@ module {top_name} #(
     localparam PACKED_K  = {PACKED_K};   // FC input packed words per token
     localparam PACKED_D  = {PACKED_D};   // packed Q/K/V words per token (EPW=5)
     localparam BUF_DEPTH = {BUF_DEPTH};  // total packed Q/K/V words across N tokens
+    localparam TOTAL_FC_PULSES = N_SEQ * PACKED_D;  // FC valid_n pulses per arm
+                                                    // (each pulse carries EPW_O=5 packed bytes)
 
-    // ───────── outer FSM state encoding ─────────
+    // ───────── outer FSM state encoding (streaming) ─────────
     localparam S_IDLE             = 4'd0;
-    localparam S_LOAD_TOKEN       = 4'd1;
-    localparam S_WAIT_FC          = 4'd2;
-    localparam S_FC_DRAIN         = 4'd3;
-    localparam S_INTER_TOKEN_RST  = 4'd4;
+    localparam S_STREAM_TOKENS    = 4'd1;
     localparam S_DIMM_FIRE        = 4'd5;
     localparam S_DRAIN            = 4'd6;
     reg [3:0] state;
 
-    reg [{tok_cnt_w - 1}:0] token_count;
-    reg [{feed_cnt_w - 1}:0] feed_count;     // 0..PACKED_K within current token feed
-    reg [{out_cnt_w - 1}:0]  fc_byte_count;  // 0..D_HEAD within current FC token output
-    reg                      fc_rst_pulse;   // one-cycle reset to FC arms
+    // Streaming counters
+    reg [{tok_cnt_w - 1}:0] token_count;       // 0..N_SEQ-1 input rows queued
+    reg [{feed_cnt_w - 1}:0] feed_count;       // 0..PACKED_K within current input row
+    reg [21:0]               fc_out_pulse_count; // 0..TOTAL_FC_PULSES seen on FC valid_n
 
-    wire fc_rst = rst | fc_rst_pulse;
+    // No fc_rst pulses between tokens — FC streams all rows continuously
+    wire fc_rst = rst;
 
     // ───────── valid + data into FCs ─────────
-    wire fc_valid_in = (state == S_LOAD_TOKEN);
+    // Stream input bytes across all N_SEQ tokens.  Per token: PACKED_K
+    // cycles of valid input followed by 3 cycles of "gap" (valid=0) to
+    // match the FC's per-row FSM period (PACKED_K + 3 cycles for compute
+    // + latch).  This keeps i_w_addr lockstep with mac_count modulo
+    // PACKED_K and prevents row N+1's data from contaminating row N's
+    // input SRAM.
+    wire fc_valid_in = (state == S_STREAM_TOKENS) && (token_count < N_SEQ)
+                       && (feed_count < PACKED_K);
     wire [DATA_WIDTH-1:0] fc_data_in = data_in_x;
 
     // FC outputs (1 int8 in low byte of 40-bit valid_n word)
@@ -182,28 +186,34 @@ module {top_name} #(
         .data_out(v_fc_out), .ready(v_fc_ready), .valid_n(v_fc_valid_n)
     );
 
-    // ───────── pack5_buffer x 3 (Q/K/V) ─────────
-    // Each takes 1 int8/cycle (FC valid_n), emits one packed 40-bit word
-    // every {epw_pack} valid_in cycles to its Q/K/V buffer SRAM.
-    wire q_buf_w_en, k_buf_w_en, v_buf_w_en;
-    wire [{buf_addr_w - 1}:0] q_buf_w_addr, k_buf_w_addr, v_buf_w_addr;
-    wire [DATA_WIDTH-1:0]     q_buf_w_data, k_buf_w_data, v_buf_w_data;
+    // ───────── FC → q/k/v_buf passthrough writes ─────────
+    // The post-streaming FC emits packed-{epw_pack} bytes per valid_n cycle
+    // (data_out[39:0] = 5 packed int8 bytes).  This MATCHES q_buf's word
+    // format, so we wire the FC's data_out directly to the q_buf write
+    // port — no pack5_buffer required.  The write address increments
+    // monotonically per FC valid_n pulse.
+    reg  [{buf_addr_w - 1}:0] q_buf_w_addr_r, k_buf_w_addr_r, v_buf_w_addr_r;
+    wire q_buf_w_en   = q_fc_valid_n;
+    wire k_buf_w_en   = k_fc_valid_n;
+    wire v_buf_w_en   = v_fc_valid_n;
+    wire [{buf_addr_w - 1}:0] q_buf_w_addr = q_buf_w_addr_r;
+    wire [{buf_addr_w - 1}:0] k_buf_w_addr = k_buf_w_addr_r;
+    wire [{buf_addr_w - 1}:0] v_buf_w_addr = v_buf_w_addr_r;
+    wire [DATA_WIDTH-1:0]     q_buf_w_data = q_fc_out;
+    wire [DATA_WIDTH-1:0]     k_buf_w_data = k_fc_out;
+    wire [DATA_WIDTH-1:0]     v_buf_w_data = v_fc_out;
 
-    pack5_buffer #(.DATA_WIDTH(DATA_WIDTH), .ADDR_W({buf_addr_w}), .EPW({epw_pack}))
-        q_packer (.clk(clk), .rst(rst),
-                  .valid_in(q_fc_valid_n), .data_in(q_fc_out),
-                  .w_en(q_buf_w_en), .w_addr(q_buf_w_addr),
-                  .sram_data_in(q_buf_w_data));
-    pack5_buffer #(.DATA_WIDTH(DATA_WIDTH), .ADDR_W({buf_addr_w}), .EPW({epw_pack}))
-        k_packer (.clk(clk), .rst(rst),
-                  .valid_in(k_fc_valid_n), .data_in(k_fc_out),
-                  .w_en(k_buf_w_en), .w_addr(k_buf_w_addr),
-                  .sram_data_in(k_buf_w_data));
-    pack5_buffer #(.DATA_WIDTH(DATA_WIDTH), .ADDR_W({buf_addr_w}), .EPW({epw_pack}))
-        v_packer (.clk(clk), .rst(rst),
-                  .valid_in(v_fc_valid_n), .data_in(v_fc_out),
-                  .w_en(v_buf_w_en), .w_addr(v_buf_w_addr),
-                  .sram_data_in(v_buf_w_data));
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            q_buf_w_addr_r <= 0;
+            k_buf_w_addr_r <= 0;
+            v_buf_w_addr_r <= 0;
+        end else begin
+            if (q_fc_valid_n) q_buf_w_addr_r <= q_buf_w_addr_r + 1;
+            if (k_fc_valid_n) k_buf_w_addr_r <= k_buf_w_addr_r + 1;
+            if (v_fc_valid_n) v_buf_w_addr_r <= v_buf_w_addr_r + 1;
+        end
+    end
 
     // ───────── Q/K/V buffer SRAMs ─────────
     // Read side: streamed out as DIMM input during S_DIMM_FIRE.
@@ -244,98 +254,72 @@ module {top_name} #(
         .valid_n(dimm_valid_n_w)
     );
 
-    // ───────── outer FSM body ─────────
+    // ───────── outer FSM body (streaming) ─────────
+    //
+    // Streaming model:
+    //   - Hold fc_valid_in=1 across all N_SEQ × PACKED_K input bytes.
+    //   - FC's parallel-output dsp_macs auto-fire on the continuous input
+    //     stream; FC produces 1 row of D_HEAD outputs every PACKED_K cycles
+    //     (steady-state).  drain rate = 1 byte/cyc — bottleneck if D_HEAD >
+    //     PACKED_K (true for D_HEAD=64 vs PACKED_K=32; max(32,64)=64 cyc/row).
+    //   - feed_count tracks position within current input row (0..PACKED_K-1).
+    //   - token_count tracks input rows queued (0..N_SEQ-1).
+    //   - fc_out_byte_count tracks FC valid_n pulses (= bytes pushed into
+    //     packers) — when it reaches TOTAL_FC_BYTES, all rows have drained.
+    //   - Once fc_out_byte_count == TOTAL_FC_BYTES: transition to S_DIMM_FIRE.
+    //   - No fc_rst_pulse; FC FSM auto-recycles between rows.
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            state             <= S_IDLE;
-            token_count       <= 0;
-            feed_count        <= 0;
-            fc_byte_count     <= 0;
-            fc_rst_pulse      <= 1'b0;
-            dimm_replay_count <= 0;
-            q_buf_r_addr      <= 0;
-            k_buf_r_addr      <= 0;
-            v_buf_r_addr      <= 0;
+            state              <= S_IDLE;
+            token_count        <= 0;
+            feed_count         <= 0;
+            fc_out_pulse_count <= 0;
+            dimm_replay_count  <= 0;
+            q_buf_r_addr       <= 0;
+            k_buf_r_addr       <= 0;
+            v_buf_r_addr       <= 0;
         end else begin
-            fc_rst_pulse <= 1'b0;  // default; pulsed in S_INTER_TOKEN_RST
+            // Track FC valid_n pulses (each pulse carries EPW_O=5 packed
+            // bytes, written directly to q_buf).  All three FC arms produce
+            // identical valid_n cadence (same rst, same valid, same shape),
+            // so q_fc_valid_n is sufficient.
+            if (q_fc_valid_n) begin
+                fc_out_pulse_count <= fc_out_pulse_count + 1;
+            end
             case (state)
                 S_IDLE: begin
                     if (valid_x) begin
-                        state         <= S_LOAD_TOKEN;
-                        token_count   <= 0;
-                        feed_count    <= 0;
-                        fc_byte_count <= 0;
+                        state              <= S_STREAM_TOKENS;
+                        token_count        <= 0;
+                        feed_count         <= 0;
+                        fc_out_pulse_count <= 0;
                     end
                 end
-                S_LOAD_TOKEN: begin
-                    // BUG 1 FIX: extend the S_LOAD_TOKEN window from PACKED_K
-                    // to PACKED_K+2 cycles so the inner FC arms can actually
-                    // transition from S_IDLE->S_LOAD->S_COMPUTE.
-                    //
-                    // Pre-fix trace (PACKED_K=32):
-                    //   cycle k=1: head enters S_LOAD_TOKEN (feed_count=0),
-                    //              valid=1. FC still in S_IDLE (async rst
-                    //              cleared it on k=1 for subsequent tokens
-                    //              via fc_rst_pulse, or from global rst for
-                    //              token 0). FC transitions S_IDLE->S_LOAD at
-                    //              posedge of k=2.
-                    //   cycle k=2: FC enters S_LOAD, i_w_addr=0, valid=1.
-                    //              Writes mem[0], i_w_addr<=1.
-                    //   ...
-                    //   cycle k=32: FC i_w_addr=30, valid=1. Writes mem[30],
-                    //               i_w_addr<=31. head feed_count was 30
-                    //               going into this cycle; commits to 31.
-                    //   cycle k=33: head feed_count==PACKED_K-1=31 ->
-                    //               transitions to S_WAIT_FC. FC i_w_addr=31,
-                    //               BUT valid drops to 0 this cycle, so the
-                    //               (i_w_addr==31 && valid) condition never
-                    //               fires. FC is stuck in S_LOAD forever.
-                    //
-                    // Post-fix: head stays in S_LOAD_TOKEN for 2 more cycles
-                    // (feed_count 0..PACKED_K+1 = 0..33). At k=34, FC has
-                    // i_w_addr=31 and valid=1 -> S_COMPUTE, i_w_addr<=0.
-                    // mem[31] also gets written in that same cycle. Only
-                    // 1 extra valid cycle is strictly needed for the FSM
-                    // transition, but +2 gives one cycle of slack so we
-                    // also cover the case where the FC's async-reset from
-                    // fc_rst_pulse takes 2 NBA settle cycles to release.
-                    if (feed_count == PACKED_K + 1) begin
-                        state      <= S_WAIT_FC;
-                        feed_count <= 0;
-                    end else begin
-                        feed_count <= feed_count + 1;
-                    end
-                end
-                S_WAIT_FC: begin
-                    // FC enters S_COMPUTE → S_OUTPUT, emits D_HEAD valid_n bytes.
-                    // Packers absorb the stream automatically.
-                    if (q_fc_valid_n) begin
-                        if (fc_byte_count == D_HEAD - 1) begin
-                            state         <= S_FC_DRAIN;
-                            fc_byte_count <= 0;
+                S_STREAM_TOKENS: begin
+                    // Pace input bytes into the FCs at the FC's per-row FSM
+                    // period (PACKED_K + 3 cycles).  feed_count cycles
+                    // 0..PACKED_K+2; valid=1 for cycles 0..PACKED_K-1 and
+                    // valid=0 for cycles PACKED_K..PACKED_K+2 (3-cyc gap).
+                    if (token_count < N_SEQ) begin
+                        if (feed_count == PACKED_K + 2) begin
+                            feed_count  <= 0;
+                            token_count <= token_count + 1;
                         end else begin
-                            fc_byte_count <= fc_byte_count + 1;
+                            feed_count  <= feed_count + 1;
                         end
                     end
-                end
-                S_FC_DRAIN: begin
-                    // One-cycle settle so the last packer write commits.
-                    state <= S_INTER_TOKEN_RST;
-                end
-                S_INTER_TOKEN_RST: begin
-                    // Pulse FC reset so the FC arms can accept the next token.
-                    fc_rst_pulse <= 1'b1;
-                    if (token_count == N_SEQ - 1) begin
+                    // Wait until all FC outputs have been collected and
+                    // written to Q/K/V buffer SRAMs.  Each token produces
+                    // D_HEAD bytes which the FC drains as PACKED_D=
+                    // ceil(D_HEAD/EPW_O) packed words; one valid_n pulse
+                    // per packed word.  Total expected pulses = N_SEQ ×
+                    // PACKED_D = TOTAL_FC_PULSES.
+                    if (fc_out_pulse_count >= TOTAL_FC_PULSES) begin
                         state             <= S_DIMM_FIRE;
-                        token_count       <= 0;
                         dimm_replay_count <= 0;
                         q_buf_r_addr      <= 0;
                         k_buf_r_addr      <= 0;
                         v_buf_r_addr      <= 0;
-                    end else begin
-                        state       <= S_LOAD_TOKEN;
-                        token_count <= token_count + 1;
-                        feed_count  <= 0;
                     end
                 end
                 S_DIMM_FIRE: begin
@@ -363,7 +347,7 @@ module {top_name} #(
     // ───────── outputs ─────────
     assign data_out = dimm_out;
     assign valid_n  = dimm_valid_n_w;
-    assign ready_x  = (state == S_IDLE) || (state == S_LOAD_TOKEN);
+    assign ready_x  = (state == S_IDLE) || (state == S_STREAM_TOKENS);
 
 endmodule
 

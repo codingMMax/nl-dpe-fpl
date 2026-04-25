@@ -720,10 +720,175 @@ def _gen_fc_top(v: int, h: int, k: int, n: int, rows: int, cols: int,
     return "\n".join(lines)
 
 
+def _gen_fc_top_streaming(k: int, n: int, rows: int, cols: int,
+                           data_width: int = 40,
+                           dpe_data_width: int = 40,
+                           elems_per_word: int = 5,
+                           module_name: str = "fc_top",
+                           include_supporting: bool = False) -> str:
+    """Generate a STREAMING fc_top wrapper.
+
+    Architecture:
+      - Two DPEs per FC arm (ping-pong) so that while DPE_A is computing/
+        outputting the previous inference, DPE_B can absorb the next 26
+        input strobes. Steady-state throughput = PACKED_K cycles per
+        inference.
+      - No SRAM input buffer, no global_controller. The streaming FSM
+        routes incoming `valid` directly to the active DPE's `w_buf_en`.
+      - Output: data_out is muxed from whichever DPE has dpe_done=1
+        (only one at a time in steady state). valid_n = OR of dpe_dones.
+
+    The module name is kept as `fc_top` inside the generated file (or
+    `module_name` if overriding), so the file can be renamed/copied to
+    e.g. `fc_top_qkv_streaming.v` and the inner `fc_top` module can be
+    string-renamed to match.
+
+    KERNEL_WIDTH for the dpe primitive is `k` (the unpacked element
+    count of the input dimension). NUM_COLS is `n`. Both are passed as
+    instance parameters so this works with the same dpe_stub.v.
+
+    NOTE: V/H tiling is NOT supported in streaming mode (must be V=1,
+    H=1). For larger workloads, fall back to one-shot mode.
+
+    Required only for V=1 H=1 (single DPE-arm) workloads.
+
+    include_supporting: If True, emit conv_layer_single_dpe + supporting
+    modules together in this file (self-contained). If False, only the
+    `fc_top` module is emitted; the caller is expected to compile the
+    other supporting files in.
+    """
+    packed_k = math.ceil(k / elems_per_word)
+    packed_n = math.ceil(n / elems_per_word)
+    # Counter widths (defensive minimum of 1)
+    cw_k = max(1, math.ceil(math.log2(packed_k + 1)))
+    cw_n = max(1, math.ceil(math.log2(packed_n + 1)))
+
+    lines = []
+    lines.append(f"// Streaming FC wrapper (K={k}, N={n})")
+    lines.append(f"//   Two-DPE ping-pong: DPE_A loads while DPE_B computes/outputs.")
+    lines.append(f"//   PACKED_K={packed_k}, PACKED_N={packed_n}, EPW={elems_per_word}")
+    lines.append(f"//   Steady-state throughput: {packed_k} cycles per inference.")
+    lines.append(f"//   No SRAM input buffer; valid → DPE w_buf_en directly.")
+    lines.append(f"")
+    lines.append(f"module {module_name} #(")
+    lines.append(f"    parameter DATA_WIDTH = {data_width}")
+    lines.append(f")(")
+    lines.append(f"    input  wire                  clk,")
+    lines.append(f"    input  wire                  rst,")
+    lines.append(f"    input  wire                  valid,")
+    lines.append(f"    input  wire                  ready_n,")
+    lines.append(f"    input  wire [DATA_WIDTH-1:0] data_in,")
+    lines.append(f"    output wire [DATA_WIDTH-1:0] data_out,")
+    lines.append(f"    output wire                  ready,")
+    lines.append(f"    output wire                  valid_n")
+    lines.append(f");")
+    lines.append(f"")
+    lines.append(f"    localparam K          = {k};")
+    lines.append(f"    localparam N_OUT      = {n};")
+    lines.append(f"    localparam EPW        = {elems_per_word};")
+    lines.append(f"    localparam PACKED_K   = {packed_k};")
+    lines.append(f"    localparam PACKED_N   = {packed_n};")
+    lines.append(f"")
+    lines.append(f"    // ─── Per-DPE wires ──────────────────────────────────────")
+    for tag in ("a", "b"):
+        lines.append(f"    wire [DATA_WIDTH-1:0] dpe_{tag}_data_out;")
+        lines.append(f"    wire dpe_{tag}_done;")
+        lines.append(f"    wire dpe_{tag}_reg_full;")
+        lines.append(f"    wire dpe_{tag}_msb_sa_ready;")
+        lines.append(f"    wire dpe_{tag}_shift_add_done;")
+        lines.append(f"    wire dpe_{tag}_shift_add_bypass_ctrl;")
+        lines.append(f"    reg  dpe_{tag}_w_buf_en;")
+    lines.append(f"")
+    lines.append(f"    // ─── Streaming controller (load-side) ───────────────────")
+    lines.append(f"    // load_active=0 → strobes go to DPE_A; =1 → DPE_B.")
+    lines.append(f"    // load_count counts strobes within the current inference.")
+    lines.append(f"    reg load_active;")
+    lines.append(f"    reg [{cw_k}-1:0] load_count;")
+    lines.append(f"    always @(posedge clk or posedge rst) begin")
+    lines.append(f"        if (rst) begin")
+    lines.append(f"            load_active <= 1'b0;")
+    lines.append(f"            load_count  <= 0;")
+    lines.append(f"            dpe_a_w_buf_en <= 1'b0;")
+    lines.append(f"            dpe_b_w_buf_en <= 1'b0;")
+    lines.append(f"        end else begin")
+    lines.append(f"            // Default: deassert both strobes")
+    lines.append(f"            dpe_a_w_buf_en <= 1'b0;")
+    lines.append(f"            dpe_b_w_buf_en <= 1'b0;")
+    lines.append(f"            if (valid) begin")
+    lines.append(f"                if (load_active == 1'b0) dpe_a_w_buf_en <= 1'b1;")
+    lines.append(f"                else                     dpe_b_w_buf_en <= 1'b1;")
+    lines.append(f"                if (load_count + 1 == PACKED_K) begin")
+    lines.append(f"                    load_count  <= 0;")
+    lines.append(f"                    load_active <= ~load_active;")
+    lines.append(f"                end else begin")
+    lines.append(f"                    load_count <= load_count + 1;")
+    lines.append(f"                end")
+    lines.append(f"            end")
+    lines.append(f"        end")
+    lines.append(f"    end")
+    lines.append(f"")
+    lines.append(f"    // ─── DPE A and B instances ──────────────────────────────")
+    lines.append(f"    // KERNEL_WIDTH is the unpacked element count (K). NUM_COLS is N_OUT.")
+    lines.append(f"    // nl_dpe_control is tied to 2'b11 (always-fire after reg_full).")
+    lines.append(f"    // shift_add_control / load_input_reg / load_output_reg / shift_add_bypass:")
+    lines.append(f"    // unused by behavioral DPE primitive — tie to 0.")
+    lines.append(f"    dpe #(.KERNEL_WIDTH(K), .NUM_COLS(N_OUT)) dpe_a_inst (")
+    lines.append(f"        .clk(clk), .reset(rst),")
+    lines.append(f"        .data_in(data_in),")
+    lines.append(f"        .nl_dpe_control(2'b11),")
+    lines.append(f"        .shift_add_control(1'b0),")
+    lines.append(f"        .w_buf_en(dpe_a_w_buf_en),")
+    lines.append(f"        .shift_add_bypass(1'b0),")
+    lines.append(f"        .load_output_reg(1'b0),")
+    lines.append(f"        .load_input_reg(1'b0),")
+    lines.append(f"        .MSB_SA_Ready(dpe_a_msb_sa_ready),")
+    lines.append(f"        .data_out(dpe_a_data_out),")
+    lines.append(f"        .dpe_done(dpe_a_done),")
+    lines.append(f"        .reg_full(dpe_a_reg_full),")
+    lines.append(f"        .shift_add_done(dpe_a_shift_add_done),")
+    lines.append(f"        .shift_add_bypass_ctrl(dpe_a_shift_add_bypass_ctrl)")
+    lines.append(f"    );")
+    lines.append(f"    dpe #(.KERNEL_WIDTH(K), .NUM_COLS(N_OUT)) dpe_b_inst (")
+    lines.append(f"        .clk(clk), .reset(rst),")
+    lines.append(f"        .data_in(data_in),")
+    lines.append(f"        .nl_dpe_control(2'b11),")
+    lines.append(f"        .shift_add_control(1'b0),")
+    lines.append(f"        .w_buf_en(dpe_b_w_buf_en),")
+    lines.append(f"        .shift_add_bypass(1'b0),")
+    lines.append(f"        .load_output_reg(1'b0),")
+    lines.append(f"        .load_input_reg(1'b0),")
+    lines.append(f"        .MSB_SA_Ready(dpe_b_msb_sa_ready),")
+    lines.append(f"        .data_out(dpe_b_data_out),")
+    lines.append(f"        .dpe_done(dpe_b_done),")
+    lines.append(f"        .reg_full(dpe_b_reg_full),")
+    lines.append(f"        .shift_add_done(dpe_b_shift_add_done),")
+    lines.append(f"        .shift_add_bypass_ctrl(dpe_b_shift_add_bypass_ctrl)")
+    lines.append(f"    );")
+    lines.append(f"")
+    lines.append(f"    // ─── Output mux + valid_n ───────────────────────────────")
+    lines.append(f"    // dpe_*_done pulses high during S_OUTPUT (PACKED_N cycles).")
+    lines.append(f"    // In steady state only one DPE is in S_OUTPUT at a time.")
+    lines.append(f"    assign valid_n  = dpe_a_done | dpe_b_done;")
+    lines.append(f"    assign data_out = dpe_a_done ? dpe_a_data_out :")
+    lines.append(f"                      dpe_b_done ? dpe_b_data_out : {{DATA_WIDTH{{1'b0}}}};")
+    lines.append(f"")
+    lines.append(f"    // ready: always accept inputs — the FSM dispatches to the")
+    lines.append(f"    // currently-loading DPE; if both DPEs are full, an external")
+    lines.append(f"    // back-pressure could be added, but the V2 TB drives valid_x")
+    lines.append(f"    // unconditionally and the ping-pong absorbs the stream.")
+    lines.append(f"    assign ready = ~rst;")
+    lines.append(f"")
+    lines.append(f"endmodule")
+    return "\n".join(lines)
+
+
 def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
                    output_dir: str,
                    conversion: str = "acam",
-                   dpe_data_width: int = 40) -> Path:
+                   dpe_data_width: int = 40,
+                   streaming: bool = False,
+                   filename: str = None,
+                   module_name: str = "fc_top") -> Path:
     """Generate a self-contained FC+activation .v file for a (K,N) workload
     mapped onto (rows x cols) crossbars.
 
@@ -733,6 +898,15 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
 
     dpe_data_width: DPE hard block data_in/data_out width (16 or 40 bits).
       Controls BRAM↔DPE transfer bandwidth.
+
+    streaming: If True, emit a streaming variant (two DPEs in ping-pong)
+      that processes N input vectors back-to-back without per-inference
+      reset overhead. Only supported for V=1, H=1 (no tiling). Default
+      False preserves existing one-shot behavior used by all the FC
+      verification flows.
+
+    filename: Optional override for the output filename (default
+      uses the standard auto-generated naming).
 
     Returns the path to the generated file.
     """
@@ -749,9 +923,17 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     acam_eligible = (v == 1) and (conversion == "acam")
     needs_clb_activation = (conversion == "adc") or (v > 1)
 
+    if streaming and not (v == 1 and h == 1):
+        raise ValueError(
+            f"streaming=True requires V=1 and H=1 (got V={v}, H={h} for "
+            f"K={k}, N={n}, rows={rows}, cols={cols})"
+        )
+
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"fc_{k}_{n}_{rows}x{cols}_{conversion}_dw{dpe_data_width}.v"
+    if filename is None:
+        suffix = "_streaming" if streaming else ""
+        filename = f"fc_{k}_{n}_{rows}x{cols}_{conversion}_dw{dpe_data_width}{suffix}.v"
     out_path = out_dir / filename
 
     parts = []
@@ -761,24 +943,40 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
     parts.append(f"// Workload: K={k}, N={n}")
     parts.append(f"// Crossbar: {rows}x{cols}")
     parts.append(f"// Conversion: {conversion}, DPE DATA_WIDTH: {dpe_data_width}")
-    parts.append(f"// Tiling: V={v}, H={h}, DPEs={total_dpes}")
+    parts.append(f"// Mode: {'streaming (2-DPE ping-pong)' if streaming else 'one-shot (single DPE)'}")
+    parts.append(f"// Tiling: V={v}, H={h}, DPEs={total_dpes if not streaming else 2}")
     parts.append(f"// ACAM eligible (V=1 + ACAM): {'yes' if acam_eligible else 'no'}")
     parts.append(f"// CLB activation LUT: {'yes' if needs_clb_activation else 'no (ACAM)'}")
-    parts.append(f"// Generated by gen_gemv_wrappers.py --fc")
+    parts.append(f"// Generated by gen_gemv_wrappers.py --fc"
+                 + (" --streaming" if streaming else ""))
     parts.append(f"")
 
     # fc_top module
     parts.append(f"// =====================================================")
     parts.append(f"// fc_top — top-level module")
     parts.append(f"// =====================================================")
-    parts.append(_gen_fc_top(v, h, k, n, rows, cols, depth, addr_width,
-                             data_width, conversion=conversion,
-                             dpe_data_width=dpe_data_width,
-                             elems_per_word=elems_per_word))
+    if streaming:
+        parts.append(_gen_fc_top_streaming(
+            k, n, rows, cols,
+            data_width=data_width,
+            dpe_data_width=dpe_data_width,
+            elems_per_word=elems_per_word,
+            module_name=module_name,
+        ))
+    else:
+        # The non-streaming generator emits "module fc_top" — override
+        # by string-replacing the module declaration after the fact.
+        body = _gen_fc_top(v, h, k, n, rows, cols, depth, addr_width,
+                           data_width, conversion=conversion,
+                           dpe_data_width=dpe_data_width,
+                           elems_per_word=elems_per_word)
+        if module_name != "fc_top":
+            body = body.replace("module fc_top #(", f"module {module_name} #(", 1)
+        parts.append(body)
     parts.append(f"")
 
-    # fc_layer module (only if not V=1 H=1)
-    if not (v == 1 and h == 1):
+    # fc_layer module (only if not V=1 H=1 AND not streaming)
+    if not streaming and not (v == 1 and h == 1):
         parts.append(f"// =====================================================")
         parts.append(f"// fc_layer — DPE stacking + reduction + activation")
         parts.append(f"// =====================================================")
@@ -789,25 +987,33 @@ def gen_fc_wrapper(k: int, n: int, rows: int, cols: int,
         parts.append(f"")
 
     # activation_lut module (needed for Azure-Lily always, NL-DPE only when V>1)
-    if needs_clb_activation:
+    # Streaming variant for ACAM V=1 doesn't need it; for ADC it does.
+    if needs_clb_activation and not streaming:
         parts.append(f"// =====================================================")
         parts.append(f"// activation_lut — piecewise-linear tanh approximation")
         parts.append(f"// =====================================================")
         parts.append(_gen_activation_lut_module())
         parts.append(f"")
 
-    # Supporting modules extracted from gemv_1_channel.v
-    parts.append(f"// =====================================================")
-    parts.append(f"// Supporting modules (from gemv_1_channel.v)")
-    parts.append(f"// =====================================================")
-    parts.append(_get_supporting_modules())
-    parts.append(f"")
+    # Supporting modules: only emit for non-streaming variants.
+    # The streaming variant relies on the dpe primitive being supplied
+    # externally (e.g. from fc_verification/dpe_stub.v at TB time, or
+    # from the architecture's hard block in VTR), so it does NOT bundle
+    # the gemv_1_channel.v supporting modules.
+    if not streaming:
+        parts.append(f"// =====================================================")
+        parts.append(f"// Supporting modules (from gemv_1_channel.v)")
+        parts.append(f"// =====================================================")
+        parts.append(_get_supporting_modules())
+        parts.append(f"")
 
     out_path.write_text("\n".join(parts))
     print(f"  Generated {filename} (K={k}, N={n}, V={v}, H={h}, "
-          f"DPEs={total_dpes}, conv={conversion}, dpe_dw={dpe_data_width}, "
+          f"DPEs={2 if streaming else total_dpes}, conv={conversion}, "
+          f"dpe_dw={dpe_data_width}, "
           f"ACAM={'yes' if acam_eligible else 'no'}, "
-          f"CLB_act={'yes' if needs_clb_activation else 'no'})")
+          f"CLB_act={'yes' if needs_clb_activation else 'no'}, "
+          f"mode={'streaming' if streaming else 'one-shot'})")
     return out_path
 
 
