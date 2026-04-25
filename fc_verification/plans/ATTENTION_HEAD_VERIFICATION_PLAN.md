@@ -1,38 +1,62 @@
 # Attention Head RTL Verification + Latency Alignment Plan
 
 **Opened:** 2026-04-24
+**Last revised:** 2026-04-24 (post T1+T2 closeout, scope clarification)
 **Precedes:** closes the V-model loop opened by `DIMM_FULL_VERIFICATION_PLAN.md` (DIMM top, Phase H–N / 3–6A)
-**Status:** locked, pre-implementation
+**Status:** T1 ✓, T2 ✓, T3-T5 active
 
 ## Ultimate goal
 
-End-to-end RTL↔sim cycle-accurate alignment for a composed attention head
-(FC_Q/K/V → DIMM top → FC_O), for both NL-DPE and Azure-Lily, with every
-residual classified `modelling_granularity`. Symmetric probe methodology,
-harness, and known-deltas schema across both architectures.
+End-to-end RTL↔sim cycle-accurate alignment for a **standalone attention
+head** (FC_Q/K/V → DIMM → FC_O), for both NL-DPE and Azure-Lily, with
+every residual classified `modelling_granularity` or `structural`.
+Symmetric probe methodology, harness, and known-deltas schema across
+both architectures (mirrors DIMM and FC parity).
 
-## Scope anchor (frozen)
+**Scope clarification:** the verification target is a SINGLE attention
+head, NOT a slice of BERT-Tiny RTL nor the full BERT-Tiny model. The
+verified head will later serve as a reference for patching
+`gen_bert_tiny_wrapper.py` (out-of-scope here; tracked as T6 follow-up).
 
-Single config point — inherits the already-verified DIMM-top surface.
+## Scope anchor (frozen design — paper-consistent)
+
+Both architectures share these parameters; **only the compute primitive
+and mapping differ.**
 
 | Parameter | Value | Source |
 |---|---|---|
-| N (seq len) | 128 | inherits verified DIMM top |
-| d (head dim) | 64 | BERT-Tiny `d_head` |
-| C (crossbar cols) | 128 | NL-DPE DIMM crossbar |
-| R (crossbar rows) | 1024 | NL-DPE DPE config |
-| W (parallel lanes) | 16 | paper §3 W=16 DIMM |
-| W_DPE (bus width) | 40 bit | 5 × int8 packed |
-| K_id (dual-identity) | 2 | = C / d |
+| `d_model` | 128 | input/output token dim (BERT-Tiny attention head) |
+| `d_head` (N out of FC, K of O FC) | 64 | BERT-Tiny per-head dim |
+| `seq_len N` (DIMM) | 128 (primary; multi-N stretch) | matches simulator sweep + verified DIMM top |
+| `C` (crossbar cols / DSP-equiv) | 128 | NL-DPE 1024×128 crossbar |
+| `R` (crossbar rows) | 1024 | NL-DPE Round-1 winner |
+| `W` (DIMM parallel lanes) | **16** | `paper/methodology/attention_dimm_mapping.md §3` (paper spec, NOT BERT-Tiny benchmark RTL which uses W=1 — that's a generator bug, T6 patches it) |
+| `K_qkt` | 2 | C/d_head dual-identity |
+| `K_sv` | 1 | when N≥C single-identity |
+| `DATA_WIDTH` | 40 bit | DPE bus / dsp_mac bus (5 × int8 packed) |
 
-Configs to verify:
+### What diverges (separate flows, different compute units + mappings)
+
+| Aspect | NL-DPE | Azure-Lily |
+|---|---|---|
+| Compute primitive | `dpe` hard block (analog crossbar + ACAM/ADC) | `dsp_mac` (4-wide pure `int_sop_4`, P6A canonical) |
+| Q/K/V/O projection | DPE in ACAM mode (V=H=1, ACAM-eligible, no CLB act) | single `dsp_mac` w/ K=PACKED_K |
+| DIMM mac_qk | DPE w/ K_qkt=2 dual-identity, **log-domain** | `dsp_mac` w/ K=⌈d/4⌉=16, **linear-domain** |
+| DIMM softmax | DPE(I\|exp) for sm_exp + DPE(I\|log) for normalize | `clb_softmax` (CLB FSM with SRAM, recip + DSP normalize) |
+| DIMM mac_sv | DPE w/ wsum_log + wsum_exp 128×128 (post-Phase-4), log-domain | `dsp_mac` w/ K=⌈N/4⌉=32, linear-domain |
+| Pipeline regime | Regime B Layout A (`T = L_A·M + O`) | Regime A serial |
+| Sim model | `gemm_log` in `azurelily/IMC/peripherals/fpga_fabric.py` | `gemm_dsp` in same file |
+| DPE/DSP per head | 4 proj + 64 DIMM = **68 DPE** | 4 proj + 32 DIMM + 16 clb_softmax = **36 dsp_mac** + 16 softmax |
+
+**Configs verified:**
 - `nldpe_attn_head_d64_c128`
 - `azurelily_attn_head_d64_c128`
 
-## Prerequisites verified today
+## Prerequisites verified
 
-- **FC RTL↔sim:** NL-DPE ✓ (12/12 Phase 2, `phase2_fc_report.md`), Azure-Lily ✗ (no standalone harness — T1 closes this)
+- **FC RTL↔sim:** NL-DPE ✓ (12/12 Phase 2), Azure-Lily ✓ (T1 closed, 14/14 unified gate at commit `9e6a913`)
 - **DIMM top RTL↔sim:** NL-DPE ✓ (Phase 3/4, E2E +42 cyc, m.g.), Azure-Lily ✓ (Phase 5/6A, E2E +2 cyc, m.g.)
+- **Composed attn-head RTL:** NL-DPE ✓, Azure-Lily ✓ (T2 closed, both compile clean at commit `2f5956e`)
 
 ## Stages
 
@@ -125,19 +149,35 @@ python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128
 
 Gate: all 7 regression commands exit 0.
 
+## Stage 6 — BERT-Tiny generator refinement (post-verification follow-up)
+
+Once T3-T5 close, the verified attention-head RTL becomes the **canonical
+reference** for `gen_bert_tiny_wrapper.py`. Diff and patch work:
+
+- **Lane parallelism**: benchmark RTL uses W=1; paper spec is W=16 → patch
+  generator to emit W=16 attention heads
+- **Module naming consistency** between standalone head and per-(block,head) instances
+- **Buffer depths / FSM handoff** semantics (concrete bugs surface during diff)
+- **Resource counts** in `benchmarks/results/bert_tiny_seqlen_final_results.md`
+  may need refresh after the W change
+- Re-emit `benchmarks/rtl/bert_tiny_*_s{N}.v` with patched generator
+
+T6 is **out of scope for the AH track gate** but tracked here so the
+verified head doesn't sit unused.
+
 ## Explicitly deferred (not in this plan)
 
-- **Multi-N attention head** — re-emit DIMM + attn-head at N ∈ {256, 512, 1024}, re-run Phase 3/5 per-N, then compose. Separate track after Stage 5 closes. Prerequisite for paper-wide seq_len scaling story.
-- **Multi-head + BERT-block composition** — 2 heads parallel, LayerNorm, residual, embedding. Next V-model layer up. Partly covered by monolithic `benchmarks/rtl/bert_tiny_*.v` (VTR synthesis only, no cycle-accurate alignment).
+- **Multi-N attention head** — re-emit DIMM + attn-head at N ∈ {256, 512, 1024, 2048, 4096}, re-run Phase 3/5 per N, then T3/T4 per N. Separate track after T5 closes.
+- **Multi-head composition** — 2 heads parallel (BERT-Tiny actually uses 2 heads). T6 will surface whether multi-head needs separate alignment.
 - **d ≠ 64 regime** — d=128 → K_id=1 (single-identity FSM), d=32 → K_id=4 (quad-identity FSM). Both untested paths.
 
 ## Dependency DAG
 
 ```
-T1 ──────────────────────┐
-                         │
-                         ▼
-T2 ──┬──► T3          T4 ──► T5
+T1 ──────────────────────┐                      ┌────► T6 (BERT-Tiny patch, follow-up)
+                         │                      │
+                         ▼                      │
+T2 ──┬──► T3          T4 ──► T5 ────────────────┘
      └──────────────────▲
 ```
 

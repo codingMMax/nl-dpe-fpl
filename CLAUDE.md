@@ -104,34 +104,39 @@ the live tracks below.
   Azure-Lily DIMM top ✓ (P5/6A, +2 E2E m.g.).
 
   **Stages:**
-  - **T1 — Azure-Lily FC Phase-2 harness** (prerequisite for T4 only;
-    independent of T2, can run in parallel or either order). New
-    `tb_azurelily_fc_{512_128,2048_256}.v`, extend
-    `phase2_known_deltas.json` and `run_fc_phase2.py`. Gate: unified
-    Phase-2 report shows 12/12 PASS for both archs.
-  - **T2 — Attention-head top generator + RTL.** New
-    `nl_dpe/gen_{nldpe,azurelily}_attn_head_top.py` (mirrors
-    `gen_dimm_*_top.py`), emits RTLs in `fc_verification/rtl/`.
-    Wire Q/K/V FC → DIMM top → O FC with shared valid/ready_n
-    interface, `ready_n=1'b0` hardwired. Retire the stale hand-written
-    `nl_dpe/attention_head_1_channel.v`. Gate: iverilog clean +
-    resource sanity (NL-DPE ≈ 96 DPE, AL ≈ 40 DSP per head).
+  - **T1 ✓ closed (commit `9e6a913`)** — AL FC Phase-2 harness, 14/14
+    unified gate (NL-DPE 12/12 + AL 2/2). New
+    `gen_azurelily_fc_wrapper.py`, AL FC RTLs at `512_128`/`2048_256`,
+    parameterized `tb_azurelily_fc.v`, arch-tagged
+    `phase2_known_deltas.json` (+2 AL entries: `compute_aggregate +1`,
+    `compute_first_out +1`, both modelling_granularity).
+  - **T2 ✓ closed (commit `2f5956e`)** — composed attention-head top
+    RTL at the locked design point (W=16, d_head=64, C=128, N=128) for
+    BOTH archs. NL-DPE: ~68 DPE (4 proj + 64 DIMM). AL: ~36 dsp_mac
+    (4 proj + 32 DIMM) + 16 clb_softmax. Both compile clean. Stale
+    `nl_dpe/attention_head_1_channel.v` retired to `nl_dpe/legacy/`.
   - **T3 — Functional TBs.** Scaled-identity Q/K/V projections +
-    identity V-matrix + one-hot input → hand-computable output. Gate:
-    cross-arch equivalence within int8 tolerance (first cross-arch
-    functional equivalence check in the project).
+    identity V-matrix + structured query → hand-computable output.
+    Gate: cross-arch equivalence within int8 tolerance.
   - **T4 — Latency TBs + sim extractor + known-deltas.** Per-stage
     timestamps on 5 stages (FC_Q, DIMM_score, DIMM_softmax, DIMM_wsum,
-    FC_O) + 2 handoff boundaries. Extend `gen_expected_cycles.py` to
-    wrap `_run_attention_pipeline`. New `phase7_known_deltas.json`.
-    Residual budget: NL-DPE E2E ≤ +50 cyc (≈ 42 DIMM + 2×~4 handoff),
-    AL E2E ≤ +10 cyc (≈ 2 DIMM + 2×~4 handoff), all
-    `modelling_granularity`. Gate: both `run_checks.py --config
-    *_attn_head_d64_c128` exit 0.
+    FC_O) + 2 handoff boundaries (FC_QKV→DIMM, DIMM→FC_O). Extend
+    `gen_expected_cycles.py` to wrap `_run_attention_pipeline`. New
+    `phase7_known_deltas.json` with arch-tagged entries (paper-spec
+    W=16, NOT BERT-Tiny benchmark W=1 which is a generator bug —
+    patched downstream in T6). Residual budget: NL-DPE E2E ≤ +50 cyc
+    (≈ 42 DIMM + 2×~4 handoff), AL E2E ≤ +10 cyc (≈ 2 DIMM + 2×~4
+    handoff), all `modelling_granularity` or `structural`.
+    Gate: both `run_checks.py --config *_attn_head_d64_c128` exit 0.
   - **T5 — VTR + regression gate extension.** 3-seed VTR per arch,
-    strict DPE=96 / DSP≈40 counts, append two new lines to
-    `VERIFICATION.md §Phase 5` gate list. Gate: all 7 regression
+    strict DPE=68 (NL-DPE) / DSP≈36 (AL) counts, append two new lines
+    to `VERIFICATION.md §Phase 5` gate list. Gate: all 7 regression
     commands exit 0.
+  - **T6 — BERT-Tiny generator refinement (post-T5 follow-up).** The
+    verified head becomes the canonical reference for diffing against
+    `gen_bert_tiny_wrapper.py`. Surfaces likely bugs (W=1 vs paper-spec
+    W=16, etc.) in the BERT-Tiny benchmark RTL family. Out of scope
+    for the AH track gate.
 
   **Dependency DAG:** T1 ∥ T2 are independent (no shared files, no
   artifact dependency — T2 can emit the head-top RTL without T1's
