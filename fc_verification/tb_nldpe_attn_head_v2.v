@@ -9,13 +9,22 @@
 // Pipeline (top-level FSM):
 //   S_IDLE -> S_FEED_X -> S_DRAIN_FC -> S_FIRE_DIMM -> S_OUTPUT
 //
-// Per-stage probes captured (lane 0 of the W=16 DIMM):
-//   linear_qkv   : T_fc_qkv_done   - T_x_first_valid
-//   mac_qk       : T_dimm_softmax_exp_start - T_fc_qkv_done
-//   softmax_exp  : T_dimm_softmax_norm_start - T_dimm_softmax_exp_start
-//   softmax_norm : T_dimm_softmax_out_start  - T_dimm_softmax_norm_start
-//   mac_sv       : T_dimm_wsum_first_out     - T_dimm_softmax_out_start
-//   e2e          : T_data_out_first_valid    - T_x_first_valid
+// PROBE SEMANTICS (post-2026-04-24 fix): each per-stage probe captures
+// `stage_total = T_last_active - T_first_active + 1` — the full active
+// duration of the stage across ALL W=16 DIMM lanes (OR-aggregated). This
+// matches the IMC sim's "full stage duration" semantics. The previous
+// `*_first_out` lane-0 timestamps are kept for diagnostic/backward-compat
+// purposes; the canonical AH_NLDPE_STAGES_TOTAL line is what run_checks.py
+// gates on. e2e = T_data_out_last_valid - T_x_first_valid + 1 (full
+// pipeline latency from first input pulse to last output pulse).
+//
+// Per-stage stage-total probes:
+//   linear_qkv   : first→last FC valid_n pulse on any of Q/K/V (or-reduce)
+//   mac_qk       : first→last cycle ANY dimm_lane[i].score_inst.state==S_OUTPUT
+//   softmax_exp  : first→last cycle ANY dimm_lane[i].softmax_inst.sm_state==SM_EXP
+//   softmax_norm : first→last cycle ANY dimm_lane[i].softmax_inst.sm_state==SM_NORMALIZE
+//   mac_sv       : first→last cycle ANY dimm_lane[i].wsum_inst.ws_state==WS_OUTPUT
+//   e2e          : T_data_out_last_valid - T_x_first_valid + 1
 //
 // Pre-load:
 //   - 3 FC arms (Q/K/V) DPE: identity weight diagonal[d_head=64] = 1
@@ -74,7 +83,7 @@ module tb_nldpe_attn_head_v2;
 
     integer i, j, ww;
 
-    // ─── Per-stage cycle timestamps ───────────────────────────────────────
+    // ─── Per-stage cycle timestamps (legacy lane-0 first-out probes) ────
     integer T_x_first_valid          = -1;
     integer T_fc_qkv_done            = -1;
     integer T_dimm_score_first_out   = -1;
@@ -86,7 +95,21 @@ module tb_nldpe_attn_head_v2;
     integer T_data_out_last_valid    = -1;
     integer top_valid_pulses         = 0;
 
-    // ─── Probe wires (lane 0 of the W=16 DIMM) ────────────────────────────
+    // ─── Stage-total duration probes (NEW, OR-aggregated across W=16 lanes) ──
+    // Each *_first / *_last pair captures the active span of that stage across
+    // all 16 lanes. stage_total_cyc = T_last - T_first + 1.
+    integer T_fc_first_valid         = -1;  // first FC valid_n on any Q/K/V
+    integer T_fc_last_valid          = -1;  // last  FC valid_n on any Q/K/V
+    integer T_score_out_first        = -1;  // first cycle ANY lane score.state == S_OUTPUT
+    integer T_score_out_last         = -1;  // last  cycle ANY lane score.state == S_OUTPUT
+    integer T_softmax_exp_first      = -1;
+    integer T_softmax_exp_last       = -1;
+    integer T_softmax_nrm_first      = -1;
+    integer T_softmax_nrm_last       = -1;
+    integer T_wsum_out_first         = -1;
+    integer T_wsum_out_last          = -1;
+
+    // ─── Probe wires (lane 0 — kept for legacy first-out probes) ────────
     // score_inst.state is 4-bit; S_OUTPUT = 4'd6
     // softmax_inst.sm_state is 3-bit; SM_EXP=3'd2, SM_NORM=3'd3, SM_OUT=3'd4
     // wsum_inst.ws_state is 4-bit; WS_OUTPUT = 4'd5
@@ -97,14 +120,117 @@ module tb_nldpe_attn_head_v2;
     wire wsum_out_v    = (dut.dimm_inst.dimm_lane[0].wsum_inst.ws_state  == 4'd5);
     wire fire_dimm_v   = (dut.state == 3'd3);
 
+    // ─── Stage-total probe wires (16-way OR-reduce across dimm_lane[0..15]) ──
+    // Each `any_*` is high if ANY lane is in the named state this cycle.
+    // Indexed-name access into the generate-block instances below.
+    wire any_score_out =
+          (dut.dimm_inst.dimm_lane[ 0].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 1].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 2].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 3].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 4].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 5].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 6].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 7].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 8].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[ 9].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[10].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[11].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[12].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[13].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[14].score_inst.state == 4'd6)
+        | (dut.dimm_inst.dimm_lane[15].score_inst.state == 4'd6);
+
+    wire any_sm_exp =
+          (dut.dimm_inst.dimm_lane[ 0].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 1].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 2].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 3].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 4].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 5].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 6].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 7].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 8].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[ 9].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[10].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[11].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[12].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[13].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[14].softmax_inst.sm_state == 3'd2)
+        | (dut.dimm_inst.dimm_lane[15].softmax_inst.sm_state == 3'd2);
+
+    wire any_sm_nrm =
+          (dut.dimm_inst.dimm_lane[ 0].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 1].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 2].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 3].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 4].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 5].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 6].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 7].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 8].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[ 9].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[10].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[11].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[12].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[13].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[14].softmax_inst.sm_state == 3'd3)
+        | (dut.dimm_inst.dimm_lane[15].softmax_inst.sm_state == 3'd3);
+
+    wire any_wsum_out =
+          (dut.dimm_inst.dimm_lane[ 0].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 1].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 2].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 3].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 4].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 5].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 6].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 7].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 8].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[ 9].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[10].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[11].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[12].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[13].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[14].wsum_inst.ws_state == 4'd5)
+        | (dut.dimm_inst.dimm_lane[15].wsum_inst.ws_state == 4'd5);
+
+    // FC valid_n OR-reduce (Q/K/V fire in lockstep but we OR for safety).
+    wire any_fc_valid =
+          dut.q_fc_valid_n | dut.k_fc_valid_n | dut.v_fc_valid_n;
+
     always @(posedge clk) begin
         if (!rst) begin
+            // Legacy lane-0 first-out timestamps (kept for diagnostic dump).
             if (score_out_v   && T_dimm_score_first_out   < 0) T_dimm_score_first_out   <= cycle;
             if (softmax_exp_v && T_dimm_softmax_exp_start < 0) T_dimm_softmax_exp_start <= cycle;
             if (softmax_nrm_v && T_dimm_softmax_norm_start< 0) T_dimm_softmax_norm_start<= cycle;
             if (softmax_out_v && T_dimm_softmax_out_start < 0) T_dimm_softmax_out_start <= cycle;
             if (wsum_out_v    && T_dimm_wsum_first_out    < 0) T_dimm_wsum_first_out    <= cycle;
             if (fire_dimm_v   && T_fc_qkv_done            < 0) T_fc_qkv_done            <= cycle;
+
+            // Stage-total OR-aggregated first/last across 16 lanes.
+            if (any_fc_valid) begin
+                if (T_fc_first_valid < 0) T_fc_first_valid <= cycle;
+                T_fc_last_valid <= cycle;
+            end
+            if (any_score_out) begin
+                if (T_score_out_first < 0) T_score_out_first <= cycle;
+                T_score_out_last <= cycle;
+            end
+            if (any_sm_exp) begin
+                if (T_softmax_exp_first < 0) T_softmax_exp_first <= cycle;
+                T_softmax_exp_last <= cycle;
+            end
+            if (any_sm_nrm) begin
+                if (T_softmax_nrm_first < 0) T_softmax_nrm_first <= cycle;
+                T_softmax_nrm_last <= cycle;
+            end
+            if (any_wsum_out) begin
+                if (T_wsum_out_first < 0) T_wsum_out_first <= cycle;
+                T_wsum_out_last <= cycle;
+            end
+
             if (valid_n) begin
                 if (T_data_out_first_valid < 0) T_data_out_first_valid <= cycle;
                 T_data_out_last_valid <= cycle;
@@ -272,6 +398,17 @@ module tb_nldpe_attn_head_v2;
         $display("  T_dimm_wsum_first_out    = %0d", T_dimm_wsum_first_out);
         $display("  T_data_out_first_valid   = %0d", T_data_out_first_valid);
         $display("  T_data_out_last_valid    = %0d", T_data_out_last_valid);
+        $display("  --- Stage-total OR-aggregated (16 lanes) ---");
+        $display("  T_fc_first_valid         = %0d", T_fc_first_valid);
+        $display("  T_fc_last_valid          = %0d", T_fc_last_valid);
+        $display("  T_score_out_first        = %0d", T_score_out_first);
+        $display("  T_score_out_last         = %0d", T_score_out_last);
+        $display("  T_softmax_exp_first      = %0d", T_softmax_exp_first);
+        $display("  T_softmax_exp_last       = %0d", T_softmax_exp_last);
+        $display("  T_softmax_nrm_first      = %0d", T_softmax_nrm_first);
+        $display("  T_softmax_nrm_last       = %0d", T_softmax_nrm_last);
+        $display("  T_wsum_out_first         = %0d", T_wsum_out_first);
+        $display("  T_wsum_out_last          = %0d", T_wsum_out_last);
         $display("");
 
         // Compute per-stage cycle counts (default 0 if any timestamp missed)
@@ -289,10 +426,19 @@ module tb_nldpe_attn_head_v2;
         $finish;
     end
 
-    // Helper: emit per-stage cycles + the regex-friendly probe row.
+    // Helper: emit per-stage cycles + the regex-friendly probe rows.
+    //
+    // Two output formats are emitted:
+    //   AH_NLDPE_STAGES        — legacy first-out latencies (kept for back-compat,
+    //                            no longer gated by run_checks.py).
+    //   AH_NLDPE_STAGES_TOTAL  — stage-total durations across W=16 lanes
+    //                            (the canonical line consumed by run_checks.py).
     task report_stages;
         integer linear_qkv, mac_qk, softmax_exp, softmax_norm, mac_sv, e2e;
+        // Stage-total durations
+        integer linear_qkv_t, mac_qk_t, softmax_exp_t, softmax_norm_t, mac_sv_t, e2e_t;
         begin
+            // Legacy first-out latency stage cycles (for diagnostic dump).
             linear_qkv   = (T_fc_qkv_done            > T_x_first_valid)
                          ? (T_fc_qkv_done            - T_x_first_valid) : 0;
             mac_qk       = (T_dimm_softmax_exp_start > T_fc_qkv_done)
@@ -306,7 +452,22 @@ module tb_nldpe_attn_head_v2;
             e2e          = (T_data_out_first_valid   > T_x_first_valid)
                          ? (T_data_out_first_valid   - T_x_first_valid) : 0;
 
-            $display("  Stage          RTL       sim    Δ");
+            // Stage-total durations (T_last - T_first + 1) across all W=16 lanes.
+            // If a stage was never observed (T_first == -1), report 0.
+            linear_qkv_t   = (T_fc_first_valid    >= 0 && T_fc_last_valid    >= 0)
+                           ? (T_fc_last_valid    - T_fc_first_valid    + 1) : 0;
+            mac_qk_t       = (T_score_out_first   >= 0 && T_score_out_last   >= 0)
+                           ? (T_score_out_last   - T_score_out_first   + 1) : 0;
+            softmax_exp_t  = (T_softmax_exp_first >= 0 && T_softmax_exp_last >= 0)
+                           ? (T_softmax_exp_last - T_softmax_exp_first + 1) : 0;
+            softmax_norm_t = (T_softmax_nrm_first >= 0 && T_softmax_nrm_last >= 0)
+                           ? (T_softmax_nrm_last - T_softmax_nrm_first + 1) : 0;
+            mac_sv_t       = (T_wsum_out_first    >= 0 && T_wsum_out_last    >= 0)
+                           ? (T_wsum_out_last    - T_wsum_out_first    + 1) : 0;
+            e2e_t          = (T_data_out_first_valid >= 0 && T_data_out_last_valid >= 0)
+                           ? (T_data_out_last_valid  - T_x_first_valid     + 1) : 0;
+
+            $display("  Stage (LEGACY first-out latencies)");
             $display("  linear_qkv  : %4d  vs  2424  %+0d", linear_qkv,   linear_qkv   - 2424);
             $display("  mac_qk      : %4d  vs  5690  %+0d", mac_qk,       mac_qk       - 5690);
             $display("  softmax_exp : %4d  vs   650  %+0d", softmax_exp,  softmax_exp  -  650);
@@ -314,8 +475,18 @@ module tb_nldpe_attn_head_v2;
             $display("  mac_sv      : %4d  vs  5339  %+0d", mac_sv,       mac_sv       - 5339);
             $display("  e2e         : %4d  vs 14480  %+0d", e2e,          e2e          - 14480);
             $display("");
+            $display("  Stage (NEW stage-total durations, OR over W=16 lanes)");
+            $display("  linear_qkv  : %5d  vs  2424  %+0d", linear_qkv_t,   linear_qkv_t   - 2424);
+            $display("  mac_qk      : %5d  vs  5690  %+0d", mac_qk_t,       mac_qk_t       - 5690);
+            $display("  softmax_exp : %5d  vs   650  %+0d", softmax_exp_t,  softmax_exp_t  -  650);
+            $display("  softmax_norm: %5d  vs   376  %+0d", softmax_norm_t, softmax_norm_t -  376);
+            $display("  mac_sv      : %5d  vs  5339  %+0d", mac_sv_t,       mac_sv_t       - 5339);
+            $display("  e2e         : %5d  vs 14480  %+0d", e2e_t,          e2e_t          - 14480);
+            $display("");
             $display("AH_NLDPE_STAGES linear_qkv=%0d mac_qk=%0d softmax_exp=%0d softmax_norm=%0d mac_sv=%0d e2e=%0d",
                      linear_qkv, mac_qk, softmax_exp, softmax_norm, mac_sv, e2e);
+            $display("AH_NLDPE_STAGES_TOTAL linear_qkv=%0d mac_qk=%0d softmax_exp=%0d softmax_norm=%0d mac_sv=%0d e2e=%0d",
+                     linear_qkv_t, mac_qk_t, softmax_exp_t, softmax_norm_t, mac_sv_t, e2e_t);
         end
     endtask
 

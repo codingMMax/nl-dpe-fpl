@@ -27,10 +27,31 @@
 // as a "DUT off-by-one — workaround applied" annotation; it does NOT
 // modify the RTL.
 //
-// Per-stage timestamps captured (cycles, regex-friendly):
+// PROBE SEMANTICS (post-2026-04-24 fix): each per-stage probe captures
+// `stage_total = T_last_active - T_first_active + 1` — the full active
+// duration of the stage across ALL W=16 DIMM lanes (OR-aggregated). This
+// matches the IMC sim's "full stage duration" semantics. Lane-0 first-out
+// timestamps are kept for diagnostic/backward-compat; the canonical
+// AH_AL_STAGES_TOTAL line is what run_checks.py gates on. e2e =
+// T_data_out_last_valid - T_x_first_valid + 1 (full pipeline latency).
+//
+// Per-stage stage-total probes:
+//   linear_qkv   : first→last FC valid_n pulse on any of Q/K/V (or-reduce)
+//   mac_qk       : first→last cycle ANY al_lane[i].mac_qk_inst.out_valid
+//   softmax_exp  : first→last cycle ANY al_lane[i].softmax_inst input valid
+//                  is asserted (S_LOAD active = scores arriving) plus the
+//                  S_INV cycle (= duration "exp+inv" before normalize starts)
+//   softmax_norm : first→last cycle ANY al_lane[i].softmax_inst.valid_n
+//                  (= S_NORM duration)
+//   mac_sv       : first→last cycle ANY al_lane[i].mac_sv_inst.out_valid
+//   e2e          : T_data_out_last_valid - T_x_first_valid + 1
+//
+// AL TB historically folded softmax_exp+softmax_norm into the softmax_exp
+// slot. The post-fix TB now reports them separately in AH_AL_STAGES_TOTAL.
+//
+// Legacy timestamps (kept for diagnostic dump):
 //   T_x_first_valid           : first cycle valid_x=1
 //   T_fc_qkv_done             : cycle state transitions to S_DIMM_FIRE
-//                               (i.e. all N tokens loaded into Q/K/V buffers)
 //   T_dimm_score_first_out    : first cycle mac_qk lane[0] out_valid=1
 //   T_dimm_softmax_first_out  : first cycle clb_softmax lane[0] valid_n=1
 //   T_dimm_wsum_first_out     : first cycle mac_sv lane[0] out_valid=1
@@ -38,15 +59,19 @@
 //   T_data_out_last_valid     : last  cycle top-level valid_n=1
 //
 // Sim oracle (from fc_verification/expected_cycles.json,
-// configs/azurelily_attn_head_d64_c128, N=128, d=64, W=16, Fmax 87.9 MHz):
+// configs/azurelily_attn_head_d64_c128, N=128, d=64, W=16, Fmax 87.9 MHz,
+// post total_dimm_dpes=16 fix):
 //   linear_qkv (parallel arms, max) = 4000 cyc
 //   mac_qk                          = 6661 cyc
-//   softmax_exp                     = 1988 cyc
-//   softmax_norm                    = 2550 cyc
+//   softmax_exp                     = 188  cyc
+//   softmax_norm                    = 750  cyc
 //   mac_sv                          = 6091 cyc
-//   E2E                             = 21290 cyc
+//   E2E                             = 17689 cyc
 //
-// Tolerance budget (per task brief): per-stage ≤ +20 cyc, e2e ≤ +50 cyc.
+// Tolerance budget: see fc_verification/phase7_known_deltas.json — each
+// stage carries an annotated delta_cycles + tolerance pair classified as
+// `modelling_granularity` (analytical-model coarseness) or `structural`
+// (W=16 lane parallelism vs sim's single-lane analytical lower-bound).
 // "Modelling-granularity" residuals are reported, never silently absorbed.
 //
 // Pre-loads (hierarchical, before reset release):
@@ -85,13 +110,13 @@ module tb_azurelily_attn_head_v2;
     parameter PACKED_KQ  = (D_MODEL + EPW_DSP - 1) / EPW_DSP;      // 32
     parameter PACKED_KO  = (D_HEAD  + EPW_DSP - 1) / EPW_DSP;      // 16
 
-    // Sim oracle (from expected_cycles.json)
+    // Sim oracle (from expected_cycles.json, post total_dimm_dpes=16 fix)
     parameter SIM_LINEAR_QKV    = 4000;
     parameter SIM_MAC_QK        = 6661;
-    parameter SIM_SOFTMAX_EXP   = 1988;
-    parameter SIM_SOFTMAX_NORM  = 2550;
+    parameter SIM_SOFTMAX_EXP   = 188;
+    parameter SIM_SOFTMAX_NORM  = 750;
     parameter SIM_MAC_SV        = 6091;
-    parameter SIM_E2E           = 21290;
+    parameter SIM_E2E           = 17689;
 
     reg              clk, rst, valid_x, ready_n;
     reg  [DW-1:0]    data_in_x;
@@ -118,7 +143,7 @@ module tb_azurelily_attn_head_v2;
 
     integer i, j;
 
-    // ─── Per-stage timestamps ────────────────────────────────────────────
+    // ─── Per-stage timestamps (legacy lane-0 first-out probes) ──────────
     integer T_x_first_valid          = -1;
     integer T_fc_qkv_done            = -1;  // S_DIMM_FIRE entered (token_count==N)
     integer T_dimm_fire_first_cycle  = -1;
@@ -129,6 +154,18 @@ module tb_azurelily_attn_head_v2;
     integer T_data_out_last_valid    = -1;
     integer top_validn_pulses        = 0;
 
+    // ─── Stage-total timestamps (NEW, 16-lane OR-aggregated) ────────────
+    integer T_fc_first_valid         = -1;
+    integer T_fc_last_valid          = -1;
+    integer T_mac_qk_first_out       = -1;
+    integer T_mac_qk_last_out        = -1;
+    integer T_softmax_in_first       = -1;  // first cycle softmax sees a score input
+    integer T_softmax_in_last        = -1;  // last cycle softmax has its valid input high
+    integer T_softmax_norm_first     = -1;  // first cycle softmax_inst.valid_n high
+    integer T_softmax_norm_last      = -1;  // last cycle softmax_inst.valid_n high
+    integer T_mac_sv_first_out       = -1;
+    integer T_mac_sv_last_out        = -1;
+
     // FSM-state shorthand (matches header in azurelily_attn_head_d64_c128.v)
     localparam S_IDLE             = 4'd0;
     localparam S_LOAD_TOKEN       = 4'd1;
@@ -138,13 +175,94 @@ module tb_azurelily_attn_head_v2;
     localparam S_DIMM_FIRE        = 4'd5;
     localparam S_DRAIN            = 4'd6;
 
-    // ─── Probe wires ─────────────────────────────────────────────────────
+    // ─── Probe wires (lane 0 — kept for legacy first-out probes) ────────
     wire [3:0] head_state          = dut.state;
     wire       dimm_score_first_v  = dut.dimm_inst.al_lane[0].mac_qk_inst.out_valid;
     wire       dimm_softmax_first_v= dut.dimm_inst.al_lane[0].softmax_inst.valid_n;
     wire       dimm_wsum_first_v   = dut.dimm_inst.al_lane[0].mac_sv_inst.out_valid;
 
-    // Edge sample: every cycle log first-valid timestamps.
+    // ─── Stage-total probe wires (16-way OR-reduce across al_lane[0..15]) ──
+    // mac_qk active = ANY lane's mac_qk_inst.out_valid pulse.
+    wire any_mac_qk_out =
+          dut.dimm_inst.al_lane[ 0].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 1].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 2].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 3].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 4].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 5].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 6].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 7].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 8].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[ 9].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[10].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[11].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[12].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[13].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[14].mac_qk_inst.out_valid
+        | dut.dimm_inst.al_lane[15].mac_qk_inst.out_valid;
+
+    // softmax_inst.valid is the input port (= mac_qk's score_valid). It pulses
+    // when scores arrive (S_LOAD active). softmax_inst.valid_n is the output
+    // (out_valid in S_NORM). We probe both for split exp/norm timing.
+    wire any_softmax_in_v =
+          dut.dimm_inst.al_lane[ 0].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 1].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 2].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 3].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 4].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 5].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 6].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 7].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 8].softmax_inst.valid
+        | dut.dimm_inst.al_lane[ 9].softmax_inst.valid
+        | dut.dimm_inst.al_lane[10].softmax_inst.valid
+        | dut.dimm_inst.al_lane[11].softmax_inst.valid
+        | dut.dimm_inst.al_lane[12].softmax_inst.valid
+        | dut.dimm_inst.al_lane[13].softmax_inst.valid
+        | dut.dimm_inst.al_lane[14].softmax_inst.valid
+        | dut.dimm_inst.al_lane[15].softmax_inst.valid;
+
+    wire any_softmax_norm_v =
+          dut.dimm_inst.al_lane[ 0].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 1].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 2].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 3].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 4].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 5].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 6].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 7].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 8].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[ 9].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[10].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[11].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[12].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[13].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[14].softmax_inst.valid_n
+        | dut.dimm_inst.al_lane[15].softmax_inst.valid_n;
+
+    wire any_mac_sv_out =
+          dut.dimm_inst.al_lane[ 0].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 1].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 2].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 3].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 4].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 5].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 6].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 7].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 8].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[ 9].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[10].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[11].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[12].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[13].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[14].mac_sv_inst.out_valid
+        | dut.dimm_inst.al_lane[15].mac_sv_inst.out_valid;
+
+    // FC valid_n OR-reduce (Q/K/V fire in lockstep but we OR for safety).
+    wire any_fc_valid =
+          dut.q_fc_valid_n | dut.k_fc_valid_n | dut.v_fc_valid_n;
+
+    // Edge sample: every cycle log first-valid + last-valid timestamps.
     always @(posedge clk) begin
         if (!rst) begin
             if (valid_x && T_x_first_valid < 0) T_x_first_valid <= cycle;
@@ -152,9 +270,33 @@ module tb_azurelily_attn_head_v2;
                 T_fc_qkv_done           <= cycle;
                 T_dimm_fire_first_cycle <= cycle;
             end
+            // Legacy lane-0 first-out timestamps.
             if (dimm_score_first_v   && T_dimm_score_first_out  < 0) T_dimm_score_first_out  <= cycle;
             if (dimm_softmax_first_v && T_dimm_softmax_first_out< 0) T_dimm_softmax_first_out<= cycle;
             if (dimm_wsum_first_v    && T_dimm_wsum_first_out   < 0) T_dimm_wsum_first_out   <= cycle;
+
+            // Stage-total OR-aggregated first/last.
+            if (any_fc_valid) begin
+                if (T_fc_first_valid < 0) T_fc_first_valid <= cycle;
+                T_fc_last_valid <= cycle;
+            end
+            if (any_mac_qk_out) begin
+                if (T_mac_qk_first_out < 0) T_mac_qk_first_out <= cycle;
+                T_mac_qk_last_out <= cycle;
+            end
+            if (any_softmax_in_v) begin
+                if (T_softmax_in_first < 0) T_softmax_in_first <= cycle;
+                T_softmax_in_last <= cycle;
+            end
+            if (any_softmax_norm_v) begin
+                if (T_softmax_norm_first < 0) T_softmax_norm_first <= cycle;
+                T_softmax_norm_last <= cycle;
+            end
+            if (any_mac_sv_out) begin
+                if (T_mac_sv_first_out < 0) T_mac_sv_first_out <= cycle;
+                T_mac_sv_last_out <= cycle;
+            end
+
             if (valid_n) begin
                 if (T_data_out_first_valid < 0) T_data_out_first_valid <= cycle;
                 T_data_out_last_valid <= cycle;
@@ -225,6 +367,14 @@ module tb_azurelily_attn_head_v2;
     integer mac_qk_rtl;
     integer softmax_combined_rtl;
     integer mac_sv_rtl;
+
+    // Stage-total durations (NEW probe semantics).
+    integer linear_qkv_total;
+    integer mac_qk_total;
+    integer softmax_exp_total;
+    integer softmax_norm_total;
+    integer mac_sv_total;
+    integer e2e_total;
 
     initial begin
         rst       = 1;
@@ -347,6 +497,17 @@ module tb_azurelily_attn_head_v2;
         $display("  T_dimm_wsum_first_out    = %0d", T_dimm_wsum_first_out);
         $display("  T_data_out_first_valid   = %0d", T_data_out_first_valid);
         $display("  T_data_out_last_valid    = %0d", T_data_out_last_valid);
+        $display("  --- Stage-total OR-aggregated (16 lanes) ---");
+        $display("  T_fc_first_valid         = %0d", T_fc_first_valid);
+        $display("  T_fc_last_valid          = %0d", T_fc_last_valid);
+        $display("  T_mac_qk_first_out       = %0d", T_mac_qk_first_out);
+        $display("  T_mac_qk_last_out        = %0d", T_mac_qk_last_out);
+        $display("  T_softmax_in_first       = %0d", T_softmax_in_first);
+        $display("  T_softmax_in_last        = %0d", T_softmax_in_last);
+        $display("  T_softmax_norm_first     = %0d", T_softmax_norm_first);
+        $display("  T_softmax_norm_last      = %0d", T_softmax_norm_last);
+        $display("  T_mac_sv_first_out       = %0d", T_mac_sv_first_out);
+        $display("  T_mac_sv_last_out        = %0d", T_mac_sv_last_out);
         $display("  top valid_n pulses       = %0d", top_validn_pulses);
         $display("");
 
@@ -392,9 +553,7 @@ module tb_azurelily_attn_head_v2;
         else e2e_rtl_cyc = -1;
 
         $display("=== Per-Stage Cycle Counts (RTL vs sim oracle) ===");
-        $display("  Stage semantics: RTL = first-out-to-first-out (latency between");
-        $display("  successive stage's first valid pulse).  Sim oracle = full stage");
-        $display("  duration in batched mode (different conventions; see report).");
+        $display("  LEGACY (first-out-to-first-out latencies):");
         $display("");
         $display("  linear_qkv (FC arms)  : RTL=%0d  sim=%0d  Δ=%0d",
                  linear_qkv_rtl, SIM_LINEAR_QKV, linear_qkv_rtl - SIM_LINEAR_QKV);
@@ -408,6 +567,39 @@ module tb_azurelily_attn_head_v2;
                  mac_sv_rtl, SIM_MAC_SV, mac_sv_rtl - SIM_MAC_SV);
         $display("  E2E (last_vn-first_vx): RTL=%0d  sim=%0d  Δ=%0d",
                  e2e_rtl_cyc, SIM_E2E, e2e_rtl_cyc - SIM_E2E);
+        $display("");
+
+        // Stage-total durations (T_last - T_first + 1) across all W=16 lanes.
+        linear_qkv_total   = (T_fc_first_valid    >= 0 && T_fc_last_valid    >= 0)
+                           ? (T_fc_last_valid    - T_fc_first_valid    + 1) : 0;
+        mac_qk_total       = (T_mac_qk_first_out  >= 0 && T_mac_qk_last_out  >= 0)
+                           ? (T_mac_qk_last_out  - T_mac_qk_first_out  + 1) : 0;
+        softmax_exp_total  = (T_softmax_in_first  >= 0 && T_softmax_in_last  >= 0)
+                           ? (T_softmax_in_last  - T_softmax_in_first  + 1) : 0;
+        softmax_norm_total = (T_softmax_norm_first>= 0 && T_softmax_norm_last>= 0)
+                           ? (T_softmax_norm_last- T_softmax_norm_first+ 1) : 0;
+        mac_sv_total       = (T_mac_sv_first_out  >= 0 && T_mac_sv_last_out  >= 0)
+                           ? (T_mac_sv_last_out  - T_mac_sv_first_out  + 1) : 0;
+        e2e_total          = (T_data_out_last_valid >= 0 && T_x_first_valid    >= 0)
+                           ? (T_data_out_last_valid - T_x_first_valid + 1) : 0;
+
+        $display("  STAGE-TOTAL (full active duration across 16 lanes):");
+        $display("");
+        $display("  linear_qkv  : RTL=%5d  sim=%5d  Δ=%+0d",
+                 linear_qkv_total, SIM_LINEAR_QKV,
+                 linear_qkv_total - SIM_LINEAR_QKV);
+        $display("  mac_qk      : RTL=%5d  sim=%5d  Δ=%+0d",
+                 mac_qk_total, SIM_MAC_QK, mac_qk_total - SIM_MAC_QK);
+        $display("  softmax_exp : RTL=%5d  sim=%5d  Δ=%+0d",
+                 softmax_exp_total, SIM_SOFTMAX_EXP,
+                 softmax_exp_total - SIM_SOFTMAX_EXP);
+        $display("  softmax_norm: RTL=%5d  sim=%5d  Δ=%+0d",
+                 softmax_norm_total, SIM_SOFTMAX_NORM,
+                 softmax_norm_total - SIM_SOFTMAX_NORM);
+        $display("  mac_sv      : RTL=%5d  sim=%5d  Δ=%+0d",
+                 mac_sv_total, SIM_MAC_SV, mac_sv_total - SIM_MAC_SV);
+        $display("  e2e         : RTL=%5d  sim=%5d  Δ=%+0d",
+                 e2e_total, SIM_E2E, e2e_total - SIM_E2E);
         $display("");
         $display("  Workarounds applied: FC nudge=%0d, DIMM valid_q gate=%0d",
                  fc_force_count, dimm_valid_q_force_active ? 1 : 0);
@@ -431,7 +623,8 @@ module tb_azurelily_attn_head_v2;
         end
         $display("");
 
-        // ── Regex-friendly final line ──
+        // ── Regex-friendly final lines ──
+        // Legacy line (first-out latencies, exp+norm folded into exp slot).
         $display("AH_AL_STAGES linear_qkv=%0d mac_qk=%0d softmax_exp=%0d softmax_norm=%0d mac_sv=%0d e2e=%0d",
                  linear_qkv_rtl,
                  mac_qk_rtl,
@@ -439,6 +632,14 @@ module tb_azurelily_attn_head_v2;
                  0,                      // softmax_norm folded into combined
                  mac_sv_rtl,
                  e2e_rtl_cyc);
+        // NEW canonical line (stage-total durations, exp/norm reported separately).
+        $display("AH_AL_STAGES_TOTAL linear_qkv=%0d mac_qk=%0d softmax_exp=%0d softmax_norm=%0d mac_sv=%0d e2e=%0d",
+                 linear_qkv_total,
+                 mac_qk_total,
+                 softmax_exp_total,
+                 softmax_norm_total,
+                 mac_sv_total,
+                 e2e_total);
 
         $finish;
     end
@@ -448,6 +649,7 @@ module tb_azurelily_attn_head_v2;
         #10_000_000;
         $display("HARD TIMEOUT (10ms simulated time)");
         $display("AH_AL_STAGES linear_qkv=-1 mac_qk=-1 softmax_exp=-1 softmax_norm=-1 mac_sv=-1 e2e=-1");
+        $display("AH_AL_STAGES_TOTAL linear_qkv=-1 mac_qk=-1 softmax_exp=-1 softmax_norm=-1 mac_sv=-1 e2e=-1");
         $finish;
     end
 

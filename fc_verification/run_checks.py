@@ -125,7 +125,18 @@ def run_iverilog(sources: list[Path], timeout_s: int = 120) -> tuple[int, str]:
 
 
 # AH-track (attention-head) per-stage regex lines emitted by
-# tb_{nldpe,azurelily}_attn_head_v2.v at simulation finish.
+# tb_{nldpe,azurelily}_attn_head_v2.v at simulation finish. The TBs emit
+# both a legacy `AH_*_STAGES` (first-out latencies, kept for back-compat)
+# and a canonical `AH_*_STAGES_TOTAL` (stage-total durations, OR-aggregated
+# across all W=16 DIMM lanes).  run_checks.py prefers _TOTAL if present.
+RE_AH_NLDPE_STAGES_TOTAL = re.compile(
+    r"AH_NLDPE_STAGES_TOTAL\s+linear_qkv=(-?\d+)\s+mac_qk=(-?\d+)\s+"
+    r"softmax_exp=(-?\d+)\s+softmax_norm=(-?\d+)\s+mac_sv=(-?\d+)\s+e2e=(-?\d+)"
+)
+RE_AH_AL_STAGES_TOTAL = re.compile(
+    r"AH_AL_STAGES_TOTAL\s+linear_qkv=(-?\d+)\s+mac_qk=(-?\d+)\s+"
+    r"softmax_exp=(-?\d+)\s+softmax_norm=(-?\d+)\s+mac_sv=(-?\d+)\s+e2e=(-?\d+)"
+)
 RE_AH_NLDPE_STAGES = re.compile(
     r"AH_NLDPE_STAGES\s+linear_qkv=(-?\d+)\s+mac_qk=(-?\d+)\s+"
     r"softmax_exp=(-?\d+)\s+softmax_norm=(-?\d+)\s+mac_sv=(-?\d+)\s+e2e=(-?\d+)"
@@ -139,9 +150,18 @@ RE_AH_TOP_PULSES = re.compile(r"top valid_n pulses\s*[:=]?\s*(\d+)", re.IGNORECA
 
 
 def _parse_ah_stages(out: str, arch: str) -> dict:
-    """Parse the AH_*_STAGES regex line into a dict keyed by stage."""
-    rx = RE_AH_NLDPE_STAGES if arch == "nldpe" else RE_AH_AL_STAGES
-    m = rx.search(out)
+    """Parse the canonical AH_*_STAGES_TOTAL regex line; fall back to legacy.
+
+    The new TB probe semantics emit a dedicated `AH_*_STAGES_TOTAL` line
+    with stage-total durations (OR-aggregated across W=16 DIMM lanes).
+    The legacy `AH_*_STAGES` line is kept for diagnostic purposes only.
+    """
+    rx_total = RE_AH_NLDPE_STAGES_TOTAL if arch == "nldpe" else RE_AH_AL_STAGES_TOTAL
+    m = rx_total.search(out)
+    if not m:
+        # Legacy fallback (older TB without _TOTAL line).
+        rx = RE_AH_NLDPE_STAGES if arch == "nldpe" else RE_AH_AL_STAGES
+        m = rx.search(out)
     if not m:
         return {}
     return {
@@ -343,10 +363,14 @@ def check_latency(config_name: str, expected: dict) -> CheckResult:
 def check_ah_attn_head(config_name: str, expected: dict) -> CheckResult:
     """Run the combined AH TB and gate per-stage cycles vs sim oracle.
 
-    Azure-Lily folds softmax_exp + softmax_norm into the softmax_exp slot
-    (TB emits softmax_norm=0); the dispatcher therefore checks softmax_exp
-    against (sim_softmax_exp + sim_softmax_norm) and treats the
-    softmax_norm stage as a sentinel (RTL=0 vs sim=0, expected delta 0).
+    The TBs emit `AH_*_STAGES_TOTAL` lines with stage-total durations
+    (OR-aggregated across W=16 DIMM lanes) — see the probe-semantics
+    comment in tb_{nldpe,azurelily}_attn_head_v2.v.
+
+    Both NL-DPE and Azure-Lily TBs now report softmax_exp and softmax_norm
+    separately in `_TOTAL` mode. The legacy "AL folds exp+norm" path is
+    only triggered when run_checks.py is parsing an old TB run that lacks
+    the _TOTAL line (legacy fallback in _parse_ah_stages emits norm=0).
     """
     cfg = CONFIG_REGISTRY[config_name]
     arch = cfg.get("ah_arch", "nldpe")
@@ -375,16 +399,19 @@ def check_ah_attn_head(config_name: str, expected: dict) -> CheckResult:
 
     known_deltas = _load_known_deltas(config_name)
 
-    # Azure-Lily's TB folds softmax_exp+norm into the exp slot (norm=0).
-    # Detect by: sim splits exp/norm, but RTL emits norm=0 and exp >> sim_exp.
+    # Detect legacy combine-softmax mode: only when the TB lacks the
+    # _TOTAL line and the legacy line emits softmax_norm=0 with sim
+    # splitting exp/norm. Post-fix TBs emit exp/norm separately in _TOTAL,
+    # so this stays False.
     combine_softmax = (
         arch == "azurelily"
         and rtl_stages.get("softmax_norm", 0) == 0
         and "softmax_norm" in sim_stages
+        and rtl_stages.get("softmax_exp", 0) > sim_stages.get("softmax_exp", 0)
     )
 
-    # Build per-stage comparison list. For combined-softmax mode, fold
-    # sim_exp + sim_norm into the softmax_exp comparison; the
+    # Build per-stage comparison list. For combined-softmax legacy mode,
+    # fold sim_exp + sim_norm into the softmax_exp comparison; the
     # softmax_norm stage check becomes 0 vs 0 (sentinel).
     deltas = {}
     reasons = []
