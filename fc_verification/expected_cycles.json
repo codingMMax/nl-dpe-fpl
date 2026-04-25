@@ -1,9 +1,9 @@
 {
-  "source": "Live sim refresh (Regime B + intra-row pipelining, Layout A) on 2026-04-24",
+  "source": "Live sim refresh (Regime B + intra-row pipelining + softmax row-parallel, Layout A) on 2026-04-25",
   "regime": "B",
   "layout": "A",
-  "updated": "2026-04-24",
-  "note": "Regenerate via gen_expected_cycles.py after any sim-model change. AH configs (attn_head) are manually maintained — refresh after running test.py --model attention.",
+  "updated": "2026-04-25",
+  "note": "Regenerate via gen_expected_cycles.py after any sim-model change. AH configs (attn_head) are manually maintained — refresh after running test.py --model attention. The 2026-04-25 entries reflect the softmax row-parallel fix (azurelily/IMC/scheduler_stats/scheduler.py:_run_softmax_exp/_run_softmax_norm now multiply per-row latency by rows_per_lane=ceil(rows/W_softmax) so the outer rows axis is W-parallel, in addition to the pre-existing within-row /W split).",
   "tolerance_cycles": {
     "per_stage": 3,
     "e2e": 5
@@ -51,20 +51,20 @@
       "stages": {
         "linear_qkv": 2424,
         "mac_qk": 5428,
-        "softmax_exp": 650,
-        "softmax_norm": 376,
+        "softmax_exp": 41,
+        "softmax_norm": 24,
         "mac_sv": 5077,
-        "e2e": 13955
+        "e2e": 12993
       },
       "ns_breakdown": {
         "linear_qkv": 23553.33,
         "mac_qk": 52750.00,
-        "softmax_exp": 6320.00,
-        "softmax_norm": 3653.33,
+        "softmax_exp": 395.00,
+        "softmax_norm": 228.33,
         "mac_sv": 49340.00,
-        "e2e": 135616.67
+        "e2e": 126266.67
       },
-      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/nl_dpe.json post-2026-04-24 sim parallelism fix (gemm_log intra-row pipelining: feed of next pass overlaps current pass's compute+drain via intra_row_steady=max(feed,compute_chain,drain)). Pre-fix mac_qk=5690, mac_sv=5339, e2e=14480; post-fix smaller because the new sim correctly models the RTL DPE lane's intra-row pipelining behavior. linear_qkv = max(linear_Q, linear_K, linear_V) = 23553.33 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 9.7182 ns (Fmax=102.9 MHz)."
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/nl_dpe.json post-2026-04-25 softmax row-parallel fix in azurelily/IMC/scheduler_stats/scheduler.py (_run_softmax_exp/_run_softmax_norm now multiply per-row latency by rows_per_lane=ceil(rows/W) so the outer rows axis is W=16 parallel; the pre-existing within-row /W col-parallel split is preserved). Pre-2026-04-25 (intra-row pipelining only): softmax_exp=650, softmax_norm=376, e2e=13955. Post-fix: softmax_exp 650→41 (~16× drop, matches expected sim/RTL alignment for the W=16 attention head), softmax_norm 376→24 (~16× drop), e2e 13955→12993. Stages mac_qk / mac_sv unchanged (different sim path: gemm_log not _run_softmax_*). linear_qkv = max(linear_Q, linear_K, linear_V) = 23553.33 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 9.7182 ns (Fmax=102.9 MHz)."
     },
     "azurelily_attn_head_d64_c128": {
       "params": {
@@ -80,20 +80,20 @@
       "stages": {
         "linear_qkv": 4000,
         "mac_qk": 815,
-        "softmax_exp": 188,
-        "softmax_norm": 750,
+        "softmax_exp": 12,
+        "softmax_norm": 47,
         "mac_sv": 1450,
-        "e2e": 7203
+        "e2e": 6324
       },
       "ns_breakdown": {
         "linear_qkv": 45506.56,
         "mac_qk": 9270.00,
-        "softmax_exp": 2133.33,
-        "softmax_norm": 8533.33,
+        "softmax_exp": 133.33,
+        "softmax_norm": 533.33,
         "mac_sv": 16493.33,
-        "e2e": 81936.56
+        "e2e": 71936.55
       },
-      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json post-2026-04-24 sim parallelism fix (gemm_dsp n_parallel_outputs=N for DIMM parallel-row + intra-wave pipelining). Pre-fix mac_qk=6661, mac_sv=6091, e2e=17689; post-fix dramatically smaller because gemm_dsp now models the parallel-output DSP fabric (n_parallel_outputs=N=128) correctly rather than serialising along the DSP-pool axis with dsp_batch=8. linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz)."
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json post-2026-04-25 softmax row-parallel fix in azurelily/IMC/scheduler_stats/scheduler.py (_run_softmax_exp/_run_softmax_norm: rows_per_lane multiplier; AL else-branch additionally gains the rows_per_lane scaling that was missing pre-fix). Pre-2026-04-25 (intra-row pipelining only): softmax_exp=188, softmax_norm=750, e2e=7203. Post-fix: softmax_exp 188→12 (~16× drop), softmax_norm 750→47 (~16× drop), e2e 7203→6324. Stages mac_qk / mac_sv unchanged (different sim path: gemm_dsp not _run_softmax_*). linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz)."
     }
   }
 }

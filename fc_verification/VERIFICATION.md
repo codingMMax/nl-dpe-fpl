@@ -1063,32 +1063,44 @@ preserved. Backward compat 14/14 PASS held post-`e118b11`.
 `*_attn_head_d64_c128`, N=128, d_head=64, W=16; classifications and
 file:line root causes in `phase7_known_deltas.json`):
 
-**NL-DPE attention head:**
+**NL-DPE attention head** (post-2026-04-25 softmax row-parallel fix in
+`azurelily/IMC/scheduler_stats/scheduler.py:_run_softmax_exp/_run_softmax_norm`
+— outer rows multiplier now `rows_per_lane = ceil(rows/W_softmax)`
+for W=16 lane parallelism):
 
 | Stage | RTL | Sim | Δ (RTL−sim) | Classification |
 |---|---:|---:|---:|---|
-| linear_qkv  | 3,350 | 2,424 | +926   | modelling_granularity |
-| mac_qk      | 1,948 | 5,690 | −3,742 | structural |
-| softmax_exp | 8     | 650   | −642   | structural |
-| softmax_norm| 10    | 376   | −366   | structural |
-| mac_sv      | 251   | 5,339 | −5,088 | structural |
-| **E2E**     | **6,692** | **14,480** | **−7,788** | **structural** |
+| linear_qkv  | 3,315 | 2,424 | +891   | modelling_granularity |
+| mac_qk      | 3,069 | 5,428 | −2,359 | structural |
+| softmax_exp | 8     | 41    | −33    | modelling_granularity (was structural pre-fix) |
+| softmax_norm| 10    | 24    | −14    | modelling_granularity (was structural pre-fix) |
+| mac_sv      | 2,791 | 5,077 | −2,286 | structural |
+| **E2E**     | **8,358** | **12,993** | **−4,635** | **structural** |
 
-**Azure-Lily attention head:**
+**Azure-Lily attention head** (same 2026-04-25 fix; AL `else` branch
+of softmax_exp + non-fusion / non-analog norm gain the
+`rows_per_lane` outer multiplier):
 
 | Stage | RTL | Sim | Δ (RTL−sim) | Classification |
 |---|---:|---:|---:|---|
-| linear_qkv  | 4,529 | 4,000 | +529   | modelling_granularity |
-| mac_qk      | 1,683 | 6,661 | −4,978 | structural |
-| softmax     | 2,289 | 938 (exp 188 + norm 750 fold) | +1,351 | modelling_granularity |
-| mac_sv      | 32    | 6,091 | −6,059 | structural |
-| **E2E**     | **8,597** | **17,689** | **−9,092** | **structural** |
+| linear_qkv  | 4,458 | 4,000 | +458   | modelling_granularity |
+| mac_qk      | 2,287 | 815   | +1,472 | modelling_granularity |
+| softmax_exp | 2,287 | 12    | +2,275 | modelling_granularity (was structural pre-fix; AL clb_softmax is data-rate-bound by upstream mac_qk, not by softmax compute) |
+| softmax_norm| 127   | 47    | +80    | modelling_granularity (was structural pre-fix) |
+| mac_sv      | 65    | 1,450 | −1,385 | structural |
+| **E2E**     | **8,598** | **6,324** | **+2,274** | **modelling_granularity** |
 
-(The AL TB folds RTL `softmax_exp` + `softmax_norm` into the
-`softmax_exp` slot — `tb_azurelily_attn_head_v2.v:435` emits
-`softmax_norm = 0`. The dispatcher `run_checks.py::check_ah_attn_head`
-detects this and compares the combined RTL value 2,289 against
-`sim_softmax_exp + sim_softmax_norm = 188 + 750 = 938`.)
+(The AL TB previously folded RTL `softmax_exp` + `softmax_norm` into
+the `softmax_exp` slot. Post-2026-04-24 `tb_azurelily_attn_head_v2.v`
+reports both stages independently and the dispatcher
+`run_checks.py::check_ah_attn_head` compares each against its
+dedicated sim value.)
+
+The 2026-04-25 fix collapsed the softmax-axis structural residuals
+~16× as expected for W=16 lane parallelism (NL-DPE softmax_exp
+−642 → −33, softmax_norm −366 → −14; AL softmax_norm −623 → +80).
+mac_qk and mac_sv stages are unchanged: those route through
+`gemm_log` / `gemm_dsp`, not `_run_softmax_*`.
 
 **Classification rationale.**
 

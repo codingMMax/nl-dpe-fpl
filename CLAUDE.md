@@ -102,22 +102,32 @@ the live tracks below.
   Configs: `nldpe_attn_head_d64_c128`, `azurelily_attn_head_d64_c128`.
 
   **Final per-stage alignment** (RTL ↔ sim, all residuals classified
-  in `phase7_known_deltas.json`):
+  in `phase7_known_deltas.json`; post-2026-04-25 softmax row-parallel
+  fix in `azurelily/IMC/scheduler_stats/scheduler.py`
+  `_run_softmax_exp/_run_softmax_norm` — outer rows multiplier now
+  `rows_per_lane = ceil(rows/W_softmax)` for W=16):
 
   | Stage | NL-DPE RTL/sim/Δ/class | AL RTL/sim/Δ/class |
   |---|---|---|
-  | linear_qkv  | 3,350 / 2,424 / +926 / m.g. | 4,529 / 4,000 / +529 / m.g. |
-  | mac_qk      | 1,948 / 5,690 / −3,742 / structural | 1,683 / 6,661 / −4,978 / structural |
-  | softmax_exp | 8 / 650 / −642 / structural | 2,289 / 938 (exp+norm fold) / +1,351 / m.g. |
-  | softmax_norm| 10 / 376 / −366 / structural | 0 / — / 0 (folded) / m.g. |
-  | mac_sv      | 251 / 5,339 / −5,088 / structural | 32 / 6,091 / −6,059 / structural |
-  | **E2E**     | **6,692 / 14,480 / −7,788 / structural** | **8,597 / 17,689 / −9,092 / structural** |
+  | linear_qkv  | 3,315 / 2,424 / +891 / m.g. | 4,458 / 4,000 / +458 / m.g. |
+  | mac_qk      | 3,069 / 5,428 / −2,359 / structural | 2,287 / 815 / +1,472 / m.g. |
+  | softmax_exp | 8 / 41 / −33 / m.g. | 2,287 / 12 / +2,275 / m.g. |
+  | softmax_norm| 10 / 24 / −14 / m.g. | 127 / 47 / +80 / m.g. |
+  | mac_sv      | 2,791 / 5,077 / −2,286 / structural | 65 / 1,450 / −1,385 / structural |
+  | **E2E**     | **8,358 / 12,993 / −4,635 / structural** | **8,598 / 6,324 / +2,274 / m.g.** |
 
-  Negative residuals are classified `structural` because the sim's
-  `gemm_log`/`gemm_dsp` analytical bodies are conservative single-lane
-  lower-bounds while the RTL realises W=16 hardware-lane parallelism.
-  Positive residuals are `modelling_granularity` (FSM transitions,
-  streaming fill/drain edges, AL CLB-serial softmax bottleneck).
+  Negative residuals on `mac_qk` (NL-DPE) and `mac_sv` (both archs)
+  remain `structural` because the sim's `gemm_log` / `gemm_dsp`
+  analytical bodies are conservative single-lane lower-bounds while
+  the RTL realises W=16 hardware-lane parallelism. The 2026-04-25
+  softmax row-parallel fix collapsed the softmax-axis residuals
+  ~16× (NL-DPE softmax_exp/norm −642/−366 → −33/−14; AL softmax_norm
+  −623 → +80) and reclassified them from `structural` to
+  `modelling_granularity`. AL `softmax_exp` residual grew (+2099 →
+  +2275) because the sim now correctly W=16-parallelises softmax
+  while the AL `clb_softmax` RTL is data-rate-bound by upstream
+  `mac_qk`'s serial 128-row FSM — that's an AL-specific FSM-coarseness
+  modelling gap, not a parallelism mismatch.
 
   **Resource counts (per head):**
   - NL-DPE: 6 DPE (3 arms × 2 ping-pong) + 64 DIMM = **70 DPE**
