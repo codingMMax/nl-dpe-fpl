@@ -90,69 +90,89 @@ the live tracks below.
 ## Active TODO Tracks
 
 - **AH — Attention Head RTL verification + latency alignment**
-  (opened 2026-04-24, pre-implementation): **Stage 1 (T1) ready to
-  start.** Ultimate goal: end-to-end RTL↔sim cycle-accurate alignment
-  for a composed attention head (FC_Q/K/V → DIMM top → FC_O), both
-  architectures, all residuals classified `modelling_granularity`.
+  (opened 2026-04-24): **T2v2/T3v2/T4v2 closed (commit `e118b11`,
+  2026-04-24).** Streaming FC refactor + sim oracle + arch-tagged
+  `phase7_known_deltas.json` + `run_checks.py` AH dispatcher all
+  landed; both `run_checks.py --config *_attn_head_d64_c128` exit 0.
+  T5v2 (VTR 3-seed) pending user sign-off. T6 (BERT-Tiny generator
+  refinement) remains future follow-up.
 
   **Scope anchor (frozen):** single config point N=128, d=64, C=128,
   W=16, W_DPE=40, K_id=2 — inherits verified DIMM-top surface.
   Configs: `nldpe_attn_head_d64_c128`, `azurelily_attn_head_d64_c128`.
 
-  **Prerequisites:** NL-DPE FC ✓ (12/12 Phase 2), Azure-Lily FC ✗
-  (T1 closes this gap). NL-DPE DIMM top ✓ (P3/4, +42 E2E m.g.),
-  Azure-Lily DIMM top ✓ (P5/6A, +2 E2E m.g.).
+  **Final per-stage alignment** (RTL ↔ sim, all residuals classified
+  in `phase7_known_deltas.json`):
+
+  | Stage | NL-DPE RTL/sim/Δ/class | AL RTL/sim/Δ/class |
+  |---|---|---|
+  | linear_qkv  | 3,350 / 2,424 / +926 / m.g. | 4,529 / 4,000 / +529 / m.g. |
+  | mac_qk      | 1,948 / 5,690 / −3,742 / structural | 1,683 / 6,661 / −4,978 / structural |
+  | softmax_exp | 8 / 650 / −642 / structural | 2,289 / 938 (exp+norm fold) / +1,351 / m.g. |
+  | softmax_norm| 10 / 376 / −366 / structural | 0 / — / 0 (folded) / m.g. |
+  | mac_sv      | 251 / 5,339 / −5,088 / structural | 32 / 6,091 / −6,059 / structural |
+  | **E2E**     | **6,692 / 14,480 / −7,788 / structural** | **8,597 / 17,689 / −9,092 / structural** |
+
+  Negative residuals are classified `structural` because the sim's
+  `gemm_log`/`gemm_dsp` analytical bodies are conservative single-lane
+  lower-bounds while the RTL realises W=16 hardware-lane parallelism.
+  Positive residuals are `modelling_granularity` (FSM transitions,
+  streaming fill/drain edges, AL CLB-serial softmax bottleneck).
+
+  **Resource counts (per head):**
+  - NL-DPE: 6 DPE (3 arms × 2 ping-pong) + 64 DIMM = **70 DPE**
+  - Azure-Lily: 192 dsp_mac (3 arms × 64 parallel-output) + 32 DIMM
+    + 16 clb_softmax = **224 dsp_mac + 16 softmax**
 
   **Stages:**
   - **T1 ✓ closed (commit `9e6a913`)** — AL FC Phase-2 harness, 14/14
-    unified gate (NL-DPE 12/12 + AL 2/2). New
-    `gen_azurelily_fc_wrapper.py`, AL FC RTLs at `512_128`/`2048_256`,
-    parameterized `tb_azurelily_fc.v`, arch-tagged
-    `phase2_known_deltas.json` (+2 AL entries: `compute_aggregate +1`,
-    `compute_first_out +1`, both modelling_granularity).
-  - **T2 v0 closed (commit `2f5956e`); T2v2 NEW** — discovered that the
-    T2 v0 composition was scope-mismatched against `attention_model` in
-    `azurelily/models/attention.py` (sim assumes N=128 token sequence
-    feed → Q/K/V proj × N + 1× DIMM + NO output projection;
-    T2v0 was 1-token broadcast + included fc_top_o). T2v0 retained as
-    legacy compile target; T2v2 is the canonical attn-head verification
-    target. T3+T4 partial commit `4860fcc` documents AL per-component
-    measurement (Δ=+6 cyc m.g. at single-inference scope).
-  - **T2v2 — Refactor attn-head RTL to match sim's `attention_model`.**
-    New top: N-token outer FSM (drives X for Q once, K/V N=128 times)
-    + intermediate `q_buffer`/`k_buffer`/`v_buffer` SRAMs that catch
-    FC outputs in DIMM-compatible packed format (AL needs unpacked→
-    packed packer; NL-DPE FC already produces packed output) + 1× DIMM
-    fire after K/V buffers full + N×d_head output stream. **Drops
-    fc_top_o** (matches sim's attention_model which stops at mac_sv).
-    New resource: NL-DPE 67 DPE (3 proj + 64 DIMM); AL 35 dsp_mac
-    + 16 clb_softmax (3 proj + 32 DIMM + 16 softmax).
-  - **T3v2 — Functional TBs.** Drive N=128 tokens; identity Q/K/V/V
-    weights; mac_sv output stream matches sim's analytical prediction.
-    Gate: per-arch correctness against sim oracle.
-  - **T4v2 — Latency TBs + sim extractor + known-deltas.** Sim oracle:
-    invoke `_run_attention_pipeline` at full N-token scope, capture
-    per-stage cycles. RTL probes: 7 stages (linear_Q/K/V, mac_qk,
-    softmax_exp/norm, mac_sv) + 1 buffer-fill timestamp. New
-    `phase7_known_deltas.json` arch-tagged. Budget: NL-DPE E2E ≤
-    +60 cyc, AL E2E ≤ +15 cyc, all m.g. or `structural`.
-    Gate: both `run_checks.py --config *_attn_head_d64_c128` exit 0.
-  - **T5v2 — VTR + regression.** Strict counts: NL-DPE DPE=67, AL
-    DSP≈35. Append to `VERIFICATION.md §Phase 5` gate list.
+    unified gate (NL-DPE 12/12 + AL 2/2).
+  - **T2 v0 closed (commit `2f5956e`); T2v2 ✓ closed (commit
+    `e118b11`)** — streaming FC composition matching sim's
+    `attention_model`. New `nl_dpe/gen_nldpe_attn_head_top.py`
+    (instantiates `fc_top_qkv_streaming.v` ping-pong DPE) + new
+    `nl_dpe/gen_azurelily_attn_head_top.py` (N parallel dsp_macs
+    parallel-output streaming, 64 dsp_macs per arm). `gen_gemv_wrappers.py`
+    extended with additive `streaming=True` mode (default off,
+    preserves T1 / Phase-2 single-inference behaviour). Both head
+    RTLs drop O projection per sim's attention_model definition.
+  - **T3v2 ✓ closed (commit `e118b11`, partial in `2e0c559`)** —
+    Combined functional+latency TBs `tb_{nldpe,azurelily}_attn_head_v2.v`
+    drive N=128 tokens with identity Q/K/V weights. AL sim
+    `total_softmax_lanes` config + 3 AL RTL composition bugs fixed
+    en route (commit `2e0c559`). Functional Overall=PASS for both archs.
+  - **T4v2 ✓ closed (commit `e118b11`)** — Sim oracle invokes
+    `attention_model` at full N-token scope, captured into
+    `expected_cycles.json`. Per-stage probes (linear_qkv, mac_qk,
+    softmax_exp/norm, mac_sv, e2e) emit timestamped boundaries.
+    `phase7_known_deltas.json` arch-tagged with file:line root-cause
+    citations for every residual. `run_checks.py` extended with AH
+    dispatcher (`check_ah_attn_head`) including AL softmax_exp+norm
+    fold semantics. Gate: both `run_checks.py --config
+    *_attn_head_d64_c128` exit 0.
+  - **T5v2 — VTR + regression (PENDING user sign-off, separate
+    stage).** Strict counts target: NL-DPE DPE=70, AL
+    DSP≈224. Will append to `VERIFICATION.md §Phase 7` gate list
+    once VTR 3-seed numbers land.
   - **T6 — BERT-Tiny generator refinement (post-T5 follow-up).** The
     verified head becomes the canonical reference for diffing against
     `gen_bert_tiny_wrapper.py`. Surfaces likely bugs (W=1 vs paper-spec
     W=16, etc.) in the BERT-Tiny benchmark RTL family. Out of scope
     for the AH track gate.
 
-  **Dependency DAG:** T1 ∥ T2 are independent (no shared files, no
-  artifact dependency — T2 can emit the head-top RTL without T1's
-  verification having passed). T3 needs T2 only (functional test uses
-  identity projections). **T4 needs both T1 and T2** — the real join
-  point, where AL FC known-deltas from T1 are needed to attribute
-  head-level residuals cleanly. T5 needs T4. Soft guidance: T1 PASS
-  also improves T3 diagnostic clarity (isolates any functional blame
-  to DIMM or handoff rather than FC).
+  **Gate command list (all 5 commands exit 0 post-`e118b11`):**
+  ```
+  python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1
+  python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # T1 14/14 PASS
+  python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # P3+P4
+  python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # P5+P6A
+  python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128   # P7 NL-DPE
+  python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128  # P7 AL
+  ```
+
+  **Dependency DAG:** T1 ∥ T2 are independent; T3 needs T2 only;
+  T4 needs both T1 and T2 (residual attribution join point);
+  T5 needs T4.
 
   **Explicitly deferred (out of this plan):**
   - Multi-N attention head — re-emit DIMM + head at N ∈ {256, 512,

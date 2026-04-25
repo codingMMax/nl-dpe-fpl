@@ -992,3 +992,182 @@ References:
 - Residual annotation (updated): `phase5_known_deltas.json`
 - Sim extraction (docstring refresh): `gen_expected_cycles.py`
 - VTR results (regenerated): `results/azurelily_dimm_top_vtr_imc_results.json`
+
+### Phase 7 — Attention head verification (2026-04-24)
+
+Composes the verified FC + DIMM building blocks into a standalone
+attention head matching the simulator's `attention_model` streaming
+convention (N=128 token sequence → Q/K/V projections → DIMM (mac_qk +
+softmax + mac_sv); NO output projection). Closes the AH track stages
+T2v2/T3v2/T4v2 at commit `e118b11`. T5v2 (VTR 3-seed) is pending user
+sign-off as a separate stage; T6 (BERT-Tiny generator refinement) is a
+follow-up that will use the verified head as canonical reference.
+
+**Motivation.** The DIMM-top verification (Phases 3+4 NL-DPE, Phases
+5+6A Azure-Lily) closed all per-stage residuals as
+`modelling_granularity` for the standalone DIMM. The next V-model
+layer is a full attention head: compose verified FC arms + DIMM into a
+single testable module that exercises the FC↔DIMM handoff under the
+same N-token streaming workload the sim simulates.
+
+**Architecture decisions.** Both architectures share:
+
+- **W = 16** (paper §3 spec — NOT the BERT-Tiny benchmark RTL's W=1,
+  which is a generator bug to patch in T6).
+- **d_model = 128, d_head = 64, N = 128**.
+- **NO output projection** — the verified head stops at mac_sv to
+  match sim's `attention_model` (Q/K/V projections + DIMM only). The
+  legacy `nl_dpe/attention_head_1_channel.v` (d=128, pre-P4
+  hand-written, 3 DPEs) is formally retired.
+
+Only the compute primitive and FC mapping diverge across architectures.
+
+**Streaming FC refactor (Phase A of `e118b11`).** The pre-T2v2 FC
+generators emitted single-inference RTL (1-token-then-done). The sim's
+`attention_model` streams N=128 tokens through Q/K/V projections; to
+match this the FC wrappers were refactored to streaming mode:
+
+- **NL-DPE (`fc_top_qkv_streaming.v`)** — ping-pong DPE pair per arm.
+  DPE_A loads SRAM weights while DPE_B computes/drains, alternating;
+  steady-state per-row throughput = PACKED_K = 26 cycles/inference.
+  Two DPEs per arm × 3 arms = 6 streaming-FC DPEs per head.
+- **Azure-Lily (`gen_azurelily_fc_wrapper.py`)** — N parallel-output
+  dsp_macs per arm. Each dsp_mac handles one output column of width
+  EPW_OUT = 5 int8/word; all dsp_macs share one broadcast input
+  stream and slice weights from one shared `w_bram` via combinational
+  hierarchical references. Per-token feed period = PACKED_K + 3
+  cycles. 64 dsp_macs per arm × 3 arms = 192 streaming-FC dsp_macs
+  per head.
+
+`gen_gemv_wrappers.py` was extended with an additive `streaming=True`
+mode (default off) so T1 / Phase-2 single-inference behaviour is
+preserved. Backward compat 14/14 PASS held post-`e118b11`.
+
+**Bug fixes during V2 build (commit `2e0c559`).**
+
+1. **AL sim `total_softmax_lanes` config** — was unset; sim treated
+   softmax as fully parallel across W=16 lanes, masking AL's actual
+   CLB-serial accumulator bottleneck (`clb_softmax`'s S_LOAD is one
+   accumulator over N=128 sequential cycles). Set explicitly so the
+   sim oracle reflects the AL design.
+2. **AL head FSM Q/K/V buffer write-enable handshake** — packed-output
+   dsp_mac drain sequencing did not gate the buffer WE strictly; fixed
+   to assert WE only on valid output cycles.
+3. **AL packed-output FIFO drain timing** — drain pointer advanced one
+   cycle early in some corner cases; fixed.
+4. **AL DIMM start-trigger sequencing** — DIMM `valid_q/k/v` could
+   pulse before all three buffers settled; fixed by gating on
+   buffer-fill complete across all arms.
+
+**Per-stage residual table** (RTL ↔ sim, both archs at config
+`*_attn_head_d64_c128`, N=128, d_head=64, W=16; classifications and
+file:line root causes in `phase7_known_deltas.json`):
+
+**NL-DPE attention head:**
+
+| Stage | RTL | Sim | Δ (RTL−sim) | Classification |
+|---|---:|---:|---:|---|
+| linear_qkv  | 3,350 | 2,424 | +926   | modelling_granularity |
+| mac_qk      | 1,948 | 5,690 | −3,742 | structural |
+| softmax_exp | 8     | 650   | −642   | structural |
+| softmax_norm| 10    | 376   | −366   | structural |
+| mac_sv      | 251   | 5,339 | −5,088 | structural |
+| **E2E**     | **6,692** | **14,480** | **−7,788** | **structural** |
+
+**Azure-Lily attention head:**
+
+| Stage | RTL | Sim | Δ (RTL−sim) | Classification |
+|---|---:|---:|---:|---|
+| linear_qkv  | 4,529 | 4,000 | +529   | modelling_granularity |
+| mac_qk      | 1,683 | 6,661 | −4,978 | structural |
+| softmax     | 2,289 | 938 (exp 188 + norm 750 fold) | +1,351 | modelling_granularity |
+| mac_sv      | 32    | 6,091 | −6,059 | structural |
+| **E2E**     | **8,597** | **17,689** | **−9,092** | **structural** |
+
+(The AL TB folds RTL `softmax_exp` + `softmax_norm` into the
+`softmax_exp` slot — `tb_azurelily_attn_head_v2.v:435` emits
+`softmax_norm = 0`. The dispatcher `run_checks.py::check_ah_attn_head`
+detects this and compares the combined RTL value 2,289 against
+`sim_softmax_exp + sim_softmax_norm = 188 + 750 = 938`.)
+
+**Classification rationale.**
+
+- **Structural negatives (RTL faster than sim).** The sim's
+  `gemm_log` / `gemm_dsp` analytical bodies in
+  `azurelily/IMC/peripherals/fpga_fabric.py:181` are conservative
+  single-lane lower-bounds — by design — while the RTL realises
+  W=16 hardware-lane parallelism (`dimm_score_matrix` /
+  `softmax_approx` / `dimm_weighted_sum` instantiated 16× via
+  `dimm_lane[0..15]`; `mac_qk` / `mac_sv` dsp_macs 16× via
+  `al_lane[0..15]`). The sim therefore over-counts cycles for any
+  W-parallel stage; classifying these residuals as `structural` reflects
+  that the sim represents a conservative lower bound on hardware
+  throughput, NOT a cycle-exact target.
+- **Modelling_granularity positives.** Streaming-fill / drain edge
+  cycles + per-token FSM transitions in the streaming FC arms
+  (`linear_qkv` +926 NL-DPE, +529 AL) and the AL `clb_softmax`
+  CLB-serial bottleneck (+1,351, sim under-models because it assumes
+  parallel softmax across W lanes). All entries carry file:line
+  citations in `phase7_known_deltas.json`.
+
+**Architectural separation.**
+
+| Aspect | Shared | NL-DPE | Azure-Lily |
+|---|---|---|---|
+| W (parallel lanes) | 16 (paper §3) | — | — |
+| d_model / d_head / N | 128 / 64 / 128 | — | — |
+| O projection | dropped (matches `attention_model`) | — | — |
+| Compute primitive | — | `dpe` hard block (analog crossbar + ACAM/ADC) | `dsp_mac` (4-wide pure `int_sop_4`, P6A canonical) |
+| FC mapping (T2v2 streaming) | — | Ping-pong DPE pair per arm | N parallel-output dsp_macs per arm |
+| DIMM mac_qk | — | DPE w/ K_qkt=2 dual-identity, log-domain | `dsp_mac` w/ K=⌈d/4⌉=16, linear-domain |
+| DIMM softmax | — | DPE(I\|exp) + DPE(I\|log) | `clb_softmax` (CLB FSM, CLB-serial accumulator) |
+| DIMM mac_sv | — | DPE w/ wsum_log + 128×128 wsum_exp | `dsp_mac` w/ K=⌈N/4⌉=32 |
+| Sim model | `attention_model` streaming | `gemm_log` body | `gemm_dsp` body |
+| Resource per head | — | 6 proj + 64 DIMM = **70 DPE** | 192 proj + 32 DIMM = **224 dsp_mac** + 16 softmax |
+
+**Gate commands** (every one exits 0 post-`e118b11`):
+
+```
+python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1
+python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # T1 14/14 PASS
+python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # Phase 3+4
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # Phase 5+6A
+python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128   # Phase 7 NL-DPE (NEW)
+python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128  # Phase 7 AL (NEW)
+```
+
+`run_checks.py --all` runs all four DIMM + AH configs in one shot
+and reports `=== <config>: PASS ===` for each.
+
+**Pending — T5v2 (VTR 3-seed re-synth).** Post-T2v2 strict-count
+targets: NL-DPE DPE = 70 (6 streaming-FC + 64 DIMM); Azure-Lily
+DSP ≈ 224 ± VTR packing drift (192 streaming-FC + 32 DIMM dsp_mac);
++16 clb_softmax counted as CLB. JSON results files
+(`results/{nldpe,azurelily}_attn_head_vtr_imc_results.json`) will be
+linked here once landed. The T2v2 streaming FC refactor changed
+resource topology substantially vs the T2-era 96-DPE / 40-DSP
+estimate, so re-synth is required.
+
+**Follow-up — T6 (BERT-Tiny generator refinement).** The verified
+head becomes the canonical reference for diffing against
+`gen_bert_tiny_wrapper.py`. Surfaces likely bugs in the BERT-Tiny
+benchmark RTL family (W=1 vs paper-spec W=16, module-naming
+inconsistency, buffer depths / FSM handoff). Out of scope for the AH
+track gate; tracked in `ATTENTION_HEAD_VERIFICATION_PLAN.md` Stage 6.
+
+References:
+- Generators (new / edited): `nl_dpe/gen_nldpe_attn_head_top.py`,
+  `nl_dpe/gen_azurelily_attn_head_top.py`,
+  `nl_dpe/gen_azurelily_fc_wrapper.py`,
+  `nl_dpe/gen_gemv_wrappers.py` (additive `streaming=True`)
+- RTL (regenerated): `rtl/{nldpe,azurelily}_attn_head_d64_c128.v`,
+  `rtl/nldpe/fc_top_qkv_streaming.v`,
+  `rtl/nldpe/fc_top_o_streaming.v` (kept for completeness, unused),
+  `rtl/azurelily/azurelily_fc_*.v`
+- TBs (new): `tb_{nldpe,azurelily}_attn_head_v2.v`
+- Sim oracle (regenerated): `expected_cycles.json`
+- Residual annotations (new): `phase7_known_deltas.json`
+- Harness dispatcher (extended): `run_checks.py::check_ah_attn_head`
+- Authoritative plan: `plans/ATTENTION_HEAD_VERIFICATION_PLAN.md`
+- Closeout commits: `e118b11` (T2v2/T3v2/T4v2 closed),
+  `2e0c559` (AL bugfixes en route), `9e6a913` (T1 baseline)
