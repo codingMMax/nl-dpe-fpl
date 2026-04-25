@@ -199,6 +199,207 @@ module tb_nldpe_attn_head_v2;
     wire any_fc_valid =
           dut.q_fc_valid_n | dut.k_fc_valid_n | dut.v_fc_valid_n;
 
+    // ─── AH gate Stage 1: Fmax-independent counter probes ───────────────
+    // Each counter increments on the rising edge of a "DPE fire complete"
+    // event for one architectural primitive. Counts are summed across
+    // ALL parallel hardware (FC ping-pong DPEs, 16 DIMM lanes) — so the
+    // total is the global # of analog primitive activations during the
+    // run, the same quantity sim's `gemm_log`/`dimm_nonlinear` aggregate.
+    //
+    // Convention: count rising edges of `dpe_done`. dpe_done pulses high
+    // for the DPE's S_OUTPUT phase and clears in S_DRAIN, so a 0→1
+    // transition is exactly 1 fire. (See dpe_stub.v lines 213, 227.)
+    //
+    // FC arms: 6 DPEs total (3 arms × 2 ping-pong). Both DPE_A and DPE_B
+    // each fire once per inference; we count each arm's pair, then sum.
+    // DIMM lanes: 4 DPEs per lane × 16 lanes = 64. Per stage:
+    //   mac_qk        : dimm_lane[i].score_inst.dimm_exp.dpe_done
+    //   softmax_exp   : dimm_lane[i].softmax_inst.sm_exp.dpe_done
+    //   softmax_norm  : dimm_lane[i].softmax_inst sm_state==SM_NORMALIZE
+    //                   (no DPE in normalize; count entries to SM_NORM)
+    //   mac_sv (log)  : dimm_lane[i].wsum_inst.ws_log.dpe_done
+    //   mac_sv (exp)  : dimm_lane[i].wsum_inst.ws_exp.dpe_done
+
+    // FC fire counters (per-arm pair, then sum into 3-arm total).
+    // NB: NBA semantics — multiple `<=` to the same target in one cycle keep
+    // only the LAST one applied. To count ALL rising edges concurrently,
+    // accumulate into a temporary integer (blocking) and assign at the end.
+    integer linear_qkv_dpe_fires = 0;
+    reg fc_q_a_prev, fc_q_b_prev, fc_k_a_prev, fc_k_b_prev, fc_v_a_prev, fc_v_b_prev;
+    integer _lq_inc;
+    always @(posedge clk) begin
+        if (rst) begin
+            fc_q_a_prev <= 0; fc_q_b_prev <= 0;
+            fc_k_a_prev <= 0; fc_k_b_prev <= 0;
+            fc_v_a_prev <= 0; fc_v_b_prev <= 0;
+            linear_qkv_dpe_fires <= 0;
+        end else begin
+            // Snapshot previous-cycle values at start (NBA on prev regs).
+            _lq_inc = 0;
+            if (!fc_q_a_prev && dut.fc_q_inst.dpe_a_inst.dpe_done) _lq_inc = _lq_inc + 1;
+            if (!fc_q_b_prev && dut.fc_q_inst.dpe_b_inst.dpe_done) _lq_inc = _lq_inc + 1;
+            if (!fc_k_a_prev && dut.fc_k_inst.dpe_a_inst.dpe_done) _lq_inc = _lq_inc + 1;
+            if (!fc_k_b_prev && dut.fc_k_inst.dpe_b_inst.dpe_done) _lq_inc = _lq_inc + 1;
+            if (!fc_v_a_prev && dut.fc_v_inst.dpe_a_inst.dpe_done) _lq_inc = _lq_inc + 1;
+            if (!fc_v_b_prev && dut.fc_v_inst.dpe_b_inst.dpe_done) _lq_inc = _lq_inc + 1;
+            linear_qkv_dpe_fires <= linear_qkv_dpe_fires + _lq_inc;
+            fc_q_a_prev <= dut.fc_q_inst.dpe_a_inst.dpe_done;
+            fc_q_b_prev <= dut.fc_q_inst.dpe_b_inst.dpe_done;
+            fc_k_a_prev <= dut.fc_k_inst.dpe_a_inst.dpe_done;
+            fc_k_b_prev <= dut.fc_k_inst.dpe_b_inst.dpe_done;
+            fc_v_a_prev <= dut.fc_v_inst.dpe_a_inst.dpe_done;
+            fc_v_b_prev <= dut.fc_v_inst.dpe_b_inst.dpe_done;
+        end
+    end
+
+    // DIMM-stage fire counters (16 lanes summed). To avoid 16-way generate
+    // probes for each, we sample dpe_done across all lanes per cycle and
+    // sum the rising-edge contributions. Iverilog macros expanded to
+    // explicit indexing (no generate scope inside the TB).
+    integer mac_qk_dpe_fires       = 0;
+    integer softmax_exp_dpe_fires  = 0;
+    integer softmax_norm_fires     = 0;
+    integer mac_sv_log_dpe_fires   = 0;
+    integer mac_sv_exp_dpe_fires   = 0;
+    reg [15:0] mac_qk_d_prev, mac_qk_d_curr;
+    reg [15:0] sm_exp_d_prev, sm_exp_d_curr;
+    reg [15:0] ws_log_d_prev, ws_log_d_curr;
+    reg [15:0] ws_exp_d_prev, ws_exp_d_curr;
+    reg [15:0] sm_nrm_prev,   sm_nrm_curr;
+
+    // Per-cycle aggregate of all 16 lanes' dpe_done bits, plus norm-state.
+    // Use indexed-name access into the dimm_lane generate.
+    always @(*) begin
+        mac_qk_d_curr[ 0] = dut.dimm_inst.dimm_lane[ 0].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 1] = dut.dimm_inst.dimm_lane[ 1].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 2] = dut.dimm_inst.dimm_lane[ 2].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 3] = dut.dimm_inst.dimm_lane[ 3].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 4] = dut.dimm_inst.dimm_lane[ 4].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 5] = dut.dimm_inst.dimm_lane[ 5].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 6] = dut.dimm_inst.dimm_lane[ 6].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 7] = dut.dimm_inst.dimm_lane[ 7].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 8] = dut.dimm_inst.dimm_lane[ 8].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[ 9] = dut.dimm_inst.dimm_lane[ 9].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[10] = dut.dimm_inst.dimm_lane[10].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[11] = dut.dimm_inst.dimm_lane[11].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[12] = dut.dimm_inst.dimm_lane[12].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[13] = dut.dimm_inst.dimm_lane[13].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[14] = dut.dimm_inst.dimm_lane[14].score_inst.dimm_exp.dpe_done;
+        mac_qk_d_curr[15] = dut.dimm_inst.dimm_lane[15].score_inst.dimm_exp.dpe_done;
+
+        sm_exp_d_curr[ 0] = dut.dimm_inst.dimm_lane[ 0].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 1] = dut.dimm_inst.dimm_lane[ 1].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 2] = dut.dimm_inst.dimm_lane[ 2].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 3] = dut.dimm_inst.dimm_lane[ 3].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 4] = dut.dimm_inst.dimm_lane[ 4].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 5] = dut.dimm_inst.dimm_lane[ 5].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 6] = dut.dimm_inst.dimm_lane[ 6].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 7] = dut.dimm_inst.dimm_lane[ 7].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 8] = dut.dimm_inst.dimm_lane[ 8].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[ 9] = dut.dimm_inst.dimm_lane[ 9].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[10] = dut.dimm_inst.dimm_lane[10].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[11] = dut.dimm_inst.dimm_lane[11].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[12] = dut.dimm_inst.dimm_lane[12].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[13] = dut.dimm_inst.dimm_lane[13].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[14] = dut.dimm_inst.dimm_lane[14].softmax_inst.sm_exp.dpe_done;
+        sm_exp_d_curr[15] = dut.dimm_inst.dimm_lane[15].softmax_inst.sm_exp.dpe_done;
+
+        // DEBUG: print sm_exp dpe_done at each cycle in lane 0 to confirm probe works.
+        // (Triggered by always @(*) so prints every value change.)
+        // Removed before final commit if not needed.
+        ws_log_d_curr[ 0] = dut.dimm_inst.dimm_lane[ 0].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 1] = dut.dimm_inst.dimm_lane[ 1].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 2] = dut.dimm_inst.dimm_lane[ 2].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 3] = dut.dimm_inst.dimm_lane[ 3].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 4] = dut.dimm_inst.dimm_lane[ 4].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 5] = dut.dimm_inst.dimm_lane[ 5].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 6] = dut.dimm_inst.dimm_lane[ 6].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 7] = dut.dimm_inst.dimm_lane[ 7].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 8] = dut.dimm_inst.dimm_lane[ 8].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[ 9] = dut.dimm_inst.dimm_lane[ 9].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[10] = dut.dimm_inst.dimm_lane[10].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[11] = dut.dimm_inst.dimm_lane[11].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[12] = dut.dimm_inst.dimm_lane[12].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[13] = dut.dimm_inst.dimm_lane[13].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[14] = dut.dimm_inst.dimm_lane[14].wsum_inst.ws_log.dpe_done;
+        ws_log_d_curr[15] = dut.dimm_inst.dimm_lane[15].wsum_inst.ws_log.dpe_done;
+
+        ws_exp_d_curr[ 0] = dut.dimm_inst.dimm_lane[ 0].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 1] = dut.dimm_inst.dimm_lane[ 1].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 2] = dut.dimm_inst.dimm_lane[ 2].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 3] = dut.dimm_inst.dimm_lane[ 3].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 4] = dut.dimm_inst.dimm_lane[ 4].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 5] = dut.dimm_inst.dimm_lane[ 5].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 6] = dut.dimm_inst.dimm_lane[ 6].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 7] = dut.dimm_inst.dimm_lane[ 7].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 8] = dut.dimm_inst.dimm_lane[ 8].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[ 9] = dut.dimm_inst.dimm_lane[ 9].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[10] = dut.dimm_inst.dimm_lane[10].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[11] = dut.dimm_inst.dimm_lane[11].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[12] = dut.dimm_inst.dimm_lane[12].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[13] = dut.dimm_inst.dimm_lane[13].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[14] = dut.dimm_inst.dimm_lane[14].wsum_inst.ws_exp.dpe_done;
+        ws_exp_d_curr[15] = dut.dimm_inst.dimm_lane[15].wsum_inst.ws_exp.dpe_done;
+
+        sm_nrm_curr[ 0] = (dut.dimm_inst.dimm_lane[ 0].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 1] = (dut.dimm_inst.dimm_lane[ 1].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 2] = (dut.dimm_inst.dimm_lane[ 2].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 3] = (dut.dimm_inst.dimm_lane[ 3].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 4] = (dut.dimm_inst.dimm_lane[ 4].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 5] = (dut.dimm_inst.dimm_lane[ 5].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 6] = (dut.dimm_inst.dimm_lane[ 6].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 7] = (dut.dimm_inst.dimm_lane[ 7].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 8] = (dut.dimm_inst.dimm_lane[ 8].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[ 9] = (dut.dimm_inst.dimm_lane[ 9].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[10] = (dut.dimm_inst.dimm_lane[10].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[11] = (dut.dimm_inst.dimm_lane[11].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[12] = (dut.dimm_inst.dimm_lane[12].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[13] = (dut.dimm_inst.dimm_lane[13].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[14] = (dut.dimm_inst.dimm_lane[14].softmax_inst.sm_state == 3'd3);
+        sm_nrm_curr[15] = (dut.dimm_inst.dimm_lane[15].softmax_inst.sm_state == 3'd3);
+    end
+
+    integer ki;
+    integer _mq_inc, _sx_inc, _wl_inc, _we_inc, _sn_inc;
+    always @(posedge clk) begin
+        if (rst) begin
+            mac_qk_d_prev      <= 0;
+            sm_exp_d_prev      <= 0;
+            ws_log_d_prev      <= 0;
+            ws_exp_d_prev      <= 0;
+            sm_nrm_prev        <= 0;
+            mac_qk_dpe_fires       <= 0;
+            softmax_exp_dpe_fires  <= 0;
+            softmax_norm_fires     <= 0;
+            mac_sv_log_dpe_fires   <= 0;
+            mac_sv_exp_dpe_fires   <= 0;
+        end else begin
+            // Aggregate into integer temporaries (blocking) so multiple
+            // lane rising edges in the SAME cycle all count. NBA semantics
+            // would otherwise keep only the last `<=` from a chain of
+            // `var <= var + 1` statements.
+            _mq_inc = 0; _sx_inc = 0; _wl_inc = 0; _we_inc = 0; _sn_inc = 0;
+            for (ki = 0; ki < 16; ki = ki + 1) begin
+                if (!mac_qk_d_prev[ki] && mac_qk_d_curr[ki]) _mq_inc = _mq_inc + 1;
+                if (!sm_exp_d_prev[ki] && sm_exp_d_curr[ki]) _sx_inc = _sx_inc + 1;
+                if (!ws_log_d_prev[ki] && ws_log_d_curr[ki]) _wl_inc = _wl_inc + 1;
+                if (!ws_exp_d_prev[ki] && ws_exp_d_curr[ki]) _we_inc = _we_inc + 1;
+                if (!sm_nrm_prev[ki]   && sm_nrm_curr[ki]  ) _sn_inc = _sn_inc + 1;
+            end
+            mac_qk_dpe_fires      <= mac_qk_dpe_fires      + _mq_inc;
+            softmax_exp_dpe_fires <= softmax_exp_dpe_fires + _sx_inc;
+            mac_sv_log_dpe_fires  <= mac_sv_log_dpe_fires  + _wl_inc;
+            mac_sv_exp_dpe_fires  <= mac_sv_exp_dpe_fires  + _we_inc;
+            softmax_norm_fires    <= softmax_norm_fires    + _sn_inc;
+            mac_qk_d_prev <= mac_qk_d_curr;
+            sm_exp_d_prev <= sm_exp_d_curr;
+            ws_log_d_prev <= ws_log_d_curr;
+            ws_exp_d_prev <= ws_exp_d_curr;
+            sm_nrm_prev   <= sm_nrm_curr;
+        end
+    end
+
+
     always @(posedge clk) begin
         if (!rst) begin
             // Legacy lane-0 first-out timestamps (kept for diagnostic dump).
@@ -487,6 +688,38 @@ module tb_nldpe_attn_head_v2;
                      linear_qkv, mac_qk, softmax_exp, softmax_norm, mac_sv, e2e);
             $display("AH_NLDPE_STAGES_TOTAL linear_qkv=%0d mac_qk=%0d softmax_exp=%0d softmax_norm=%0d mac_sv=%0d e2e=%0d",
                      linear_qkv_t, mac_qk_t, softmax_exp_t, softmax_norm_t, mac_sv_t, e2e_t);
+
+            // ── AH gate Stage 1: Fmax-independent counter emission ──
+            // Format: COUNTER <stage> <key> <value>
+            // run_checks.py regex-parses these and compares against
+            // expected_counters.json. mac_sv combines ws_log + ws_exp DPE
+            // fires (= total weighted-sum DPE activations).
+            $display("");
+            $display("=== AH-gate counters (TB-side architectural invariants) ===");
+            $display("COUNTER linear_qkv dpe_fire_count %0d", linear_qkv_dpe_fires);
+            $display("COUNTER linear_qkv pass_count %0d", linear_qkv_dpe_fires);
+            $display("COUNTER linear_qkv row_count %0d", N_SEQ);
+            $display("COUNTER linear_qkv lane_count 6");
+            $display("COUNTER mac_qk dpe_fire_count %0d", mac_qk_dpe_fires);
+            $display("COUNTER mac_qk pass_count %0d", mac_qk_dpe_fires);
+            $display("COUNTER mac_qk row_count 1");
+            $display("COUNTER mac_qk lane_count %0d", W_LANES);
+            $display("COUNTER softmax_exp dpe_fire_count %0d", softmax_exp_dpe_fires);
+            $display("COUNTER softmax_exp pass_count %0d", softmax_exp_dpe_fires);
+            $display("COUNTER softmax_exp row_count 1");
+            $display("COUNTER softmax_exp lane_count %0d", W_LANES);
+            $display("COUNTER softmax_exp softmax_exp_fires %0d", softmax_exp_dpe_fires);
+            $display("COUNTER softmax_norm dpe_fire_count %0d", softmax_norm_fires);
+            $display("COUNTER softmax_norm pass_count %0d", softmax_norm_fires);
+            $display("COUNTER softmax_norm row_count 1");
+            $display("COUNTER softmax_norm lane_count %0d", W_LANES);
+            $display("COUNTER softmax_norm softmax_norm_fires %0d", softmax_norm_fires);
+            $display("COUNTER mac_sv dpe_fire_count %0d", mac_sv_log_dpe_fires + mac_sv_exp_dpe_fires);
+            $display("COUNTER mac_sv pass_count %0d", mac_sv_log_dpe_fires + mac_sv_exp_dpe_fires);
+            $display("COUNTER mac_sv row_count 1");
+            $display("COUNTER mac_sv lane_count %0d", W_LANES);
+            $display("COUNTER mac_sv ws_log_fires %0d", mac_sv_log_dpe_fires);
+            $display("COUNTER mac_sv ws_exp_fires %0d", mac_sv_exp_dpe_fires);
         end
     endtask
 

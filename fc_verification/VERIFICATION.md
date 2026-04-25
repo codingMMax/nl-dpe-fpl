@@ -1183,3 +1183,130 @@ References:
 - Authoritative plan: `plans/ATTENTION_HEAD_VERIFICATION_PLAN.md`
 - Closeout commits: `e118b11` (T2v2/T3v2/T4v2 closed),
   `2e0c559` (AL bugfixes en route), `9e6a913` (T1 baseline)
+
+### Phase 7 Stage 1 — Counter-based gate (Fmax-independent, 2026-04-25)
+
+**Status: INFRASTRUCTURE LANDED, GATE FAILING — surfacing real bugs.**
+
+The cycle-level Phase 7 gate compared RTL `AH_*_STAGES_TOTAL` cycles to
+sim cycles via `cycles = ns × Fmax_MHz / 1000`. Fmax was a placeholder
+(102.85 / 87.9 MHz from prior DIMM-top runs), not real placed-and-routed
+Fmax of the AH RTL. So every cycle-level residual in
+`phase7_known_deltas.json` was a **shadow** of the placeholder Fmax.
+
+Stage 1 of the gate refactor replaces cycles with **architectural
+invariants**: integer event counts that describe the same hardware
+without comparing cycles or ns.
+
+**Schema (canonical):**
+
+| Counter | Definition | NL-DPE source | Azure-Lily source |
+|---------|-----------|---------------|-------------------|
+| `dpe_fire_count` | Total DPE/DSP primitive activations summed across all parallel lanes | `dpe.dpe_done` rising edges (FC ping-pong DPEs + 16×4 DIMM DPEs) | `dsp_mac.valid_n` rising edges (FC parallel-output dsp_macs + 16-lane DIMM dsp_macs) |
+| `pass_count` | Alias of dpe_fire_count for AH gate | same | same |
+| `row_count` | Output rows produced by the stage | derived from RTL FSM (single-row DIMM = 1) | same |
+| `lane_count` | Parallel hardware lanes engaged | W=16 (DIMM), 6 (FC ping-pong) | W=16 (DIMM), 192 (FC parallel-output) |
+| `softmax_exp_fires` | exp() invocations | sm_exp.dpe_done rising edges per lane | clb_softmax S_LOAD valid pulses per lane |
+| `softmax_norm_fires` | norm-stage invocations | softmax_inst SM_NORMALIZE entry events | clb_softmax.valid_n rising edges per lane |
+
+**Sim instrumentation** (azurelily/IMC/, submodule):
+- `peripherals/fpga_fabric.py`: `gemm_log` and `gemm_dsp` populate
+  `self.last_gemm_counters` after each call.
+- `imc_core/imc_core.py`: `run_gemm` and `dimm_nonlinear` populate
+  `self.last_gemm_counters` / `self.last_dimm_nl_counters`.
+- `scheduler_stats/scheduler.py`: `_run_linear`, `_run_dimm`,
+  `_run_softmax_exp`, `_run_softmax_norm` aggregate per-layer counters
+  into `self.layer_counters`.
+- `test.py`: emits `COUNTER <stage> <key> <value>` block at end-of-sim.
+
+**TB instrumentation** (`tb_{nldpe,azurelily}_attn_head_v2.v`):
+- 16-way OR-reduce probes for each DIMM lane stage; rising-edge
+  counters aggregated via integer temporaries (avoids NBA-with-multiple-
+  same-target issue).
+- FC arms counted via `dpe_done` rising edges (NL-DPE) or
+  `q_fc_valid_n / k_fc_valid_n / v_fc_valid_n` rising edges × 64
+  parallel dsp_macs (AL).
+- Emits `COUNTER <stage> <key> <value>` block alongside legacy
+  `AH_*_STAGES_TOTAL` cycle line; cycle line is now diagnostic-only.
+
+**New gate dispatch** (`run_checks.py`):
+- `--gate counters` (default): compares per-stage counter values
+  against `expected_counters.json`; gates exit code on counter
+  equality (±1 edge slack, with documented residuals in
+  `known_count_deltas.json` accepted at exact `delta_count`).
+- `--gate cycles`: legacy advisory mode (preserved for diagnostics).
+- AH configs always run BOTH the counter gate (canonical) and the
+  cycle gate (advisory, marked `cycles_advisory` and forced PASS).
+
+**New JSON files:**
+- `expected_counters.json` — sim-derived per-stage counter values for
+  both AH configs.
+- `known_count_deltas.json` — annotated counter deltas with
+  classification (`structural_rtl_bug`, `structural_sim_modeling`,
+  `modelling_granularity`).
+
+**Updated JSON files (advisory marking only — no value changes):**
+- `expected_cycles.json` — `note` field marks AH configs as advisory.
+- `phase7_known_deltas.json` — `_description` marks file as advisory.
+
+**Findings — current state of the gate (2026-04-25):**
+
+The counter gate FAILS for both AH configs, surfacing three independent
+architectural disagreements that the cycle gate masked:
+
+1. **RTL bug — single-row DIMM fire.** The head's `S_FIRE_DIMM` only
+   fires the DIMM once for `1 Q × N K × N V` (q_sram DEPTH=14 = 1 Q
+   row buffered). The full attention head should compute `N × N` =
+   16,384 score elements and 64 × 128 = 8,192 weighted-sum elements.
+   Current RTL produces 1 attention row only.
+
+   Counter evidence:
+   - NL-DPE: `mac_qk dpe_fire_count` RTL=64 sim=4096 Δ=-4032
+     (= 1 row × 4 fires/lane × 16 lanes for RTL; 16384 elements / K_id=4 for sim)
+   - NL-DPE: `mac_sv dpe_fire_count` RTL=64 sim=4096 Δ=-4032 (same)
+   - AL: `mac_qk dpe_fire_count` RTL=2048 sim=16384 Δ=-14336
+   - AL: `mac_sv dpe_fire_count` RTL=48 sim=8192 Δ=-8144
+   - softmax_norm Δ=-112 (sim 128 rows × 1 = 128; RTL 1 row × 16 lanes = 16)
+
+2. **NL-DPE RTL bug — sm_exp + ws_log DPEs never fire in iverilog.**
+   These DPEs are instantiated without `#()` parameters (per existing
+   comment: "no #() params (arch XML model is parameterless)"), so
+   they default to `KERNEL_WIDTH=128, NUM_COLS=128, LOAD_STROBES=26`.
+   The softmax_approx (`SM_EXP` 8 cycles) and dimm_weighted_sum
+   (`WS_LOG_FEED` ~8 cycles) FSMs only feed 8 strobes per attn row,
+   never reaching 26 → `reg_full` never rises → DPE never fires.
+   - NL-DPE `softmax_exp dpe_fire_count` RTL=0 sim=128 Δ=-128
+   - NL-DPE `mac_sv ws_log fires` RTL=0 expected ≥128
+
+3. **AL sim model — n_parallel_outputs mismatch.** Sim's `_run_dimm`
+   uses `n_parallel_outputs = N` (=128 for mac_qk) but RTL has only
+   `W=16` lanes. Compounds with issue (1) for AL mac_qk/mac_sv.
+
+Per CLAUDE.md `## Active TODO Tracks` AH section, the user has been
+notified to review these findings before patching. The counter-gate
+INFRASTRUCTURE is committed but the gate exits non-zero pending bug
+fix decisions:
+
+```
+python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128       # FAILS — surfaces bugs (1) + (2)
+python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128   # FAILS — surfaces bugs (1) + (3)
+```
+
+**Sanity checks (still PASS — no regressions in pre-AH gates):**
+```
+python3 azurelily/IMC/test_gemm_log_regime_b.py                          # PASS
+python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # 14/14 PASS
+python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # PASS
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # PASS
+```
+
+**Next steps (Stage 2 / Stage 3, not in scope for Stage 1):**
+- Stage 2: Fix the RTL bugs (single-row DIMM fire, defparam mismatch)
+  — possibly via gen_*_attn_head_top.py regen or by parameterizing
+  dpe_stub.v to carry the intended KW/NC values.
+- Stage 3: Decide AL sim modeling: align `n_parallel_outputs` with
+  actual W=16 lanes, or document the modeling choice and accept the
+  delta in `known_count_deltas.json` as `structural_sim_modeling`.
+
+Once bugs (1)+(2)+(3) are addressed, the counter gate should pass with
+empty (or only-edge-slack) entries in `known_count_deltas.json`.

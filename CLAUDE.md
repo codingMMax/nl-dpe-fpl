@@ -93,9 +93,55 @@ the live tracks below.
   (opened 2026-04-24): **T2v2/T3v2/T4v2 closed (commit `e118b11`,
   2026-04-24).** Streaming FC refactor + sim oracle + arch-tagged
   `phase7_known_deltas.json` + `run_checks.py` AH dispatcher all
-  landed; both `run_checks.py --config *_attn_head_d64_c128` exit 0.
-  T5v2 (VTR 3-seed) pending user sign-off. T6 (BERT-Tiny generator
-  refinement) remains future follow-up.
+  landed.
+
+  **Stage 1 of counter-based gate refactor LANDED 2026-04-25:**
+  Replaces Fmax-dependent cycle gate with Fmax-independent
+  **architectural-invariants gate** (DPE/DSP fire counts, output rows,
+  parallel lanes). Fmax was a placeholder (no VTR data yet on AH
+  RTL); cycle deltas were shadows of that placeholder. New canonical
+  gate uses integer counters that describe the SAME hardware on both
+  sides without comparing cycles or ns. Cycle gate retained as
+  advisory only.
+
+  **Counter gate STATUS (current, 2026-04-25): FAILS for both AH
+  configs — surfacing 3 architectural bugs that the cycle gate
+  masked.** Per task instructions, infrastructure committed but
+  bugs left UNFIXED for user review.
+
+  **Surfaced bugs (require Stage 2 fix before counter gate passes):**
+  1. RTL — single-row DIMM fire (head only fires DIMM once for 1 Q × N
+     K × N V, instead of N times for N attention rows).
+     Evidence: NL-DPE `mac_qk dpe_fire_count` RTL=64 vs sim=4096
+     (Δ=-4032); AL `mac_qk` RTL=2048 vs sim=16384 (Δ=-14336).
+  2. NL-DPE RTL — sm_exp and ws_log DPEs never fire in iverilog
+     because they're instantiated without `#(KERNEL_WIDTH=1)` params
+     (default KW=128 + LOAD_STROBES=26 vs FSM-fed 8 strobes).
+     Evidence: NL-DPE `softmax_exp dpe_fire_count` RTL=0 vs sim=128.
+  3. AL sim — `n_parallel_outputs=N` (=128) but RTL has W=16 lanes.
+
+  **Stage 5b — counter-gate refactor stages (now in plan):**
+  - Stage 1 ✓ landed 2026-04-25 (this commit). Infrastructure +
+    surfaced bugs in `known_count_deltas.json`.
+  - Stage 2 — fix the 3 bugs above. Awaiting user sign-off.
+  - Stage 3 — VTR 3-seed re-synth (was T5v2). Real Fmax replaces
+    placeholder; cycle gate re-enables alongside counter gate.
+
+  **Updated gate command list (post-Stage 1):**
+  ```
+  python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1 — PASS
+  python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # T1 14/14 — PASS
+  python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # Phase 3+4 — PASS
+  python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # Phase 5+6A — PASS
+  python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128       # Phase 7 NL-DPE — FAILS (Stage 1 surfaces bugs)
+  python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128   # Phase 7 AL — FAILS (Stage 1 surfaces bugs)
+  ```
+  All 4 pre-AH gates remain green. The 2 AH gates fail by design,
+  surfacing the bugs surfaced above. Add `--gate cycles` for legacy
+  cycle-level diagnostic (advisory).
+
+  T5v2 (VTR 3-seed) renamed to Stage 3, dependent on Stage 2 closure.
+  T6 (BERT-Tiny generator refinement) remains future follow-up.
 
   **Scope anchor (frozen):** single config point N=128, d=64, C=128,
   W=16, W_DPE=40, K_id=2 — inherits verified DIMM-top surface.

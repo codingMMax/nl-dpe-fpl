@@ -262,6 +262,160 @@ module tb_azurelily_attn_head_v2;
     wire any_fc_valid =
           dut.q_fc_valid_n | dut.k_fc_valid_n | dut.v_fc_valid_n;
 
+    // ─── AH gate Stage 1: Fmax-independent counter probes ───────────────
+    // Per-stage primitive activation counters, summed across all parallel
+    // hardware. AL uses dsp_mac (one valid_n pulse per output) for
+    // mac_qk/mac_sv, and clb_softmax (S_LOAD valid pulses for exp,
+    // S_NORM valid_n pulses for norm). FC arms have 64 dsp_macs each
+    // (parallel-output), so we count valid_n pulses on Q/K/V FCs (= 1 row
+    // produced per pulse, but we count GLOBAL fires by summing dsp_macs
+    // active per-cycle pulse across all 64+64+64 dsp_macs in the FC arms).
+    // For FC: we use the simpler "FC valid_n pulses per arm × 64 dsp_macs
+    // per arm" — each FC valid_n pulse carries one row's worth of outputs,
+    // produced by 64 parallel dsp_macs firing simultaneously. So
+    // dsp_mac fires per FC arm = (# FC valid_n pulses) × 64.
+    // Total across 3 arms = 3 × pulses × 64.
+
+    // Edge counter: count rising edges on dsp_mac.valid_n across 16 lanes.
+    // For mac_qk: dut.dimm_inst.al_lane[i].mac_qk_inst.valid_n
+    // For mac_sv: dut.dimm_inst.al_lane[i].mac_sv_inst.valid_n
+    // For softmax_exp: count rising edges of clb_softmax S_LOAD entry events
+    //                  per lane (= each lane's clb_softmax processes 1 attn row,
+    //                  the S_LOAD state runs N=128 cycles consuming scores).
+    //                  We count per-cycle "valid input strobes" instead of fires
+    //                  because clb_softmax doesn't have a discrete "fire" event
+    //                  for exp — it's an inline shift-LUT applied per S_LOAD cyc.
+    // For softmax_norm: count rising edges of clb_softmax.valid_n (= S_NORM
+    //                   completion).
+
+    integer fc_q_pulses = 0, fc_k_pulses = 0, fc_v_pulses = 0;
+    reg fc_q_prev = 0, fc_k_prev = 0, fc_v_prev = 0;
+    always @(posedge clk) begin
+        if (rst) begin
+            fc_q_pulses <= 0; fc_k_pulses <= 0; fc_v_pulses <= 0;
+            fc_q_prev <= 0; fc_k_prev <= 0; fc_v_prev <= 0;
+        end else begin
+            if (!fc_q_prev && dut.q_fc_valid_n) fc_q_pulses <= fc_q_pulses + 1;
+            if (!fc_k_prev && dut.k_fc_valid_n) fc_k_pulses <= fc_k_pulses + 1;
+            if (!fc_v_prev && dut.v_fc_valid_n) fc_v_pulses <= fc_v_pulses + 1;
+            fc_q_prev <= dut.q_fc_valid_n;
+            fc_k_prev <= dut.k_fc_valid_n;
+            fc_v_prev <= dut.v_fc_valid_n;
+        end
+    end
+
+    // mac_qk dsp_mac valid_n rising edges across 16 lanes (= total dsp_mac
+    // output events for mac_qk).
+    integer mac_qk_dsp_fires   = 0;
+    integer mac_sv_dsp_fires   = 0;
+    integer softmax_exp_inputs = 0;  // clb_softmax S_LOAD valid pulses (per row)
+    integer softmax_norm_outs  = 0;  // clb_softmax valid_n rising edges
+    reg [15:0] al_mq_prev, al_mq_curr;
+    reg [15:0] al_ms_prev, al_ms_curr;
+    reg [15:0] al_sx_prev, al_sx_curr;
+    reg [15:0] al_sn_prev, al_sn_curr;
+
+    always @(*) begin
+        al_mq_curr[ 0] = dut.dimm_inst.al_lane[ 0].mac_qk_inst.valid_n;
+        al_mq_curr[ 1] = dut.dimm_inst.al_lane[ 1].mac_qk_inst.valid_n;
+        al_mq_curr[ 2] = dut.dimm_inst.al_lane[ 2].mac_qk_inst.valid_n;
+        al_mq_curr[ 3] = dut.dimm_inst.al_lane[ 3].mac_qk_inst.valid_n;
+        al_mq_curr[ 4] = dut.dimm_inst.al_lane[ 4].mac_qk_inst.valid_n;
+        al_mq_curr[ 5] = dut.dimm_inst.al_lane[ 5].mac_qk_inst.valid_n;
+        al_mq_curr[ 6] = dut.dimm_inst.al_lane[ 6].mac_qk_inst.valid_n;
+        al_mq_curr[ 7] = dut.dimm_inst.al_lane[ 7].mac_qk_inst.valid_n;
+        al_mq_curr[ 8] = dut.dimm_inst.al_lane[ 8].mac_qk_inst.valid_n;
+        al_mq_curr[ 9] = dut.dimm_inst.al_lane[ 9].mac_qk_inst.valid_n;
+        al_mq_curr[10] = dut.dimm_inst.al_lane[10].mac_qk_inst.valid_n;
+        al_mq_curr[11] = dut.dimm_inst.al_lane[11].mac_qk_inst.valid_n;
+        al_mq_curr[12] = dut.dimm_inst.al_lane[12].mac_qk_inst.valid_n;
+        al_mq_curr[13] = dut.dimm_inst.al_lane[13].mac_qk_inst.valid_n;
+        al_mq_curr[14] = dut.dimm_inst.al_lane[14].mac_qk_inst.valid_n;
+        al_mq_curr[15] = dut.dimm_inst.al_lane[15].mac_qk_inst.valid_n;
+
+        al_ms_curr[ 0] = dut.dimm_inst.al_lane[ 0].mac_sv_inst.valid_n;
+        al_ms_curr[ 1] = dut.dimm_inst.al_lane[ 1].mac_sv_inst.valid_n;
+        al_ms_curr[ 2] = dut.dimm_inst.al_lane[ 2].mac_sv_inst.valid_n;
+        al_ms_curr[ 3] = dut.dimm_inst.al_lane[ 3].mac_sv_inst.valid_n;
+        al_ms_curr[ 4] = dut.dimm_inst.al_lane[ 4].mac_sv_inst.valid_n;
+        al_ms_curr[ 5] = dut.dimm_inst.al_lane[ 5].mac_sv_inst.valid_n;
+        al_ms_curr[ 6] = dut.dimm_inst.al_lane[ 6].mac_sv_inst.valid_n;
+        al_ms_curr[ 7] = dut.dimm_inst.al_lane[ 7].mac_sv_inst.valid_n;
+        al_ms_curr[ 8] = dut.dimm_inst.al_lane[ 8].mac_sv_inst.valid_n;
+        al_ms_curr[ 9] = dut.dimm_inst.al_lane[ 9].mac_sv_inst.valid_n;
+        al_ms_curr[10] = dut.dimm_inst.al_lane[10].mac_sv_inst.valid_n;
+        al_ms_curr[11] = dut.dimm_inst.al_lane[11].mac_sv_inst.valid_n;
+        al_ms_curr[12] = dut.dimm_inst.al_lane[12].mac_sv_inst.valid_n;
+        al_ms_curr[13] = dut.dimm_inst.al_lane[13].mac_sv_inst.valid_n;
+        al_ms_curr[14] = dut.dimm_inst.al_lane[14].mac_sv_inst.valid_n;
+        al_ms_curr[15] = dut.dimm_inst.al_lane[15].mac_sv_inst.valid_n;
+
+        // softmax exp/norm: clb_softmax has `valid` (input) and `valid_n` (output).
+        // For exp: 1 input pulse per S_LOAD step (valid signal active). For norm:
+        // valid_n = output S_NORM pulses.
+        al_sx_curr[ 0] = dut.dimm_inst.al_lane[ 0].softmax_inst.valid;
+        al_sx_curr[ 1] = dut.dimm_inst.al_lane[ 1].softmax_inst.valid;
+        al_sx_curr[ 2] = dut.dimm_inst.al_lane[ 2].softmax_inst.valid;
+        al_sx_curr[ 3] = dut.dimm_inst.al_lane[ 3].softmax_inst.valid;
+        al_sx_curr[ 4] = dut.dimm_inst.al_lane[ 4].softmax_inst.valid;
+        al_sx_curr[ 5] = dut.dimm_inst.al_lane[ 5].softmax_inst.valid;
+        al_sx_curr[ 6] = dut.dimm_inst.al_lane[ 6].softmax_inst.valid;
+        al_sx_curr[ 7] = dut.dimm_inst.al_lane[ 7].softmax_inst.valid;
+        al_sx_curr[ 8] = dut.dimm_inst.al_lane[ 8].softmax_inst.valid;
+        al_sx_curr[ 9] = dut.dimm_inst.al_lane[ 9].softmax_inst.valid;
+        al_sx_curr[10] = dut.dimm_inst.al_lane[10].softmax_inst.valid;
+        al_sx_curr[11] = dut.dimm_inst.al_lane[11].softmax_inst.valid;
+        al_sx_curr[12] = dut.dimm_inst.al_lane[12].softmax_inst.valid;
+        al_sx_curr[13] = dut.dimm_inst.al_lane[13].softmax_inst.valid;
+        al_sx_curr[14] = dut.dimm_inst.al_lane[14].softmax_inst.valid;
+        al_sx_curr[15] = dut.dimm_inst.al_lane[15].softmax_inst.valid;
+
+        al_sn_curr[ 0] = dut.dimm_inst.al_lane[ 0].softmax_inst.valid_n;
+        al_sn_curr[ 1] = dut.dimm_inst.al_lane[ 1].softmax_inst.valid_n;
+        al_sn_curr[ 2] = dut.dimm_inst.al_lane[ 2].softmax_inst.valid_n;
+        al_sn_curr[ 3] = dut.dimm_inst.al_lane[ 3].softmax_inst.valid_n;
+        al_sn_curr[ 4] = dut.dimm_inst.al_lane[ 4].softmax_inst.valid_n;
+        al_sn_curr[ 5] = dut.dimm_inst.al_lane[ 5].softmax_inst.valid_n;
+        al_sn_curr[ 6] = dut.dimm_inst.al_lane[ 6].softmax_inst.valid_n;
+        al_sn_curr[ 7] = dut.dimm_inst.al_lane[ 7].softmax_inst.valid_n;
+        al_sn_curr[ 8] = dut.dimm_inst.al_lane[ 8].softmax_inst.valid_n;
+        al_sn_curr[ 9] = dut.dimm_inst.al_lane[ 9].softmax_inst.valid_n;
+        al_sn_curr[10] = dut.dimm_inst.al_lane[10].softmax_inst.valid_n;
+        al_sn_curr[11] = dut.dimm_inst.al_lane[11].softmax_inst.valid_n;
+        al_sn_curr[12] = dut.dimm_inst.al_lane[12].softmax_inst.valid_n;
+        al_sn_curr[13] = dut.dimm_inst.al_lane[13].softmax_inst.valid_n;
+        al_sn_curr[14] = dut.dimm_inst.al_lane[14].softmax_inst.valid_n;
+        al_sn_curr[15] = dut.dimm_inst.al_lane[15].softmax_inst.valid_n;
+    end
+
+    integer ali, _almq_inc, _alms_inc, _alsx_inc, _alsn_inc;
+    always @(posedge clk) begin
+        if (rst) begin
+            al_mq_prev <= 0; al_ms_prev <= 0;
+            al_sx_prev <= 0; al_sn_prev <= 0;
+            mac_qk_dsp_fires   <= 0;
+            mac_sv_dsp_fires   <= 0;
+            softmax_exp_inputs <= 0;
+            softmax_norm_outs  <= 0;
+        end else begin
+            _almq_inc = 0; _alms_inc = 0; _alsx_inc = 0; _alsn_inc = 0;
+            for (ali = 0; ali < 16; ali = ali + 1) begin
+                if (!al_mq_prev[ali] && al_mq_curr[ali]) _almq_inc = _almq_inc + 1;
+                if (!al_ms_prev[ali] && al_ms_curr[ali]) _alms_inc = _alms_inc + 1;
+                if (!al_sx_prev[ali] && al_sx_curr[ali]) _alsx_inc = _alsx_inc + 1;
+                if (!al_sn_prev[ali] && al_sn_curr[ali]) _alsn_inc = _alsn_inc + 1;
+            end
+            mac_qk_dsp_fires   <= mac_qk_dsp_fires   + _almq_inc;
+            mac_sv_dsp_fires   <= mac_sv_dsp_fires   + _alms_inc;
+            softmax_exp_inputs <= softmax_exp_inputs + _alsx_inc;
+            softmax_norm_outs  <= softmax_norm_outs  + _alsn_inc;
+            al_mq_prev <= al_mq_curr;
+            al_ms_prev <= al_ms_curr;
+            al_sx_prev <= al_sx_curr;
+            al_sn_prev <= al_sn_curr;
+        end
+    end
+
     // Edge sample: every cycle log first-valid + last-valid timestamps.
     always @(posedge clk) begin
         if (!rst) begin
@@ -640,6 +794,45 @@ module tb_azurelily_attn_head_v2;
                  softmax_norm_total,
                  mac_sv_total,
                  e2e_total);
+
+        // ── AH gate Stage 1: Fmax-independent counter emission ──
+        // For AL FCs, each FC valid_n pulse corresponds to 1 row produced
+        // by 64 parallel dsp_macs (the fc_q/k/v_inst has 64 parallel-output
+        // dsp_macs, all firing simultaneously per row). Total dsp_mac fires
+        // per FC valid_n pulse = 64. Total across 3 arms = 64 × pulses × 3.
+        // For mac_qk/mac_sv: dsp_mac.valid_n rising edges across 16 lanes.
+        // For softmax_exp: clb_softmax.valid (input) rising edges (= score
+        //   inputs consumed during S_LOAD phase). Total = inputs across 16
+        //   lanes (each S_LOAD pulse triggers a combinational exp() LUT —
+        //   one fire per pulse).
+        // For softmax_norm: clb_softmax.valid_n rising edges (= S_NORM
+        //   completion events). Each lane completes 1 attn row's norm
+        //   stream of N elements before resetting; we count rising edges
+        //   = # of norm "starts" per lane.
+        $display("");
+        $display("=== AH-gate counters (TB-side architectural invariants) ===");
+        $display("COUNTER linear_qkv dpe_fire_count %0d", 64*(fc_q_pulses + fc_k_pulses + fc_v_pulses));
+        $display("COUNTER linear_qkv pass_count %0d", 64*(fc_q_pulses + fc_k_pulses + fc_v_pulses));
+        $display("COUNTER linear_qkv row_count %0d", N_SEQ);
+        $display("COUNTER linear_qkv lane_count 192");  // 3 arms × 64 dsp_macs
+        $display("COUNTER mac_qk dpe_fire_count %0d", mac_qk_dsp_fires);
+        $display("COUNTER mac_qk pass_count %0d", mac_qk_dsp_fires);
+        $display("COUNTER mac_qk row_count 1");
+        $display("COUNTER mac_qk lane_count %0d", W);
+        $display("COUNTER softmax_exp dpe_fire_count %0d", softmax_exp_inputs);
+        $display("COUNTER softmax_exp pass_count %0d", softmax_exp_inputs);
+        $display("COUNTER softmax_exp row_count 1");
+        $display("COUNTER softmax_exp lane_count %0d", W);
+        $display("COUNTER softmax_exp softmax_exp_fires %0d", softmax_exp_inputs);
+        $display("COUNTER softmax_norm dpe_fire_count %0d", softmax_norm_outs);
+        $display("COUNTER softmax_norm pass_count %0d", softmax_norm_outs);
+        $display("COUNTER softmax_norm row_count 1");
+        $display("COUNTER softmax_norm lane_count %0d", W);
+        $display("COUNTER softmax_norm softmax_norm_fires %0d", softmax_norm_outs);
+        $display("COUNTER mac_sv dpe_fire_count %0d", mac_sv_dsp_fires);
+        $display("COUNTER mac_sv pass_count %0d", mac_sv_dsp_fires);
+        $display("COUNTER mac_sv row_count 1");
+        $display("COUNTER mac_sv lane_count %0d", W);
 
         $finish;
     end

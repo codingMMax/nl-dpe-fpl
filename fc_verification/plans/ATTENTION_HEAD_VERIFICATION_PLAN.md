@@ -269,6 +269,84 @@ Gate: all P3+P4+P5+P6A+P7 regression commands exit 0 (already
 green at commit `e118b11`); the VTR JSON results will be linked from
 `VERIFICATION.md §Phase 7` once landed.
 
+### Stage 5b — Counter-based gate refactor (Stage 1, INFRASTRUCTURE LANDED 2026-04-25)
+
+**Status: INFRASTRUCTURE LANDED, COUNTER GATE FAILING — surfacing real bugs.**
+
+The cycle gate uses placeholder Fmax (no VTR data yet), so cycle deltas
+are shadows of an unknown frequency assumption. Stage 5b replaces the
+cycle gate with an Fmax-independent **counter gate** that compares
+integer architectural-invariant counts (DPE/DSP fires, output rows,
+parallel lanes, softmax exp/norm fires).
+
+**Three independent stages of the counter-gate refactor:**
+
+- **Stage 1 — Counter gate INFRASTRUCTURE (this stage; landed 2026-04-25).**
+  Adds counter side-channels to sim (`fpga_fabric.py`, `imc_core.py`,
+  `scheduler.py`, `test.py`) and counter probes to TBs
+  (`tb_{nldpe,azurelily}_attn_head_v2.v`).  New JSON files
+  `expected_counters.json` (sim-derived) and `known_count_deltas.json`
+  (annotated residuals).  `run_checks.py --gate counters` (default for
+  AH configs) gates exit code on counter equality; `--gate cycles`
+  preserved as legacy advisory.  Cycle gate continues to run alongside
+  but is forced PASS (advisory only).  Counter gate currently FAILS,
+  surfacing 5 architectural disagreements (3 root causes).
+
+- **Stage 2 — Fix bugs surfaced by Stage 1 (FUTURE, awaiting user sign-off).**
+  Required before counter gate can pass:
+  1. **RTL — single-row DIMM fire bug.** The head's `S_FIRE_DIMM` only
+     fires the DIMM once for `1 Q × N K × N V`. Fix: regen
+     `gen_*_attn_head_top.py` to iterate S_FIRE_DIMM N times with
+     different Q rows (or widen DIMM q_sram to N rows).
+  2. **NL-DPE RTL — sm_exp + ws_log defparam mismatch.** DPEs are
+     instantiated without `#(KERNEL_WIDTH=1, NUM_COLS=1)`, so they
+     never reach reg_full in iverilog (default KW=128 needs 26
+     strobes; FSM only feeds 8). Fix: add defparam blocks in
+     `gen_dimm_*.py` (VTR-only flag to skip them — arch XML ignores).
+  3. **AL sim — n_parallel_outputs choice.** Sim uses `n_parallel_outputs
+     = N` for AL DIMM, but RTL has `W=16` lanes. Either align sim
+     (`n_parallel_outputs = W`) or document as
+     `structural_sim_modeling` in `known_count_deltas.json`.
+
+- **Stage 3 — VTR (FUTURE, after Stage 2 closes).** Same as old Stage 5
+  (T5v2): VTR 3-seed re-synth with the bug-fixed RTL, append metrics
+  to `VERIFICATION.md §Phase 7`. After Stage 3 closes, the cycle gate
+  can be re-enabled with REAL Fmax (no longer placeholder); both gates
+  should agree.
+
+**Artifacts (Stage 1 landed):**
+
+- Submodule `azurelily/IMC/`: counter side-channels in `fpga_fabric.py`
+  (`gemm_log`, `gemm_dsp`), `imc_core.py` (`run_gemm`, `dimm_nonlinear`),
+  `scheduler.py` (`_record_layer_counters`, `_record_softmax_counters`),
+  `test.py` (`COUNTER ...` block emit).
+- TB counter probes: `tb_nldpe_attn_head_v2.v`,
+  `tb_azurelily_attn_head_v2.v`.
+- New JSON: `fc_verification/expected_counters.json`,
+  `fc_verification/known_count_deltas.json`.
+- Updated: `fc_verification/run_checks.py` (`--gate counters` default,
+  `check_ah_attn_head_counters` dispatcher, `_parse_ah_counters`
+  regex parser, `_load_known_count_deltas`).
+- Advisory marking only: `fc_verification/expected_cycles.json` and
+  `fc_verification/phase7_known_deltas.json` `note` / `_description`
+  fields updated; values UNCHANGED.
+
+**Gate command list (post-Stage 1; all 6 commands listed below):**
+
+```
+python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1 — PASS
+python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # T1 14/14 — PASS
+python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # Phase 3+4 — PASS
+python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # Phase 5+6A — PASS
+python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128       # Phase 7 NL-DPE — FAILS (Stage 1 surfaces bugs)
+python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128   # Phase 7 AL — FAILS (Stage 1 surfaces bugs)
+```
+
+The two AH-gate failures are EXPECTED and DESIRED — they encode the
+three architectural bugs surfaced by the counter gate. The Stage 2 fix
+list is documented above. After Stage 2 closes, all 6 commands should
+exit 0.
+
 ## Stage 6 — BERT-Tiny generator refinement (post-verification follow-up)
 
 Once T3-T5 close, the verified attention-head RTL becomes the **canonical

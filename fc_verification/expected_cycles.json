@@ -3,7 +3,7 @@
   "regime": "B",
   "layout": "A",
   "updated": "2026-04-25",
-  "note": "Regenerate via gen_expected_cycles.py after any sim-model change. AH configs (attn_head) are manually maintained — refresh after running test.py --model attention. The 2026-04-25 entries reflect the softmax row-parallel fix (azurelily/IMC/scheduler_stats/scheduler.py:_run_softmax_exp/_run_softmax_norm now multiply per-row latency by rows_per_lane=ceil(rows/W_softmax) so the outer rows axis is W-parallel, in addition to the pre-existing within-row /W split).",
+  "note": "Regenerate via gen_expected_cycles.py after any sim-model change. AH configs (attn_head) are manually maintained — refresh after running test.py --model attention. The 2026-04-25 entries reflect the softmax row-parallel fix (azurelily/IMC/scheduler_stats/scheduler.py:_run_softmax_exp/_run_softmax_norm now multiply per-row latency by rows_per_lane=ceil(rows/W_softmax) so the outer rows axis is W-parallel, in addition to the pre-existing within-row /W split). 2026-04-25 ADVISORY MARKING: For AH configs (attn_head), this file is now ADVISORY ONLY — the canonical Stage 1 gate uses Fmax-independent counters (see expected_counters.json + run_checks.py --gate counters). Cycle values here are derived from a placeholder Fmax (no VTR data yet); they remain useful as diagnostic but are no longer load-bearing. DIMM-top + FC Phase-2 configs continue to gate on cycles (those have real Fmax from prior VTR runs).",
   "tolerance_cycles": {
     "per_stage": 3,
     "e2e": 5

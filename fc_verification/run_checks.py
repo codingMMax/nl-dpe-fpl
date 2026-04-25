@@ -31,6 +31,8 @@ RTL_DIR = FC_DIR / "rtl"
 STUB = FC_DIR / "dpe_stub.v"
 
 EXPECTED_JSON = FC_DIR / "expected_cycles.json"
+EXPECTED_COUNTERS_JSON = FC_DIR / "expected_counters.json"
+KNOWN_COUNT_DELTAS_JSON = FC_DIR / "known_count_deltas.json"
 WHITELIST_JSON = FC_DIR / "functional_whitelist.json"
 PHASE3_KNOWN_DELTAS_JSON = FC_DIR / "phase3_known_deltas.json"
 PHASE5_KNOWN_DELTAS_JSON = FC_DIR / "phase5_known_deltas.json"
@@ -147,6 +149,12 @@ RE_AH_AL_STAGES = re.compile(
 )
 RE_AH_FUNC_PASS = re.compile(r"Functional\s*(?:output)?\s*:\s*PASS", re.IGNORECASE)
 RE_AH_TOP_PULSES = re.compile(r"top valid_n pulses\s*[:=]?\s*(\d+)", re.IGNORECASE)
+
+# AH-gate Stage 1: counter probe regex.
+# Format: COUNTER <stage> <key> <value>
+RE_COUNTER = re.compile(
+    r"^COUNTER\s+(\S+)\s+(\S+)\s+(-?\d+)\s*$", re.MULTILINE
+)
 
 
 def _parse_ah_stages(out: str, arch: str) -> dict:
@@ -358,6 +366,134 @@ def check_latency(config_name: str, expected: dict) -> CheckResult:
     return CheckResult("latency", passed, detail, fields)
 
 
+# ── AH (attention-head) Stage 1: Fmax-independent counter gate ───────────
+
+def _parse_ah_counters(out: str) -> dict:
+    """Parse all `COUNTER <stage> <key> <value>` lines from TB stdout.
+
+    Returns nested dict: {stage_name: {key: int_value}}. Schema keys are
+    integers; non-integer values (e.g. "_arch") are skipped because the
+    regex only matches `\\d+` for the value group.
+    """
+    counters = {}
+    for m in RE_COUNTER.finditer(out):
+        stage, key, val = m.group(1), m.group(2), m.group(3)
+        try:
+            iv = int(val)
+        except ValueError:
+            continue
+        counters.setdefault(stage, {})[key] = iv
+    return counters
+
+
+def _load_known_count_deltas(config_name: str) -> dict:
+    """Load known counter deltas (file:line annotated structural / modelling
+    residuals) for *config_name*. Returns dict[stage][key] -> dict with
+    delta_count + tolerance + classification.
+    """
+    if not KNOWN_COUNT_DELTAS_JSON.exists():
+        return {}
+    try:
+        data = json.loads(KNOWN_COUNT_DELTAS_JSON.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    cfg_entry = data.get("configs", {}).get(config_name, {})
+    by_stage_key = {}
+    for entry in cfg_entry.get("deltas", []):
+        s = entry.get("stage")
+        k = entry.get("key")
+        if s and k:
+            by_stage_key.setdefault(s, {})[k] = {
+                "delta_count":    entry.get("delta_count", 0),
+                "tolerance":      entry.get("tolerance", 0),
+                "root_cause":     entry.get("root_cause", ""),
+                "classification": entry.get("classification", ""),
+            }
+    return by_stage_key
+
+
+def check_ah_attn_head_counters(config_name: str, expected_counters: dict) -> CheckResult:
+    """AH-gate Stage 1 counter check.
+
+    Compares per-stage architectural-invariant counter values
+    (dpe_fire_count, pass_count, row_count, lane_count, softmax_*_fires)
+    between the RTL TB's `COUNTER ...` block and the sim oracle's
+    expected_counters.json. Counter equality is integer; ±1 boundary
+    slack is allowed for FSM-edge probes; anything > 1 must be in
+    known_count_deltas.json.
+    """
+    cfg = CONFIG_REGISTRY[config_name]
+    sources = list(cfg.get("extra_rtl", [])) + [cfg["rtl"], cfg["tb_combined"]]
+
+    # Same long-timeout window as the cycle gate — these are the same TB
+    # runs (counters are emitted alongside cycle reports at end-of-sim).
+    rc, out = run_iverilog(sources, timeout_s=600)
+    if "COMPILE FAIL" in out:
+        return CheckResult("ah_attn_head_counters", False,
+                           f"compile failed rc={rc}",
+                           {"stdout_tail": out[-500:]})
+
+    rtl_counters = _parse_ah_counters(out)
+    if not rtl_counters:
+        return CheckResult("ah_attn_head_counters", False,
+                           "no COUNTER lines parsed from TB stdout (TB may be missing counter probes)",
+                           {"stdout_tail": out[-500:]})
+
+    exp_cfg = expected_counters["configs"].get(config_name, {})
+    sim_stages = exp_cfg.get("stages", {})
+    if not sim_stages:
+        return CheckResult("ah_attn_head_counters", False,
+                           f"no expected counters for {config_name} in expected_counters.json",
+                           {"rtl": rtl_counters})
+
+    known_deltas = _load_known_count_deltas(config_name)
+    edge_slack = expected_counters.get("tolerance", {}).get("edge_slack", 1)
+    schema_keys = set(expected_counters.get("tolerance", {}).get(
+        "exact_keys",
+        ["dpe_fire_count", "pass_count", "row_count", "lane_count",
+         "softmax_exp_fires", "softmax_norm_fires"]
+    ))
+
+    deltas = {}
+    reasons = []
+    for stage, expected_dict in sim_stages.items():
+        rtl_dict = rtl_counters.get(stage, {})
+        if not rtl_dict:
+            reasons.append(f"{stage}: TB emitted no COUNTER lines for this stage")
+            continue
+        for key in schema_keys:
+            sim_val = expected_dict.get(key)
+            rtl_val = rtl_dict.get(key)
+            if sim_val is None or rtl_val is None:
+                continue
+            d = rtl_val - sim_val
+            deltas.setdefault(stage, {})[key] = d
+            stage_known = known_deltas.get(stage, {})
+            if key in stage_known:
+                expected_delta = stage_known[key]["delta_count"]
+                tol_known = stage_known[key]["tolerance"]
+                if abs(d - expected_delta) > tol_known:
+                    reasons.append(
+                        f"{stage}.{key}: RTL={rtl_val} sim={sim_val} Δ={d} "
+                        f"(expected Δ={expected_delta}±{tol_known} per "
+                        f"{KNOWN_COUNT_DELTAS_JSON.name})"
+                    )
+            else:
+                if abs(d) > edge_slack:
+                    reasons.append(
+                        f"{stage}.{key}: RTL={rtl_val} sim={sim_val} Δ={d} > ±{edge_slack} "
+                        f"(no entry in {KNOWN_COUNT_DELTAS_JSON.name})"
+                    )
+
+    passed = len(reasons) == 0
+    detail = "pass" if passed else "; ".join(reasons[:6]) + (
+        f"; ... ({len(reasons)-6} more)" if len(reasons) > 6 else ""
+    )
+    fields = {"rtl": rtl_counters, "sim": sim_stages, "deltas": deltas,
+              "stdout_tail": out[-600:]}
+    return CheckResult("ah_attn_head_counters", passed, detail, fields)
+
+
 # ── AH (attention-head) combined functional + latency check ──────────────
 
 def check_ah_attn_head(config_name: str, expected: dict) -> CheckResult:
@@ -469,14 +605,34 @@ def check_ah_attn_head(config_name: str, expected: dict) -> CheckResult:
 # ── Orchestration ─────────────────────────────────────────────────────────
 
 def run_one(config_name: str, skip_func: bool, skip_lat: bool,
-            expected: dict, whitelist: dict) -> list[CheckResult]:
+            expected: dict, whitelist: dict, gate: str = "counters",
+            expected_counters: dict | None = None) -> list[CheckResult]:
     results = []
     if config_name in AH_CONFIGS:
         # AH configs use a single combined TB; --skip-functional and
         # --skip-latency both have to be set to skip it (defensive: usually
         # neither is set).
+        #
+        # Stage 1 gate refactor: --gate counters (default) compares
+        # Fmax-independent counter values (dpe_fire_count, pass_count,
+        # row_count, lane_count, softmax_*_fires) and is what controls
+        # exit code. --gate cycles falls back to the legacy
+        # cycle-level gate (advisory only post-Stage 1).
         if not (skip_func and skip_lat):
-            results.append(check_ah_attn_head(config_name, expected))
+            if gate == "counters":
+                # Counter gate is canonical (Fmax-independent); cycle
+                # gate runs alongside as advisory diagnostics.
+                if expected_counters is None:
+                    expected_counters = json.loads(EXPECTED_COUNTERS_JSON.read_text())
+                results.append(check_ah_attn_head_counters(config_name, expected_counters))
+                # Advisory-only cycle check (no exit-code impact via the
+                # counter-gate path — caller can still see the residuals).
+                advisory = check_ah_attn_head(config_name, expected)
+                advisory.name = "ah_attn_head_cycles_advisory"
+                advisory.passed = True  # advisory: never fail the run
+                results.append(advisory)
+            else:
+                results.append(check_ah_attn_head(config_name, expected))
         return results
     if not skip_func:
         results.append(check_functional(config_name, whitelist))
@@ -492,11 +648,21 @@ def summarise(config_name: str, results: list[CheckResult]) -> bool:
     for r in results:
         marker = "✓" if r.passed else "✗"
         print(f"  [{marker}] {r.name}: {r.detail}")
-        if r.name in ("latency", "ah_attn_head") and r.fields.get("deltas"):
+        if r.name in ("latency", "ah_attn_head", "ah_attn_head_cycles_advisory",
+                       "ah_attn_head_counters") and r.fields.get("deltas"):
             d = r.fields["deltas"]
-            print(f"       RTL={r.fields['rtl']}")
-            print(f"       sim={r.fields['sim']}")
-            print(f"       Δ  ={d}")
+            if r.name == "ah_attn_head_counters":
+                # Per-stage per-key delta dump (counter gate).
+                for stage, kdict in d.items():
+                    print(f"       {stage}:")
+                    for k, dv in kdict.items():
+                        rtl = r.fields["rtl"].get(stage, {}).get(k, "?")
+                        sim = r.fields["sim"].get(stage, {}).get(k, "?")
+                        print(f"         {k}: RTL={rtl} sim={sim} Δ={dv:+d}")
+            else:
+                print(f"       RTL={r.fields['rtl']}")
+                print(f"       sim={r.fields['sim']}")
+                print(f"       Δ  ={d}")
             if r.fields.get("combine_softmax"):
                 print(f"       (softmax: AL TB folds exp+norm into exp slot)")
     return overall
@@ -508,6 +674,11 @@ def main() -> int:
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--skip-functional", action="store_true")
     ap.add_argument("--skip-latency",    action="store_true")
+    ap.add_argument(
+        "--gate", choices=["counters", "cycles"], default="counters",
+        help="AH gate mode: 'counters' (default, Fmax-independent "
+             "architectural-invariants) or 'cycles' (legacy advisory)."
+    )
     args = ap.parse_args()
 
     if not args.config and not args.all:
@@ -515,13 +686,18 @@ def main() -> int:
 
     expected  = json.loads(EXPECTED_JSON.read_text())
     whitelist = json.loads(WHITELIST_JSON.read_text())
+    expected_counters = (
+        json.loads(EXPECTED_COUNTERS_JSON.read_text())
+        if EXPECTED_COUNTERS_JSON.exists() else None
+    )
 
     targets = list(CONFIG_REGISTRY.keys()) if args.all else [args.config]
 
     any_fail = False
     for cfg in targets:
         results = run_one(cfg, args.skip_functional, args.skip_latency,
-                          expected, whitelist)
+                          expected, whitelist, gate=args.gate,
+                          expected_counters=expected_counters)
         if not summarise(cfg, results):
             any_fail = True
 
