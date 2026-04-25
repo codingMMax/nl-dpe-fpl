@@ -2,7 +2,7 @@
   "source": "Live sim refresh (Regime B, Layout A) on 2026-04-23",
   "regime": "B",
   "layout": "A",
-  "updated": "2026-04-23",
+  "updated": "2026-04-24",
   "note": "Regenerate via gen_expected_cycles.py after any sim-model change.",
   "tolerance_cycles": {
     "per_stage": 3,
@@ -39,6 +39,60 @@
         "e2e": 2338
       },
       "todo": "Stage names map to Azure-Lily modules: score=mac_qk, softmax=clb_softmax (S_LOAD+S_INV+S_NORM), wsum=mac_sv. Residuals annotated in phase5_known_deltas.json."
+    },
+    "nldpe_attn_head_d64_c128": {
+      "params": {
+        "N": 128,
+        "d": 64,
+        "C": 128,
+        "W": 16,
+        "fmax_mhz": 102.9
+      },
+      "stages": {
+        "linear_qkv": 2424,
+        "mac_qk": 5690,
+        "softmax_exp": 650,
+        "softmax_norm": 376,
+        "mac_sv": 5339,
+        "e2e": 14480
+      },
+      "ns_breakdown": {
+        "linear_qkv": 23553.33,
+        "mac_qk": 55300.00,
+        "softmax_exp": 6320.00,
+        "softmax_norm": 3653.33,
+        "mac_sv": 51890.00,
+        "e2e": 140716.67
+      },
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/nl_dpe.json. linear_qkv = max(linear_Q, linear_K, linear_V) = 23553.33 ns (parallel arms, byte-identical Linear_Layer params). Cycles = round(ns / t_clk) with t_clk = 9.7182 ns (Fmax=102.9 MHz)."
+    },
+    "azurelily_attn_head_d64_c128": {
+      "params": {
+        "N": 128,
+        "d": 64,
+        "C": 128,
+        "W": 16,
+        "total_dsp": 16,
+        "DSP_WDITH": 4,
+        "fmax_mhz": 87.9
+      },
+      "stages": {
+        "linear_qkv": 4000,
+        "mac_qk": 6661,
+        "softmax_exp": 1988,
+        "softmax_norm": 2550,
+        "mac_sv": 6091,
+        "e2e": 21290
+      },
+      "ns_breakdown": {
+        "linear_qkv": 45506.56,
+        "mac_qk": 75776.67,
+        "softmax_exp": 22613.33,
+        "softmax_norm": 29013.33,
+        "mac_sv": 69293.33,
+        "e2e": 242203.23
+      },
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json. linear_qkv = max(linear_Q, linear_K, linear_V) = 45506.56 ns (parallel arms). Cycles = round(ns / t_clk) with t_clk = 11.3766 ns (Fmax=87.9 MHz)."
     }
   }
 }

@@ -110,28 +110,35 @@ the live tracks below.
     parameterized `tb_azurelily_fc.v`, arch-tagged
     `phase2_known_deltas.json` (+2 AL entries: `compute_aggregate +1`,
     `compute_first_out +1`, both modelling_granularity).
-  - **T2 ✓ closed (commit `2f5956e`)** — composed attention-head top
-    RTL at the locked design point (W=16, d_head=64, C=128, N=128) for
-    BOTH archs. NL-DPE: ~68 DPE (4 proj + 64 DIMM). AL: ~36 dsp_mac
-    (4 proj + 32 DIMM) + 16 clb_softmax. Both compile clean. Stale
-    `nl_dpe/attention_head_1_channel.v` retired to `nl_dpe/legacy/`.
-  - **T3 — Functional TBs.** Scaled-identity Q/K/V projections +
-    identity V-matrix + structured query → hand-computable output.
-    Gate: cross-arch equivalence within int8 tolerance.
-  - **T4 — Latency TBs + sim extractor + known-deltas.** Per-stage
-    timestamps on 5 stages (FC_Q, DIMM_score, DIMM_softmax, DIMM_wsum,
-    FC_O) + 2 handoff boundaries (FC_QKV→DIMM, DIMM→FC_O). Extend
-    `gen_expected_cycles.py` to wrap `_run_attention_pipeline`. New
-    `phase7_known_deltas.json` with arch-tagged entries (paper-spec
-    W=16, NOT BERT-Tiny benchmark W=1 which is a generator bug —
-    patched downstream in T6). Residual budget: NL-DPE E2E ≤ +50 cyc
-    (≈ 42 DIMM + 2×~4 handoff), AL E2E ≤ +10 cyc (≈ 2 DIMM + 2×~4
-    handoff), all `modelling_granularity` or `structural`.
+  - **T2 v0 closed (commit `2f5956e`); T2v2 NEW** — discovered that the
+    T2 v0 composition was scope-mismatched against `attention_model` in
+    `azurelily/models/attention.py` (sim assumes N=128 token sequence
+    feed → Q/K/V proj × N + 1× DIMM + NO output projection;
+    T2v0 was 1-token broadcast + included fc_top_o). T2v0 retained as
+    legacy compile target; T2v2 is the canonical attn-head verification
+    target. T3+T4 partial commit `4860fcc` documents AL per-component
+    measurement (Δ=+6 cyc m.g. at single-inference scope).
+  - **T2v2 — Refactor attn-head RTL to match sim's `attention_model`.**
+    New top: N-token outer FSM (drives X for Q once, K/V N=128 times)
+    + intermediate `q_buffer`/`k_buffer`/`v_buffer` SRAMs that catch
+    FC outputs in DIMM-compatible packed format (AL needs unpacked→
+    packed packer; NL-DPE FC already produces packed output) + 1× DIMM
+    fire after K/V buffers full + N×d_head output stream. **Drops
+    fc_top_o** (matches sim's attention_model which stops at mac_sv).
+    New resource: NL-DPE 67 DPE (3 proj + 64 DIMM); AL 35 dsp_mac
+    + 16 clb_softmax (3 proj + 32 DIMM + 16 softmax).
+  - **T3v2 — Functional TBs.** Drive N=128 tokens; identity Q/K/V/V
+    weights; mac_sv output stream matches sim's analytical prediction.
+    Gate: per-arch correctness against sim oracle.
+  - **T4v2 — Latency TBs + sim extractor + known-deltas.** Sim oracle:
+    invoke `_run_attention_pipeline` at full N-token scope, capture
+    per-stage cycles. RTL probes: 7 stages (linear_Q/K/V, mac_qk,
+    softmax_exp/norm, mac_sv) + 1 buffer-fill timestamp. New
+    `phase7_known_deltas.json` arch-tagged. Budget: NL-DPE E2E ≤
+    +60 cyc, AL E2E ≤ +15 cyc, all m.g. or `structural`.
     Gate: both `run_checks.py --config *_attn_head_d64_c128` exit 0.
-  - **T5 — VTR + regression gate extension.** 3-seed VTR per arch,
-    strict DPE=68 (NL-DPE) / DSP≈36 (AL) counts, append two new lines
-    to `VERIFICATION.md §Phase 5` gate list. Gate: all 7 regression
-    commands exit 0.
+  - **T5v2 — VTR + regression.** Strict counts: NL-DPE DPE=67, AL
+    DSP≈35. Append to `VERIFICATION.md §Phase 5` gate list.
   - **T6 — BERT-Tiny generator refinement (post-T5 follow-up).** The
     verified head becomes the canonical reference for diffing against
     `gen_bert_tiny_wrapper.py`. Surfaces likely bugs (W=1 vs paper-spec
