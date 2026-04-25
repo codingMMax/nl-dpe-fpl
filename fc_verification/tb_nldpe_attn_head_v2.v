@@ -304,9 +304,6 @@ module tb_nldpe_attn_head_v2;
         sm_exp_d_curr[14] = dut.dimm_inst.dimm_lane[14].softmax_inst.sm_exp.dpe_done;
         sm_exp_d_curr[15] = dut.dimm_inst.dimm_lane[15].softmax_inst.sm_exp.dpe_done;
 
-        // DEBUG: print sm_exp dpe_done at each cycle in lane 0 to confirm probe works.
-        // (Triggered by always @(*) so prints every value change.)
-        // Removed before final commit if not needed.
         ws_log_d_curr[ 0] = dut.dimm_inst.dimm_lane[ 0].wsum_inst.ws_log.dpe_done;
         ws_log_d_curr[ 1] = dut.dimm_inst.dimm_lane[ 1].wsum_inst.ws_log.dpe_done;
         ws_log_d_curr[ 2] = dut.dimm_inst.dimm_lane[ 2].wsum_inst.ws_log.dpe_done;
