@@ -626,13 +626,12 @@ module tb_azurelily_attn_head_v2;
         end
 
         // ── Phase B: wait for DIMM to drain ──
-        // Cap drain wait at 16000 cycles after head enters S_DIMM_FIRE.
-        // The DIMM's natural mac_qk feed (~2304 cyc) + softmax (~128) +
-        // mac_sv first/last (~32-200) + per-lane staggering = ~2500 cyc,
-        // plus comfortable headroom for the sim's mac_sv=6091 reference.
-        // Beyond 16000 the DUT is in stuck-valid territory (DUT issue 3).
+        // Bug-1 fix: head FSM now loops N=128 Q rows. Each iteration takes
+        // ~3,500 cycles (Q load + K/V re-stream + DIMM internal compute), so
+        // 128 iterations ≈ 500K cycles total. Cap raised from 16000 to 1.5M
+        // to accommodate the outer-loop refactor.
         begin : wait_drain
-            for (i = 0; i < 16000; i = i + 1) begin
+            for (i = 0; i < 1500000; i = i + 1) begin
                 @(posedge clk);
             end
         end
@@ -811,36 +810,38 @@ module tb_azurelily_attn_head_v2;
         //   = # of norm "starts" per lane.
         $display("");
         $display("=== AH-gate counters (TB-side architectural invariants) ===");
+        // Bug-1 fix: row_count is now N_SEQ (head FSM loops N=128 Q rows).
         $display("COUNTER linear_qkv dpe_fire_count %0d", 64*(fc_q_pulses + fc_k_pulses + fc_v_pulses));
         $display("COUNTER linear_qkv pass_count %0d", 64*(fc_q_pulses + fc_k_pulses + fc_v_pulses));
         $display("COUNTER linear_qkv row_count %0d", N_SEQ);
         $display("COUNTER linear_qkv lane_count 192");  // 3 arms × 64 dsp_macs
         $display("COUNTER mac_qk dpe_fire_count %0d", mac_qk_dsp_fires);
         $display("COUNTER mac_qk pass_count %0d", mac_qk_dsp_fires);
-        $display("COUNTER mac_qk row_count 1");
+        $display("COUNTER mac_qk row_count %0d", N_SEQ);
         $display("COUNTER mac_qk lane_count %0d", W);
         $display("COUNTER softmax_exp dpe_fire_count %0d", softmax_exp_inputs);
         $display("COUNTER softmax_exp pass_count %0d", softmax_exp_inputs);
-        $display("COUNTER softmax_exp row_count 1");
+        $display("COUNTER softmax_exp row_count %0d", N_SEQ);
         $display("COUNTER softmax_exp lane_count %0d", W);
         $display("COUNTER softmax_exp softmax_exp_fires %0d", softmax_exp_inputs);
         $display("COUNTER softmax_norm dpe_fire_count %0d", softmax_norm_outs);
         $display("COUNTER softmax_norm pass_count %0d", softmax_norm_outs);
-        $display("COUNTER softmax_norm row_count 1");
+        $display("COUNTER softmax_norm row_count %0d", N_SEQ);
         $display("COUNTER softmax_norm lane_count %0d", W);
         $display("COUNTER softmax_norm softmax_norm_fires %0d", softmax_norm_outs);
         $display("COUNTER mac_sv dpe_fire_count %0d", mac_sv_dsp_fires);
         $display("COUNTER mac_sv pass_count %0d", mac_sv_dsp_fires);
-        $display("COUNTER mac_sv row_count 1");
+        $display("COUNTER mac_sv row_count %0d", N_SEQ);
         $display("COUNTER mac_sv lane_count %0d", W);
 
         $finish;
     end
 
-    // Hard timeout: 10 ms = 1M cycles @100MHz
+    // Hard timeout: bumped to 60 ms (6M cycles) to accommodate the Bug-1
+    // outer Q-row loop (~500K cycles for 128 iterations × ~3.5K cyc each).
     initial begin
-        #10_000_000;
-        $display("HARD TIMEOUT (10ms simulated time)");
+        #60_000_000;
+        $display("HARD TIMEOUT (60ms simulated time)");
         $display("AH_AL_STAGES linear_qkv=-1 mac_qk=-1 softmax_exp=-1 softmax_norm=-1 mac_sv=-1 e2e=-1");
         $display("AH_AL_STAGES_TOTAL linear_qkv=-1 mac_qk=-1 softmax_exp=-1 softmax_norm=-1 mac_sv=-1 e2e=-1");
         $finish;

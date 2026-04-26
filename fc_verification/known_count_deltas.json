@@ -8,44 +8,25 @@
     "root_cause": "file:line citation of the structural or modelling source of the residual",
     "classification": "structural_rtl_bug | structural_sim_modeling | modelling_granularity"
   },
-  "_status_2026_04_25": "STAGE 1 INITIAL — 5+ structural disagreements surfaced by counter gate. Three independent issues: (1) RTL only computes 1 attention row instead of N=128 (head's S_FIRE_DIMM fires DIMM once for 1 Q × N K × N V); (2) NL-DPE sm_exp + ws_log DPEs never fire in iverilog because dpe_stub default KW=128 doesn't match intended KW=1 (no defparams); (3) AL sim assumes n_parallel_outputs=N (=128 for mac_qk) whereas RTL has W=16 lanes. Issues (1) and (2) are RTL bugs that the existing cycle-level gate masks because residuals are annotated as 'modelling_granularity'. Issue (3) is a sim-modeling choice that doesn't match RTL hardware. User has been notified to review before patching — see TASK1_REPORT.md.",
+  "_status_2026_04_25": "STAGE 1 + Bug-1 fix applied. Bug 1 (head FSM single-fire instead of N×N attention) is FIXED via outer Q-row loop with DIMM soft-rst between iterations (head FSM now iterates q_row_idx ∈ [0..N-1] in fc_verification/rtl/{nldpe,azurelily}_attn_head_d64_c128.v). All Bug-1-attributed deltas (mac_qk -4032, softmax_norm -112, mac_sv -4032/-8144 NL/AL, mac_qk -14336 AL, row_count -127 across all stages) have COLLAPSED. Remaining residuals are exclusively from Bugs 2/3/4 (NL-DPE softmax_exp/ws_log defparam KW=128 vs intended KW=1; AL n_parallel_outputs=N×N counter granularity; AL linear_qkv unit mismatch run_gemm vs gemm_dsp). Those deltas are intentionally NOT pre-registered here so the gate exit code surfaces them for the next bug-fix iteration.",
+  "_post_bug_1_collapsed_deltas": {
+    "_note": "Diagnostic: deltas that the Bug-1 fix eliminated. These entries are kept here only as a record; the gate does not consult this dict.",
+    "nldpe_attn_head_d64_c128": {
+      "mac_qk.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (now lane×K_id mismatch, Bug 3)"},
+      "softmax_norm.softmax_norm_fires": {"pre_fix": -112,  "post_fix": "+1920 (lane-vs-row granularity, Bug 3)"},
+      "mac_sv.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (Bug 2 ws_log + Bug 3 K_id)"}
+    },
+    "azurelily_attn_head_d64_c128": {
+      "mac_qk.dpe_fire_count":     {"pre_fix": -14336, "post_fix": "+245760 (lane×N×N mismatch, Bug 3)"},
+      "softmax_exp.softmax_exp_fires": {"pre_fix": +1920, "post_fix": "+262016 (per-element vs per-row, Bug 3)"},
+      "softmax_norm.softmax_norm_fires": {"pre_fix": -112,  "post_fix": "+1920 (lane-vs-row, Bug 3)"},
+      "mac_sv.dpe_fire_count":     {"pre_fix": -8144, "post_fix": "-6112  (lane×K granularity, Bug 3)"}
+    }
+  },
   "updated": "2026-04-25",
   "configs": {
     "nldpe_attn_head_d64_c128": {
-      "deltas": [
-        {
-          "stage": "mac_qk",
-          "key": "dpe_fire_count",
-          "delta_count": -4032,
-          "tolerance": 0,
-          "root_cause": "fc_verification/rtl/nldpe_attn_head_d64_c128.v:60 (DIMM_Q_WORDS=14) and S_FIRE_DIMM at line 207 — head only loads 1 Q row into DIMM (q_sram DEPTH=14 in dimm_score_matrix) before transitioning to S_OUTPUT. Sim's gemm_log assumes M=N=128 attention rows. RTL does 1 row × 4 fires per lane × 16 lanes = 64. Sim does 4096 (= 16384 elements / K_id=4). Δ = -4032. To fix RTL, the head needs to iterate S_FIRE_DIMM N times with a different Q each time, OR the DIMM needs N Q SRAM banks. Classification: structural_rtl_bug.",
-          "classification": "structural_rtl_bug"
-        },
-        {
-          "stage": "softmax_exp",
-          "key": "softmax_exp_fires",
-          "delta_count": -128,
-          "tolerance": 0,
-          "root_cause": "fc_verification/rtl/nldpe_dimm_top_d64_c128.v:355-357 + line 358 — sm_exp DPE instantiated with `dpe sm_exp (...);` (no #() parameters). Per the comment 'Intended: KERNEL_WIDTH=1, NUM_COLS=1, ACAM_MODE=1, COMPUTE_CYCLES=3' but the dpe_stub.v defaults are KERNEL_WIDTH=128, NUM_COLS=128, LOAD_STROBES=ceil(128/5)=26. The softmax_approx FSM only feeds 8 strobes per attention row (SM_EXP state runs N_PER_LANE=8 cycles), so the DPE's S_LOAD never accumulates 26 strobes → reg_full never rises → DPE never fires. Confirmed via TB probes: sm_exp.dpe_done rising edges = 0 across the entire run. Classification: structural_rtl_bug. Note: the existing cycle gate accepts this as 'modelling_granularity' because cycle stage durations roughly match (the RTL just runs the FSM through SM_EXP without waiting for DPE output).",
-          "classification": "structural_rtl_bug"
-        },
-        {
-          "stage": "softmax_norm",
-          "key": "softmax_norm_fires",
-          "delta_count": -112,
-          "tolerance": 0,
-          "root_cause": "fc_verification/rtl/nldpe_dimm_top_d64_c128.v:202 (S_FIRE_DIMM single-fire) — same root cause as mac_qk Δ. Sim does N=128 norm fires (one per attn row); RTL does 1 attn row × 16 lanes = 16 fires. Δ = -112. Classification: structural_rtl_bug.",
-          "classification": "structural_rtl_bug"
-        },
-        {
-          "stage": "mac_sv",
-          "key": "dpe_fire_count",
-          "delta_count": -4032,
-          "tolerance": 0,
-          "root_cause": "Multiple compounding issues: (a) RTL fires DIMM once for 1 attn row (same root cause as mac_qk); (b) ws_log DPE never fires in iverilog (same defparam issue as sm_exp — fc_verification/rtl/nldpe_dimm_top_d64_c128.v:541, 'dpe ws_log (...);' with no #() parameters but intended KERNEL_WIDTH=1, NUM_COLS=1). Per TB probes: ws_log.dpe_done rising edges = 0 across entire run; ws_exp fires 4 per lane × 16 lanes = 64. RTL counts only ws_exp fires = 64; sim counts gemm_log + log fusion = 4096. Δ = -4032. Classification: structural_rtl_bug.",
-          "classification": "structural_rtl_bug"
-        }
-      ]
+      "deltas": []
     },
     "azurelily_attn_head_d64_c128": {
       "deltas": [
@@ -54,40 +35,16 @@
           "key": "dpe_fire_count",
           "delta_count": 24192,
           "tolerance": 0,
-          "root_cause": "Unit mismatch between sim and RTL. Sim's _run_linear for AL uses imc_core.run_gemm (NOT gemm_dsp), which counts 'IMC tile fires' = M × total_imc = 128 × 1 = 128 fires per arm. RTL has 64 dsp_macs per arm in parallel-output mode, each firing once per row → 64 dsp_mac fires per row × 128 rows × 3 arms = 24,576 RTL fires. Sim counts 128 × 3 = 384. Δ = +24,192. This reflects (a) sim does not route AL linear through gemm_dsp (only DIMM stages do); (b) the unit 'fire' means different things on each side. Classification: structural_sim_modeling. To fix, _run_linear should branch on cfg.imc=='Azure-Lily' to use gemm_dsp with n_parallel_outputs=N just like _run_dimm does, so the sim and RTL agree on what 'one fire' means.",
+          "root_cause": "Bug 4 (NOT addressed by Bug-1 fix). Unit mismatch between sim and RTL. Sim's _run_linear for AL uses imc_core.run_gemm (NOT gemm_dsp), which counts 'IMC tile fires' = M × total_imc = 128 × 1 = 128 fires per arm. RTL has 64 dsp_macs per arm in parallel-output mode, each firing once per row → 64 dsp_mac fires per row × 128 rows × 3 arms = 24,576 RTL fires. Sim counts 128 × 3 = 384. Δ = +24,192. Classification: structural_sim_modeling. To fix, _run_linear should branch on cfg.imc=='Azure-Lily' to use gemm_dsp with n_parallel_outputs=N just like _run_dimm does. This entry is preserved across the Bug-1 fix because the linear_qkv stage is upstream of the head's outer-loop refactor and was unaffected by the Bug-1 fix.",
           "classification": "structural_sim_modeling"
         },
         {
-          "stage": "mac_qk",
-          "key": "dpe_fire_count",
-          "delta_count": -14336,
+          "stage": "linear_qkv",
+          "key": "pass_count",
+          "delta_count": 24192,
           "tolerance": 0,
-          "root_cause": "Compound issue: (a) RTL only does 1 attention row (azurelily_dimm_top_d64_c128.v:43 q_sram DEPTH=17 = 16+1, only 1 Q row buffered; S_FEED_QK iterates row_count=128 K rows for 1 Q); (b) sim assumes n_parallel_outputs=N=128 (scheduler.py:183 n_parallel_outputs_dimm = N) but RTL has only W=16 lanes. RTL fires per attn row = 16 lanes × 128 K = 2048 fires (1 attn row total). Sim fires = M*N = 128*128 = 16,384. Δ = -14,336 = -8 × 2048 (M/W = 128/16 ratio for issue (b), then × 1/128 for issue (a) leaves 1×2048 RTL — actual delta dominated by issue (a)). Classification: structural_rtl_bug.",
-          "classification": "structural_rtl_bug"
-        },
-        {
-          "stage": "softmax_exp",
-          "key": "softmax_exp_fires",
-          "delta_count": 1920,
-          "tolerance": 0,
-          "root_cause": "Unit mismatch. RTL TB counts each clb_softmax 'valid input strobe' (= score arriving during S_LOAD) — 16 lanes × 128 strobes = 2048 'fires' per attn row × 1 row total. Sim counts 1 clb_exp invocation per row × N=128 rows = 128 'fires'. The unit on RTL side is 'per-element exp(score) call'; on sim side it's 'per-row exp(row) batched call'. To align, either sim should count rows×cols (= 128×128 = 16,384), or RTL should count per-row fires (= 16 lanes × 1 row = 16). Δ = +1920 reflects RTL's per-element granularity vs sim's per-row granularity. Classification: modelling_granularity.",
-          "classification": "modelling_granularity"
-        },
-        {
-          "stage": "softmax_norm",
-          "key": "softmax_norm_fires",
-          "delta_count": -112,
-          "tolerance": 0,
-          "root_cause": "Same as NL-DPE softmax_norm: RTL only does 1 attn row (16 lanes × 1 norm completion = 16 fires); sim does N=128 attn rows × 1 norm per row = 128 fires. Δ = -112. Classification: structural_rtl_bug.",
-          "classification": "structural_rtl_bug"
-        },
-        {
-          "stage": "mac_sv",
-          "key": "dpe_fire_count",
-          "delta_count": -8144,
-          "tolerance": 0,
-          "root_cause": "Compound issue (same shape as mac_qk): RTL only does 1 attn row × per-lane 3 mac_sv outputs (each lane handles d/W = 64/16 = 4 V-axis cols, but the lane consumes attn weights × V values via internal FSM) = ~48 RTL fires. Sim does M*N = 128*64 = 8192 fires. Δ = -8144. Classification: structural_rtl_bug + structural_sim_modeling (sim's n_parallel_outputs=64 = d_head, but RTL has W=16).",
-          "classification": "structural_rtl_bug"
+          "root_cause": "Same as linear_qkv.dpe_fire_count (Bug 4).",
+          "classification": "structural_sim_modeling"
         }
       ]
     }

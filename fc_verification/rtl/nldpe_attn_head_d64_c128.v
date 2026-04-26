@@ -62,12 +62,21 @@ module nldpe_attn_head_d64_c128 #(
     localparam DIMM_V_WORDS     = 1664;
 
     // ─── FSM ───────────────────────────────────────────────────────
-    localparam S_IDLE      = 3'd0;
-    localparam S_FEED_X    = 3'd1;
-    localparam S_DRAIN_FC  = 3'd2;
-    localparam S_FIRE_DIMM = 3'd3;
-    localparam S_OUTPUT    = 3'd4;
-    reg [2:0] state;
+    // Bug-1 fix (2026-04-25): outer Q-row loop. The DIMM internally
+    // computes ONE Q row's full attention output (mac_qk + softmax +
+    // mac_sv across all N keys) per fire. To run a full N×N attention
+    // head we now loop S_FIRE_DIMM N times, soft-resetting the DIMM
+    // between iterations and re-driving valid_q (with each Q row read
+    // from the head's q_buffer) plus valid_k / valid_v (re-loaded from
+    // the static k/v_buffer; SRAM contents persist through DIMM rst).
+    localparam S_IDLE        = 4'd0;
+    localparam S_FEED_X      = 4'd1;
+    localparam S_DRAIN_FC    = 4'd2;
+    localparam S_DIMM_RST    = 4'd3;  // hold DIMM in soft rst between Q rows
+    localparam S_FIRE_DIMM   = 4'd4;  // drive valid_q/k/v for one Q row
+    localparam S_DIMM_WAIT   = 4'd5;  // wait for DIMM to produce valid_n
+    localparam S_OUTPUT      = 4'd6;
+    reg [3:0] state;
 
     reg [11:0] in_count;       // X words consumed (0..N_X_INPUT_WORDS)
     reg [10:0] write_addr;    // q/k/v_buffer write address
@@ -76,6 +85,10 @@ module nldpe_attn_head_d64_c128 #(
     reg [10:0] dimm_k_count; // valid_k pulses already issued
     reg [10:0] dimm_v_count; // valid_v pulses already issued
     reg drive_valid_q, drive_valid_k, drive_valid_v;
+    // Bug-1 fix: outer-loop Q-row counter and DIMM soft-rst pulse
+    reg [7:0] q_row_idx;            // 0..N-1 over Q rows
+    reg [3:0] dimm_rst_count;       // S_DIMM_RST hold counter
+    reg dimm_soft_rst;              // pulses high during S_DIMM_RST
 
     // ─── Q/K/V projection arms ─────────────────────────────────────
     wire [DATA_WIDTH-1:0] q_fc_out, k_fc_out, v_fc_out;
@@ -152,15 +165,20 @@ module nldpe_attn_head_d64_c128 #(
         end
     end
 
-    // ─── DIMM instance (single fire over buffered Q/K/V) ────────────
+    // ─── DIMM instance (re-fired N times via soft rst, Bug-1 fix) ──
+    // dimm_rst_internal pulses high between Q rows so the DIMM's
+    // FSM resets to S_LOAD_Q while its k_sram/v_sram contents persist
+    // (regular SRAMs don't clear on rst). Each iteration reloads K/V
+    // from the head's static k/v_buffer with the same data — idempotent.
     wire [DATA_WIDTH-1:0] dimm_data_out;
     wire dimm_valid_n;
     wire dimm_ready_q, dimm_ready_k, dimm_ready_v;
+    wire dimm_rst_internal = rst | dimm_soft_rst;
 
     nldpe_dimm_top #(
         .N(N_SEQ), .D(D_HEAD), .W(W), .DATA_WIDTH(DATA_WIDTH)
     ) dimm_inst (
-        .clk(clk), .rst(rst),
+        .clk(clk), .rst(dimm_rst_internal),
         .valid_q(drive_valid_q), .valid_k(drive_valid_k), .valid_v(drive_valid_v),
         .ready_n(ready_n),
         .data_in_q(q_buf_out), .data_in_k(k_buf_out), .data_in_v(v_buf_out),
@@ -169,7 +187,20 @@ module nldpe_attn_head_d64_c128 #(
         .valid_n(dimm_valid_n)
     );
 
-    // ─── Top-level FSM ─────────────────────────────────────────────
+    // ─── Top-level FSM (Bug-1 fix: outer Q-row loop) ───────────────
+    // For each q_row_idx in [0..N-1]:
+    //   1. S_DIMM_RST  : pulse dimm_soft_rst for a few cycles so the
+    //                    DIMM's FSM returns to S_IDLE (k/v_sram persists)
+    //   2. S_FIRE_DIMM : drive valid_q for DIMM_Q_WORDS, then valid_k for
+    //                    DIMM_K_WORDS, then valid_v for DIMM_V_WORDS.
+    //                    Q read address starts at q_row_idx * PACKED_NQ.
+    //   3. S_DIMM_WAIT : wait for dimm_valid_n to rise (DIMM completed
+    //                    mac_qk + softmax + mac_sv for this Q row); this
+    //                    ensures every DPE in the pipeline fires before
+    //                    we re-rst the DIMM for the next Q row.
+    //   4. If q_row_idx + 1 < N: increment q_row_idx, go back to S_DIMM_RST.
+    //      Else: transition to S_OUTPUT (final Q row's outputs drain to top).
+    localparam DIMM_RST_CYCLES = 4'd4;   // hold DIMM in soft rst for 4 cyc
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             state          <= S_IDLE;
@@ -181,6 +212,9 @@ module nldpe_attn_head_d64_c128 #(
             drive_valid_q  <= 1'b0;
             drive_valid_k  <= 1'b0;
             drive_valid_v  <= 1'b0;
+            q_row_idx      <= 0;
+            dimm_rst_count <= 0;
+            dimm_soft_rst  <= 1'b0;
         end else begin
             case (state)
                 S_IDLE: begin
@@ -195,15 +229,43 @@ module nldpe_attn_head_d64_c128 #(
                 S_DRAIN_FC: begin
                     // Wait until all PACKED_NQ × N FC outputs are buffered.
                     if (fc_out_count >= N_FC_OUT_WORDS) begin
+                        // Enter Q-row loop. q_row_idx already 0.
+                        state         <= S_DIMM_RST;
+                        dimm_rst_count <= 0;
+                        dimm_soft_rst  <= 1'b0;  // first iteration: no rst needed,
+                                                   // DIMM is already at S_IDLE post-rst
+                    end
+                end
+                S_DIMM_RST: begin
+                    // Pulse dimm_soft_rst high for DIMM_RST_CYCLES cycles
+                    // (skip on q_row_idx==0 since DIMM was just rst by global)
+                    if (q_row_idx == 0) begin
+                        // First iteration: DIMM is fresh from global rst, skip soft rst
                         state         <= S_FIRE_DIMM;
-                        read_addr     <= 0;
+                        read_addr     <= q_row_idx * PACKED_NQ;
                         drive_valid_q <= 1'b1;
+                        dimm_q_count  <= 0;
+                        dimm_k_count  <= 0;
+                        dimm_v_count  <= 0;
+                        dimm_soft_rst <= 1'b0;
+                    end else begin
+                        dimm_soft_rst <= 1'b1;
+                        dimm_rst_count <= dimm_rst_count + 1;
+                        if (dimm_rst_count + 1 == DIMM_RST_CYCLES) begin
+                            dimm_soft_rst  <= 1'b0;
+                            state          <= S_FIRE_DIMM;
+                            read_addr      <= q_row_idx * PACKED_NQ;
+                            drive_valid_q  <= 1'b1;
+                            dimm_q_count   <= 0;
+                            dimm_k_count   <= 0;
+                            dimm_v_count   <= 0;
+                        end
                     end
                 end
                 S_FIRE_DIMM: begin
-                    // Phase A: drive valid_q for DIMM_Q_WORDS cycles.
-                    // Phase B: drive valid_k for DIMM_K_WORDS cycles.
-                    // Phase C: drive valid_v for DIMM_V_WORDS cycles.
+                    // Phase A: drive valid_q for DIMM_Q_WORDS cycles (Q row).
+                    // Phase B: drive valid_k for DIMM_K_WORDS cycles (full K).
+                    // Phase C: drive valid_v for DIMM_V_WORDS cycles (full V).
                     // read_addr advances in lockstep with the active phase.
                     if (drive_valid_q) begin
                         dimm_q_count <= dimm_q_count + 1;
@@ -226,7 +288,24 @@ module nldpe_attn_head_d64_c128 #(
                         read_addr    <= read_addr + 1;
                         if (dimm_v_count + 1 == DIMM_V_WORDS) begin
                             drive_valid_v <= 1'b0;
-                            state         <= S_OUTPUT;
+                            state         <= S_DIMM_WAIT;
+                        end
+                    end
+                end
+                S_DIMM_WAIT: begin
+                    // Wait for DIMM to fully complete this Q row.
+                    // dimm_valid_n is high once any wsum lane reaches WS_OUTPUT,
+                    // by which time all DPE pipeline stages have fired.
+                    if (dimm_valid_n) begin
+                        if (q_row_idx + 1 == N_SEQ) begin
+                            // Last Q row complete — drain output to top.
+                            state <= S_OUTPUT;
+                        end else begin
+                            // Move to next Q row: soft-reset DIMM, repeat.
+                            q_row_idx     <= q_row_idx + 1;
+                            state         <= S_DIMM_RST;
+                            dimm_rst_count <= 0;
+                            dimm_soft_rst  <= 1'b1;
                         end
                     end
                 end

@@ -461,21 +461,21 @@ module tb_nldpe_attn_head_v2;
         dut.dimm_inst.dimm_lane[L].wsum_inst.v_write_addr = 11'd1663;
 
     reg drive_valid_k_d;
-    reg fired_kw_kick;
+    // Bug-1 fix: head FSM now loops N=128 Q rows, so the FORCE_KW kick must
+    // fire N times — once per Q→V phase transition. Retriggered each cycle
+    // the falling edge is observed; no `fired_kw_kick` latch.
     always @(posedge clk) begin
         if (rst) begin
             drive_valid_k_d <= 0;
-            fired_kw_kick   <= 0;
         end else begin
             drive_valid_k_d <= dut.drive_valid_k;
             // Detect 1→0 falling edge of drive_valid_k (Q→V phase transition's
-            // K-end signal). Fire the kick exactly once.
-            if (drive_valid_k_d && !dut.drive_valid_k && !fired_kw_kick) begin
+            // K-end signal). Fire the kick on every transition.
+            if (drive_valid_k_d && !dut.drive_valid_k) begin
                 `FORCE_KW( 0) `FORCE_KW( 1) `FORCE_KW( 2) `FORCE_KW( 3)
                 `FORCE_KW( 4) `FORCE_KW( 5) `FORCE_KW( 6) `FORCE_KW( 7)
                 `FORCE_KW( 8) `FORCE_KW( 9) `FORCE_KW(10) `FORCE_KW(11)
                 `FORCE_KW(12) `FORCE_KW(13) `FORCE_KW(14) `FORCE_KW(15)
-                fired_kw_kick <= 1;
             end
         end
     end
@@ -564,19 +564,19 @@ module tb_nldpe_attn_head_v2;
                  cycle, N_X_INPUT + 2, N_X_INPUT);
 
         // ─── Wait for top-level valid_n pulses to drain ──────────────────
-        // Top valid_n pulses ~N*PACKED_NQ = 1664 times. Note: due to the
-        // lane round-robin and wsum WS_OUTPUT-state semantics, the actual
-        // count can be slightly above N_FC_OUT (a small structural FSM
-        // residual). Wait for at least N_FC_OUT pulses, then capture the
-        // last pulse cycle.
+        // Top valid_n pulses ~N*PACKED_NQ = 1664 times when only ONE Q row's
+        // outputs reach the head (head's S_OUTPUT only mirrors the FINAL Q
+        // row's DIMM output; intermediate Q rows are consumed internally).
+        // Bug-1 fix bumps the timeout to accommodate the N-iteration outer
+        // loop in the head FSM (each Q row ≈ 3,500 DIMM cycles + reload).
         begin : wait_drain
             integer timeout;
             timeout = 0;
-            while (top_valid_pulses < N_FC_OUT && timeout < 200000) begin
+            while (top_valid_pulses < N_FC_OUT && timeout < 1500000) begin
                 @(posedge clk);
                 timeout = timeout + 1;
             end
-            if (timeout >= 200000)
+            if (timeout >= 1500000)
                 $display("  [t=%0d] TIMEOUT waiting for top valid_n drain (%0d/%0d)",
                          cycle, top_valid_pulses, N_FC_OUT);
         end
@@ -693,37 +693,39 @@ module tb_nldpe_attn_head_v2;
             // fires (= total weighted-sum DPE activations).
             $display("");
             $display("=== AH-gate counters (TB-side architectural invariants) ===");
+            // Bug-1 fix: row_count is now N_SEQ (head FSM loops N=128 Q rows).
             $display("COUNTER linear_qkv dpe_fire_count %0d", linear_qkv_dpe_fires);
             $display("COUNTER linear_qkv pass_count %0d", linear_qkv_dpe_fires);
             $display("COUNTER linear_qkv row_count %0d", N_SEQ);
             $display("COUNTER linear_qkv lane_count 6");
             $display("COUNTER mac_qk dpe_fire_count %0d", mac_qk_dpe_fires);
             $display("COUNTER mac_qk pass_count %0d", mac_qk_dpe_fires);
-            $display("COUNTER mac_qk row_count 1");
+            $display("COUNTER mac_qk row_count %0d", N_SEQ);
             $display("COUNTER mac_qk lane_count %0d", W_LANES);
             $display("COUNTER softmax_exp dpe_fire_count %0d", softmax_exp_dpe_fires);
             $display("COUNTER softmax_exp pass_count %0d", softmax_exp_dpe_fires);
-            $display("COUNTER softmax_exp row_count 1");
+            $display("COUNTER softmax_exp row_count %0d", N_SEQ);
             $display("COUNTER softmax_exp lane_count %0d", W_LANES);
             $display("COUNTER softmax_exp softmax_exp_fires %0d", softmax_exp_dpe_fires);
             $display("COUNTER softmax_norm dpe_fire_count %0d", softmax_norm_fires);
             $display("COUNTER softmax_norm pass_count %0d", softmax_norm_fires);
-            $display("COUNTER softmax_norm row_count 1");
+            $display("COUNTER softmax_norm row_count %0d", N_SEQ);
             $display("COUNTER softmax_norm lane_count %0d", W_LANES);
             $display("COUNTER softmax_norm softmax_norm_fires %0d", softmax_norm_fires);
             $display("COUNTER mac_sv dpe_fire_count %0d", mac_sv_log_dpe_fires + mac_sv_exp_dpe_fires);
             $display("COUNTER mac_sv pass_count %0d", mac_sv_log_dpe_fires + mac_sv_exp_dpe_fires);
-            $display("COUNTER mac_sv row_count 1");
+            $display("COUNTER mac_sv row_count %0d", N_SEQ);
             $display("COUNTER mac_sv lane_count %0d", W_LANES);
             $display("COUNTER mac_sv ws_log_fires %0d", mac_sv_log_dpe_fires);
             $display("COUNTER mac_sv ws_exp_fires %0d", mac_sv_exp_dpe_fires);
         end
     endtask
 
-    // Hard timeout (3 ms sim ≈ 300k cycles at 10 ns clock).
+    // Hard timeout — bumped to 60 ms (6M cycles) to accommodate the Bug-1
+    // outer Q-row loop (~500K cycles for 128 iterations × ~3.5K cyc each).
     initial begin
-        #3000000;
-        $display("HARD TIMEOUT at 3 ms sim time");
+        #60000000;
+        $display("HARD TIMEOUT at 60 ms sim time");
         $finish;
     end
 
