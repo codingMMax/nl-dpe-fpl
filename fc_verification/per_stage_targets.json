@@ -1,0 +1,135 @@
+{
+  "_description": "Per-stage sim predictions and DIMM-top per-stage RTL TB cycles at single-Q-row scope. Used as alignment targets for Steps 1-5 of the AH cycle alignment work. linear_qkv targets reference the FC arm timing; mac_qk/mac_sv targets reference single-Q-row gemm row timing; softmax_exp/norm targets reference the per-Q-row analytical latency.",
+  "captured": "2026-04-26",
+  "scope": "single-Q-row stage span (DIMM-top TBs) + FC arm streaming (gemm_pipeline_profile / gemm_dsp)",
+  "rtl_tb_note": "The currently-passing per-stage RTL TBs are the DIMM-top latency TBs (tb_nldpe_dimm_top_latency.v, tb_azurelily_dimm_top_latency.v). These probe one Q-row through the score \u2192 softmax \u2192 wsum cascade (stage names: score=mac_qk, softmax=softmax_exp+norm folded for AL/separate for NL-DPE, wsum=mac_sv). The legacy stand-alone tb_score / tb_softmax / tb_wsum (tb_dimm_score.v, tb_nldpe_dimm_mac_sv_*.v, etc.) are DEPRECATED \u2014 see header banner in those files. linear_qkv has no per-stage TB; the FC primitive is verified separately via tb_fc_*.v.",
+  "configs": {
+    "nldpe_attn_head_d64_c128": {
+      "_arch": "NL-DPE",
+      "params": {
+        "N": 128,
+        "d": 64,
+        "C": 128,
+        "W": 16,
+        "freq_mhz": 300,
+        "t_clk_ns": 3.3333333333333335,
+        "imc_config": "azurelily/IMC/configs/nl_dpe.json"
+      },
+      "stages": {
+        "linear_qkv": {
+          "sim_first_output_ns": 270.0,
+          "sim_steady_ns": 183.33333333333334,
+          "sim_events_per_arm": 128,
+          "rtl_cycles_per_q_row": "N/A (no per-stage TB; verified via tb_fc_*.v at FC primitive level)",
+          "_source": "scheduler.py:_run_linear \u2192 imc_core.gemm_pipeline_profile (NL-DPE FC) \u2014 first_output_ns=t_fill, steady=max stage. K=d=64, N=d=64, M=N=128 (per-arm streaming)."
+        },
+        "mac_qk": {
+          "sim_per_row_total_ns": 416.6666666666667,
+          "sim_per_row_steady_ns": 400.0,
+          "sim_per_row_compute_ns": 400.0,
+          "sim_per_row_read_ns": 10.0,
+          "sim_per_row_write_ns": 6.666666666666667,
+          "rtl_cycles_per_q_row": 260,
+          "rtl_source": "tb_nldpe_dimm_top_latency.v 'Score stage' (score_inst.state==S_OUTPUT first-out, single-Q-row scope, DIMM-top single-lane probe)",
+          "_source": "fpga_fabric.py:gemm_log row_timing \u2014 M=N=128, K=d=64, N=N=128, n_parallel_dpes=W=16, K_id_phys=2 (c=128 dual-identity)."
+        },
+        "softmax_exp": {
+          "sim_compute_per_row_ns": 36.04166666666667,
+          "sim_per_row_total_ns": 49.375,
+          "rtl_cycles_per_q_row": "see DIMM-top softmax stage = 27 cycles (includes exp+norm fold in DIMM-top probe)",
+          "_source": "scheduler.py:_run_softmax_exp NL-DPE branch: imc_core.dimm_nonlinear(N, exp) / W_softmax + ceil(log2(W_softmax)) * t_clk"
+        },
+        "softmax_norm": {
+          "sim_compute_per_row_ns": 15.208333333333334,
+          "sim_per_row_total_ns": 28.541666666666668,
+          "rtl_cycles_per_q_row": "folded into DIMM-top softmax stage probe = 27 cycles (NL-DPE log-softmax fusion: norm_fpga/W + reduction)",
+          "_source": "scheduler.py:_run_softmax_norm NL-DPE log-fusion branch: fpga.norm_fpga(N) / W_softmax + ceil(log2(W_softmax)) * t_clk"
+        },
+        "mac_sv": {
+          "sim_per_row_total_ns": 386.6666666666667,
+          "sim_per_row_steady_ns": 373.33333333333337,
+          "sim_per_row_compute_ns": 373.33333333333337,
+          "sim_per_row_read_ns": 10.0,
+          "sim_per_row_write_ns": 3.3333333333333335,
+          "rtl_cycles_per_q_row": 252,
+          "rtl_source": "tb_nldpe_dimm_top_latency.v 'Wsum stage' (wsum_inst.ws_state==WS_OUTPUT first-out)",
+          "_source": "fpga_fabric.py:gemm_log row_timing \u2014 M=N=128, K=N=128, N=d=64, n_parallel_dpes=W=16, K_id_phys=1, helper_fires_per_row_per_lane=1 (ws_log helper)."
+        },
+        "e2e": {
+          "rtl_cycles_per_q_row": 539,
+          "rtl_source": "tb_nldpe_dimm_top_latency.v 'Compute+output' (end_cyc - feed_qk_cyc)",
+          "sim_e2e_cycles_dimm_top_only": 505,
+          "_note": "DIMM-top E2E excludes linear_qkv. Full attention head E2E (with FC arms) is tracked separately in expected_cycles.json (advisory only post-Bug-1)."
+        }
+      }
+    },
+    "azurelily_attn_head_d64_c128": {
+      "_arch": "Azure-Lily",
+      "params": {
+        "N": 128,
+        "d": 64,
+        "C": 128,
+        "W": 16,
+        "freq_mhz": 300,
+        "t_clk_ns": 3.3333333333333335,
+        "DSP_WIDTH": 4,
+        "imc_config": "azurelily/IMC/configs/azure_lily.json"
+      },
+      "stages": {
+        "linear_qkv": {
+          "sim_first_output_ns": 9100.0,
+          "sim_steady_ns": 71.09375,
+          "sim_events_per_arm": 128,
+          "rtl_cycles_per_q_row": "N/A (no per-stage TB; AL FC verified via tb_fc_*.v at primitive level)",
+          "_source": "scheduler.py:_run_linear AL Baseline branch \u2014 fpga.gemm_dsp(M=128, K=64, N=64, n_parallel_outputs=N=64). AL FC has no separate fill/steady decomposition; first_output = total latency, steady = total/M."
+        },
+        "mac_qk": {
+          "sim_per_row_total_ns": 443.33333333333337,
+          "sim_per_row_steady_ns": 426.6666666666667,
+          "sim_per_row_compute_ns": 426.6666666666667,
+          "sim_per_row_read_ns": 10.0,
+          "sim_per_row_write_ns": 6.666666666666667,
+          "rtl_cycles_per_q_row": 18,
+          "rtl_source": "tb_azurelily_dimm_top_latency.v 'Score stage' (mac_qk first valid_n, DIMM-top single-lane probe). Note AL DIMM-top measures first-row k_tile_qk only (=16 + 2 SRAM setup).",
+          "_source": "fpga_fabric.py:gemm_dsp row_timing \u2014 M=N=128, K=d=64, N=N=128, n_parallel_outputs=W=16, fires_per_lane_per_row=N. DSP_WIDTH=4."
+        },
+        "softmax_exp": {
+          "sim_compute_per_row_ns": 3.3333333333333335,
+          "sim_per_row_total_ns": 16.666666666666668,
+          "rtl_cycles_per_q_row": "DIMM-top softmax probe folds AL S_LOAD + S_INV + first S_NORM = 2289 cyc (includes 127 sequential rows streaming into S_LOAD)",
+          "_source": "scheduler.py:_run_softmax_exp AL else-branch \u2014 fpga.exp_fpga(N) (per-row, no /W split: AL has W LUT instances running rows_per_lane rows in parallel)."
+        },
+        "softmax_norm": {
+          "sim_compute_per_row_ns": 53.333333333333336,
+          "sim_per_row_total_ns": 66.66666666666667,
+          "rtl_cycles_per_q_row": "folded into DIMM-top softmax probe 2289 cyc (AL clb_softmax: S_LOAD all rows \u2192 S_INV \u2192 S_NORM)",
+          "_source": "scheduler.py:_run_softmax_norm AL else-branch \u2014 fpga.norm_fpga(N) (per-row latency, AL: W lanes process rows_per_lane rows in parallel)."
+        },
+        "mac_sv": {
+          "sim_per_row_total_ns": 866.6666666666667,
+          "sim_per_row_steady_ns": 853.3333333333334,
+          "sim_per_row_compute_ns": 853.3333333333334,
+          "sim_per_row_read_ns": 10.0,
+          "sim_per_row_write_ns": 3.3333333333333335,
+          "rtl_cycles_per_q_row": 32,
+          "rtl_source": "tb_azurelily_dimm_top_latency.v 'Wsum stage' (mac_sv first valid_n). AL DIMM-top measures first-row k_tile_sv only (=ceil(N/4)=32).",
+          "_source": "fpga_fabric.py:gemm_dsp row_timing \u2014 M=N=128, K=N=128, N=d=64, n_parallel_outputs=W=16, fires_per_lane_per_row=1."
+        },
+        "e2e": {
+          "rtl_cycles_per_q_row": 2340,
+          "rtl_source": "tb_azurelily_dimm_top_latency.v 'Compute+output' (end_cyc - feed_qk_cyc)",
+          "sim_e2e_cycles_dimm_top_only": 2338,
+          "_note": "DIMM-top E2E excludes linear_qkv. Includes mac_qk + clb_softmax + mac_sv."
+        }
+      }
+    }
+  },
+  "tb_status": {
+    "tb_nldpe_dimm_top_latency.v": "PASS (validated 2026-04-26, RTL=260/27/252/539, sim=248/17/240/505, all \u0394 within phase3_known_deltas tolerance)",
+    "tb_azurelily_dimm_top_latency.v": "PASS (validated 2026-04-26, RTL=18/2289/32/2340, sim=18/2288/32/2338, all \u0394 within phase5_known_deltas tolerance)",
+    "tb_score (legacy)": "DEPRECATED (tb_dimm_score.v: W=1 4\u00d74 exploration, see file header banner)",
+    "tb_softmax (legacy)": "DEPRECATED (no current standalone TB; covered by DIMM-top latency probe)",
+    "tb_wsum (legacy)": "DEPRECATED (tb_*_dimm_mac_sv_*.v files marked DEPRECATED in headers)",
+    "_note": "The DIMM-top latency TBs (tb_nldpe_dimm_top_latency.v + tb_azurelily_dimm_top_latency.v) supersede the per-stage TBs and drive a single Q-row through all DIMM stages with per-stage timestamps. These are the correct Step-0 anchor for cycle-alignment work."
+  }
+}
