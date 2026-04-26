@@ -352,10 +352,11 @@ module softmax_approx #(
             sm_exp_nl_dpe_control <= sm_exp_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    // dpe instantiation — no #() params (arch XML model is parameterless)
-    // Intended: KERNEL_WIDTH=1, NUM_COLS=1,
-    //           ACAM_MODE=1, COMPUTE_CYCLES=3
-    dpe sm_exp (
+    // dpe instantiation — KW=1, NUM_COLS=1 override needed for
+    // iverilog reg_full semantics (stub default KW=128 needs 26 strobes).
+    // Other params (ACAM_MODE=1, COMPUTE_CYCLES=3) are
+    // overridden via TB-level defparam where needed.
+    dpe #(.KERNEL_WIDTH(1), .NUM_COLS(1)) sm_exp (
         .clk(clk), .reset(rst),
         .data_in(sm_exp_data_in),
         .nl_dpe_control(sm_exp_nl_dpe_control),
@@ -535,10 +536,11 @@ module dimm_weighted_sum #(
             ws_log_nl_dpe_control <= ws_log_dpe_exec ? 2'b11 : 2'b00;
         end
     end
-    // dpe instantiation — no #() params (arch XML model is parameterless)
-    // Intended: KERNEL_WIDTH=1, NUM_COLS=1,
-    //           ACAM_MODE=2, COMPUTE_CYCLES=3
-    dpe ws_log (
+    // dpe instantiation — KW=1, NUM_COLS=1 override needed for
+    // iverilog reg_full semantics (stub default KW=128 needs 26 strobes).
+    // Other params (ACAM_MODE=2, COMPUTE_CYCLES=3) are
+    // overridden via TB-level defparam where needed.
+    dpe #(.KERNEL_WIDTH(1), .NUM_COLS(1)) ws_log (
         .clk(clk), .reset(rst),
         .data_in(ws_log_data_in),
         .nl_dpe_control(ws_log_nl_dpe_control),

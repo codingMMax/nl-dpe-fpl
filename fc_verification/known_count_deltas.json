@@ -8,13 +8,13 @@
     "root_cause": "file:line citation of the structural or modelling source of the residual",
     "classification": "structural_rtl_bug | structural_sim_modeling | modelling_granularity"
   },
-  "_status_2026_04_25": "STAGE 1 + Bug-1 fix applied. Bug 1 (head FSM single-fire instead of N×N attention) is FIXED via outer Q-row loop with DIMM soft-rst between iterations (head FSM now iterates q_row_idx ∈ [0..N-1] in fc_verification/rtl/{nldpe,azurelily}_attn_head_d64_c128.v). All Bug-1-attributed deltas (mac_qk -4032, softmax_norm -112, mac_sv -4032/-8144 NL/AL, mac_qk -14336 AL, row_count -127 across all stages) have COLLAPSED. Remaining residuals are exclusively from Bugs 2/3/4 (NL-DPE softmax_exp/ws_log defparam KW=128 vs intended KW=1; AL n_parallel_outputs=N×N counter granularity; AL linear_qkv unit mismatch run_gemm vs gemm_dsp). Those deltas are intentionally NOT pre-registered here so the gate exit code surfaces them for the next bug-fix iteration.",
+  "_status_2026_04_25": "STAGE 1 + Bug-1 + Bug-2 fixes applied. Bug 1 (head FSM single-fire instead of N×N attention) is FIXED via outer Q-row loop with DIMM soft-rst between iterations (head FSM now iterates q_row_idx ∈ [0..N-1] in fc_verification/rtl/{nldpe,azurelily}_attn_head_d64_c128.v). Bug 2 (NL-DPE sm_exp / ws_log instantiated without #(.KERNEL_WIDTH(1), .NUM_COLS(1)) defparams → DPE stub default KW=128 needs 26 strobes vs FSM's 8 → DPE never reaches reg_full → never fires under iverilog) is FIXED via _gen_dimm_stage emitting #(.KERNEL_WIDTH(1), .NUM_COLS(1)) on KW=1/NUM_COLS=1 instances (nl_dpe/gen_attention_wrapper.py). softmax_exp fire count went 0 → 2048 (16 lanes × 128 rows) confirming sm_exp now fires; mac_sv added +2048 from ws_log now firing (8192 → 10240). All Bug-1- and Bug-2-attributed structural-zero deltas have COLLAPSED. Remaining residuals are exclusively from Bug 3 (NL-DPE lane-vs-row counter granularity; AL n_parallel_outputs=N×N counter granularity) and Bug 4 (AL linear_qkv unit mismatch run_gemm vs gemm_dsp). Those deltas are intentionally NOT pre-registered here so the gate exit code surfaces them for the next bug-fix iteration.",
   "_post_bug_1_collapsed_deltas": {
     "_note": "Diagnostic: deltas that the Bug-1 fix eliminated. These entries are kept here only as a record; the gate does not consult this dict.",
     "nldpe_attn_head_d64_c128": {
       "mac_qk.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (now lane×K_id mismatch, Bug 3)"},
       "softmax_norm.softmax_norm_fires": {"pre_fix": -112,  "post_fix": "+1920 (lane-vs-row granularity, Bug 3)"},
-      "mac_sv.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (Bug 2 ws_log + Bug 3 K_id)"}
+      "mac_sv.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (Bug 2 ws_log + Bug 3 K_id; UPDATED post-Bug-2: now +6144 with ws_log firing, all Bug 3 lane×K_id)"}
     },
     "azurelily_attn_head_d64_c128": {
       "mac_qk.dpe_fire_count":     {"pre_fix": -14336, "post_fix": "+245760 (lane×N×N mismatch, Bug 3)"},
@@ -23,7 +23,17 @@
       "mac_sv.dpe_fire_count":     {"pre_fix": -8144, "post_fix": "-6112  (lane×K granularity, Bug 3)"}
     }
   },
-  "updated": "2026-04-25",
+  "_post_bug_2_collapsed_deltas": {
+    "_note": "Diagnostic: deltas that the Bug-2 fix eliminated. NL-DPE only — AL was unaffected since Bug 2 was a NL-DPE generator-side issue.",
+    "nldpe_attn_head_d64_c128": {
+      "softmax_exp.softmax_exp_fires": {"pre_fix": -128,  "post_fix": "+1920 (sm_exp now fires, residual is Bug 3 lane-vs-row 16× over-count)"},
+      "softmax_exp.dpe_fire_count":     {"pre_fix": -128,  "post_fix": "+1920 (same as above)"},
+      "softmax_exp.pass_count":         {"pre_fix": -128,  "post_fix": "+1920 (same as above)"},
+      "mac_sv.dpe_fire_count":          {"pre_fix": +4096, "post_fix": "+6144 (ws_log added 2048 fires; +4096 unchanged from ws_exp Bug 3, +2048 new from ws_log lane-vs-row)"},
+      "mac_sv.pass_count":              {"pre_fix": +4096, "post_fix": "+6144 (same as above)"}
+    }
+  },
+  "updated": "2026-04-26",
   "configs": {
     "nldpe_attn_head_d64_c128": {
       "deltas": []

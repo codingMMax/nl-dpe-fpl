@@ -100,16 +100,31 @@ def _gen_dimm_stage(name: str, kernel_width: int, depth: int,
     lines.append(f"            {name}_nl_dpe_control <= {name}_dpe_exec ? 2'b11 : 2'b00;")
     lines.append(f"        end")
     lines.append(f"    end")
-    # dpe instantiation is parameterless — the arch XML's dpe hard block has
-    # no parameters.  The TB overrides stub parameters via defparam (per-instance)
-    # when different ACAM_MODE or kernel sizes are needed.  The stub's
-    # module-level defaults (KW=128, NUM_COLS=128, ACAM=1, BUF=40, COMPUTE=3)
-    # match the dimm_exp stage so the primary NL-DPE functional test works
-    # without defparams.
-    lines.append(f"    // dpe instantiation — no #() params (arch XML model is parameterless)")
-    lines.append(f"    // Intended: KERNEL_WIDTH={kernel_width}, NUM_COLS={num_cols},")
-    lines.append(f"    //           ACAM_MODE={acam_mode}, COMPUTE_CYCLES={compute_cycles}")
-    lines.append(f"    dpe {name} (")
+    # dpe instantiation parameterisation:
+    #   The arch-XML dpe hard block is parameterless — VTR ignores `#(...)` blocks
+    #   that don't change tile selection, so adding param overrides here is safe
+    #   for synthesis.  iverilog, however, REQUIRES per-instance parameter overrides
+    #   for sm_exp (KW=1, NUM_COLS=1) and ws_log (KW=1, NUM_COLS=1): the stub's
+    #   module-level defaults are KW=128/NUM_COLS=128 (matched to the primary
+    #   dimm_exp stage), and at KW=128 the stub needs ceil(128/5)=26 w_buf_en
+    #   strobes to fill its input register before reg_full triggers compute.
+    #   The softmax_approx and dimm_weighted_sum FSMs only feed 8 strobes per
+    #   row, so without this defparam the scalar 1×1 DPEs (sm_exp / ws_log)
+    #   never reach reg_full → never fire (Bug-2, AH-gate).
+    #   Only the KW=1, NUM_COLS=1 case needs the override; KW=128 stages match
+    #   the stub's defaults and are emitted parameterless as before.
+    needs_param_override = (kernel_width == 1 and num_cols == 1)
+    if needs_param_override:
+        lines.append(f"    // dpe instantiation — KW=1, NUM_COLS=1 override needed for")
+        lines.append(f"    // iverilog reg_full semantics (stub default KW=128 needs 26 strobes).")
+        lines.append(f"    // Other params (ACAM_MODE={acam_mode}, COMPUTE_CYCLES={compute_cycles}) are")
+        lines.append(f"    // overridden via TB-level defparam where needed.")
+        lines.append(f"    dpe #(.KERNEL_WIDTH(1), .NUM_COLS(1)) {name} (")
+    else:
+        lines.append(f"    // dpe instantiation — no #() params (arch XML model is parameterless)")
+        lines.append(f"    // Intended: KERNEL_WIDTH={kernel_width}, NUM_COLS={num_cols},")
+        lines.append(f"    //           ACAM_MODE={acam_mode}, COMPUTE_CYCLES={compute_cycles}")
+        lines.append(f"    dpe {name} (")
     lines.append(f"        .clk(clk), .reset(rst),")
     lines.append(f"        .data_in({name}_data_in),")
     lines.append(f"        .nl_dpe_control({name}_nl_dpe_control),")
