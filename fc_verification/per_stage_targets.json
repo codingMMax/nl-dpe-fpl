@@ -2,6 +2,21 @@
   "_description": "Per-stage sim predictions and DIMM-top per-stage RTL TB cycles at single-Q-row scope. Used as alignment targets for Steps 1-5 of the AH cycle alignment work. linear_qkv targets reference the FC arm timing; mac_qk/mac_sv targets reference single-Q-row gemm row timing; softmax_exp/norm targets reference the per-Q-row analytical latency.",
   "captured": "2026-04-26",
   "scope": "single-Q-row stage span (DIMM-top TBs) + FC arm streaming (gemm_pipeline_profile / gemm_dsp)",
+  "_aggregation_rules": {
+    "_note": "Per-stage targets are PER-Q-ROW. Full-stage time at N=128 scope is computed via the formulas below. Cross-checked against expected_cycles.json ns_breakdown for NL-DPE: linear_qkv=23553, mac_qk=52750, softmax_exp=395, softmax_norm=228, mac_sv=49340 (all ≤1% of the formulas' predictions, modulo first-output initialization).",
+    "linear_qkv_full_ns":   "first_output_ns + (N-1) * steady_ns           (streaming through ping-pong DPE pair / parallel-output DSPs)",
+    "mac_qk_full_ns":       "first_output_ns + (N-1) * per_row_steady_ns   (Layout A + Regime B; first_output ≈ per_row_total)",
+    "mac_sv_full_ns":       "first_output_ns + (N-1) * per_row_steady_ns   (same Layout-A pipelining)",
+    "softmax_exp_full_ns":  "per_row_total_ns * ceil(N / W)                (W=16 lanes process rows_per_lane=8 rows in parallel)",
+    "softmax_norm_full_ns": "per_row_total_ns * ceil(N / W)                (same W-lane fold)",
+    "_step_alignment_targets": {
+      "Step 1 (mac_qk streaming)":    "RTL stage_span ≈ first_output + (N-1) * steady. Per-Q-row first-output target = sim_per_row_total_ns / t_clk_TB.",
+      "Step 2 (softmax streaming)":   "RTL stage_span (N rows) ≈ per_row_total_ns * ceil(N/W) / t_clk_TB.",
+      "Step 3 (mac_sv streaming)":    "Same form as Step 1.",
+      "Step 4 (DIMM-top intra-row)":  "Total per-Q-row = max(mac_qk_first, softmax_first, mac_sv_first) instead of sum (pipelined within Q row).",
+      "Step 5 (head outer loop)":     "Full-N E2E = t_fill + (N-1)*t_steady + t_drain ≈ above ns_breakdown sums."
+    }
+  },
   "rtl_tb_note": "The currently-passing per-stage RTL TBs are the DIMM-top latency TBs (tb_nldpe_dimm_top_latency.v, tb_azurelily_dimm_top_latency.v). These probe one Q-row through the score \u2192 softmax \u2192 wsum cascade (stage names: score=mac_qk, softmax=softmax_exp+norm folded for AL/separate for NL-DPE, wsum=mac_sv). The legacy stand-alone tb_score / tb_softmax / tb_wsum (tb_dimm_score.v, tb_nldpe_dimm_mac_sv_*.v, etc.) are DEPRECATED \u2014 see header banner in those files. linear_qkv has no per-stage TB; the FC primitive is verified separately via tb_fc_*.v.",
   "configs": {
     "nldpe_attn_head_d64_c128": {
