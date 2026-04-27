@@ -188,14 +188,16 @@ module azurelily_attn_head_d64_c128 #(
     // OR-reduced across W lanes). Unused at head level for now; Step 4 will
     // consume it to wire score → softmax streaming directly.
     wire dimm_score_valid_o;  /* unused — Step 1 observation port */
-    // AH Step B-2/B-3 (additive, default off): back-to-back Q-row mode +
-    // trigger ports. Tied to 0 here (preserves current head FSM behaviour
-    // exactly). B-5 will rewire these from the new 3-phase head FSM and
-    // override the parameters to 1 to enable back-to-back Q-row processing.
+    // AH B-2/B-3/B-4 (additive, default off): back-to-back triggers and
+    // wide-address mode tied off here; B-5 rewires from 3-phase head FSM.
+    wire [7:0] dimm_q_row_idx = 8'd0;  // B-5 will drive from counter
+
     azurelily_dimm_top #(
         .N(N_SEQ), .D(D_HEAD), .W(W), .DATA_WIDTH(DATA_WIDTH),
         .SCORE_BACK_TO_BACK_MODE(0),  // B-5 will override
-        .WSUM_BACK_TO_BACK_MODE(0)    // B-5 will override
+        .WSUM_BACK_TO_BACK_MODE(0),   // B-5 will override
+        .SOFTMAX_WIDE_ADDR_MODE(0),   // B-5 will override
+        .WSUM_WIDE_ADDR_MODE(0)       // B-5 will override
     ) dimm_inst (
         .clk(clk), .rst(dimm_rst_internal),
         .valid_q(dimm_valid_q), .valid_k(dimm_valid_k), .valid_v(dimm_valid_v),
@@ -206,7 +208,8 @@ module azurelily_attn_head_d64_c128 #(
         .valid_n(dimm_valid_n_w),
         .score_valid_o(dimm_score_valid_o),
         .score_next_q_row_trigger_i(1'b0),  // B-5 will override
-        .wsum_next_q_row_trigger_i(1'b0)    // B-5 will override
+        .wsum_next_q_row_trigger_i(1'b0),   // B-5 will override
+        .q_row_idx_i(dimm_q_row_idx)        // B-5 will drive from counter
     );
 
     // ───────── outer FSM body (streaming) ─────────

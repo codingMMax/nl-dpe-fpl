@@ -183,12 +183,18 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     addr_width = max(1, (max_depth - 1).bit_length())
     k_addr_width = max(1, (depth_k - 1).bit_length())
     lines = []
+    # AH Step B-4: widen score_sram per-lane to hold all N Q rows × N keys
+    # (= N² entries — safe upper bound for both single- and dual-identity
+    # FSMs). For N=128, W=16 that is 16384 entries per lane (~64× the
+    # canonical N+1 depth). Default WIDE_ADDR_MODE=0 ⇒ extra capacity dormant.
+    wide_depth_score = n_seq * n_seq + 1
+    wide_addr_w_score = max(1, (wide_depth_score - 1).bit_length())
     lines.append(f"module dimm_score_matrix #(")
     lines.append(f"    parameter N = {n_seq},")
     lines.append(f"    parameter d = {d_head},")
     lines.append(f"    parameter DATA_WIDTH = {dw},")
-    lines.append(f"    parameter ADDR_WIDTH = {addr_width},")
-    lines.append(f"    parameter DEPTH = {max_depth},")
+    lines.append(f"    parameter ADDR_WIDTH = {wide_addr_w_score},")
+    lines.append(f"    parameter DEPTH = {wide_depth_score},")
     lines.append(f"    parameter LANE_IDX = 0,       // which key-lane this instance handles (0..W-1)")
     lines.append(f"    parameter W = 1,              // total number of parallel key-lanes at top")
     lines.append(f"    // AH cycle alignment Step B-2 (additive, default off):")
@@ -197,7 +203,10 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    // back-to-back mac_qk firing across Q rows without a")
     lines.append(f"    // soft-rst between iterations. Default 0 preserves the")
     lines.append(f"    // current single-Q-row behaviour exactly.")
-    lines.append(f"    parameter BACK_TO_BACK_MODE = 0")
+    lines.append(f"    parameter BACK_TO_BACK_MODE = 0,")
+    lines.append(f"    // AH Step B-4 (additive, default off): WIDE_ADDR_MODE=1 prefixes")
+    lines.append(f"    // score_write_addr with q_row_idx_i*N (absolute over all Q rows).")
+    lines.append(f"    parameter WIDE_ADDR_MODE = 0")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid_q, input wire valid_k,")
@@ -208,6 +217,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    // head FSM (B-5) wants the score FSM to start the next Q row.")
     lines.append(f"    // Tied to 1'b0 today (B-5 will activate); when mode=0 ignored.")
     lines.append(f"    input wire next_q_row_trigger,")
+    lines.append(f"    // AH Step B-4 (additive): Q-row counter for wide-address mode.")
+    lines.append(f"    input wire [7:0] q_row_idx_i,")
     lines.append(f"    output wire [DATA_WIDTH-1:0] data_out,")
     lines.append(f"    output wire ready_q, output wire ready_k,")
     lines.append(f"    output wire valid_n")
@@ -378,12 +389,12 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    end")
     lines.append(f"")
 
-    # Score SRAM
+    # AH Step B-4: score_sram widened to N²+1 entries (was depth_score=N+1).
     lines.append(f"    reg [ADDR_WIDTH-1:0] score_write_addr, score_read_addr;")
     lines.append(f"    reg score_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] score_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] score_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_score}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({wide_depth_score}))")
     lines.append(f"    score_sram (.clk(clk),.rst(rst),.w_en(score_w_en),.r_addr(score_read_addr),")
     lines.append(f"                .w_addr(score_write_addr),.sram_data_in(score_write_data),.sram_data_out(score_sram_out));")
     lines.append(f"")
@@ -467,14 +478,15 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                        // Write score A")
         lines.append(f"                        score_write_data <= accumulator_a[7:0];")
         lines.append(f"                        score_w_en <= 1;")
-        lines.append(f"                        score_write_addr <= score_idx;")
+        lines.append(f"                        // AH B-4: WIDE_ADDR_MODE=1 → q_row_idx_i*N+offset.")
+        lines.append(f"                        score_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N + score_idx) : score_idx;")
         lines.append(f"                        state <= S_WRITE_B;")
         lines.append(f"                    end")
         lines.append(f"                end")
         lines.append(f"                S_WRITE_B: begin")
         lines.append(f"                    score_write_data <= accumulator_b[7:0];")
         lines.append(f"                    score_w_en <= 1;")
-        lines.append(f"                    score_write_addr <= score_idx + 1;")
+        lines.append(f"                    score_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N + score_idx + 1) : (score_idx + 1);")
         lines.append(f"                    acc_clear <= 1;")
         # Key-parallel: step by W*stride each iteration. Exit when next step would exceed N.
         lines.append(f"                    if (score_idx + W * {stride} >= N) state <= S_OUTPUT;")
@@ -502,7 +514,8 @@ def _gen_dimm_score_matrix(n_seq: int, d_head: int, h_dimm: int,
         lines.append(f"                    if (dpe_output_done && dimm_exp_MSB_SA_Ready) begin")
         lines.append(f"                        score_write_data <= accumulator[7:0];")
         lines.append(f"                        score_w_en <= 1;")
-        lines.append(f"                        score_write_addr <= score_idx;")
+        lines.append(f"                        // AH B-4: WIDE_ADDR_MODE=1 → q_row_idx_i*N+score_idx.")
+        lines.append(f"                        score_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N + score_idx) : score_idx;")
         lines.append(f"                        acc_clear <= 1;")
         # Key-parallel (non-dual): step by W each iteration.
         lines.append(f"                        if (score_idx + W >= N) state <= S_OUTPUT;")
@@ -566,30 +579,39 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     dw = data_width
     max_depth = max(depth_in, depth_exp, depth_out)
     addr_width = max(1, (max_depth - 1).bit_length())
+    # AH Step B-4: widen in/exp/out SRAMs to N²+1 entries (was depth_*=N+1).
+    wide_per_lane = n_seq * n_seq + 1
+    wide_addr_w = max(1, (wide_per_lane - 1).bit_length())
     lines = []
     lines.append(f"module softmax_approx #(")
     lines.append(f"    parameter N = {n_seq},")
     lines.append(f"    parameter d = {d_head},")
     lines.append(f"    parameter DATA_WIDTH = {dw},")
-    lines.append(f"    parameter ADDR_WIDTH = {addr_width},")
-    lines.append(f"    parameter DEPTH = {max_depth},")
+    lines.append(f"    parameter ADDR_WIDTH = {wide_addr_w},")
+    lines.append(f"    parameter DEPTH = {wide_per_lane},")
     lines.append(f"    parameter LANE_IDX = 0,          // lane index (0..W-1)")
     lines.append(f"    parameter W = 1,                 // total parallel lanes at top")
-    lines.append(f"    parameter N_PER_LANE = N / W     // attn elements this lane handles (= N/W)")
+    lines.append(f"    parameter N_PER_LANE = N / W,    // attn elements this lane handles (= N/W)")
+    lines.append(f"    // AH Step B-4 (additive, default off): WIDE_ADDR_MODE=1 prefixes")
+    lines.append(f"    // in/out_sram write addresses with q_row_idx_i*N_PER_LANE; also")
+    lines.append(f"    // gates exp_sum accumulator reset per Q row (sm_q_row_clear).")
+    lines.append(f"    parameter WIDE_ADDR_MODE = 0")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid, input wire ready_n,")
     lines.append(f"    input wire [DATA_WIDTH-1:0] data_in,")
+    lines.append(f"    // AH Step B-4 (additive): Q-row counter for wide-address mode.")
+    lines.append(f"    input wire [7:0] q_row_idx_i,")
     lines.append(f"    output wire [DATA_WIDTH-1:0] data_out,")
     lines.append(f"    output wire ready, output wire valid_n")
     lines.append(f");")
     lines.append(f"")
 
-    # Input SRAM
+    # AH Step B-4: in_sram widened to {wide_per_lane} entries.
     lines.append(f"    reg [ADDR_WIDTH-1:0] in_write_addr, in_read_addr;")
     lines.append(f"    reg in_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] in_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_in}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({wide_per_lane}))")
     lines.append(f"    in_sram (.clk(clk),.rst(rst),.w_en(in_w_en),.r_addr(in_read_addr),")
     lines.append(f"             .w_addr(in_write_addr),.sram_data_in(data_in),.sram_data_out(in_sram_out));")
     lines.append(f"")
@@ -618,22 +640,24 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
             lines.append(f"    assign sm_exp_{i}_ready_n = 1'b0;")
     lines.append(f"")
 
-    # Exp value SRAM + sum accumulator
+    # AH Step B-4: exp_sram widened.
     lines.append(f"    reg [ADDR_WIDTH-1:0] exp_write_addr, exp_read_addr;")
     lines.append(f"    reg exp_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] exp_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] exp_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_exp}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({wide_per_lane}))")
     lines.append(f"    exp_sram (.clk(clk),.rst(rst),.w_en(exp_w_en),.r_addr(exp_read_addr),")
     lines.append(f"              .w_addr(exp_write_addr),.sram_data_in(exp_write_data),.sram_data_out(exp_sram_out));")
     lines.append(f"    reg [2*DATA_WIDTH-1:0] exp_sum;")
     lines.append(f"")
 
-    # DPE output → exp SRAM + accumulate sum
-    exp_out = "sm_exp_data_out" if h_dimm == 1 else "sm_exp_0_data_out"  # simplified for h_dimm>1
+    # AH Step B-4: per-Q-row exp_sum clear pulse (only fires when WIDE_ADDR_MODE=1).
+    exp_out = "sm_exp_data_out" if h_dimm == 1 else "sm_exp_0_data_out"
     exp_valid = "sm_exp_valid_n" if h_dimm == 1 else "sm_exp_0_valid_n"
+    lines.append(f"    reg sm_q_row_clear;")
     lines.append(f"    always @(posedge clk) begin")
     lines.append(f"        if (rst) begin exp_w_en <= 0; exp_write_addr <= 0; exp_sum <= 0; end")
+    lines.append(f"        else if (sm_q_row_clear) begin exp_sum <= 0; exp_w_en <= 0; end")
     lines.append(f"        else if ({exp_valid}) begin")
     lines.append(f"            exp_write_data <= {exp_out};")
     lines.append(f"            exp_w_en <= 1; exp_write_addr <= exp_write_addr + 1;")
@@ -662,11 +686,11 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    reg [DATA_WIDTH-1:0] norm_val;")
     lines.append(f"")
 
-    # Output SRAM
+    # AH Step B-4: out_sram widened.
     lines.append(f"    reg [ADDR_WIDTH-1:0] out_write_addr, out_read_addr;")
     lines.append(f"    reg out_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] out_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_out}))")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({wide_per_lane}))")
     lines.append(f"    out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),")
     lines.append(f"              .w_addr(out_write_addr),.sram_data_in(norm_val),.sram_data_out(out_sram_out));")
     lines.append(f"")
@@ -683,8 +707,10 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"            in_write_addr <= 0; in_read_addr <= 0; in_w_en <= 0;")
     lines.append(f"            out_write_addr <= 0; out_read_addr <= 0; out_w_en <= 0;")
     lines.append(f"            inv_sum <= 0; norm_product <= 0; norm_val <= 0;")
+    lines.append(f"            sm_q_row_clear <= 0;")
     lines.append(f"        end else begin")
     lines.append(f"            in_w_en <= 0; out_w_en <= 0;")
+    lines.append(f"            sm_q_row_clear <= 0;  // AH B-4 default low")
     lines.append(f"            case (sm_state)")
     lines.append(f"                SM_IDLE: if (valid) sm_state <= SM_LOAD;")
     lines.append(f"                SM_LOAD: begin")
@@ -705,9 +731,13 @@ def _gen_softmax_dpe(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"                    norm_product <= exp_sram_out * inv_sum;")
     lines.append(f"                    norm_val <= norm_product[2*DATA_WIDTH-1:DATA_WIDTH];")
     lines.append(f"                    out_w_en <= (sm_count > 1);")
-    lines.append(f"                    out_write_addr <= sm_count - 2;")
+    lines.append(f"                    // AH B-4: WIDE_ADDR_MODE=1 → q_row_idx_i*N_PER_LANE prefix.")
+    lines.append(f"                    out_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N_PER_LANE + (sm_count - 2)) : (sm_count - 2);")
     lines.append(f"                    sm_count <= sm_count + 1;")
-    lines.append(f"                    if (sm_count == N_PER_LANE + 1) sm_state <= SM_OUTPUT;")
+    lines.append(f"                    if (sm_count == N_PER_LANE + 1) begin")
+    lines.append(f"                        sm_state <= SM_OUTPUT;")
+    lines.append(f"                        if (WIDE_ADDR_MODE) sm_q_row_clear <= 1;  // AH B-4")
+    lines.append(f"                    end")
     lines.append(f"                end")
     lines.append(f"                SM_OUTPUT: if (!ready_n) out_read_addr <= out_read_addr + 1;")
     lines.append(f"            endcase")
@@ -759,7 +789,12 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     depth_log_packed = packed_N + 1
     # Per-lane N/W element-serial attn buffer
     depth_attn_lane = (n_seq // 1) + 1  # use N not N/W to keep safe read range
-    max_depth = max(depth_attn_lane, depth_v_packed, depth_log_packed, depth_out)
+    # AH Step B-4: widen attn_sram to hold all N Q rows × N/W per row =
+    # N²/W entries per lane. For N=128, W=16 → 1024 per lane. Use a safe
+    # upper bound of N×N + 1 so a single formula works across all configs.
+    wide_attn_depth = n_seq * n_seq + 1
+    max_depth = max(depth_attn_lane, depth_v_packed, depth_log_packed,
+                    depth_out, wide_attn_depth)
     addr_width = max(1, (max_depth - 1).bit_length())
     v_addr_width = max(1, (depth_v_packed - 1).bit_length())
     lines = []
@@ -777,7 +812,9 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    // to WS_LOAD_A on a `next_q_row_trigger` pulse, enabling")
     lines.append(f"    // back-to-back mac_sv firing across Q rows. V SRAM persists,")
     lines.append(f"    // so WS_LOAD_V is skipped. Default 0 preserves current behaviour.")
-    lines.append(f"    parameter BACK_TO_BACK_MODE = 0")
+    lines.append(f"    parameter BACK_TO_BACK_MODE = 0,")
+    lines.append(f"    // AH Step B-4 (additive, default off): wide-addressing for attn/out SRAMs.")
+    lines.append(f"    parameter WIDE_ADDR_MODE = 0")
     lines.append(f")(")
     lines.append(f"    input wire clk, input wire rst,")
     lines.append(f"    input wire valid_attn, input wire valid_v,")
@@ -788,6 +825,8 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    // (B-5) wants wsum to begin processing the next Q row.")
     lines.append(f"    // Tied to 1'b0 today; ignored when BACK_TO_BACK_MODE=0.")
     lines.append(f"    input wire next_q_row_trigger,")
+    lines.append(f"    // AH Step B-4 (additive): Q-row counter for wide-address mode.")
+    lines.append(f"    input wire [7:0] q_row_idx_i,")
     lines.append(f"    output wire [DATA_WIDTH-1:0] data_out,")
     lines.append(f"    output wire ready_attn, output wire ready_v,")
     lines.append(f"    output wire valid_n")
@@ -798,13 +837,16 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    localparam PACKED_N = {packed_N};  // ceil(N/{epw}) packed words for KW=128 feed")
     lines.append(f"")
 
-    # Attn SRAM (linear domain from softmax, element-serial 1 byte/word)
+    # AH Step B-4: attn_sram widened to {wide_attn_depth} entries; wide-addr
+    # wires gate the physical address (default mode=0 ⇒ lane-local).
     lines.append(f"    reg [ADDR_WIDTH-1:0] attn_write_addr, attn_read_addr;")
     lines.append(f"    reg attn_w_en;")
     lines.append(f"    wire [DATA_WIDTH-1:0] attn_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_attn_lane}))")
-    lines.append(f"    attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_read_addr),")
-    lines.append(f"               .w_addr(attn_write_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));")
+    lines.append(f"    wire [ADDR_WIDTH-1:0] attn_sram_w_addr = WIDE_ADDR_MODE ? (q_row_idx_i * (N/W) + attn_write_addr) : attn_write_addr;")
+    lines.append(f"    wire [ADDR_WIDTH-1:0] attn_sram_r_addr = WIDE_ADDR_MODE ? (q_row_idx_i * (N/W) + attn_read_addr) : attn_read_addr;")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({wide_attn_depth}))")
+    lines.append(f"    attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_sram_r_addr),")
+    lines.append(f"               .w_addr(attn_sram_w_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));")
     lines.append(f"")
 
     # V SRAM (transposed packed: v_sram[m*PACKED_N + k] = packed V[5k..5k+4][m])
@@ -962,14 +1004,16 @@ def _gen_dimm_weighted_sum(n_seq: int, d_head: int, h_dimm: int,
     lines.append(f"    end")
     lines.append(f"")
 
-    # Output SRAM
+    # AH Step B-4: out_sram widened; wide-addr wire prefixes ws_m with q_row_idx_i*M_PER_LANE.
+    wide_out_depth = n_seq * d_head + 1
     lines.append(f"    reg [ADDR_WIDTH-1:0] out_write_addr, out_read_addr;")
     lines.append(f"    reg out_w_en;")
     lines.append(f"    reg [DATA_WIDTH-1:0] out_write_data;")
     lines.append(f"    wire [DATA_WIDTH-1:0] out_sram_out;")
-    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({depth_out}))")
+    lines.append(f"    wire [ADDR_WIDTH-1:0] out_sram_w_addr = WIDE_ADDR_MODE ? (q_row_idx_i * M_PER_LANE + (out_write_addr - LANE_IDX * M_PER_LANE)) : out_write_addr;")
+    lines.append(f"    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH({wide_out_depth}))")
     lines.append(f"    out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),")
-    lines.append(f"              .w_addr(out_write_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));")
+    lines.append(f"              .w_addr(out_sram_w_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));")
     lines.append(f"")
 
     # FSM: single ws_log fire, then per-m (ws_exp fire + reduce + write)

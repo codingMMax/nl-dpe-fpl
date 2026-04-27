@@ -103,6 +103,54 @@ def _gen_dsp_mac_pure4(data_width=40):
 endmodule"""
 
 
+def _gen_weight_buffer_module(data_width=40):
+    """AH Step B-4 (additive): post-softmax weight_buffer per lane.
+
+    WIDE_ADDR_MODE=0 (default) ⇒ transparent passthrough (same-cycle
+    wire-through; zero added latency vs the pre-B4 direct wiring).
+    WIDE_ADDR_MODE=1 ⇒ writes accumulate into N²-deep SRAM at
+    q_row_idx_i*N+count; B-5 will add the read FSM and switch the
+    output mux. Today (B-4) reads remain passthrough so cycles unchanged.
+    """
+    return f"""module weight_buffer #(
+    parameter DATA_WIDTH = {data_width},
+    parameter N = 128,
+    parameter WIDE_ADDR_MODE = 0  // AH B-4 default off
+)(
+    input  wire                   clk, rst,
+    input  wire [7:0]             q_row_idx_i,
+    input  wire [DATA_WIDTH-1:0]  data_in,
+    input  wire                   valid_in,
+    output wire [DATA_WIDTH-1:0]  data_out,
+    output wire                   valid_out
+);
+    localparam DEPTH = N * N;
+    localparam ADDR_W = $clog2(DEPTH + 1);
+    reg  [ADDR_W-1:0] count;
+    reg  [DATA_WIDTH-1:0] sram [0:DEPTH-1];
+    wire [ADDR_W-1:0] w_addr = q_row_idx_i * N + count;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) count <= 0;
+        else if (valid_in && WIDE_ADDR_MODE) begin
+            if (count == N - 1) count <= 0;
+            else                count <= count + 1;
+        end
+    end
+
+    integer init_i;
+    initial for (init_i = 0; init_i < DEPTH; init_i = init_i + 1) sram[init_i] = 0;
+
+    always @(posedge clk) begin
+        if (valid_in && WIDE_ADDR_MODE) sram[w_addr] <= data_in;
+    end
+
+    // B-4: passthrough; B-5 will switch mode=1 reads to sram[w_addr].
+    assign data_out  = data_in;
+    assign valid_out = valid_in;
+endmodule"""
+
+
 def _gen_int_sop_4_stub():
     """Behavioral stub of Intel int_sop_4 for iverilog simulation."""
     return """// Behavioral stub of int_sop_4 for iverilog simulation.
@@ -236,7 +284,11 @@ def _gen_dimm_top_azurelily(n_seq, d_head, crossbar_cols, W, data_width=40):
     L.append(f"    // Default 0 keeps the canonical single-Q-row pipeline; B-5 will")
     L.append(f"    // override to 1 to enable back-to-back Q-row processing.")
     L.append(f"    parameter SCORE_BACK_TO_BACK_MODE = 0,")
-    L.append(f"    parameter WSUM_BACK_TO_BACK_MODE = 0")
+    L.append(f"    parameter WSUM_BACK_TO_BACK_MODE = 0,")
+    L.append(f"    // AH Step B-4 (additive, default off): wide-address mode for clb_softmax")
+    L.append(f"    // sm_buf and the new post-softmax weight_buffer.")
+    L.append(f"    parameter SOFTMAX_WIDE_ADDR_MODE = 0,")
+    L.append(f"    parameter WSUM_WIDE_ADDR_MODE = 0")
     L.append(f")(")
     L.append(f"    input wire clk, rst,")
     L.append(f"    input wire valid_q, valid_k, valid_v, ready_n,")
@@ -254,7 +306,9 @@ def _gen_dimm_top_azurelily(n_seq, d_head, crossbar_cols, W, data_width=40):
     L.append(f"    // 1-cycle pulse advances S_WAIT_QK → S_FEED_QK (score) or S_OUTPUT")
     L.append(f"    // → S_FEED_QK (wsum). With parameters at default (=0), inert.")
     L.append(f"    input wire score_next_q_row_trigger_i,")
-    L.append(f"    input wire wsum_next_q_row_trigger_i")
+    L.append(f"    input wire wsum_next_q_row_trigger_i,")
+    L.append(f"    // AH Step B-4 (additive): Q-row counter for wide-address mode.")
+    L.append(f"    input wire [7:0] q_row_idx_i")
     L.append(f");")
     L.append(f"")
 
@@ -409,19 +463,36 @@ def _gen_dimm_top_azurelily(n_seq, d_head, crossbar_cols, W, data_width=40):
     L.append(f"        assign lane_score_valid[lane] = score_valid;")
     L.append(f"")
     L.append(f"        // Stage 2: clb_softmax (SRAM-backed, handles one row)")
-    L.append(f"        clb_softmax #(.DATA_WIDTH(DATA_WIDTH), .N({n_seq})) softmax_inst (")
+    L.append(f"        // AH B-4: sm_buf widened to N²=16384 with WIDE_ADDR_MODE-gated addr.")
+    L.append(f"        clb_softmax #(.DATA_WIDTH(DATA_WIDTH), .N({n_seq}),")
+    L.append(f"                      .WIDE_ADDR_MODE(SOFTMAX_WIDE_ADDR_MODE)) softmax_inst (")
     L.append(f"            .clk(clk), .rst(rst),")
     L.append(f"            .valid(score_valid), .ready_n(1'b0),")
     L.append(f"            .data_in(score),")
+    L.append(f"            .q_row_idx_i(q_row_idx_i),")
     L.append(f"            .data_out(attn),")
     L.append(f"            .ready(), .valid_n(attn_valid)")
     L.append(f"        );")
     L.append(f"")
-    L.append(f"        // Stage 3: mac_sv (dsp_mac, K={packed_N})")
+    L.append(f"        // AH B-4: post-softmax weight_buffer (transparent when mode=0; B-5")
+    L.append(f"        // will switch to wide-SRAM path for back-to-back mac_sv replay).")
+    L.append(f"        wire [DATA_WIDTH-1:0] weight_buf_out;")
+    L.append(f"        wire weight_buf_valid;")
+    L.append(f"        weight_buffer #(.DATA_WIDTH(DATA_WIDTH), .N({n_seq}),")
+    L.append(f"                        .WIDE_ADDR_MODE(WSUM_WIDE_ADDR_MODE)) weight_buf (")
+    L.append(f"            .clk(clk), .rst(rst),")
+    L.append(f"            .q_row_idx_i(q_row_idx_i),")
+    L.append(f"            .data_in(attn),")
+    L.append(f"            .valid_in(attn_valid),")
+    L.append(f"            .data_out(weight_buf_out),")
+    L.append(f"            .valid_out(weight_buf_valid)")
+    L.append(f"        );")
+    L.append(f"")
+    L.append(f"        // Stage 3: mac_sv (dsp_mac, K={packed_N}). AH B-4: data_a from weight_buffer.")
     L.append(f"        dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K({packed_N})) mac_sv_inst (")
     L.append(f"            .clk(clk), .rst(rst),")
-    L.append(f"            .valid(attn_valid), .ready_n(1'b0),")
-    L.append(f"            .data_a(attn),")
+    L.append(f"            .valid(weight_buf_valid), .ready_n(1'b0),")
+    L.append(f"            .data_a(weight_buf_out),")
     L.append(f"            .data_b(v_sram_out),")
     L.append(f"            .data_out(lane_data[lane]),")
     L.append(f"            .ready(), .valid_n(lane_valid[lane])")
@@ -468,6 +539,7 @@ def main():
     top_rtl = _gen_dimm_top_azurelily(args.N, args.d, args.C, args.W, dw)
     dsp_mac = _gen_dsp_mac_pure4(dw)
     int_sop = _gen_int_sop_4_stub()
+    weight_buffer = _gen_weight_buffer_module(dw)
     clb_softmax = _gen_clb_softmax_module(dw)
     # Apply the two patches we developed for clb_softmax
     clb_softmax = clb_softmax.replace(
@@ -488,6 +560,43 @@ def main():
     clb_softmax = clb_softmax.replace(
         "    wire w_en;  // combinational fix",
         "    wire w_en;  // combinational fix\n    assign w_en = (state == 3'd0 /*S_LOAD*/) && valid;")
+    # AH Step B-4 (additive, default off): widen sm_buf and add
+    # WIDE_ADDR_MODE / q_row_idx_i. Default mode=0 ⇒ canonical
+    # single-Q-row addressing preserved exactly. Mode=1 ⇒ writes
+    # use absolute address q_row_idx_i*N + w_addr; reads use the
+    # same prefix on r_addr. SRAM widened to N²=16384 entries per
+    # lane to hold all Q rows simultaneously.
+    clb_softmax = clb_softmax.replace(
+        "module clb_softmax #(\n    parameter DATA_WIDTH = 40,\n    parameter N = 128,\n    parameter ADDR_W = $clog2(N)\n)(",
+        "module clb_softmax #(\n    parameter DATA_WIDTH = 40,\n    parameter N = 128,\n"
+        "    // AH Step B-4 (additive, default off):\n"
+        "    parameter WIDE_ADDR_MODE = 0,\n"
+        "    parameter ADDR_W = $clog2(N),\n"
+        "    parameter WIDE_DEPTH = N * N,\n"
+        "    parameter WIDE_ADDR_W = $clog2(WIDE_DEPTH)  // sized for DEPTH addressable\n"
+        ")(\n"
+        "    input  wire [7:0]             q_row_idx_i,  // AH Step B-4")
+    # Widen sm_buf depth + adjust read/write address to be q_row_idx-aware.
+    # Default WIDE_ADDR_MODE=0 ⇒ sm_buf_*_addr reduces to lane-local
+    # value (canonical single-Q-row addressing). Mode=1 ⇒ q_row_idx_i*N
+    # prefix is added so all 128 Q rows × N=128 elements coexist.
+    clb_softmax = clb_softmax.replace(
+        "    sram #(.DATA_WIDTH(40), .DEPTH(N)) sm_buf (\n"
+        "        .clk(clk), .rst(rst), .w_en(w_en),\n"
+        "        .r_addr(r_addr), .w_addr(w_addr),\n"
+        "        .sram_data_in(exp_val), .sram_data_out(sram_out)\n"
+        "    );",
+        "    // AH Step B-4: WIDE_ADDR_MODE-gated physical addresses.\n"
+        "    // Default mode=0 ⇒ wires zero-extend lane-local addr (canonical).\n"
+        "    wire [WIDE_ADDR_W-1:0] sm_buf_w_addr = WIDE_ADDR_MODE\n"
+        "        ? (q_row_idx_i * N + w_addr) : {{(WIDE_ADDR_W-ADDR_W){1'b0}}, w_addr};\n"
+        "    wire [WIDE_ADDR_W-1:0] sm_buf_r_addr = WIDE_ADDR_MODE\n"
+        "        ? (q_row_idx_i * N + r_addr) : {{(WIDE_ADDR_W-ADDR_W){1'b0}}, r_addr};\n"
+        "    sram #(.DATA_WIDTH(40), .DEPTH(WIDE_DEPTH)) sm_buf (\n"
+        "        .clk(clk), .rst(rst), .w_en(w_en),\n"
+        "        .r_addr(sm_buf_r_addr), .w_addr(sm_buf_w_addr),\n"
+        "        .sram_data_in(exp_val), .sram_data_out(sram_out)\n"
+        "    );")
     # BUG 3 FIX (intentionally NOT applied): the previous generator stripped
     # the `out_valid <= 0` clear in the S_NORM → S_LOAD transition as a
     # cosmetic cleanup. That breaks downstream consumers: clb_softmax's
@@ -507,8 +616,10 @@ def main():
         f.write(top_rtl)
         f.write("\n\n// ════ dsp_mac (pure 4-wide int_sop_4, no CLB helper) ════\n\n")
         f.write(dsp_mac)
-        f.write("\n\n// ════ clb_softmax (patched for SRAM[0] + last-output) ════\n\n")
+        f.write("\n\n// ════ clb_softmax (patched for SRAM[0] + last-output, AH B-4 wide-addr) ════\n\n")
         f.write(clb_softmax)
+        f.write("\n\n// ════ weight_buffer (AH Step B-4, default-off transparent passthrough) ════\n\n")
+        f.write(weight_buffer)
         f.write("\n\n// ════ int_sop_4 behavioral stub ════\n\n")
         f.write(int_sop)
         f.write("\n\n// ════ sram ════\n\n")
@@ -516,6 +627,7 @@ def main():
     print(f"Generated: {path}")
     print(f"  W={args.W} × 2 matmul stages = {2*args.W} DSPs")
     print(f"  + {args.W} × clb_softmax (CLB-based)")
+    print(f"  + {args.W} × weight_buffer (B-4 additive, default-off passthrough)")
 
 
 if __name__ == "__main__":

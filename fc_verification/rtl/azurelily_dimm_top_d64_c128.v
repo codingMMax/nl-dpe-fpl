@@ -21,7 +21,11 @@ module azurelily_dimm_top #(
     // Default 0 keeps the canonical single-Q-row pipeline; B-5 will
     // override to 1 to enable back-to-back Q-row processing.
     parameter SCORE_BACK_TO_BACK_MODE = 0,
-    parameter WSUM_BACK_TO_BACK_MODE = 0
+    parameter WSUM_BACK_TO_BACK_MODE = 0,
+    // AH Step B-4 (additive, default off): wide-address mode for clb_softmax
+    // sm_buf and the new post-softmax weight_buffer.
+    parameter SOFTMAX_WIDE_ADDR_MODE = 0,
+    parameter WSUM_WIDE_ADDR_MODE = 0
 )(
     input wire clk, rst,
     input wire valid_q, valid_k, valid_v, ready_n,
@@ -39,7 +43,9 @@ module azurelily_dimm_top #(
     // 1-cycle pulse advances S_WAIT_QK → S_FEED_QK (score) or S_OUTPUT
     // → S_FEED_QK (wsum). With parameters at default (=0), inert.
     input wire score_next_q_row_trigger_i,
-    input wire wsum_next_q_row_trigger_i
+    input wire wsum_next_q_row_trigger_i,
+    // AH Step B-4 (additive): Q-row counter for wide-address mode.
+    input wire [7:0] q_row_idx_i
 );
 
     // Per-lane output storage + valid flags
@@ -161,19 +167,36 @@ module azurelily_dimm_top #(
         assign lane_score_valid[lane] = score_valid;
 
         // Stage 2: clb_softmax (SRAM-backed, handles one row)
-        clb_softmax #(.DATA_WIDTH(DATA_WIDTH), .N(128)) softmax_inst (
+        // AH B-4: sm_buf widened to N²=16384 with WIDE_ADDR_MODE-gated addr.
+        clb_softmax #(.DATA_WIDTH(DATA_WIDTH), .N(128),
+                      .WIDE_ADDR_MODE(SOFTMAX_WIDE_ADDR_MODE)) softmax_inst (
             .clk(clk), .rst(rst),
             .valid(score_valid), .ready_n(1'b0),
             .data_in(score),
+            .q_row_idx_i(q_row_idx_i),
             .data_out(attn),
             .ready(), .valid_n(attn_valid)
         );
 
-        // Stage 3: mac_sv (dsp_mac, K=32)
+        // AH B-4: post-softmax weight_buffer (transparent when mode=0; B-5
+        // will switch to wide-SRAM path for back-to-back mac_sv replay).
+        wire [DATA_WIDTH-1:0] weight_buf_out;
+        wire weight_buf_valid;
+        weight_buffer #(.DATA_WIDTH(DATA_WIDTH), .N(128),
+                        .WIDE_ADDR_MODE(WSUM_WIDE_ADDR_MODE)) weight_buf (
+            .clk(clk), .rst(rst),
+            .q_row_idx_i(q_row_idx_i),
+            .data_in(attn),
+            .valid_in(attn_valid),
+            .data_out(weight_buf_out),
+            .valid_out(weight_buf_valid)
+        );
+
+        // Stage 3: mac_sv (dsp_mac, K=32). AH B-4: data_a from weight_buffer.
         dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(32)) mac_sv_inst (
             .clk(clk), .rst(rst),
-            .valid(attn_valid), .ready_n(1'b0),
-            .data_a(attn),
+            .valid(weight_buf_valid), .ready_n(1'b0),
+            .data_a(weight_buf_out),
             .data_b(v_sram_out),
             .data_out(lane_data[lane]),
             .ready(), .valid_n(lane_valid[lane])
@@ -267,13 +290,18 @@ module dsp_mac #(
     assign ready = 1'b1;
 endmodule
 
-// ════ clb_softmax (patched for SRAM[0] + last-output) ════
+// ════ clb_softmax (patched for SRAM[0] + last-output, AH B-4 wide-addr) ════
 
 module clb_softmax #(
     parameter DATA_WIDTH = 40,
     parameter N = 128,
-    parameter ADDR_W = $clog2(N)
+    // AH Step B-4 (additive, default off):
+    parameter WIDE_ADDR_MODE = 0,
+    parameter ADDR_W = $clog2(N),
+    parameter WIDE_DEPTH = N * N,
+    parameter WIDE_ADDR_W = $clog2(WIDE_DEPTH)  // sized for DEPTH addressable
 )(
+    input  wire [7:0]             q_row_idx_i,  // AH Step B-4
     input  wire                   clk, rst, valid, ready_n,
     input  wire [DATA_WIDTH-1:0]  data_in,
     output reg  [DATA_WIDTH-1:0]  data_out,
@@ -290,9 +318,15 @@ module clb_softmax #(
     wire w_en;  // combinational fix
     assign w_en = (state == 3'd0 /*S_LOAD*/) && valid;
     wire [DATA_WIDTH-1:0] sram_out;
-    sram #(.DATA_WIDTH(40), .DEPTH(N)) sm_buf (
+    // AH Step B-4: WIDE_ADDR_MODE-gated physical addresses.
+    // Default mode=0 ⇒ wires zero-extend lane-local addr (canonical).
+    wire [WIDE_ADDR_W-1:0] sm_buf_w_addr = WIDE_ADDR_MODE
+        ? (q_row_idx_i * N + w_addr) : {{(WIDE_ADDR_W-ADDR_W){1'b0}}, w_addr};
+    wire [WIDE_ADDR_W-1:0] sm_buf_r_addr = WIDE_ADDR_MODE
+        ? (q_row_idx_i * N + r_addr) : {{(WIDE_ADDR_W-ADDR_W){1'b0}}, r_addr};
+    sram #(.DATA_WIDTH(40), .DEPTH(WIDE_DEPTH)) sm_buf (
         .clk(clk), .rst(rst), .w_en(w_en),
-        .r_addr(r_addr), .w_addr(w_addr),
+        .r_addr(sm_buf_r_addr), .w_addr(sm_buf_w_addr),
         .sram_data_in(exp_val), .sram_data_out(sram_out)
     );
 
@@ -350,6 +384,46 @@ module clb_softmax #(
     end
     assign valid_n = out_valid;
     assign ready = (state == S_LOAD);
+endmodule
+
+// ════ weight_buffer (AH Step B-4, default-off transparent passthrough) ════
+
+module weight_buffer #(
+    parameter DATA_WIDTH = 40,
+    parameter N = 128,
+    parameter WIDE_ADDR_MODE = 0  // AH B-4 default off
+)(
+    input  wire                   clk, rst,
+    input  wire [7:0]             q_row_idx_i,
+    input  wire [DATA_WIDTH-1:0]  data_in,
+    input  wire                   valid_in,
+    output wire [DATA_WIDTH-1:0]  data_out,
+    output wire                   valid_out
+);
+    localparam DEPTH = N * N;
+    localparam ADDR_W = $clog2(DEPTH + 1);
+    reg  [ADDR_W-1:0] count;
+    reg  [DATA_WIDTH-1:0] sram [0:DEPTH-1];
+    wire [ADDR_W-1:0] w_addr = q_row_idx_i * N + count;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) count <= 0;
+        else if (valid_in && WIDE_ADDR_MODE) begin
+            if (count == N - 1) count <= 0;
+            else                count <= count + 1;
+        end
+    end
+
+    integer init_i;
+    initial for (init_i = 0; init_i < DEPTH; init_i = init_i + 1) sram[init_i] = 0;
+
+    always @(posedge clk) begin
+        if (valid_in && WIDE_ADDR_MODE) sram[w_addr] <= data_in;
+    end
+
+    // B-4: passthrough; B-5 will switch mode=1 reads to sram[w_addr].
+    assign data_out  = data_in;
+    assign valid_out = valid_in;
 endmodule
 
 // ════ int_sop_4 behavioral stub ════

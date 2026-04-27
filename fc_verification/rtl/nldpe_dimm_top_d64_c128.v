@@ -16,7 +16,11 @@ module nldpe_dimm_top #(
     // FSM. Default 0 keeps the canonical single-Q-row pipeline; B-5
     // will override to 1 to enable back-to-back Q-row processing.
     parameter SCORE_BACK_TO_BACK_MODE = 0,
-    parameter WSUM_BACK_TO_BACK_MODE = 0
+    parameter WSUM_BACK_TO_BACK_MODE = 0,
+    // AH Step B-4 (additive, default off): per-stage WIDE_ADDR_MODE selectors.
+    parameter SCORE_WIDE_ADDR_MODE = 0,
+    parameter SOFTMAX_WIDE_ADDR_MODE = 0,
+    parameter WSUM_WIDE_ADDR_MODE = 0
 )(
     input wire clk, rst,
     input wire valid_q, valid_k, valid_v, ready_n,
@@ -37,7 +41,9 @@ module nldpe_dimm_top #(
     // to S_LOAD_Q/WS_LOAD_A. With the parameters at default (=0) these
     // signals are inert — pre-B2/B3 single-Q-row behaviour preserved.
     input wire score_next_q_row_trigger_i,
-    input wire wsum_next_q_row_trigger_i
+    input wire wsum_next_q_row_trigger_i,
+    // AH Step B-4 (additive): Q-row counter for wide-address mode.
+    input wire [7:0] q_row_idx_i
 );
 
     // Per-lane valid/ready/data arrays
@@ -53,17 +59,18 @@ module nldpe_dimm_top #(
         wire score_valid, softmax_valid;
         wire score_ready, softmax_ready;
 
-        // Stage 1: dimm_score_matrix (mac_qk + softmax_exp fused)
-        // LANE_IDX + W parameters make this lane handle keys {2*lane, 2*lane+1,
-        // 2*lane+2W, 2*lane+2W+1, ...}, giving N/W=8 scores per lane at N=128, W=16.
+        // Stage 1: dimm_score_matrix (mac_qk + softmax_exp fused).
+        // AH B-4: pass WIDE_ADDR_MODE + q_row_idx_i down.
         dimm_score_matrix #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
                             .LANE_IDX(lane), .W(W),
-                            .BACK_TO_BACK_MODE(SCORE_BACK_TO_BACK_MODE)) score_inst (
+                            .BACK_TO_BACK_MODE(SCORE_BACK_TO_BACK_MODE),
+                            .WIDE_ADDR_MODE(SCORE_WIDE_ADDR_MODE)) score_inst (
             .clk(clk), .rst(rst),
             .valid_q(valid_q), .valid_k(valid_k),
             .ready_n(softmax_ready),
             .data_in_q(data_in_q), .data_in_k(data_in_k),
             .next_q_row_trigger(score_next_q_row_trigger_i),
+            .q_row_idx_i(q_row_idx_i),
             .data_out(score_out),
             .ready_q(lane_ready_q[lane]), .ready_k(lane_ready_k[lane]),
             .valid_n(score_valid)
@@ -71,31 +78,32 @@ module nldpe_dimm_top #(
         // AH Step 1: surface per-lane score_valid to top-level array
         assign lane_score_valid[lane] = score_valid;
 
-        // Stage 2: softmax_approx (normalize) — per-lane over N/W=8 elements.
-        // NOTE: sum is LOCAL (8 elements), not global. A cross-lane reduction
-        // would be needed for mathematically correct softmax output. For Phase
-        // J cycle alignment we accept local-only softmax; wsum outputs X here.
+        // Stage 2: softmax_approx (per-lane over N/W=8 elements).
+        // AH B-4: pass WIDE_ADDR_MODE + q_row_idx_i down.
         softmax_approx #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
-                         .LANE_IDX(lane), .W(W)) softmax_inst (
+                         .LANE_IDX(lane), .W(W),
+                         .WIDE_ADDR_MODE(SOFTMAX_WIDE_ADDR_MODE)) softmax_inst (
             .clk(clk), .rst(rst),
             .valid(score_valid), .ready_n(1'b0),
             .data_in(score_out),
+            .q_row_idx_i(q_row_idx_i),
             .data_out(softmax_out),
             .ready(score_ready), .valid_n(softmax_valid)
         );
         assign softmax_ready = score_ready;
 
-        // Stage 3: dimm_weighted_sum (wsum_log + mac_sv)
-        // LANE_IDX + W make this lane handle output cols
-        //   [LANE_IDX * d/W, (LANE_IDX+1) * d/W), giving d/W=4 cols per lane at d=64, W=16.
+        // Stage 3: dimm_weighted_sum (wsum_log + mac_sv).
+        // AH B-4: pass WIDE_ADDR_MODE + q_row_idx_i down.
         dimm_weighted_sum #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
                             .LANE_IDX(lane), .W(W),
-                            .BACK_TO_BACK_MODE(WSUM_BACK_TO_BACK_MODE)) wsum_inst (
+                            .BACK_TO_BACK_MODE(WSUM_BACK_TO_BACK_MODE),
+                            .WIDE_ADDR_MODE(WSUM_WIDE_ADDR_MODE)) wsum_inst (
             .clk(clk), .rst(rst),
             .valid_attn(softmax_valid), .valid_v(valid_v),
             .ready_n(1'b0),
             .data_in_attn(softmax_out), .data_in_v(data_in_v),
             .next_q_row_trigger(wsum_next_q_row_trigger_i),
+            .q_row_idx_i(q_row_idx_i),
             .data_out(lane_data_out[lane]),
             .ready_attn(), .ready_v(lane_ready_v[lane]),
             .valid_n(lane_valid_n[lane])
@@ -130,8 +138,8 @@ module dimm_score_matrix #(
     parameter N = 128,
     parameter d = 64,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 11,
-    parameter DEPTH = 1665,
+    parameter ADDR_WIDTH = 15,
+    parameter DEPTH = 16385,
     parameter LANE_IDX = 0,       // which key-lane this instance handles (0..W-1)
     parameter W = 1,              // total number of parallel key-lanes at top
     // AH cycle alignment Step B-2 (additive, default off):
@@ -140,7 +148,10 @@ module dimm_score_matrix #(
     // back-to-back mac_qk firing across Q rows without a
     // soft-rst between iterations. Default 0 preserves the
     // current single-Q-row behaviour exactly.
-    parameter BACK_TO_BACK_MODE = 0
+    parameter BACK_TO_BACK_MODE = 0,
+    // AH Step B-4 (additive, default off): WIDE_ADDR_MODE=1 prefixes
+    // score_write_addr with q_row_idx_i*N (absolute over all Q rows).
+    parameter WIDE_ADDR_MODE = 0
 )(
     input wire clk, input wire rst,
     input wire valid_q, input wire valid_k,
@@ -151,6 +162,8 @@ module dimm_score_matrix #(
     // head FSM (B-5) wants the score FSM to start the next Q row.
     // Tied to 1'b0 today (B-5 will activate); when mode=0 ignored.
     input wire next_q_row_trigger,
+    // AH Step B-4 (additive): Q-row counter for wide-address mode.
+    input wire [7:0] q_row_idx_i,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready_q, output wire ready_k,
     output wire valid_n
@@ -267,7 +280,7 @@ module dimm_score_matrix #(
     reg score_w_en;
     reg [DATA_WIDTH-1:0] score_write_data;
     wire [DATA_WIDTH-1:0] score_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(16385))
     score_sram (.clk(clk),.rst(rst),.w_en(score_w_en),.r_addr(score_read_addr),
                 .w_addr(score_write_addr),.sram_data_in(score_write_data),.sram_data_out(score_sram_out));
 
@@ -333,14 +346,15 @@ module dimm_score_matrix #(
                         // Write score A
                         score_write_data <= accumulator_a[7:0];
                         score_w_en <= 1;
-                        score_write_addr <= score_idx;
+                        // AH B-4: WIDE_ADDR_MODE=1 → q_row_idx_i*N+offset.
+                        score_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N + score_idx) : score_idx;
                         state <= S_WRITE_B;
                     end
                 end
                 S_WRITE_B: begin
                     score_write_data <= accumulator_b[7:0];
                     score_w_en <= 1;
-                    score_write_addr <= score_idx + 1;
+                    score_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N + score_idx + 1) : (score_idx + 1);
                     acc_clear <= 1;
                     if (score_idx + W * 2 >= N) state <= S_OUTPUT;
                     else begin score_idx <= score_idx + W * 2; state <= S_COMPUTE; end
@@ -379,15 +393,21 @@ module softmax_approx #(
     parameter N = 128,
     parameter d = 64,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 8,
-    parameter DEPTH = 129,
+    parameter ADDR_WIDTH = 15,
+    parameter DEPTH = 16385,
     parameter LANE_IDX = 0,          // lane index (0..W-1)
     parameter W = 1,                 // total parallel lanes at top
-    parameter N_PER_LANE = N / W     // attn elements this lane handles (= N/W)
+    parameter N_PER_LANE = N / W,    // attn elements this lane handles (= N/W)
+    // AH Step B-4 (additive, default off): WIDE_ADDR_MODE=1 prefixes
+    // in/out_sram write addresses with q_row_idx_i*N_PER_LANE; also
+    // gates exp_sum accumulator reset per Q row (sm_q_row_clear).
+    parameter WIDE_ADDR_MODE = 0
 )(
     input wire clk, input wire rst,
     input wire valid, input wire ready_n,
     input wire [DATA_WIDTH-1:0] data_in,
+    // AH Step B-4 (additive): Q-row counter for wide-address mode.
+    input wire [7:0] q_row_idx_i,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready, output wire valid_n
 );
@@ -395,7 +415,7 @@ module softmax_approx #(
     reg [ADDR_WIDTH-1:0] in_write_addr, in_read_addr;
     reg in_w_en;
     wire [DATA_WIDTH-1:0] in_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(16385))
     in_sram (.clk(clk),.rst(rst),.w_en(in_w_en),.r_addr(in_read_addr),
              .w_addr(in_write_addr),.sram_data_in(data_in),.sram_data_out(in_sram_out));
 
@@ -450,13 +470,15 @@ module softmax_approx #(
     reg exp_w_en;
     reg [DATA_WIDTH-1:0] exp_write_data;
     wire [DATA_WIDTH-1:0] exp_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(16385))
     exp_sram (.clk(clk),.rst(rst),.w_en(exp_w_en),.r_addr(exp_read_addr),
               .w_addr(exp_write_addr),.sram_data_in(exp_write_data),.sram_data_out(exp_sram_out));
     reg [2*DATA_WIDTH-1:0] exp_sum;
 
+    reg sm_q_row_clear;
     always @(posedge clk) begin
         if (rst) begin exp_w_en <= 0; exp_write_addr <= 0; exp_sum <= 0; end
+        else if (sm_q_row_clear) begin exp_sum <= 0; exp_w_en <= 0; end
         else if (sm_exp_valid_n) begin
             exp_write_data <= sm_exp_data_out;
             exp_w_en <= 1; exp_write_addr <= exp_write_addr + 1;
@@ -495,7 +517,7 @@ module softmax_approx #(
     reg [ADDR_WIDTH-1:0] out_write_addr, out_read_addr;
     reg out_w_en;
     wire [DATA_WIDTH-1:0] out_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(16385))
     out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),
               .w_addr(out_write_addr),.sram_data_in(norm_val),.sram_data_out(out_sram_out));
 
@@ -510,8 +532,10 @@ module softmax_approx #(
             in_write_addr <= 0; in_read_addr <= 0; in_w_en <= 0;
             out_write_addr <= 0; out_read_addr <= 0; out_w_en <= 0;
             inv_sum <= 0; norm_product <= 0; norm_val <= 0;
+            sm_q_row_clear <= 0;
         end else begin
             in_w_en <= 0; out_w_en <= 0;
+            sm_q_row_clear <= 0;  // AH B-4 default low
             case (sm_state)
                 SM_IDLE: if (valid) sm_state <= SM_LOAD;
                 SM_LOAD: begin
@@ -532,9 +556,13 @@ module softmax_approx #(
                     norm_product <= exp_sram_out * inv_sum;
                     norm_val <= norm_product[2*DATA_WIDTH-1:DATA_WIDTH];
                     out_w_en <= (sm_count > 1);
-                    out_write_addr <= sm_count - 2;
+                    // AH B-4: WIDE_ADDR_MODE=1 → q_row_idx_i*N_PER_LANE prefix.
+                    out_write_addr <= WIDE_ADDR_MODE ? (q_row_idx_i * N_PER_LANE + (sm_count - 2)) : (sm_count - 2);
                     sm_count <= sm_count + 1;
-                    if (sm_count == N_PER_LANE + 1) sm_state <= SM_OUTPUT;
+                    if (sm_count == N_PER_LANE + 1) begin
+                        sm_state <= SM_OUTPUT;
+                        if (WIDE_ADDR_MODE) sm_q_row_clear <= 1;  // AH B-4
+                    end
                 end
                 SM_OUTPUT: if (!ready_n) out_read_addr <= out_read_addr + 1;
             endcase
@@ -550,8 +578,8 @@ module dimm_weighted_sum #(
     parameter N = 128,
     parameter d = 64,
     parameter DATA_WIDTH = 40,
-    parameter ADDR_WIDTH = 11,
-    parameter DEPTH = 1665,
+    parameter ADDR_WIDTH = 15,
+    parameter DEPTH = 16385,
     parameter LANE_IDX = 0,       // column-lane this instance owns (0..W-1)
     parameter W = 1,              // total parallel column-lanes at top
     parameter M_PER_LANE = d / W, // output cols per lane (= d/W)
@@ -560,7 +588,9 @@ module dimm_weighted_sum #(
     // to WS_LOAD_A on a `next_q_row_trigger` pulse, enabling
     // back-to-back mac_sv firing across Q rows. V SRAM persists,
     // so WS_LOAD_V is skipped. Default 0 preserves current behaviour.
-    parameter BACK_TO_BACK_MODE = 0
+    parameter BACK_TO_BACK_MODE = 0,
+    // AH Step B-4 (additive, default off): wide-addressing for attn/out SRAMs.
+    parameter WIDE_ADDR_MODE = 0
 )(
     input wire clk, input wire rst,
     input wire valid_attn, input wire valid_v,
@@ -571,6 +601,8 @@ module dimm_weighted_sum #(
     // (B-5) wants wsum to begin processing the next Q row.
     // Tied to 1'b0 today; ignored when BACK_TO_BACK_MODE=0.
     input wire next_q_row_trigger,
+    // AH Step B-4 (additive): Q-row counter for wide-address mode.
+    input wire [7:0] q_row_idx_i,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready_attn, output wire ready_v,
     output wire valid_n
@@ -581,9 +613,11 @@ module dimm_weighted_sum #(
     reg [ADDR_WIDTH-1:0] attn_write_addr, attn_read_addr;
     reg attn_w_en;
     wire [DATA_WIDTH-1:0] attn_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(129))
-    attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_read_addr),
-               .w_addr(attn_write_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));
+    wire [ADDR_WIDTH-1:0] attn_sram_w_addr = WIDE_ADDR_MODE ? (q_row_idx_i * (N/W) + attn_write_addr) : attn_write_addr;
+    wire [ADDR_WIDTH-1:0] attn_sram_r_addr = WIDE_ADDR_MODE ? (q_row_idx_i * (N/W) + attn_read_addr) : attn_read_addr;
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(16385))
+    attn_sram (.clk(clk),.rst(rst),.w_en(attn_w_en),.r_addr(attn_sram_r_addr),
+               .w_addr(attn_sram_w_addr),.sram_data_in(data_in_attn),.sram_data_out(attn_sram_out));
 
     reg [11-1:0] v_write_addr, v_read_addr;
     reg v_w_en;
@@ -755,9 +789,10 @@ module dimm_weighted_sum #(
     reg out_w_en;
     reg [DATA_WIDTH-1:0] out_write_data;
     wire [DATA_WIDTH-1:0] out_sram_out;
-    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(65))
+    wire [ADDR_WIDTH-1:0] out_sram_w_addr = WIDE_ADDR_MODE ? (q_row_idx_i * M_PER_LANE + (out_write_addr - LANE_IDX * M_PER_LANE)) : out_write_addr;
+    sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(8193))
     out_sram (.clk(clk),.rst(rst),.w_en(out_w_en),.r_addr(out_read_addr),
-              .w_addr(out_write_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));
+              .w_addr(out_sram_w_addr),.sram_data_in(out_write_data),.sram_data_out(out_sram_out));
 
     localparam WS_IDLE       = 4'd0,
                WS_LOAD_A     = 4'd1,
