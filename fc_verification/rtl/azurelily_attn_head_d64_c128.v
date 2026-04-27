@@ -184,6 +184,10 @@ module azurelily_attn_head_d64_c128 #(
     wire dimm_rst_internal = rst | dimm_soft_rst;
     wire [DATA_WIDTH-1:0] dimm_out;
     wire dimm_valid_n_w;
+    // AH Step 1: per-cycle DIMM score-stage valid (mac_qk dsp_mac.valid_n
+    // OR-reduced across W lanes). Unused at head level for now; Step 4 will
+    // consume it to wire score → softmax streaming directly.
+    wire dimm_score_valid_o;  /* unused — Step 1 observation port */
     azurelily_dimm_top #(
         .N(N_SEQ), .D(D_HEAD), .W(W), .DATA_WIDTH(DATA_WIDTH)
     ) dimm_inst (
@@ -193,7 +197,8 @@ module azurelily_attn_head_d64_c128 #(
         .data_in_q(q_buf_r_data), .data_in_k(k_buf_r_data), .data_in_v(v_buf_r_data),
         .data_out(dimm_out),
         .ready_q(), .ready_k(), .ready_v(),
-        .valid_n(dimm_valid_n_w)
+        .valid_n(dimm_valid_n_w),
+        .score_valid_o(dimm_score_valid_o)
     );
 
     // ───────── outer FSM body (streaming) ─────────

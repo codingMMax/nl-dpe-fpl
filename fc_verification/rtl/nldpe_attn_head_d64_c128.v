@@ -173,6 +173,9 @@ module nldpe_attn_head_d64_c128 #(
     wire [DATA_WIDTH-1:0] dimm_data_out;
     wire dimm_valid_n;
     wire dimm_ready_q, dimm_ready_k, dimm_ready_v;
+    // AH Step 1: per-cycle DIMM score-stage valid (unused at head level
+    // for now; Step 4 will consume it to wire score → softmax streaming).
+    wire dimm_score_valid_o;  /* unused — Step 1 observation port */
     wire dimm_rst_internal = rst | dimm_soft_rst;
 
     nldpe_dimm_top #(
@@ -184,7 +187,8 @@ module nldpe_attn_head_d64_c128 #(
         .data_in_q(q_buf_out), .data_in_k(k_buf_out), .data_in_v(v_buf_out),
         .data_out(dimm_data_out),
         .ready_q(dimm_ready_q), .ready_k(dimm_ready_k), .ready_v(dimm_ready_v),
-        .valid_n(dimm_valid_n)
+        .valid_n(dimm_valid_n),
+        .score_valid_o(dimm_score_valid_o)
     );
 
     // ─── Top-level FSM (Bug-1 fix: outer Q-row loop) ───────────────

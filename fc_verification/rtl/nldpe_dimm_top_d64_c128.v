@@ -16,12 +16,19 @@ module nldpe_dimm_top #(
     input wire valid_q, valid_k, valid_v, ready_n,
     input wire [DATA_WIDTH-1:0] data_in_q, data_in_k, data_in_v,
     output wire [DATA_WIDTH-1:0] data_out,
-    output wire ready_q, ready_k, ready_v, valid_n
+    output wire ready_q, ready_k, ready_v, valid_n,
+    // AH cycle alignment Step 1 (additive): per-cycle score-stage
+    // valid pulse, OR-reduced across W lanes. Asserts every cycle a
+    // lane's dimm_score_matrix produces a new score word into the
+    // softmax SRAM. Step 4 will consume this to wire score → softmax
+    // streaming directly. Today (Step 1) it is observable but unused.
+    output wire score_valid_o
 );
 
     // Per-lane valid/ready/data arrays
     wire [W-1:0] lane_valid_n;
     wire [W-1:0] lane_ready_q, lane_ready_k, lane_ready_v;
+    wire [W-1:0] lane_score_valid;  // AH Step 1: per-lane score-stage valid
     wire [DATA_WIDTH-1:0] lane_data_out [0:W-1];
 
     // W parallel DIMM pipelines (each = score_matrix + softmax + weighted_sum)
@@ -44,6 +51,8 @@ module nldpe_dimm_top #(
             .ready_q(lane_ready_q[lane]), .ready_k(lane_ready_k[lane]),
             .valid_n(score_valid)
         );
+        // AH Step 1: surface per-lane score_valid to top-level array
+        assign lane_score_valid[lane] = score_valid;
 
         // Stage 2: softmax_approx (normalize) — per-lane over N/W=8 elements.
         // NOTE: sum is LOCAL (8 elements), not global. A cross-lane reduction
@@ -87,6 +96,12 @@ module nldpe_dimm_top #(
     assign ready_q = &lane_ready_q;
     assign ready_k = &lane_ready_k;
     assign ready_v = &lane_ready_v;
+
+    // AH Step 1: top-level score-stage valid = OR-reduction of W lanes.
+    // Cycle-by-cycle pulse, one bit per score word emitted by any lane's
+    // dimm_score_matrix S_OUTPUT. Cycles unchanged vs pre-Step-1 (purely
+    // additive observation port).
+    assign score_valid_o = |lane_score_valid;
 
 endmodule
 

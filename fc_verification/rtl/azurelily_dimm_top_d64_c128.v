@@ -16,11 +16,17 @@ module azurelily_dimm_top #(
     input wire valid_q, valid_k, valid_v, ready_n,
     input wire [DATA_WIDTH-1:0] data_in_q, data_in_k, data_in_v,
     output wire [DATA_WIDTH-1:0] data_out,
-    output wire ready_q, ready_k, ready_v, valid_n
+    output wire ready_q, ready_k, ready_v, valid_n,
+    // AH cycle alignment Step 1 (additive): per-cycle score-stage
+    // valid pulse, OR-reduced across W lanes. Asserts every cycle a
+    // lane's mac_qk dsp_mac fires (dsp_mac.valid_n). Step 4 will
+    // consume this to stream score → softmax. Today unused at top.
+    output wire score_valid_o
 );
 
     // Per-lane output storage + valid flags
     wire [W-1:0] lane_valid;
+    wire [W-1:0] lane_score_valid;  // AH Step 1: per-lane mac_qk valid_n
     wire [DATA_WIDTH-1:0] lane_data [0:W-1];
 
     // Shared Q/K/V SRAMs (broadcast to all lanes)
@@ -111,6 +117,8 @@ module azurelily_dimm_top #(
             .data_out(score),
             .ready(), .valid_n(score_valid)
         );
+        // AH Step 1: surface per-lane mac_qk valid_n to top-level array
+        assign lane_score_valid[lane] = score_valid;
 
         // Stage 2: clb_softmax (SRAM-backed, handles one row)
         clb_softmax #(.DATA_WIDTH(DATA_WIDTH), .N(128)) softmax_inst (
@@ -144,6 +152,11 @@ module azurelily_dimm_top #(
     assign ready_q = (state == S_IDLE || state == S_LOAD);
     assign ready_k = (state == S_IDLE || state == S_LOAD);
     assign ready_v = (state == S_IDLE || state == S_LOAD);
+
+    // AH Step 1: top-level score-stage valid = OR-reduction of W lanes.
+    // Cycle-by-cycle pulse, one bit per score word emitted by any lane's
+    // mac_qk dsp_mac. Cycles unchanged vs pre-Step-1 (purely additive).
+    assign score_valid_o = |lane_score_valid;
 
 endmodule
 
