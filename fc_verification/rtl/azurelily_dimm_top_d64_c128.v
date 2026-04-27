@@ -22,6 +22,14 @@ module azurelily_dimm_top #(
     // override to 1 to enable back-to-back Q-row processing.
     parameter SCORE_BACK_TO_BACK_MODE = 0,
     parameter WSUM_BACK_TO_BACK_MODE = 0,
+    // AH Step B-5 (additive, default off): SOFTMAX_BACK_TO_BACK_MODE is
+    // a no-op for AL (clb_softmax already auto-recycles S_NORM → S_LOAD).
+    // Kept for symmetry with NL DIMM-top so the head FSM can drive the
+    // same parameter set on both architectures.
+    parameter SOFTMAX_BACK_TO_BACK_MODE = 0,
+    // SCORE_WIDE_ADDR_MODE — no-op on AL (mac_qk doesn't need wide-addr;
+    // softmax's sm_buf is the only Q-row-aware SRAM in the AL DIMM-top).
+    parameter SCORE_WIDE_ADDR_MODE = 0,
     // AH Step B-4 (additive, default off): wide-address mode for clb_softmax
     // sm_buf and the new post-softmax weight_buffer.
     parameter SOFTMAX_WIDE_ADDR_MODE = 0,
@@ -37,6 +45,21 @@ module azurelily_dimm_top #(
     // lane's mac_qk dsp_mac fires (dsp_mac.valid_n). Step 4 will
     // consume this to stream score → softmax. Today unused at top.
     output wire score_valid_o,
+    // AH Step B-5 (additive): AND-reduced score-stage done — asserts only
+    // when ALL W lanes' mac_qk simultaneously fire valid_n. Cosmetic on AL
+    // (single shared FSM means lanes always lockstep) but kept for parity
+    // with NL DIMM-top.
+    output wire score_all_done_o,
+    // AH Step B-5 (additive): per-Q-row softmax-done pulse, AND-reduced
+    // across W lanes. Asserts when ALL W clb_softmax instances enter S_NORM
+    // for the current Q row (= scores fully captured, normalisation begins).
+    output wire softmax_done_o,
+    // AH Step B-5 (additive): per-Q-row wsum-done pulse — OR-reduced across
+    // W lanes' mac_sv valid_n.  Fires when the FIRST lane's mac_sv produces
+    // its first valid_n for this Q row. Used by the head FSM as the row-
+    // advance trigger; matches sim's gemm_dsp(fires_per_lane_per_row=1) FSM-
+    // cutoff semantics.
+    output wire wsum_done_o,
     // AH cycle alignment Steps B-2/B-3 (additive, default off):
     // back-to-back Q-row trigger pulses for the score and wsum stages.
     // When the corresponding mode parameter is 1 (B-5 territory), a
@@ -44,13 +67,17 @@ module azurelily_dimm_top #(
     // → S_FEED_QK (wsum). With parameters at default (=0), inert.
     input wire score_next_q_row_trigger_i,
     input wire wsum_next_q_row_trigger_i,
+    // AH Step B-5 (additive): softmax trigger.  No-op on AL (clb_softmax
+    // auto-recycles); kept for symmetry with NL DIMM-top interface.
+    input wire softmax_next_q_row_trigger_i,
     // AH Step B-4 (additive): Q-row counter for wide-address mode.
     input wire [7:0] q_row_idx_i
 );
 
     // Per-lane output storage + valid flags
     wire [W-1:0] lane_valid;
-    wire [W-1:0] lane_score_valid;  // AH Step 1: per-lane mac_qk valid_n
+    wire [W-1:0] lane_score_valid;     // AH Step 1: per-lane mac_qk valid_n
+    wire [W-1:0] lane_softmax_done;    // AH Step B-5: per-lane S_LOAD→S_INV edge
     wire [DATA_WIDTH-1:0] lane_data [0:W-1];
 
     // Shared Q/K/V SRAMs (broadcast to all lanes)
@@ -177,6 +204,14 @@ module azurelily_dimm_top #(
             .data_out(attn),
             .ready(), .valid_n(attn_valid)
         );
+        // AH Step B-5: per-lane softmax_done = rising edge of clb_softmax's
+        // valid_n (= entry into S_NORM, scores all captured + recip computed).
+        reg attn_valid_d;
+        always @(posedge clk or posedge rst) begin
+            if (rst) attn_valid_d <= 0;
+            else attn_valid_d <= attn_valid;
+        end
+        assign lane_softmax_done[lane] = attn_valid && !attn_valid_d;
 
         // AH B-4: post-softmax weight_buffer (transparent when mode=0; B-5
         // will switch to wide-SRAM path for back-to-back mac_sv replay).
@@ -220,6 +255,20 @@ module azurelily_dimm_top #(
     // Cycle-by-cycle pulse, one bit per score word emitted by any lane's
     // mac_qk dsp_mac. Cycles unchanged vs pre-Step-1 (purely additive).
     assign score_valid_o = |lane_score_valid;
+    // AH Step B-5: AND-reduce score_valid → score_all_done_o.  AL has a
+    // single shared FSM driving all W lanes' mac_qk in lockstep, so this is
+    // mostly cosmetic, but exposes consistent interface across NL/AL.
+    assign score_all_done_o = &lane_score_valid;
+    // AH Step B-5: top-level done aggregation.
+    //   softmax_done_o : AND-reduced rising-edge of softmax_inst.valid_n,
+    //                    asserts when ALL W lanes' clb_softmax simultaneously
+    //                    enter S_NORM (= scores all captured for this Q row).
+    //   wsum_done_o    : OR-reduced lane_valid (mac_sv valid_n).  Asserts the
+    //                    cycle the FIRST lane's mac_sv produces a valid output,
+    //                    matching sim's gemm_dsp(fires_per_lane_per_row=1) FSM-
+    //                    cutoff convention.  Used by the head FSM to advance Q rows.
+    assign softmax_done_o = &lane_softmax_done;
+    assign wsum_done_o    = |lane_valid;
 
 endmodule
 

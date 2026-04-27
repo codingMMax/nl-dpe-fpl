@@ -270,16 +270,34 @@ module {top_name} #(
     // OR-reduced across W lanes). Unused at head level for now; Step 4 will
     // consume it to wire score → softmax streaming directly.
     wire dimm_score_valid_o;  /* unused — Step 1 observation port */
-    // AH B-2/B-3/B-4 (additive, default off): back-to-back triggers and
-    // wide-address mode tied off here; B-5 rewires from 3-phase head FSM.
-    wire [7:0] dimm_q_row_idx = 8'd0;  // B-5 will drive from counter
+    // AH Step B-5 (additive): top-level done aggregations.  The AL head
+    // currently uses the soft-rst loop (Bug 1 fix from c54a7de) for Q-row
+    // recycling, so these dones are observable but not load-bearing for the
+    // FSM advance.  Exposed for symmetry with NL DIMM-top and to keep the
+    // interfaces aligned should we move to a non-soft-rst architecture later.
+    wire dimm_score_all_done_o;
+    wire dimm_softmax_done_o;
+    wire dimm_wsum_done_o;
+    // AH B-5: drive q_row_idx_i from the head's outer-loop counter so the
+    // DIMM's WIDE_ADDR_MODE-aware SRAMs can index per-Q-row slots.  With the
+    // soft-rst loop the SRAM contents reset between Q rows so wide-addr is
+    // not strictly needed, but feeding the counter keeps the interface
+    // exercised end-to-end.
+    wire [7:0] dimm_q_row_idx = q_row_idx;
 
     azurelily_dimm_top #(
         .N(N_SEQ), .D(D_HEAD), .W(W), .DATA_WIDTH(DATA_WIDTH),
-        .SCORE_BACK_TO_BACK_MODE(0),  // B-5 will override
-        .WSUM_BACK_TO_BACK_MODE(0),   // B-5 will override
-        .SOFTMAX_WIDE_ADDR_MODE(0),   // B-5 will override
-        .WSUM_WIDE_ADDR_MODE(0)       // B-5 will override
+        // AH Step B-5: every back-to-back / wide-addr mode set to 1 for
+        // interface parity with NL.  Note: with the head's soft-rst loop the
+        // DIMM resets per Q row, so the back-to-back triggers and wide-addr
+        // SRAM offsets are largely no-ops in practice.  They become active
+        // if/when the head moves to a non-soft-rst recycling architecture.
+        .SCORE_BACK_TO_BACK_MODE(1),
+        .WSUM_BACK_TO_BACK_MODE(1),
+        .SOFTMAX_BACK_TO_BACK_MODE(1),
+        .SCORE_WIDE_ADDR_MODE(1),
+        .SOFTMAX_WIDE_ADDR_MODE(1),
+        .WSUM_WIDE_ADDR_MODE(1)
     ) dimm_inst (
         .clk(clk), .rst(dimm_rst_internal),
         .valid_q(dimm_valid_q), .valid_k(dimm_valid_k), .valid_v(dimm_valid_v),
@@ -289,9 +307,13 @@ module {top_name} #(
         .ready_q(), .ready_k(), .ready_v(),
         .valid_n(dimm_valid_n_w),
         .score_valid_o(dimm_score_valid_o),
-        .score_next_q_row_trigger_i(1'b0),  // B-5 will override
-        .wsum_next_q_row_trigger_i(1'b0),   // B-5 will override
-        .q_row_idx_i(dimm_q_row_idx)        // B-5 will drive from counter
+        .score_all_done_o(dimm_score_all_done_o),
+        .softmax_done_o(dimm_softmax_done_o),
+        .wsum_done_o(dimm_wsum_done_o),
+        .score_next_q_row_trigger_i(1'b0),    // soft-rst loop drives recycling
+        .wsum_next_q_row_trigger_i(1'b0),     // soft-rst loop drives recycling
+        .softmax_next_q_row_trigger_i(1'b0),  // clb_softmax auto-recycles
+        .q_row_idx_i(dimm_q_row_idx)
     );
 
     // ───────── outer FSM body (streaming) ─────────

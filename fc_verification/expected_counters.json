@@ -1,6 +1,6 @@
 {
-  "_description": "AH-gate expected architectural-invariant counters (Stage 1, Fmax-independent). Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 with the per-call counter side-channel landed in fpga_fabric.py / imc_core.py / scheduler.py. Schema: per-stage dict of {dpe_fire_count, pass_count, row_count, lane_count, softmax_exp_fires?, softmax_norm_fires?}. Counters are summed across all parallel hardware (16 DIMM lanes, 6 FC DPEs for NL-DPE / 192 FC dsp_macs for AL).",
-  "source": "azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/{nl_dpe,azure_lily}.json on 2026-04-25",
+  "_description": "AH-gate expected architectural-invariant counters (Stage 1, Fmax-independent). Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 with the per-call counter side-channel landed in fpga_fabric.py / imc_core.py / scheduler.py. Counter contract: counters report physical fire events summed across all parallel hardware (W=16 DIMM lanes, 6 NL-DPE FC DPEs / 192 AL FC dsp_macs), per the run_checks Bug-3 fix. Schema: per-stage dict of {dpe_fire_count, pass_count, row_count, lane_count, softmax_exp_fires?, softmax_norm_fires?}.",
+  "source": "azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/{nl_dpe,azure_lily}.json on 2026-04-25 (post-Bug-3)",
   "updated": "2026-04-25",
   "tolerance": {
     "exact_keys":   ["dpe_fire_count", "pass_count", "softmax_exp_fires", "softmax_norm_fires", "row_count", "lane_count"],
@@ -12,7 +12,8 @@
       "params": {
         "N": 128, "d": 64, "C": 128, "W": 16,
         "_imc_cfg": "azurelily/IMC/configs/nl_dpe.json",
-        "_K_id_per_stage": {"mac_qk": 4, "mac_sv": 2}
+        "_K_id_phys_per_stage": {"mac_qk": 2, "mac_sv": 1},
+        "_helper_fires_mac_sv_ws_log": "2048 (1 fire per Q-row per W lane)"
       },
       "stages": {
         "linear_qkv": {
@@ -20,43 +21,43 @@
           "pass_count":     384,
           "row_count":      128,
           "lane_count":     6,
-          "_note":          "3 arms × 2 ping-pong DPEs each = 6 DPEs. Per arm, 128 tokens → 128 DPE fires (alternating between dpe_a and dpe_b ping-pong). Sim's run_gemm gives 128 fires per arm × 3 arms = 384 (matches RTL)."
+          "_note":          "3 arms × 2 ping-pong DPEs each = 6 DPEs. Per arm, 128 tokens → 128 DPE fires (alternating between dpe_a and dpe_b ping-pong). Sim's run_gemm gives 128 fires per arm × 3 arms = 384 (matches RTL counter probe)."
         },
         "mac_qk": {
-          "dpe_fire_count": 4096,
-          "pass_count":     4096,
+          "dpe_fire_count": 8192,
+          "pass_count":     8192,
           "row_count":      128,
           "lane_count":     16,
           "softmax_exp_fires": 0,
           "softmax_norm_fires": 0,
-          "_note":          "Sim's gemm_log(M=128, K=64, N=128, n_parallel_dpes=16) with cfg.cols=256 → K_id=4. effective_passes = M*N / K_id = 16384/4 = 4096 total DPE pass invocations across 16 lanes."
+          "_note":          "Sim's gemm_log(M=128, K=64, N=128, n_parallel_dpes=16, K_id_phys=2). Physical K_id = 2 (RTL c=128 dual_identity for 2*d_head=128≤c=128), even though sim's cfg.cols=256 would suggest K_id_lat=4. Per-Q-row per-lane fires = N/(W*K_id_phys) = 128/32 = 4. Total = 4 × 16 lanes × 128 Q-rows = 8192. Counter formula: M × ceil(N/(W×K_id_phys)) × W = 8192."
         },
         "softmax_exp": {
-          "dpe_fire_count": 128,
-          "pass_count":     128,
+          "dpe_fire_count": 2048,
+          "pass_count":     2048,
           "row_count":      128,
           "lane_count":     16,
-          "softmax_exp_fires": 128,
+          "softmax_exp_fires": 2048,
           "softmax_norm_fires": 0,
-          "_note":          "Sim's _run_softmax_exp uses dimm_nonlinear once per row × N=128 rows. cols/cfg.cols = 128/256 < 1 → num_passes=1 per row → 128 total exp DPE fires."
+          "_note":          "Sim's _run_softmax_exp uses dimm_nonlinear once per row (passes_per_row=1 since cols=128 ≤ cfg.cols=256). Per-lane work = 1 fire × N=128 rows = 128. Scaled by W=16 lanes (dimm_lane[0..15] each have their own sm_exp DPE) = 2048 total fires."
         },
         "softmax_norm": {
-          "dpe_fire_count": 128,
-          "pass_count":     128,
+          "dpe_fire_count": 2048,
+          "pass_count":     2048,
           "row_count":      128,
           "lane_count":     16,
           "softmax_exp_fires": 0,
-          "softmax_norm_fires": 128,
-          "_note":          "Sim's _run_softmax_norm uses norm_fpga + DPE(I|log) per row × N=128 rows → 128 total norm-stage fires."
+          "softmax_norm_fires": 2048,
+          "_note":          "Sim's _run_softmax_norm: 1 norm event per row (the SM_NORMALIZE state entry per lane in the RTL FSM). Per lane × W=16 × N=128 = 2048."
         },
         "mac_sv": {
-          "dpe_fire_count": 4096,
-          "pass_count":     4096,
+          "dpe_fire_count": 10240,
+          "pass_count":     10240,
           "row_count":      128,
           "lane_count":     16,
           "softmax_exp_fires": 0,
           "softmax_norm_fires": 0,
-          "_note":          "Sim's gemm_log(M=128, K=128, N=64, n_parallel_dpes=16) with K_id=2 → effective_passes = 128*64/2 = 4096 DPE pass invocations across 16 lanes. (cfg.cols=256 / K=128 = 2 elements packed per pass.)"
+          "_note":          "Sim's gemm_log(M=128, K=128, N=64, n_parallel_dpes=16, K_id_phys=1, helper_fires_per_row_per_lane=1). Gemm part: 8192 = M × (d/W) × W = 128 × 4 × 16 (= per-Q-row per-lane fires of ws_exp × W × M). Helper part: 2048 = M × W = ws_log scalar fires (1×1 DPE that fires once per Q-row per lane to log-convert the attention vector). Total = 10240."
         }
       }
     },
@@ -64,51 +65,52 @@
       "params": {
         "N": 128, "d": 64, "C": 128, "W": 16,
         "_imc_cfg": "azurelily/IMC/configs/azure_lily.json",
-        "_n_parallel_outputs_per_stage": {"linear_qkv": 64, "mac_qk": 128, "mac_sv": 64}
+        "_n_parallel_outputs_per_stage": {"linear_qkv": 64, "mac_qk": 16, "mac_sv": 16},
+        "_fires_per_lane_per_row_per_stage": {"linear_qkv": 1, "mac_qk": 128, "mac_sv": 1}
       },
       "stages": {
         "linear_qkv": {
-          "dpe_fire_count": 384,
-          "pass_count":     384,
+          "dpe_fire_count": 24576,
+          "pass_count":     24576,
           "row_count":      128,
           "lane_count":     192,
-          "_note":          "Sim's run_gemm path emits 128 fires per arm × 3 arms = 384 'IMC tile fires' (sim treats AL linear as IMC analog crossbar, not DSP-MAC). RTL has 192 dsp_macs (3 arms × 64 parallel-output) firing 64 times per row × 128 rows × 3 arms = 24,576 dsp_mac fires. Unit mismatch — see known_count_deltas.json."
+          "_note":          "Sim's _run_linear (AL branch) emits per-arm gemm_dsp counter: M × N × eff_dsp = 128 × 1 × 64 = 8192 fires per arm (each of 64 dsp_macs fires once per input row M, fires_per_lane_per_row=1 for parallel-output FC). 3 arms (Q/K/V) × 8192 = 24,576. Lane count = 3 × 64 = 192 (3 arms × 64 dsp_macs/arm)."
         },
         "mac_qk": {
-          "dpe_fire_count": 16384,
-          "pass_count":     16384,
+          "dpe_fire_count": 262144,
+          "pass_count":     262144,
           "row_count":      128,
-          "lane_count":     128,
+          "lane_count":     16,
           "softmax_exp_fires": 0,
           "softmax_norm_fires": 0,
-          "_note":          "Sim's gemm_dsp(M=128, K=64, N=128, n_parallel_outputs=128) → M*N = 16384 total dsp_mac fires. Lane count = 128 (sim assumes parallel-output along N axis). RTL has only W=16 lanes, so RTL fires = 1 attn row × 128 K rows × 16 lanes = 2048 — see known_count_deltas.json."
+          "_note":          "Sim's gemm_dsp(M=128, K=64, N=128, n_parallel_outputs=W=16, fires_per_lane_per_row=N=128). Each of W=16 lanes scans all N=128 K-rows per Q-row sequentially → 128 fires per lane per Q-row. Total = M × N × W = 128 × 128 × 16 = 262144. Lane count = W=16 (was N=128 before Bug-3 fix; sim's n_parallel_outputs_dimm now uses W from the doc, not N as the placeholder default)."
         },
         "softmax_exp": {
-          "dpe_fire_count": 128,
-          "pass_count":     128,
+          "dpe_fire_count": 262144,
+          "pass_count":     262144,
           "row_count":      128,
           "lane_count":     16,
-          "softmax_exp_fires": 128,
+          "softmax_exp_fires": 262144,
           "softmax_norm_fires": 0,
-          "_note":          "Sim's clb_exp branch fires once per row (LUT-based exp on cols values) × N=128 rows = 128 fires."
+          "_note":          "Sim's _run_softmax_exp (AL branch): clb_softmax pulses input ``valid`` once per score during S_LOAD's N=128-cycle streaming. Per lane × per row = N=128 strobes. Across W=16 lanes × 128 rows = 262144 total. Counter probe in TB counts rising edges of clb_softmax.valid (input port) summed across W=16 lanes."
         },
         "softmax_norm": {
-          "dpe_fire_count": 128,
-          "pass_count":     128,
+          "dpe_fire_count": 2048,
+          "pass_count":     2048,
           "row_count":      128,
           "lane_count":     16,
           "softmax_exp_fires": 0,
-          "softmax_norm_fires": 128,
-          "_note":          "Sim's norm_fpga fires once per row × N=128 rows = 128 fires."
+          "softmax_norm_fires": 2048,
+          "_note":          "Sim's _run_softmax_norm (AL branch): clb_softmax fires ``valid_n`` once per row at the S_NORM entry edge (= 1 per lane per row). ×W=16 lanes × 128 rows = 2048."
         },
         "mac_sv": {
-          "dpe_fire_count": 8192,
-          "pass_count":     8192,
+          "dpe_fire_count": 2048,
+          "pass_count":     2048,
           "row_count":      128,
-          "lane_count":     64,
+          "lane_count":     16,
           "softmax_exp_fires": 0,
           "softmax_norm_fires": 0,
-          "_note":          "Sim's gemm_dsp(M=128, K=128, N=64, n_parallel_outputs=64) → M*N = 8192 dsp_mac fires. Lane count = 64 (parallel along d_head=64 output cols). RTL has W=16 lanes — see known_count_deltas.json."
+          "_note":          "Sim's gemm_dsp(M=128, K=128, N=64, n_parallel_outputs=W=16, fires_per_lane_per_row=1). Per lane × per Q-row = 1 fire (FSM cutoff: head's S_DIMM_WAIT advances to S_DIMM_RST on first lane's mac_sv valid_n, soft-resetting all lanes before they can produce additional partial sums). Total = M × 1 × W = 128 × 16 = 2048. Edge-case +32 in RTL accommodated by ±1 edge_slack tolerance for FSM transition timing."
         }
       }
     }

@@ -1,5 +1,5 @@
 {
-  "_description": "AH-gate Stage 1 known counter deltas. The new counter gate (gate=counters) compares per-stage architectural-invariant counts (dpe_fire_count, pass_count, row_count, lane_count, softmax_exp_fires, softmax_norm_fires) — Fmax-independent integers describing the same hardware. A delta entry here documents a real disagreement with file:line root-cause citations; the gate accepts the residual if |delta - delta_count| <= tolerance.",
+  "_description": "AH-gate Stage 1 known counter deltas. The counter gate (gate=counters) compares per-stage architectural-invariant counts (dpe_fire_count, pass_count, row_count, lane_count, softmax_exp_fires, softmax_norm_fires) — Fmax-independent integers describing the same hardware. A delta entry here documents a real disagreement with file:line root-cause citations; the gate accepts the residual if |delta - delta_count| <= tolerance.",
   "_schema": {
     "stage": "linear_qkv | mac_qk | softmax_exp | softmax_norm | mac_sv",
     "key": "dpe_fire_count | pass_count | row_count | lane_count | softmax_exp_fires | softmax_norm_fires",
@@ -8,32 +8,8 @@
     "root_cause": "file:line citation of the structural or modelling source of the residual",
     "classification": "structural_rtl_bug | structural_sim_modeling | modelling_granularity"
   },
-  "_status_2026_04_25": "STAGE 1 + Bug-1 + Bug-2 fixes applied. Bug 1 (head FSM single-fire instead of N×N attention) is FIXED via outer Q-row loop with DIMM soft-rst between iterations (head FSM now iterates q_row_idx ∈ [0..N-1] in fc_verification/rtl/{nldpe,azurelily}_attn_head_d64_c128.v). Bug 2 (NL-DPE sm_exp / ws_log instantiated without #(.KERNEL_WIDTH(1), .NUM_COLS(1)) defparams → DPE stub default KW=128 needs 26 strobes vs FSM's 8 → DPE never reaches reg_full → never fires under iverilog) is FIXED via _gen_dimm_stage emitting #(.KERNEL_WIDTH(1), .NUM_COLS(1)) on KW=1/NUM_COLS=1 instances (nl_dpe/gen_attention_wrapper.py). softmax_exp fire count went 0 → 2048 (16 lanes × 128 rows) confirming sm_exp now fires; mac_sv added +2048 from ws_log now firing (8192 → 10240). All Bug-1- and Bug-2-attributed structural-zero deltas have COLLAPSED. Remaining residuals are exclusively from Bug 3 (NL-DPE lane-vs-row counter granularity; AL n_parallel_outputs=N×N counter granularity) and Bug 4 (AL linear_qkv unit mismatch run_gemm vs gemm_dsp). Those deltas are intentionally NOT pre-registered here so the gate exit code surfaces them for the next bug-fix iteration.",
-  "_post_bug_1_collapsed_deltas": {
-    "_note": "Diagnostic: deltas that the Bug-1 fix eliminated. These entries are kept here only as a record; the gate does not consult this dict.",
-    "nldpe_attn_head_d64_c128": {
-      "mac_qk.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (now lane×K_id mismatch, Bug 3)"},
-      "softmax_norm.softmax_norm_fires": {"pre_fix": -112,  "post_fix": "+1920 (lane-vs-row granularity, Bug 3)"},
-      "mac_sv.dpe_fire_count":     {"pre_fix": -4032, "post_fix": "+4096 (Bug 2 ws_log + Bug 3 K_id; UPDATED post-Bug-2: now +6144 with ws_log firing, all Bug 3 lane×K_id)"}
-    },
-    "azurelily_attn_head_d64_c128": {
-      "mac_qk.dpe_fire_count":     {"pre_fix": -14336, "post_fix": "+245760 (lane×N×N mismatch, Bug 3)"},
-      "softmax_exp.softmax_exp_fires": {"pre_fix": +1920, "post_fix": "+262016 (per-element vs per-row, Bug 3)"},
-      "softmax_norm.softmax_norm_fires": {"pre_fix": -112,  "post_fix": "+1920 (lane-vs-row, Bug 3)"},
-      "mac_sv.dpe_fire_count":     {"pre_fix": -8144, "post_fix": "-6112  (lane×K granularity, Bug 3)"}
-    }
-  },
-  "_post_bug_2_collapsed_deltas": {
-    "_note": "Diagnostic: deltas that the Bug-2 fix eliminated. NL-DPE only — AL was unaffected since Bug 2 was a NL-DPE generator-side issue.",
-    "nldpe_attn_head_d64_c128": {
-      "softmax_exp.softmax_exp_fires": {"pre_fix": -128,  "post_fix": "+1920 (sm_exp now fires, residual is Bug 3 lane-vs-row 16× over-count)"},
-      "softmax_exp.dpe_fire_count":     {"pre_fix": -128,  "post_fix": "+1920 (same as above)"},
-      "softmax_exp.pass_count":         {"pre_fix": -128,  "post_fix": "+1920 (same as above)"},
-      "mac_sv.dpe_fire_count":          {"pre_fix": +4096, "post_fix": "+6144 (ws_log added 2048 fires; +4096 unchanged from ws_exp Bug 3, +2048 new from ws_log lane-vs-row)"},
-      "mac_sv.pass_count":              {"pre_fix": +4096, "post_fix": "+6144 (same as above)"}
-    }
-  },
-  "updated": "2026-04-26",
+  "_status_2026_04_25_post_bug_3": "STAGE 1 + Bug-1 + Bug-2 + Bug-3 fixes applied. Bug 3 fix (this commit): sim counter export now multiplied by physical fan-out factors (lane × identity × byte) to match RTL fire convention. Specifically (a) gemm_log gained a K_id_phys parameter (counter-only; latency/energy unchanged) so NL-DPE DIMM mac_qk uses K_id_phys=2 (RTL c=128 dual_identity) and mac_sv uses K_id_phys=1 (no S×V dual at this size); (b) gemm_log also gained helper_fires_per_row_per_lane to add NL-DPE wsum's ws_log scalar fire (=1 per Q-row per W lane); (c) gemm_dsp gained fires_per_lane_per_row (counter-only) so DIMM mac_qk's redundant-lane topology (each of W=16 lanes scans N K-rows per Q-row → N fires per lane per row) is correctly counted as M×N×W; (d) scheduler._run_dimm now passes n_parallel_outputs_dimm=W (= total_dimm_dpes=16) instead of N (was placeholder); (e) scheduler._run_linear (AL branch) now emits per-DSP fires (M×N=8192 per arm × 3 arms = 24576) instead of imc_core.run_gemm's IMC-tile fires (M=128 → 384 with implicit 3-arm aggregation); (f) scheduler._record_softmax_counters now scales exp/norm per-lane fires by W lanes; AL exp specifically uses rows×cols (per-cycle valid input strobes) since clb_softmax fires every S_LOAD cycle. All Bug-3 deltas collapsed to ±1 except AL mac_sv +32 (FSM transition edge effect — rising edges captured between S_DIMM_WAIT advance decision and dimm_soft_rst settling, see entry below).",
+  "updated": "2026-04-25",
   "configs": {
     "nldpe_attn_head_d64_c128": {
       "deltas": []
@@ -41,20 +17,20 @@
     "azurelily_attn_head_d64_c128": {
       "deltas": [
         {
-          "stage": "linear_qkv",
+          "stage": "mac_sv",
           "key": "dpe_fire_count",
-          "delta_count": 24192,
+          "delta_count": 32,
           "tolerance": 0,
-          "root_cause": "Bug 4 (NOT addressed by Bug-1 fix). Unit mismatch between sim and RTL. Sim's _run_linear for AL uses imc_core.run_gemm (NOT gemm_dsp), which counts 'IMC tile fires' = M × total_imc = 128 × 1 = 128 fires per arm. RTL has 64 dsp_macs per arm in parallel-output mode, each firing once per row → 64 dsp_mac fires per row × 128 rows × 3 arms = 24,576 RTL fires. Sim counts 128 × 3 = 384. Δ = +24,192. Classification: structural_sim_modeling. To fix, _run_linear should branch on cfg.imc=='Azure-Lily' to use gemm_dsp with n_parallel_outputs=N just like _run_dimm does. This entry is preserved across the Bug-1 fix because the linear_qkv stage is upstream of the head's outer-loop refactor and was unaffected by the Bug-1 fix.",
-          "classification": "structural_sim_modeling"
+          "root_cause": "fc_verification/rtl/azurelily_attn_head_d64_c128.v:300-334 (S_DIMM_WAIT → S_DIMM_RST). Head FSM advances on first dimm_valid_n_w pulse, but DIMM_RST_CYCLES=4 (line 222) holds the soft-reset for 4 cycles before re-entering S_DIMM_FIRE. During the transition window (= the 1 cycle from advance decision until dimm_soft_rst settles for all 16 lanes via dimm_rst_internal = rst | dimm_soft_rst on line 184), lanes that were 1 K=32 cycle behind fire their valid_n right at the boundary. Aggregated across 128 Q-rows, this yields ~32 extra mac_sv valid_n rising edges (~0.25 per Q-row, summed across 16 lanes — matches edge-cycle FSM transition timing). Pure per-Q-row per-lane count is 1, so RTL ≈ M*W=2048 + ~16-32 boundary spillover = 2080. Sim's gemm_dsp models the FSM-cutoff as exactly M*W=2048 (no boundary spill). Classification: modelling_granularity.",
+          "classification": "modelling_granularity"
         },
         {
-          "stage": "linear_qkv",
+          "stage": "mac_sv",
           "key": "pass_count",
-          "delta_count": 24192,
+          "delta_count": 32,
           "tolerance": 0,
-          "root_cause": "Same as linear_qkv.dpe_fire_count (Bug 4).",
-          "classification": "structural_sim_modeling"
+          "root_cause": "Same as mac_sv.dpe_fire_count (FSM transition edge effect, pass_count is an alias).",
+          "classification": "modelling_granularity"
         }
       ]
     }

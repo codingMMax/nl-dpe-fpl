@@ -17,6 +17,8 @@ module nldpe_dimm_top #(
     // will override to 1 to enable back-to-back Q-row processing.
     parameter SCORE_BACK_TO_BACK_MODE = 0,
     parameter WSUM_BACK_TO_BACK_MODE = 0,
+    // AH Step B-5 (additive, default off): softmax back-to-back recycle.
+    parameter SOFTMAX_BACK_TO_BACK_MODE = 0,
     // AH Step B-4 (additive, default off): per-stage WIDE_ADDR_MODE selectors.
     parameter SCORE_WIDE_ADDR_MODE = 0,
     parameter SOFTMAX_WIDE_ADDR_MODE = 0,
@@ -33,6 +35,20 @@ module nldpe_dimm_top #(
     // softmax SRAM. Step 4 will consume this to wire score → softmax
     // streaming directly. Today (Step 1) it is observable but unused.
     output wire score_valid_o,
+    // AH Step B-5 (additive): AND-reduced score_valid_o — asserts only when
+    // ALL W lanes' score FSMs are simultaneously in S_OUTPUT (= safe to advance).
+    // Used by the head FSM to fire score_next_q_row_trigger.
+    output wire score_all_done_o,
+    // AH Step B-5 (additive): per-Q-row softmax-done pulse, AND-reduced
+    // across W lanes. Asserts for one cycle when ALL W lanes' softmax
+    // have completed processing the current Q row (entry edge into
+    // SM_OUTPUT). Used by the head FSM to advance Phase 2 (softmax-all).
+    output wire softmax_done_o,
+    // AH Step B-5 (additive): per-Q-row wsum-done pulse, AND-reduced across
+    // W lanes. Asserts for one cycle when ALL W lanes' wsum have completed
+    // the current Q row (entry edge into WS_OUTPUT). Used by the head FSM
+    // to advance Phase 3 (mac_sv-all).
+    output wire wsum_done_o,
     // AH cycle alignment Steps B-2/B-3 (additive, default off):
     // back-to-back Q-row trigger pulses, broadcast to every lane's
     // score (mac_qk) and wsum (mac_sv) FSM. When the corresponding
@@ -42,6 +58,8 @@ module nldpe_dimm_top #(
     // signals are inert — pre-B2/B3 single-Q-row behaviour preserved.
     input wire score_next_q_row_trigger_i,
     input wire wsum_next_q_row_trigger_i,
+    // AH Step B-5 (additive): softmax back-to-back trigger.
+    input wire softmax_next_q_row_trigger_i,
     // AH Step B-4 (additive): Q-row counter for wide-address mode.
     input wire [7:0] q_row_idx_i
 );
@@ -50,6 +68,8 @@ module nldpe_dimm_top #(
     wire [W-1:0] lane_valid_n;
     wire [W-1:0] lane_ready_q, lane_ready_k, lane_ready_v;
     wire [W-1:0] lane_score_valid;  // AH Step 1: per-lane score-stage valid
+    wire [W-1:0] lane_softmax_done; // AH Step B-5: per-lane softmax-done pulse
+    wire [W-1:0] lane_wsum_done;    // AH Step B-5: per-lane wsum-done pulse
     wire [DATA_WIDTH-1:0] lane_data_out [0:W-1];
 
     // W parallel DIMM pipelines (each = score_matrix + softmax + weighted_sum)
@@ -80,13 +100,17 @@ module nldpe_dimm_top #(
 
         // Stage 2: softmax_approx (per-lane over N/W=8 elements).
         // AH B-4: pass WIDE_ADDR_MODE + q_row_idx_i down.
+        // AH B-5: pass BACK_TO_BACK_MODE + next_q_row_trigger + softmax_done.
         softmax_approx #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
                          .LANE_IDX(lane), .W(W),
-                         .WIDE_ADDR_MODE(SOFTMAX_WIDE_ADDR_MODE)) softmax_inst (
+                         .WIDE_ADDR_MODE(SOFTMAX_WIDE_ADDR_MODE),
+                         .BACK_TO_BACK_MODE(SOFTMAX_BACK_TO_BACK_MODE)) softmax_inst (
             .clk(clk), .rst(rst),
             .valid(score_valid), .ready_n(1'b0),
             .data_in(score_out),
             .q_row_idx_i(q_row_idx_i),
+            .next_q_row_trigger(softmax_next_q_row_trigger_i),
+            .softmax_done(lane_softmax_done[lane]),
             .data_out(softmax_out),
             .ready(score_ready), .valid_n(softmax_valid)
         );
@@ -94,6 +118,7 @@ module nldpe_dimm_top #(
 
         // Stage 3: dimm_weighted_sum (wsum_log + mac_sv).
         // AH B-4: pass WIDE_ADDR_MODE + q_row_idx_i down.
+        // AH B-5: pass wsum_done up.
         dimm_weighted_sum #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
                             .LANE_IDX(lane), .W(W),
                             .BACK_TO_BACK_MODE(WSUM_BACK_TO_BACK_MODE),
@@ -104,6 +129,7 @@ module nldpe_dimm_top #(
             .data_in_attn(softmax_out), .data_in_v(data_in_v),
             .next_q_row_trigger(wsum_next_q_row_trigger_i),
             .q_row_idx_i(q_row_idx_i),
+            .wsum_done(lane_wsum_done[lane]),
             .data_out(lane_data_out[lane]),
             .ready_attn(), .ready_v(lane_ready_v[lane]),
             .valid_n(lane_valid_n[lane])
@@ -129,6 +155,15 @@ module nldpe_dimm_top #(
     // dimm_score_matrix S_OUTPUT. Cycles unchanged vs pre-Step-1 (purely
     // additive observation port).
     assign score_valid_o = |lane_score_valid;
+    // AH Step B-5: AND-reduced score_valid_o = score_all_done_o.
+    // Used by head FSM as a strict barrier before pulsing score_next_q_row_trigger.
+    assign score_all_done_o = &lane_score_valid;
+    // AH Step B-5: top-level done aggregation. softmax_done_o asserts only
+    // when ALL W lanes' softmax have advanced into SM_OUTPUT this cycle (1-cycle
+    // pulse). wsum_done_o is symmetric for WS_OUTPUT entry. Used by the head
+    // FSM to advance Phase 2 and detect Phase 3 row-completion.
+    assign softmax_done_o = &lane_softmax_done;
+    assign wsum_done_o    = &lane_wsum_done;
 
 endmodule
 
@@ -401,13 +436,25 @@ module softmax_approx #(
     // AH Step B-4 (additive, default off): WIDE_ADDR_MODE=1 prefixes
     // in/out_sram write addresses with q_row_idx_i*N_PER_LANE; also
     // gates exp_sum accumulator reset per Q row (sm_q_row_clear).
-    parameter WIDE_ADDR_MODE = 0
+    parameter WIDE_ADDR_MODE = 0,
+    // AH Step B-5 (additive, default off): BACK_TO_BACK_MODE=1 lets the
+    // softmax FSM return from SM_OUTPUT to SM_IDLE on a `next_q_row_trigger`
+    // pulse, enabling back-to-back softmax across Q rows. Default 0 keeps the
+    // canonical SM_OUTPUT-as-terminal behaviour exactly.
+    parameter BACK_TO_BACK_MODE = 0
 )(
     input wire clk, input wire rst,
     input wire valid, input wire ready_n,
     input wire [DATA_WIDTH-1:0] data_in,
     // AH Step B-4 (additive): Q-row counter for wide-address mode.
     input wire [7:0] q_row_idx_i,
+    // AH Step B-5 (additive): pulses high one cycle when the head FSM wants
+    // softmax to begin processing the next Q row. Tied to 1'b0 by callers
+    // running in single-Q-row mode; ignored when BACK_TO_BACK_MODE=0.
+    input wire next_q_row_trigger,
+    // AH Step B-5 (additive): pulses high for one cycle when the softmax
+    // FSM enters SM_OUTPUT (= S_NORM completion = data ready in out_sram).
+    output wire softmax_done,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready, output wire valid_n
 );
@@ -564,7 +611,25 @@ module softmax_approx #(
                         if (WIDE_ADDR_MODE) sm_q_row_clear <= 1;  // AH B-4
                     end
                 end
-                SM_OUTPUT: if (!ready_n) out_read_addr <= out_read_addr + 1;
+                SM_OUTPUT: begin
+                    if (!ready_n) out_read_addr <= out_read_addr + 1;
+                    // AH Step B-5 (additive): back-to-back Q-row recycle.
+                    // When mode=1 and head pulses next_q_row_trigger, SM_OUTPUT
+                    // returns to SM_IDLE so SM_LOAD can absorb the next Q row's
+                    // scores. Default mode=0 keeps SM_OUTPUT terminal.
+                    if (BACK_TO_BACK_MODE && next_q_row_trigger) begin
+                        sm_state <= SM_IDLE;
+                        sm_count <= 0;
+                        in_write_addr <= 0;
+                        in_read_addr <= 0;
+                        out_read_addr <= 0;
+                        // out_write_addr stays where it left off (wide-mode
+                        // SRAM accumulates across Q rows); in_write_addr resets
+                        // to 0 so SM_LOAD can write next Q row's scores starting
+                        // at the beginning of in_sram (single-Q-row scope per
+                        // SM_LOAD; wide_addr_mode is on out_sram).
+                    end
+                end
             endcase
         end
     end
@@ -572,6 +637,16 @@ module softmax_approx #(
     assign data_out = out_sram_out;
     assign valid_n = (sm_state == SM_OUTPUT);
     assign ready = (sm_state == SM_LOAD || sm_state == SM_IDLE);
+    // AH Step B-5: per-Q-row softmax-done pulse.
+    // High for one cycle on the entry edge into SM_OUTPUT (= SM_NORMALIZE
+    // exit, sm_count==N_PER_LANE+1). Used by the head FSM to count completed
+    // softmax rows. Independent of BACK_TO_BACK_MODE — always observable.
+    reg sm_state_was_normalize;
+    always @(posedge clk or posedge rst) begin
+        if (rst) sm_state_was_normalize <= 0;
+        else sm_state_was_normalize <= (sm_state == SM_NORMALIZE);
+    end
+    assign softmax_done = sm_state_was_normalize && (sm_state == SM_OUTPUT);
 endmodule
 
 module dimm_weighted_sum #(
@@ -605,7 +680,12 @@ module dimm_weighted_sum #(
     input wire [7:0] q_row_idx_i,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready_attn, output wire ready_v,
-    output wire valid_n
+    output wire valid_n,
+    // AH Step B-5 (additive): per-Q-row wsum-done pulse. Asserts for one
+    // cycle on the entry edge into WS_OUTPUT (= last column written, FSM
+    // about to terminate single-Q-row scope). Used by the head FSM to
+    // count completed wsum rows in S_PHASE3.
+    output wire wsum_done
 );
 
     localparam PACKED_N = 26;  // ceil(N/5) packed words for KW=128 feed
@@ -894,6 +974,16 @@ module dimm_weighted_sum #(
     assign valid_n = (ws_state == WS_OUTPUT);
     assign ready_attn = (ws_state == WS_LOAD_A || ws_state == WS_IDLE);
     assign ready_v = (ws_state == WS_LOAD_V || ws_state == WS_IDLE);
+    // AH Step B-5: per-Q-row wsum-done pulse.
+    // High for one cycle on the entry edge into WS_OUTPUT (= WS_EXP_DRAIN
+    // exit when ws_m hit last column). Used by the head FSM to count
+    // completed wsum rows in S_PHASE3.
+    reg ws_state_was_exp_drain;
+    always @(posedge clk or posedge rst) begin
+        if (rst) ws_state_was_exp_drain <= 0;
+        else ws_state_was_exp_drain <= (ws_state == WS_EXP_DRAIN);
+    end
+    assign wsum_done = ws_state_was_exp_drain && (ws_state == WS_OUTPUT);
 endmodule
 
 // ════ Supporting modules ════
