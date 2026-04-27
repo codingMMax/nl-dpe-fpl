@@ -3,18 +3,39 @@
   "captured": "2026-04-26",
   "scope": "single-Q-row stage span (DIMM-top TBs) + FC arm streaming (gemm_pipeline_profile / gemm_dsp)",
   "_aggregation_rules": {
-    "_note": "Per-stage targets are PER-Q-ROW. Full-stage time at N=128 scope is computed via the formulas below. Cross-checked against expected_cycles.json ns_breakdown for NL-DPE: linear_qkv=23553, mac_qk=52750, softmax_exp=395, softmax_norm=228, mac_sv=49340 (all ≤1% of the formulas' predictions, modulo first-output initialization).",
-    "linear_qkv_full_ns":   "first_output_ns + (N-1) * steady_ns           (streaming through ping-pong DPE pair / parallel-output DSPs)",
-    "mac_qk_full_ns":       "first_output_ns + (N-1) * per_row_steady_ns   (Layout A + Regime B; first_output ≈ per_row_total)",
-    "mac_sv_full_ns":       "first_output_ns + (N-1) * per_row_steady_ns   (same Layout-A pipelining)",
-    "softmax_exp_full_ns":  "per_row_total_ns * ceil(N / W)                (W=16 lanes process rows_per_lane=8 rows in parallel)",
-    "softmax_norm_full_ns": "per_row_total_ns * ceil(N / W)                (same W-lane fold)",
+    "_note": "Per-stage targets in cycles (sim's direct analytical output from gen_expected_cycles.py::_compute_sim_per_row, sourced from expected_cycles.json — no Fmax conversion). Two scopes captured per stage: (1) sim_cycles_per_q_row_single = single-Q-row sequential within Q row (what DIMM-top latency TB measures today, pre-pipelining), and (2) sim_cycles_full_n_pipelined = sim's _run_attention_pipeline output at full N=128 scope. Per-row steady (the post-pipelining target for Steps 1-4) = (full_n_pipelined - first_output_cyc) / (N-1).",
+    "linear_qkv_full_cycles":   "first_output_cyc + (N-1) * steady_cyc           (streaming through ping-pong DPE pair / parallel-output DSPs)",
+    "mac_qk_full_cycles":       "first_output_cyc + (N-1) * per_row_steady_cyc   (Layout A + Regime B; first_output = single-Q-row sequential cyc)",
+    "mac_sv_full_cycles":       "first_output_cyc + (N-1) * per_row_steady_cyc   (same Layout-A pipelining)",
+    "softmax_exp_full_cycles":  "per_row_cyc * ceil(N / W)                       (W=16 lanes process rows_per_lane=8 rows in parallel)",
+    "softmax_norm_full_cycles": "per_row_cyc * ceil(N / W)                       (same W-lane fold)",
+    "_canonical_per_stage_cycles": {
+      "_source":      "expected_cycles.json::configs.<arch>_dimm_top_d64_c128.stages (single-Q-row) and configs.<arch>_attn_head_d64_c128.stages (full-N pipelined). Both produced by gen_expected_cycles.py from sim's analytical cycle math (cycles_per_pass + handshake) * cols_per_dpe etc.",
+      "_assumed_fmax_NL_DPE": "102.9 MHz (nldpe_dimm_top_imc_config.json). Placeholder — to be replaced post-VTR.",
+      "_assumed_fmax_AL":     "87.9 MHz placeholder — to be replaced post-VTR.",
+      "nldpe_attn_head_d64_c128": {
+        "linear_qkv":   {"single_q_row_cyc": "N/A (no DIMM-top scope; FC primitive)", "full_n_pipelined_cyc": 2424, "per_row_steady_cyc_derived": 19.0,    "_note": "(2424 - 0) / 128 ≈ 19 cyc/token streamed; first_output absorbed into ping-pong fill"},
+        "mac_qk":       {"single_q_row_cyc": 248, "full_n_pipelined_cyc": 5428,                                    "per_row_steady_cyc_derived": 40.8,    "_note": "= (5428 - 248) / 127"},
+        "softmax_exp":  {"single_q_row_cyc": 17,  "full_n_pipelined_cyc": 41,                                      "per_row_steady_cyc_derived": "n/a (W-lane fold, not pipelined-row form)", "_note": "softmax stages use per_row * ceil(N/W) form"},
+        "softmax_norm": {"single_q_row_cyc": "folded into 17", "full_n_pipelined_cyc": 24,                          "per_row_steady_cyc_derived": "n/a"},
+        "mac_sv":       {"single_q_row_cyc": 240, "full_n_pipelined_cyc": 5077,                                    "per_row_steady_cyc_derived": 38.1,    "_note": "= (5077 - 240) / 127"},
+        "e2e":          {"single_q_row_cyc": 505, "full_n_pipelined_cyc": 12993,                                   "_note": "Full-N pipelined E2E vs single-row sequential E2E ratio ≈ 25.7× — that is the throughput multiplier sim's pipeline assumes (currently absent in RTL)"}
+      },
+      "azurelily_attn_head_d64_c128": {
+        "linear_qkv":   {"single_q_row_cyc": "N/A",  "full_n_pipelined_cyc": 4000,  "per_row_steady_cyc_derived": 31.2},
+        "mac_qk":       {"single_q_row_cyc": 18,    "full_n_pipelined_cyc": 815,   "per_row_steady_cyc_derived": 6.3,  "_note": "= (815 - 18) / 127"},
+        "softmax_exp":  {"single_q_row_cyc": 2289,  "full_n_pipelined_cyc": 12,    "per_row_steady_cyc_derived": "n/a", "_note": "AL clb_softmax DIMM-top probe folds full S_LOAD across N rows = 2289 sequential; AH-scope sim assumes per-row =12 cyc parallelised across W lanes — sim is much faster than RTL today by design (RTL clb_softmax is data-rate bound by upstream mac_qk's 128-row serial FSM)"},
+        "softmax_norm": {"single_q_row_cyc": "folded into 2289", "full_n_pipelined_cyc": 47, "per_row_steady_cyc_derived": "n/a"},
+        "mac_sv":       {"single_q_row_cyc": 32,    "full_n_pipelined_cyc": 1450,  "per_row_steady_cyc_derived": 11.2, "_note": "= (1450 - 32) / 127"},
+        "e2e":          {"single_q_row_cyc": 2340,  "full_n_pipelined_cyc": 6324,  "_note": "Full-N pipelined E2E vs single-row sequential E2E ratio ≈ 2.7× — softmax dominates AL E2E so pipelining helps less"}
+      }
+    },
     "_step_alignment_targets": {
-      "Step 1 (mac_qk streaming)":    "RTL stage_span ≈ first_output + (N-1) * steady. Per-Q-row first-output target = sim_per_row_total_ns / t_clk_TB.",
-      "Step 2 (softmax streaming)":   "RTL stage_span (N rows) ≈ per_row_total_ns * ceil(N/W) / t_clk_TB.",
+      "Step 1 (mac_qk streaming)":    "RTL TB stage_span at single-Q-row scope should still ≈ single_q_row_cyc (this step is about exposing per-cycle valid; the architectural fix). After Step 4 (intra-row pipeline) + Step 5 (outer loop), the FULL-N RTL E2E should approach full_n_pipelined_cyc.",
+      "Step 2 (softmax streaming)":   "Same as Step 1 — single_q_row_cyc is the preserved target during the additive change.",
       "Step 3 (mac_sv streaming)":    "Same form as Step 1.",
-      "Step 4 (DIMM-top intra-row)":  "Total per-Q-row = max(mac_qk_first, softmax_first, mac_sv_first) instead of sum (pipelined within Q row).",
-      "Step 5 (head outer loop)":     "Full-N E2E = t_fill + (N-1)*t_steady + t_drain ≈ above ns_breakdown sums."
+      "Step 4 (DIMM-top intra-row pipeline)": "RTL DIMM-top per-Q-row cycle should drop from sum(mac_qk + softmax + mac_sv) to max(mac_qk_first, softmax_first, mac_sv_first). NL-DPE: 505 → max(248,17,240)=248. AL: 2340 → max(18, 2289, 32)=2289 (softmax-dominated).",
+      "Step 5 (head outer loop)":     "Full-N RTL E2E should approach full_n_pipelined_cyc — NL-DPE 12993, AL 6324. This is the ultimate cycle-alignment target."
     }
   },
   "rtl_tb_note": "The currently-passing per-stage RTL TBs are the DIMM-top latency TBs (tb_nldpe_dimm_top_latency.v, tb_azurelily_dimm_top_latency.v). These probe one Q-row through the score \u2192 softmax \u2192 wsum cascade (stage names: score=mac_qk, softmax=softmax_exp+norm folded for AL/separate for NL-DPE, wsum=mac_sv). The legacy stand-alone tb_score / tb_softmax / tb_wsum (tb_dimm_score.v, tb_nldpe_dimm_mac_sv_*.v, etc.) are DEPRECATED \u2014 see header banner in those files. linear_qkv has no per-stage TB; the FC primitive is verified separately via tb_fc_*.v.",
