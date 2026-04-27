@@ -1,0 +1,20 @@
+{
+  "_description": "AH cycle-alignment known deltas. Mirrors known_count_deltas.json schema but for per-stage cycle counts. The cycle gate (gate=cycles, advisory until Stage 2 VTR lands) compares per-stage RTL TB-measured spans against expected_rtl_cycles in per_stage_targets.json::_alignment_contract. A delta entry here documents a real residual with file:line root-cause citations; the gate accepts if |measured - expected - delta_cycles| <= tolerance.",
+  "_schema": {
+    "stage": "linear_qkv | mac_qk | softmax_exp | softmax_norm | mac_sv | e2e",
+    "delta_cycles": "RTL_measured - expected_rtl_cycles. Positive = RTL slower than sim; negative = RTL faster.",
+    "tolerance": "Allowed wiggle around delta_cycles (typically small for FSM-glue).",
+    "root_cause": "file:line citation of the structural or modelling source of the residual.",
+    "classification": "structural_rtl_bug | structural_sim_modeling | modelling_granularity | fsm_glue"
+  },
+  "_status_initial": "Created 2026-04-26 alongside Stage-3 cycle alignment work. Steps 1–5 will populate this file as residuals are measured and annotated. Initial state: empty (gate currently fails by design — the 33–82× E2E gap is the alignment work itself, not a known residual).",
+  "updated": "2026-04-26",
+  "configs": {
+    "nldpe_attn_head_d64_c128": {
+      "deltas": []
+    },
+    "azurelily_attn_head_d64_c128": {
+      "deltas": []
+    }
+  }
+}

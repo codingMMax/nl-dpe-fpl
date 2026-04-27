@@ -2,6 +2,46 @@
   "_description": "Per-stage sim predictions and DIMM-top per-stage RTL TB cycles at single-Q-row scope. Used as alignment targets for Steps 1-5 of the AH cycle alignment work. linear_qkv targets reference the FC arm timing; mac_qk/mac_sv targets reference single-Q-row gemm row timing; softmax_exp/norm targets reference the per-Q-row analytical latency.",
   "captured": "2026-04-26",
   "scope": "single-Q-row stage span (DIMM-top TBs) + FC arm streaming (gemm_pipeline_profile / gemm_dsp)",
+  "_alignment_contract": {
+    "_note": "Cycle alignment target: each per-stage RTL TB-measured span MUST converge to expected_rtl_cycles within tolerance defined in fc_verification/known_cycle_deltas.json. The TB additionally enforces functional correctness (output bits match reference) — the cycle target is meaningless without functional pass. Both checks gate together.",
+    "expected_rtl_cycles_per_stage": {
+      "_source": "expected_cycles.json::configs.<ah_config>.stages — sim's analytical cycle output at full N=128 attention head scope. Cycles assume Fmax = 102.9 MHz (NL-DPE) / 87.9 MHz (AL) placeholders to be replaced post-VTR (Stage 2). Architectural counts are Fmax-independent; the cycle target moves linearly with Fmax once VTR lands.",
+      "nldpe_attn_head_d64_c128": {
+        "linear_qkv":   2424,
+        "mac_qk":       5428,
+        "softmax_exp":  41,
+        "softmax_norm": 24,
+        "mac_sv":       5077,
+        "e2e":          12993
+      },
+      "azurelily_attn_head_d64_c128": {
+        "linear_qkv":   4000,
+        "mac_qk":       815,
+        "softmax_exp":  12,
+        "softmax_norm": 47,
+        "mac_sv":       1450,
+        "e2e":          6324
+      }
+    },
+    "current_rtl_cycles_per_stage_pre_alignment": {
+      "_source": "tb_*_attn_head_v2.v cycle advisory output (post-Bug-1, post-Bug-2; sequential outer loop, not pipelined).",
+      "nldpe_attn_head_d64_c128": {
+        "linear_qkv": 3315, "mac_qk": 428139, "softmax_exp": 425077, "softmax_norm": 425079, "mac_sv": 427861, "e2e": 433429
+      },
+      "azurelily_attn_head_d64_c128": {
+        "linear_qkv": 4458, "mac_qk": 511430, "softmax_exp": 511430, "softmax_norm": 509270, "mac_sv": 509208, "e2e": 517742
+      }
+    },
+    "tb_contract": [
+      "Each step's per-stage TB MUST run two checks in parallel:",
+      "  1. Functional correctness — output bits match reference (existing T3v2 mechanism)",
+      "  2. Cycle alignment — TB-measured per-stage span vs expected_rtl_cycles within tolerance",
+      "Tolerances live in fc_verification/known_cycle_deltas.json (mirrors known_count_deltas.json schema).",
+      "Steps 1–3 are streaming-valid additions: per-stage cycles SHOULD NOT change (they enable Step 4).",
+      "Step 4 closes per-Q-row stage span (sum→max within Q row).",
+      "Step 5 closes outer-loop pipelining (full-N E2E → expected_rtl_cycles E2E)."
+    ]
+  },
   "_aggregation_rules": {
     "_note": "Per-stage targets in cycles (sim's direct analytical output from gen_expected_cycles.py::_compute_sim_per_row, sourced from expected_cycles.json — no Fmax conversion). Two scopes captured per stage: (1) sim_cycles_per_q_row_single = single-Q-row sequential within Q row (what DIMM-top latency TB measures today, pre-pipelining), and (2) sim_cycles_full_n_pipelined = sim's _run_attention_pipeline output at full N=128 scope. Per-row steady (the post-pipelining target for Steps 1-4) = (full_n_pipelined - first_output_cyc) / (N-1).",
     "linear_qkv_full_cycles":   "first_output_cyc + (N-1) * steady_cyc           (streaming through ping-pong DPE pair / parallel-output DSPs)",
