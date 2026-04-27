@@ -1,26 +1,26 @@
 {
-  "_description": "Per-stage sim predictions and DIMM-top per-stage RTL TB cycles at single-Q-row scope. Used as alignment targets for Steps 1-5 of the AH cycle alignment work. linear_qkv targets reference the FC arm timing; mac_qk/mac_sv targets reference single-Q-row gemm row timing; softmax_exp/norm targets reference the per-Q-row analytical latency.",
-  "captured": "2026-04-26",
-  "scope": "single-Q-row stage span (DIMM-top TBs) + FC arm streaming (gemm_pipeline_profile / gemm_dsp)",
+  "_description": "Per-stage sim predictions and DIMM-top per-stage RTL TB cycles at single-Q-row scope. Used as alignment targets for Steps 1-5 of the AH cycle alignment work. linear_qkv targets reference the FC arm timing; mac_qk/mac_sv targets reference single-Q-row gemm row timing; softmax_exp/norm targets reference the per-Q-row analytical latency.\n\n2026-04-27 UPDATE — Per-Q-row cascade sim model (Step B-5-alt): the _alignment_contract.expected_rtl_cycles_per_stage values now reflect the post-cascade sim output (full-N attention head scope). Pre-2026-04-27 values reflected the idealised intra-stage row pipeline that is no longer the sim model.",
+  "captured": "2026-04-27",
+  "scope": "full-N attention-head cascade (sim run_attention_per_Q_row_cascade) + FC arm streaming (gemm_pipeline_profile / gemm_dsp)",
   "_alignment_contract": {
     "_note": "Cycle alignment target: each per-stage RTL TB-measured span MUST converge to expected_rtl_cycles within tolerance defined in fc_verification/known_cycle_deltas.json. The TB additionally enforces functional correctness (output bits match reference) — the cycle target is meaningless without functional pass. Both checks gate together.",
     "expected_rtl_cycles_per_stage": {
-      "_source": "expected_cycles.json::configs.<ah_config>.stages — sim's analytical cycle output at full N=128 attention head scope. Cycles assume Fmax = 102.9 MHz (NL-DPE) / 87.9 MHz (AL) placeholders to be replaced post-VTR (Stage 2). Architectural counts are Fmax-independent; the cycle target moves linearly with Fmax once VTR lands.",
+      "_source": "expected_cycles.json::configs.<ah_config>.stages — sim's analytical cycle output at full N=128 attention head scope, post-2026-04-27 per-Q-row cascade model. Cycles assume Fmax = 102.9 MHz (NL-DPE) / 87.9 MHz (AL) placeholders to be replaced post-VTR (Stage 2). Architectural counts are Fmax-independent; the cycle target moves linearly with Fmax once VTR lands.",
       "nldpe_attn_head_d64_c128": {
         "linear_qkv":   2424,
-        "mac_qk":       5428,
-        "softmax_exp":  41,
-        "softmax_norm": 24,
-        "mac_sv":       5077,
-        "e2e":          12993
+        "mac_qk":       73692,
+        "softmax_exp":  73473,
+        "softmax_norm": 73473,
+        "mac_sv":       73684,
+        "e2e":          78094
       },
       "azurelily_attn_head_d64_c128": {
         "linear_qkv":   4000,
-        "mac_qk":       815,
-        "softmax_exp":  12,
-        "softmax_norm": 47,
-        "mac_sv":       1450,
-        "e2e":          6324
+        "mac_qk":       509821,
+        "softmax_exp":  512028,
+        "softmax_norm": 509789,
+        "mac_sv":       509853,
+        "e2e":          517788
       }
     },
     "current_rtl_cycles_per_stage_pre_alignment": {
