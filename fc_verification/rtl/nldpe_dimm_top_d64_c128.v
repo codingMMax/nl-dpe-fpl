@@ -10,7 +10,13 @@ module nldpe_dimm_top #(
     parameter N = 128,
     parameter D = 64,
     parameter W = 16,
-    parameter DATA_WIDTH = 40
+    parameter DATA_WIDTH = 40,
+    // AH cycle alignment Steps B-2/B-3 (additive, default off):
+    // top-level mode selectors propagated to every lane's score/wsum
+    // FSM. Default 0 keeps the canonical single-Q-row pipeline; B-5
+    // will override to 1 to enable back-to-back Q-row processing.
+    parameter SCORE_BACK_TO_BACK_MODE = 0,
+    parameter WSUM_BACK_TO_BACK_MODE = 0
 )(
     input wire clk, rst,
     input wire valid_q, valid_k, valid_v, ready_n,
@@ -22,7 +28,16 @@ module nldpe_dimm_top #(
     // lane's dimm_score_matrix produces a new score word into the
     // softmax SRAM. Step 4 will consume this to wire score → softmax
     // streaming directly. Today (Step 1) it is observable but unused.
-    output wire score_valid_o
+    output wire score_valid_o,
+    // AH cycle alignment Steps B-2/B-3 (additive, default off):
+    // back-to-back Q-row trigger pulses, broadcast to every lane's
+    // score (mac_qk) and wsum (mac_sv) FSM. When the corresponding
+    // SCORE_BACK_TO_BACK_MODE / WSUM_BACK_TO_BACK_MODE parameter is 1
+    // (B-5 territory), a 1-cycle pulse advances S_OUTPUT/WS_OUTPUT back
+    // to S_LOAD_Q/WS_LOAD_A. With the parameters at default (=0) these
+    // signals are inert — pre-B2/B3 single-Q-row behaviour preserved.
+    input wire score_next_q_row_trigger_i,
+    input wire wsum_next_q_row_trigger_i
 );
 
     // Per-lane valid/ready/data arrays
@@ -42,11 +57,13 @@ module nldpe_dimm_top #(
         // LANE_IDX + W parameters make this lane handle keys {2*lane, 2*lane+1,
         // 2*lane+2W, 2*lane+2W+1, ...}, giving N/W=8 scores per lane at N=128, W=16.
         dimm_score_matrix #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
-                            .LANE_IDX(lane), .W(W)) score_inst (
+                            .LANE_IDX(lane), .W(W),
+                            .BACK_TO_BACK_MODE(SCORE_BACK_TO_BACK_MODE)) score_inst (
             .clk(clk), .rst(rst),
             .valid_q(valid_q), .valid_k(valid_k),
             .ready_n(softmax_ready),
             .data_in_q(data_in_q), .data_in_k(data_in_k),
+            .next_q_row_trigger(score_next_q_row_trigger_i),
             .data_out(score_out),
             .ready_q(lane_ready_q[lane]), .ready_k(lane_ready_k[lane]),
             .valid_n(score_valid)
@@ -72,11 +89,13 @@ module nldpe_dimm_top #(
         // LANE_IDX + W make this lane handle output cols
         //   [LANE_IDX * d/W, (LANE_IDX+1) * d/W), giving d/W=4 cols per lane at d=64, W=16.
         dimm_weighted_sum #(.N(N), .d(D), .DATA_WIDTH(DATA_WIDTH),
-                            .LANE_IDX(lane), .W(W)) wsum_inst (
+                            .LANE_IDX(lane), .W(W),
+                            .BACK_TO_BACK_MODE(WSUM_BACK_TO_BACK_MODE)) wsum_inst (
             .clk(clk), .rst(rst),
             .valid_attn(softmax_valid), .valid_v(valid_v),
             .ready_n(1'b0),
             .data_in_attn(softmax_out), .data_in_v(data_in_v),
+            .next_q_row_trigger(wsum_next_q_row_trigger_i),
             .data_out(lane_data_out[lane]),
             .ready_attn(), .ready_v(lane_ready_v[lane]),
             .valid_n(lane_valid_n[lane])
@@ -114,13 +133,24 @@ module dimm_score_matrix #(
     parameter ADDR_WIDTH = 11,
     parameter DEPTH = 1665,
     parameter LANE_IDX = 0,       // which key-lane this instance handles (0..W-1)
-    parameter W = 1               // total number of parallel key-lanes at top
+    parameter W = 1,              // total number of parallel key-lanes at top
+    // AH cycle alignment Step B-2 (additive, default off):
+    // BACK_TO_BACK_MODE=1 lets the FSM return from S_OUTPUT to
+    // S_LOAD_Q on a `next_q_row_trigger` pulse, enabling
+    // back-to-back mac_qk firing across Q rows without a
+    // soft-rst between iterations. Default 0 preserves the
+    // current single-Q-row behaviour exactly.
+    parameter BACK_TO_BACK_MODE = 0
 )(
     input wire clk, input wire rst,
     input wire valid_q, input wire valid_k,
     input wire ready_n,
     input wire [DATA_WIDTH-1:0] data_in_q,
     input wire [DATA_WIDTH-1:0] data_in_k,
+    // AH Step B-2 (additive): pulses high for one cycle when the
+    // head FSM (B-5) wants the score FSM to start the next Q row.
+    // Tied to 1'b0 today (B-5 will activate); when mode=0 ignored.
+    input wire next_q_row_trigger,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready_q, output wire ready_k,
     output wire valid_n
@@ -315,7 +345,26 @@ module dimm_score_matrix #(
                     if (score_idx + W * 2 >= N) state <= S_OUTPUT;
                     else begin score_idx <= score_idx + W * 2; state <= S_COMPUTE; end
                 end
-                S_OUTPUT: if (ready_n) score_read_addr <= score_read_addr + 1;
+                S_OUTPUT: begin
+                    if (ready_n) score_read_addr <= score_read_addr + 1;
+                    // AH Step B-2 (additive): back-to-back Q-row recycle.
+                    // When mode=1 and head FSM pulses next_q_row_trigger,
+                    // re-enter S_LOAD_Q to absorb the next Q row and recompute
+                    // scores. K SRAM persists; we skip S_LOAD_K. Default mode=0
+                    // makes this branch unreachable, preserving current behaviour.
+                    if (BACK_TO_BACK_MODE && next_q_row_trigger) begin
+                        state <= S_LOAD_Q;
+                        q_write_addr <= 0;
+                        q_read_addr <= 0;
+                        score_write_addr <= 0;
+                        score_read_addr <= 0;
+                        mac_count <= 0;
+                        score_idx <= LANE_IDX * 2;
+                        acc_clear <= 1;
+                        feed_half <= 0;
+                        feed_phase <= 0;
+                    end
+                end
             endcase
         end
     end
@@ -505,13 +554,23 @@ module dimm_weighted_sum #(
     parameter DEPTH = 1665,
     parameter LANE_IDX = 0,       // column-lane this instance owns (0..W-1)
     parameter W = 1,              // total parallel column-lanes at top
-    parameter M_PER_LANE = d / W  // output cols per lane (= d/W)
+    parameter M_PER_LANE = d / W, // output cols per lane (= d/W)
+    // AH cycle alignment Step B-3 (additive, default off):
+    // BACK_TO_BACK_MODE=1 lets the wsum FSM return from WS_OUTPUT
+    // to WS_LOAD_A on a `next_q_row_trigger` pulse, enabling
+    // back-to-back mac_sv firing across Q rows. V SRAM persists,
+    // so WS_LOAD_V is skipped. Default 0 preserves current behaviour.
+    parameter BACK_TO_BACK_MODE = 0
 )(
     input wire clk, input wire rst,
     input wire valid_attn, input wire valid_v,
     input wire ready_n,
     input wire [DATA_WIDTH-1:0] data_in_attn,
     input wire [DATA_WIDTH-1:0] data_in_v,
+    // AH Step B-3 (additive): pulses high one cycle when head FSM
+    // (B-5) wants wsum to begin processing the next Q row.
+    // Tied to 1'b0 today; ignored when BACK_TO_BACK_MODE=0.
+    input wire next_q_row_trigger,
     output wire [DATA_WIDTH-1:0] data_out,
     output wire ready_attn, output wire ready_v,
     output wire valid_n
@@ -773,7 +832,25 @@ module dimm_weighted_sum #(
                 WS_WRITE: begin  // vestigial — kept for 4-bit decoder completeness
                     ws_state <= WS_EXP_FEED;
                 end
-                WS_OUTPUT: if (ready_n) out_read_addr <= out_read_addr + 1;
+                WS_OUTPUT: begin
+                    if (ready_n) out_read_addr <= out_read_addr + 1;
+                    // AH Step B-3 (additive): back-to-back Q-row recycle.
+                    // When mode=1 and head FSM pulses next_q_row_trigger,
+                    // re-enter WS_LOAD_A to absorb the next Q row's softmax
+                    // weights. v_sram persists; WS_LOAD_V is skipped.
+                    // Default mode=0 makes this branch unreachable.
+                    if (BACK_TO_BACK_MODE && next_q_row_trigger) begin
+                        ws_state <= WS_LOAD_A;
+                        attn_write_addr <= 0;
+                        attn_read_addr <= 0;
+                        out_write_addr <= 0;
+                        out_read_addr <= 0;
+                        ws_feed_count <= 0;
+                        ws_m <= LANE_IDX * M_PER_LANE;
+                        ws_acc_clear <= 1;
+                        log_attn_read_addr <= 0;
+                    end
+                end
             endcase
         end
     end

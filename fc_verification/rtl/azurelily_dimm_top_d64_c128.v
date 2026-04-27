@@ -10,7 +10,18 @@ module azurelily_dimm_top #(
     parameter N = 128,
     parameter D = 64,
     parameter W = 16,
-    parameter DATA_WIDTH = 40
+    parameter DATA_WIDTH = 40,
+    // AH cycle alignment Steps B-2/B-3 (additive, default off):
+    // SCORE_BACK_TO_BACK_MODE — when set, lets the top-level FSM
+    // recycle from S_WAIT_QK back to S_FEED_QK on a `score_next_q_row_trigger_i`
+    // pulse, enabling back-to-back mac_qk firing across Q rows.
+    // WSUM_BACK_TO_BACK_MODE — when set, lets the FSM recycle from
+    // S_OUTPUT back to S_FEED_QK on a `wsum_next_q_row_trigger_i` pulse,
+    // re-arming the dsp_mac auto-recycle for the next Q row's mac_sv.
+    // Default 0 keeps the canonical single-Q-row pipeline; B-5 will
+    // override to 1 to enable back-to-back Q-row processing.
+    parameter SCORE_BACK_TO_BACK_MODE = 0,
+    parameter WSUM_BACK_TO_BACK_MODE = 0
 )(
     input wire clk, rst,
     input wire valid_q, valid_k, valid_v, ready_n,
@@ -21,7 +32,14 @@ module azurelily_dimm_top #(
     // valid pulse, OR-reduced across W lanes. Asserts every cycle a
     // lane's mac_qk dsp_mac fires (dsp_mac.valid_n). Step 4 will
     // consume this to stream score → softmax. Today unused at top.
-    output wire score_valid_o
+    output wire score_valid_o,
+    // AH cycle alignment Steps B-2/B-3 (additive, default off):
+    // back-to-back Q-row trigger pulses for the score and wsum stages.
+    // When the corresponding mode parameter is 1 (B-5 territory), a
+    // 1-cycle pulse advances S_WAIT_QK → S_FEED_QK (score) or S_OUTPUT
+    // → S_FEED_QK (wsum). With parameters at default (=0), inert.
+    input wire score_next_q_row_trigger_i,
+    input wire wsum_next_q_row_trigger_i
 );
 
     // Per-lane output storage + valid flags
@@ -89,8 +107,30 @@ module azurelily_dimm_top #(
                     end
                 end
             end
-            S_WAIT_QK: if (|lane_valid) state <= S_OUTPUT;  // waits for mac_sv; here it stays simplified
-            S_OUTPUT: if (!ready_n) state <= S_IDLE;
+            S_WAIT_QK: begin
+                // AH Step B-2 (additive, default off): when SCORE_BACK_TO_BACK_MODE=1
+                // and the head FSM (B-5) pulses score_next_q_row_trigger_i, recycle
+                // S_WAIT_QK → S_FEED_QK to begin computing scores for the next Q row.
+                // Default mode=0 keeps the canonical S_WAIT_QK → S_OUTPUT path.
+                if (SCORE_BACK_TO_BACK_MODE && score_next_q_row_trigger_i) begin
+                    state <= S_FEED_QK;
+                    mac_count <= 0;
+                    row_count <= 0;
+                end else if (|lane_valid) state <= S_OUTPUT;  // waits for mac_sv; here it stays simplified
+            end
+            S_OUTPUT: begin
+                // AH Step B-3 (additive, default off): when WSUM_BACK_TO_BACK_MODE=1
+                // and head FSM pulses wsum_next_q_row_trigger_i, return to S_FEED_QK
+                // to re-arm the dsp_mac auto-recycle for the next Q row's mac_sv. The
+                // dsp_mac instances themselves auto-recycle (count → 0 after K=32);
+                // this transition only re-engages the upstream FSM driving the data.
+                // Default mode=0 keeps the canonical S_OUTPUT → S_IDLE behaviour.
+                if (WSUM_BACK_TO_BACK_MODE && wsum_next_q_row_trigger_i) begin
+                    state <= S_FEED_QK;
+                    mac_count <= 0;
+                    row_count <= 0;
+                end else if (!ready_n) state <= S_IDLE;
+            end
         endcase
     end
 
