@@ -16,11 +16,11 @@
       },
       "azurelily_attn_head_d64_c128": {
         "linear_qkv":   4000,
-        "mac_qk":       509821,
-        "softmax_exp":  512028,
-        "softmax_norm": 509789,
-        "mac_sv":       509853,
-        "e2e":          517788
+        "mac_qk":       316174,
+        "softmax_exp":  318381,
+        "softmax_norm": 316142,
+        "mac_sv":       316206,
+        "e2e":          324205
       }
     },
     "current_rtl_cycles_per_stage_pre_alignment": {
@@ -29,7 +29,7 @@
         "linear_qkv": 3315, "mac_qk": 428139, "softmax_exp": 425077, "softmax_norm": 425079, "mac_sv": 427861, "e2e": 433429
       },
       "azurelily_attn_head_d64_c128": {
-        "linear_qkv": 4458, "mac_qk": 511430, "softmax_exp": 511430, "softmax_norm": 509270, "mac_sv": 509208, "e2e": 517742
+        "linear_qkv": 4458, "mac_qk": 311913, "softmax_exp": 311913, "softmax_norm": 309753, "mac_sv": 309627, "e2e": 321661
       }
     },
     "tb_contract": [

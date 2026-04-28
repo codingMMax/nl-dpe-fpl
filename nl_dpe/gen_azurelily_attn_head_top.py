@@ -96,23 +96,34 @@ def gen_azurelily_attn_head_top(
 //   - 3 × sram (Q/K/V buffer)       (depth = N⌈d_head/5⌉ + 1 = {BUF_DEPTH})
 //   - 1 × azurelily_dimm_top        (W={w_lanes} lanes, fires once)
 //
-// Outer FSM (Bug-1 fix: outer Q-row loop):
+// Outer FSM (AH B-5 finish: K/V amortization + strict-serial cascade):
 //   S_IDLE          : await valid_x → S_STREAM_TOKENS
 //   S_STREAM_TOKENS : hold fc_valid_in=1 continuously; FC processes rows
 //                     back-to-back (parallel-output dsp_macs, 1 byte/cyc drain
-//                     into pack5_buffer).  Track FC valid_n bytes; once
-//                     N_SEQ × D_HEAD bytes have flowed, transition to
-//                     S_DIMM_RST.  No fc_rst pulses between tokens.
-//   S_DIMM_RST      : pulse dimm_soft_rst for a few cycles so the DIMM's
-//                     FSM returns to S_IDLE between Q rows (k/v_sram persists)
-//   S_DIMM_FIRE     : drive valid_q/k/v with current Q row + full K/V stream
-//                     (replays buffered Q row from q_buf_r_addr starting at
-//                     q_row_idx * PACKED_D); DIMM internally iterates 128
-//                     K rows in S_FEED_QK for current Q row.
-//   S_DIMM_WAIT     : wait for dimm_valid_n (DIMM completed mac_qk + softmax
-//                     + mac_sv for this Q row) — ensures all DPE/dsp_mac
-//                     stages fired before we re-rst the DIMM for next Q row.
-//   S_DRAIN         : DIMM emits valid_n stream → output port (final Q row).
+//                     into pack5_buffer).  Track FC valid_n pulses; once
+//                     N_SEQ × PACKED_D pulses have flowed, transition to
+//                     S_LOAD_KV.  No fc_rst pulses between tokens.
+//   S_LOAD_KV       : drive valid_q for PACKED_D cycles (Q row 0's 13 packed
+//                     words), then valid_k for BUF_DEPTH-1 cycles (full K),
+//                     then valid_v for BUF_DEPTH-1 cycles (full V) — ONE-SHOT
+//                     ingress (NOT repeated per Q row; DIMM's K/V SRAMs
+//                     persist through the full cascade thanks to the AL DIMM
+//                     SCORE/WSUM_BACK_TO_BACK_MODE reset semantics, which
+//                     reset only Q-side addresses on next_q_row trigger).
+//   S_CASCADE       : strict-serial Q-row processing.  For each Q row k=1..N-1:
+//                       • Drive valid_q for PACKED_D cycles (Q row k's words,
+//                         read from q_buf at offset k * PACKED_D).
+//                       • Wait for dimm_wsum_done_o (= Q row k entered AL DIMM
+//                         S_OUTPUT/S_WAIT_QK after mac_qk + softmax + mac_sv).
+//                       • Fire all 3 next_q_row_trigger pulses simultaneously
+//                         to recycle DIMM FSM (AL FSM returns to S_LOAD with
+//                         q_w_addr/q_r_addr reset; K/V SRAM contents persist).
+//                       • Increment q_row_idx for wide-addr indexing.
+//                       • Repeat until q_row_idx == N_SEQ-1, then drain.
+//   S_DRAIN_FINAL   : settle margin (PHASE_DRAIN_CYC) for last Q row's mac_sv
+//                     to commit out_sram before output drain.
+//   S_OUTPUT_DRAIN  : assert valid_n for N_FC_OUT_WORDS cycles (TB-counted).
+//   S_OUTPUT_DONE   : terminal.
 //
 // Format note: AL DIMM's S_LOAD threshold uses EPW=5 (q_w_addr >= 13,
 // k_w_addr/v_w_addr >= 1664).  This is a pre-existing inconsistency in
@@ -142,24 +153,65 @@ module {top_name} #(
     localparam BUF_DEPTH = {BUF_DEPTH};  // total packed Q/K/V words across N tokens
     localparam TOTAL_FC_PULSES = N_SEQ * PACKED_D;  // FC valid_n pulses per arm
                                                     // (each pulse carries EPW_O=5 packed bytes)
+    // AH B-5 finish: AL DIMM ingest counts mirror NL conventions.
+    //   DIMM_Q_WORDS = PACKED_D (one Q row's packed words)
+    //   DIMM_K_WORDS = BUF_DEPTH-1 (= N × PACKED_D, full K tensor)
+    //   DIMM_V_WORDS = BUF_DEPTH-1 (full V tensor)
+    localparam DIMM_Q_WORDS    = PACKED_D;
+    localparam DIMM_K_WORDS    = BUF_DEPTH - 1;
+    localparam DIMM_V_WORDS    = BUF_DEPTH - 1;
+    localparam N_FC_OUT_WORDS  = N_SEQ * PACKED_D;  // mirrors NL N×PACKED_NQ drain
 
-    // ───────── outer FSM state encoding (Bug-1 fix: outer Q-row loop) ─────────
+    // ───────── outer FSM state encoding (AH B-5 finish: K/V amortization) ─────
+    // Strict-serial cascade matching NL head FSM (gen_nldpe_attn_head_top.py).
+    // K/V loaded ONCE in S_LOAD_KV (one-shot Q0+K+V load); per Q row the head
+    // drives valid_q for PACKED_D cycles + waits for dimm_wsum_done_o + fires
+    // next_q_row triggers.
+    //
+    // State encoding kept aligned with the in-tree TB (tb_azurelily_attn_head_v2.v
+    // lines 170-176): S_IDLE=0, S_LOAD_TOKEN=1 (= S_STREAM_TOKENS),
+    // S_WAIT_FC=2, S_FC_DRAIN=3, S_INTER_TOKEN_RST=4 (legacy, unused post-B5),
+    // S_DIMM_FIRE=5 (entered when FC arms drained — covers K/V load + cascade),
+    // S_DRAIN=6 (terminal, stream output).  Multiple internal states map to
+    // S_DIMM_FIRE=5 so the TB's T_fc_qkv_done timestamp (head_state==S_DIMM_FIRE)
+    // fires at the right cycle (FC drain → DIMM cascade transition).
     localparam S_IDLE             = 4'd0;
-    localparam S_STREAM_TOKENS    = 4'd1;
-    localparam S_DIMM_RST         = 4'd2;  // hold DIMM in soft rst between Q rows
-    localparam S_DIMM_FIRE        = 4'd5;  // drive valid_q/k/v for current Q row
-    localparam S_DIMM_WAIT        = 4'd4;  // wait for DIMM to produce valid_n
-    localparam S_DRAIN            = 4'd6;  // pass through DIMM output (final Q row)
+    localparam S_STREAM_TOKENS    = 4'd1;  // = S_LOAD_TOKEN in TB
+    localparam S_LOAD_KV          = 4'd5;  // = S_DIMM_FIRE in TB
+    localparam S_CASCADE          = 4'd7;
+    localparam S_DRAIN_FINAL      = 4'd8;
+    localparam S_OUTPUT_DRAIN     = 4'd6;  // = S_DRAIN in TB
+    localparam S_OUTPUT_DONE      = 4'd9;
     reg [3:0] state;
 
     // Streaming counters
     reg [{tok_cnt_w - 1}:0] token_count;       // 0..N_SEQ-1 input rows queued
     reg [{feed_cnt_w - 1}:0] feed_count;       // 0..PACKED_K within current input row
     reg [21:0]               fc_out_pulse_count; // 0..TOTAL_FC_PULSES seen on FC valid_n
-    // Bug-1 fix: outer-loop Q-row counter and DIMM soft-rst pulse
-    reg [{tok_cnt_w - 1}:0] q_row_idx;          // 0..N_SEQ-1 over Q rows
-    reg [3:0]                dimm_rst_count;     // S_DIMM_RST hold counter
-    reg                      dimm_soft_rst;      // pulses high during S_DIMM_RST
+    // AH B-5 finish: outer-loop Q-row counter (NL parity).
+    reg [7:0] q_row_idx;                        // 0..N_SEQ-1 (drives DIMM wide-addr SRAMs)
+
+    // Per-phase ingest counters for S_LOAD_KV / S_CASCADE drives.
+    reg [{buf_addr_w - 1}:0] dimm_q_count;      // valid_q pulses already issued
+    reg [{buf_addr_w - 1}:0] dimm_k_count;      // valid_k pulses already issued
+    reg [{buf_addr_w - 1}:0] dimm_v_count;      // valid_v pulses already issued
+    reg drive_valid_q, drive_valid_k, drive_valid_v;
+
+    // Drain margin counters — mirror NL S_DRAIN_FINAL / S_OUTPUT_DRAIN cycles.
+    reg [15:0] phase_drain_count;
+    reg [15:0] output_drain_count;
+
+    // wsum_done_o is a 1-cycle edge pulse; track total count globally so events
+    // fired during S_LOAD_KV (Q row 0 finishes inside DIMM before S_CASCADE entry)
+    // aren't missed.
+    reg [7:0] ws_done_count;        // cumulative wsum_done_o pulses observed
+    reg [7:0] ws_consumed_count;    // wsum_done events consumed by S_CASCADE advance
+
+    // AH B-5 finish: triggers driven combinationally from FSM state below.
+    reg score_next_q_row_pulse, softmax_next_q_row_pulse, wsum_next_q_row_pulse;
+
+    // Drain margin: mirror NL PHASE_DRAIN_CYC = 64.
+    localparam PHASE_DRAIN_CYC = 16'd64;
 
     // No fc_rst pulses between tokens — FC streams all rows continuously
     wire fc_rst = rst;
@@ -245,53 +297,35 @@ module {top_name} #(
                .r_addr(v_buf_r_addr), .w_addr(v_buf_w_addr),
                .sram_data_in(v_buf_w_data), .sram_data_out(v_buf_r_data));
 
-    // ───────── DIMM inputs (replay buffered Q/K/V into DIMM stream) ─────────
-    // Bug-1 fix: dimm_replay_count is reused per Q-row iteration. The DIMM is
-    // soft-reset between Q rows; on each iteration we drive valid_q only for
-    // PACKED_D cycles (one Q row) but valid_k/v for full BUF_DEPTH-1 cycles
-    // (re-loading K/V each iteration; SRAM contents idempotent).
-    reg [{buf_addr_w - 1}:0] dimm_replay_count;
-    wire dimm_replay_active = (state == S_DIMM_FIRE);
-    // Q drives only for the current Q row (PACKED_D packed words = 13).
-    wire dimm_valid_q = dimm_replay_active && (dimm_replay_count < PACKED_D);
-    // K and V re-stream the full N×PACKED_D buffer for every iteration (1664 cyc).
-    wire dimm_valid_k = dimm_replay_active && (dimm_replay_count < BUF_DEPTH - 1);
-    wire dimm_valid_v = dimm_replay_active && (dimm_replay_count < BUF_DEPTH - 1);
+    // ───────── DIMM inputs (NL parity: K/V loaded ONCE in S_LOAD_KV) ─────────
+    // AH B-5 finish: The AL DIMM-top's SCORE/WSUM_BACK_TO_BACK_MODE branches
+    // (in azurelily_dimm_top_d64_c128.v lines 144-180) reset Q-side SRAM
+    // addresses on next_q_row_trigger but PERSIST k_w_addr/v_w_addr — so the
+    // K/V SRAM contents remain intact across all 128 Q rows and the head only
+    // pays the K/V load cost once. valid_q/k/v are now driven by per-phase
+    // one-hot drive_valid_* flags from the FSM (matching NL's pattern).
+    wire dimm_valid_q = drive_valid_q;
+    wire dimm_valid_k = drive_valid_k;
+    wire dimm_valid_v = drive_valid_v;
 
     // ───────── DIMM (W=16 lanes, mac_qk + clb_softmax + mac_sv) ─────────
-    // Bug-1 fix: dimm_rst_internal pulses high between Q rows so the DIMM's
-    // FSM resets to S_IDLE while its k_sram/v_sram contents persist (SRAMs
-    // don't clear on rst). Each iteration reloads K/V — idempotent (same data
-    // to same addresses).
-    wire dimm_rst_internal = rst | dimm_soft_rst;
+    // AH B-5 finish: DIMM is reset once globally with rst; Q-row recycling is
+    // driven by next_q_row_trigger pulses (no soft-rst loop). K/V SRAM
+    // contents persist throughout the cascade.
     wire [DATA_WIDTH-1:0] dimm_out;
     wire dimm_valid_n_w;
-    // AH Step 1: per-cycle DIMM score-stage valid (mac_qk dsp_mac.valid_n
-    // OR-reduced across W lanes). Unused at head level for now; Step 4 will
-    // consume it to wire score → softmax streaming directly.
-    wire dimm_score_valid_o;  /* unused — Step 1 observation port */
-    // AH Step B-5 (additive): top-level done aggregations.  The AL head
-    // currently uses the soft-rst loop (Bug 1 fix from c54a7de) for Q-row
-    // recycling, so these dones are observable but not load-bearing for the
-    // FSM advance.  Exposed for symmetry with NL DIMM-top and to keep the
-    // interfaces aligned should we move to a non-soft-rst architecture later.
-    wire dimm_score_all_done_o;
-    wire dimm_softmax_done_o;
-    wire dimm_wsum_done_o;
-    // AH B-5: drive q_row_idx_i from the head's outer-loop counter so the
-    // DIMM's WIDE_ADDR_MODE-aware SRAMs can index per-Q-row slots.  With the
-    // soft-rst loop the SRAM contents reset between Q rows so wide-addr is
-    // not strictly needed, but feeding the counter keeps the interface
-    // exercised end-to-end.
+    wire dimm_score_valid_o;        // unused — Step 1 observation port
+    wire dimm_score_all_done_o;     // unused at head level (lockstep AL FSM)
+    wire dimm_softmax_done_o;       // 1-cycle pulse when ALL W lanes enter S_NORM
+    wire dimm_wsum_done_o;          // 1-cycle pulse on first lane mac_sv valid_n
+    // q_row_idx drives DIMM wide-addr SRAMs (clb_softmax sm_buf, weight_buffer).
     wire [7:0] dimm_q_row_idx = q_row_idx;
 
     azurelily_dimm_top #(
         .N(N_SEQ), .D(D_HEAD), .W(W), .DATA_WIDTH(DATA_WIDTH),
-        // AH Step B-5: every back-to-back / wide-addr mode set to 1 for
-        // interface parity with NL.  Note: with the head's soft-rst loop the
-        // DIMM resets per Q row, so the back-to-back triggers and wide-addr
-        // SRAM offsets are largely no-ops in practice.  They become active
-        // if/when the head moves to a non-soft-rst recycling architecture.
+        // AH B-5 finish: every back-to-back / wide-addr mode is ON. Score/wsum
+        // back-to-back triggers cause the AL FSM to recycle to S_LOAD with
+        // q-side reset (k/v_w_addr persists), enabling one-shot K/V load.
         .SCORE_BACK_TO_BACK_MODE(1),
         .WSUM_BACK_TO_BACK_MODE(1),
         .SOFTMAX_BACK_TO_BACK_MODE(1),
@@ -299,7 +333,7 @@ module {top_name} #(
         .SOFTMAX_WIDE_ADDR_MODE(1),
         .WSUM_WIDE_ADDR_MODE(1)
     ) dimm_inst (
-        .clk(clk), .rst(dimm_rst_internal),
+        .clk(clk), .rst(rst),
         .valid_q(dimm_valid_q), .valid_k(dimm_valid_k), .valid_v(dimm_valid_v),
         .ready_n(ready_n),
         .data_in_q(q_buf_r_data), .data_in_k(k_buf_r_data), .data_in_v(v_buf_r_data),
@@ -310,57 +344,70 @@ module {top_name} #(
         .score_all_done_o(dimm_score_all_done_o),
         .softmax_done_o(dimm_softmax_done_o),
         .wsum_done_o(dimm_wsum_done_o),
-        .score_next_q_row_trigger_i(1'b0),    // soft-rst loop drives recycling
-        .wsum_next_q_row_trigger_i(1'b0),     // soft-rst loop drives recycling
-        .softmax_next_q_row_trigger_i(1'b0),  // clb_softmax auto-recycles
+        .score_next_q_row_trigger_i(score_next_q_row_pulse),
+        .wsum_next_q_row_trigger_i(wsum_next_q_row_pulse),
+        .softmax_next_q_row_trigger_i(softmax_next_q_row_pulse),
         .q_row_idx_i(dimm_q_row_idx)
     );
 
-    // ───────── outer FSM body (streaming) ─────────
+    // ───────── Top-level strict-serial cascade FSM (NL parity) ─────────
     //
-    // Streaming model:
-    //   - Hold fc_valid_in=1 across all N_SEQ × PACKED_K input bytes.
-    //   - FC's parallel-output dsp_macs auto-fire on the continuous input
-    //     stream; FC produces 1 row of D_HEAD outputs every PACKED_K cycles
-    //     (steady-state).  drain rate = 1 byte/cyc — bottleneck if D_HEAD >
-    //     PACKED_K (true for D_HEAD=64 vs PACKED_K=32; max(32,64)=64 cyc/row).
-    //   - feed_count tracks position within current input row (0..PACKED_K-1).
-    //   - token_count tracks input rows queued (0..N_SEQ-1).
-    //   - fc_out_byte_count tracks FC valid_n pulses (= bytes pushed into
-    //     packers) — when it reaches TOTAL_FC_BYTES, all rows have drained.
-    //   - Once fc_out_byte_count == TOTAL_FC_BYTES: transition to S_DIMM_FIRE.
-    //   - No fc_rst_pulse; FC FSM auto-recycles between rows.
-    // Bug-1 fix: outer Q-row loop (matches NL-DPE head's S_DIMM_RST/FIRE/WAIT
-    // structure). For each q_row_idx in [0..N-1]:
-    //   1. S_DIMM_RST  — pulse dimm_soft_rst for DIMM_RST_CYCLES (skip on first iter).
-    //   2. S_DIMM_FIRE — drive valid_q (PACKED_D cyc, current Q row) and valid_k/v
-    //                    (BUF_DEPTH-1 cyc, full re-stream); read q_buf_r_addr at
-    //                    q_row_idx*PACKED_D + dimm_replay_count.
-    //   3. S_DIMM_WAIT — wait for dimm_valid_n_w (DIMM completed mac_qk/softmax/mac_sv).
-    //   4. If q_row_idx+1 < N: increment q_row_idx, return to S_DIMM_RST.
-    //      Else: transition to S_DRAIN (final Q row's outputs visible at top).
-    localparam DIMM_RST_CYCLES = 4'd4;
+    // S_LOAD_KV : drive valid_q for DIMM_Q_WORDS=PACKED_D cycles (Q row 0),
+    //              valid_k for DIMM_K_WORDS=BUF_DEPTH-1 cycles (full K),
+    //              valid_v for DIMM_V_WORDS=BUF_DEPTH-1 cycles (full V).
+    //              ONE-SHOT — these SRAMs persist (the AL DIMM-top's
+    //              SCORE/WSUM_BACK_TO_BACK_MODE branches reset only
+    //              q-side; k/v_w_addr persist across Q rows).
+    // S_CASCADE : per Q row k = 0..N-1:
+    //              • If q_row_idx > 0: drive valid_q for DIMM_Q_WORDS cycles
+    //                (Q row k, read from q_buffer at offset k*PACKED_D).
+    //              • Wait for dimm_wsum_done_o (= Q row k mac_sv produced
+    //                first valid_n, meaning all 3 stages completed for k).
+    //              • Fire all 3 *_next_q_row_trigger pulses in lockstep —
+    //                AL DIMM FSM transitions S_WAIT_QK/S_OUTPUT → S_LOAD,
+    //                resets q-side addrs, k/v_w_addr persists.
+    //              • Increment q_row_idx; advance to compute next Q row.
+    //              • After q_row_idx == N-1's wsum_done, transition to
+    //                S_DRAIN_FINAL.
+    // S_DRAIN_FINAL  : drain margin (PHASE_DRAIN_CYC) for last Q row's mac_sv
+    //                  to commit out_sram before draining.
+    // S_OUTPUT_DRAIN : assert valid_n for N_FC_OUT_WORDS cycles.
     always @(posedge clk or posedge rst) begin
         if (rst) begin
             state              <= S_IDLE;
             token_count        <= 0;
             feed_count         <= 0;
             fc_out_pulse_count <= 0;
-            dimm_replay_count  <= 0;
             q_buf_r_addr       <= 0;
             k_buf_r_addr       <= 0;
             v_buf_r_addr       <= 0;
             q_row_idx          <= 0;
-            dimm_rst_count     <= 0;
-            dimm_soft_rst      <= 1'b0;
+            dimm_q_count       <= 0;
+            dimm_k_count       <= 0;
+            dimm_v_count       <= 0;
+            drive_valid_q      <= 1'b0;
+            drive_valid_k      <= 1'b0;
+            drive_valid_v      <= 1'b0;
+            ws_done_count      <= 0;
+            ws_consumed_count  <= 0;
+            phase_drain_count  <= 0;
+            output_drain_count <= 0;
         end else begin
-            // Track FC valid_n pulses (each pulse carries EPW_O=5 packed
-            // bytes, written directly to q_buf).  All three FC arms produce
-            // identical valid_n cadence (same rst, same valid, same shape),
-            // so q_fc_valid_n is sufficient.
+            // Default: pulses low; states below override for one cycle.
+            score_next_q_row_pulse   <= 1'b0;
+            softmax_next_q_row_pulse <= 1'b0;
+            wsum_next_q_row_pulse    <= 1'b0;
+
+            // Track FC valid_n pulses.
             if (q_fc_valid_n) begin
                 fc_out_pulse_count <= fc_out_pulse_count + 1;
             end
+
+            // Track wsum_done_o pulses globally (independent of FSM state).
+            // Allows S_CASCADE to consume events that fired during S_LOAD_KV
+            // (e.g. Q row 0's wsum finishes mid-K/V load).
+            if (dimm_wsum_done_o) ws_done_count <= ws_done_count + 1;
+
             case (state)
                 S_IDLE: begin
                     if (valid_x) begin
@@ -372,9 +419,7 @@ module {top_name} #(
                 end
                 S_STREAM_TOKENS: begin
                     // Pace input bytes into the FCs at the FC's per-row FSM
-                    // period (PACKED_K + 3 cycles).  feed_count cycles
-                    // 0..PACKED_K+2; valid=1 for cycles 0..PACKED_K-1 and
-                    // valid=0 for cycles PACKED_K..PACKED_K+2 (3-cyc gap).
+                    // period (PACKED_K + 3 cycles).
                     if (token_count < N_SEQ) begin
                         if (feed_count == PACKED_K + 2) begin
                             feed_count  <= 0;
@@ -383,79 +428,105 @@ module {top_name} #(
                             feed_count  <= feed_count + 1;
                         end
                     end
-                    // Wait until all FC outputs have been collected and
-                    // written to Q/K/V buffer SRAMs.  Each token produces
-                    // D_HEAD bytes which the FC drains as PACKED_D=
-                    // ceil(D_HEAD/EPW_O) packed words; one valid_n pulse
-                    // per packed word.  Total expected pulses = N_SEQ ×
-                    // PACKED_D = TOTAL_FC_PULSES.
                     if (fc_out_pulse_count >= TOTAL_FC_PULSES) begin
-                        // Enter Q-row loop. q_row_idx already 0.
-                        state             <= S_DIMM_RST;
-                        dimm_replay_count <= 0;
-                        q_buf_r_addr      <= 0;
-                        k_buf_r_addr      <= 0;
-                        v_buf_r_addr      <= 0;
-                        dimm_rst_count    <= 0;
-                        dimm_soft_rst     <= 1'b0;  // first iteration: skip soft rst
+                        // FC arms have drained; load Q row 0 + full K + full V.
+                        state         <= S_LOAD_KV;
+                        q_buf_r_addr  <= 0;       // Q row 0 starts at offset 0
+                        k_buf_r_addr  <= 0;
+                        v_buf_r_addr  <= 0;
+                        dimm_q_count  <= 0;
+                        dimm_k_count  <= 0;
+                        dimm_v_count  <= 0;
+                        drive_valid_q <= 1'b1;    // begin valid_q (Q row 0)
+                        q_row_idx     <= 0;
                     end
                 end
-                S_DIMM_RST: begin
-                    // Pulse dimm_soft_rst for DIMM_RST_CYCLES cycles (skip on
-                    // q_row_idx==0; DIMM was just rst by global).
-                    if (q_row_idx == 0) begin
-                        state             <= S_DIMM_FIRE;
-                        dimm_replay_count <= 0;
-                        dimm_soft_rst     <= 1'b0;
-                    end else begin
-                        dimm_soft_rst  <= 1'b1;
-                        dimm_rst_count <= dimm_rst_count + 1;
-                        if (dimm_rst_count + 1 == DIMM_RST_CYCLES) begin
-                            dimm_soft_rst     <= 1'b0;
-                            state             <= S_DIMM_FIRE;
-                            dimm_replay_count <= 0;
+                S_LOAD_KV: begin
+                    // Phase A: drive valid_q for DIMM_Q_WORDS cycles (Q row 0).
+                    // Phase B: drive valid_k for DIMM_K_WORDS cycles (full K).
+                    // Phase C: drive valid_v for DIMM_V_WORDS cycles (full V).
+                    // After V completes, transition to S_CASCADE.
+                    if (drive_valid_q) begin
+                        dimm_q_count <= dimm_q_count + 1;
+                        q_buf_r_addr <= q_buf_r_addr + 1;
+                        if (dimm_q_count + 1 == DIMM_Q_WORDS) begin
+                            drive_valid_q <= 1'b0;
+                            drive_valid_k <= 1'b1;
+                            k_buf_r_addr  <= 0;
+                        end
+                    end else if (drive_valid_k) begin
+                        dimm_k_count <= dimm_k_count + 1;
+                        k_buf_r_addr <= k_buf_r_addr + 1;
+                        if (dimm_k_count + 1 == DIMM_K_WORDS) begin
+                            drive_valid_k <= 1'b0;
+                            drive_valid_v <= 1'b1;
+                            v_buf_r_addr  <= 0;
+                        end
+                    end else if (drive_valid_v) begin
+                        dimm_v_count <= dimm_v_count + 1;
+                        v_buf_r_addr <= v_buf_r_addr + 1;
+                        if (dimm_v_count + 1 == DIMM_V_WORDS) begin
+                            drive_valid_v <= 1'b0;
+                            // Q row 0 is being processed inside DIMM; advance to
+                            // S_CASCADE FSM that handles all N Q rows.
+                            state         <= S_CASCADE;
+                            q_row_idx     <= 0;
+                            phase_drain_count <= 0;
                         end
                     end
                 end
-                S_DIMM_FIRE: begin
-                    // Stream Q (PACKED_D cycles, current Q row from q_buf at
-                    // offset q_row_idx*PACKED_D) and K/V (full BUF_DEPTH-1 cyc
-                    // re-stream of the static k/v_buf into DIMM's K/V SRAMs).
-                    // dimm_valid_q gates valid_q to first PACKED_D cycles only.
-                    if (dimm_replay_count < BUF_DEPTH - 1) begin
-                        // Q reads current Q row's PACKED_D words; first PACKED_D
-                        // cycles use offset q_row_idx*PACKED_D, rest are dontcare
-                        // (gated by dimm_valid_q).
-                        q_buf_r_addr      <= q_row_idx * PACKED_D + dimm_replay_count;
-                        k_buf_r_addr      <= dimm_replay_count;
-                        v_buf_r_addr      <= dimm_replay_count;
-                        dimm_replay_count <= dimm_replay_count + 1;
-                    end else begin
-                        // Full K/V loaded; transition to wait for DIMM compute.
-                        state <= S_DIMM_WAIT;
+                S_CASCADE: begin
+                    // Drive valid_q for current Q row (k > 0). For k = 0,
+                    // valid_q already fired in S_LOAD_KV.
+                    if (drive_valid_q) begin
+                        dimm_q_count <= dimm_q_count + 1;
+                        q_buf_r_addr <= q_buf_r_addr + 1;
+                        if (dimm_q_count + 1 == DIMM_Q_WORDS) begin
+                            drive_valid_q <= 1'b0;
+                        end
                     end
-                end
-                S_DIMM_WAIT: begin
-                    // Wait for DIMM to fully complete this Q row.
-                    // dimm_valid_n_w is high once any lane reaches mac_sv output,
-                    // by which time mac_qk + softmax + mac_sv have all fired.
-                    if (dimm_valid_n_w) begin
-                        if (q_row_idx + 1 == N_SEQ) begin
-                            // Last Q row complete — drain output to top.
-                            state <= S_DRAIN;
+                    // Use cumulative ws_done_count (vs ws_consumed_count) so
+                    // events that fired before S_CASCADE entry aren't lost.
+                    // When a fresh wsum_done arrived (count > consumed) and we're
+                    // not still driving valid_q for the current Q row, advance.
+                    if (ws_done_count > ws_consumed_count && !drive_valid_q) begin
+                        if (q_row_idx + 1 < N_SEQ) begin
+                            // Advance to next Q row. Fire all 3 triggers in
+                            // lockstep — AL DIMM FSM returns to S_LOAD with
+                            // q-side reset; k/v_w_addr persist.
+                            score_next_q_row_pulse   <= 1'b1;
+                            softmax_next_q_row_pulse <= 1'b1;
+                            wsum_next_q_row_pulse    <= 1'b1;
+                            ws_consumed_count <= ws_consumed_count + 1;
+                            q_row_idx     <= q_row_idx + 1;
+                            // Drive valid_q for next Q row (k+1).
+                            drive_valid_q <= 1'b1;
+                            dimm_q_count  <= 0;
+                            // Read addr starts at next Q row's word 0 in q_buffer.
+                            q_buf_r_addr  <= (q_row_idx + 1) * PACKED_D;
                         end else begin
-                            // Move to next Q row: soft-reset DIMM, repeat.
-                            q_row_idx      <= q_row_idx + 1;
-                            state          <= S_DIMM_RST;
-                            dimm_rst_count <= 0;
-                            dimm_soft_rst  <= 1'b1;
+                            // Last Q row done — no more triggers; advance to drain.
+                            ws_consumed_count <= ws_consumed_count + 1;
+                            state             <= S_DRAIN_FINAL;
+                            phase_drain_count <= 0;
                         end
                     end
                 end
-                S_DRAIN: begin
-                    // Hold here; DIMM internally drives valid_n through W lanes.
-                    // Top exits to S_IDLE only via top-level rst (one-shot run).
-                    state <= S_DRAIN;
+                S_DRAIN_FINAL: begin
+                    phase_drain_count <= phase_drain_count + 1;
+                    if (phase_drain_count + 1 == PHASE_DRAIN_CYC) begin
+                        state              <= S_OUTPUT_DRAIN;
+                        output_drain_count <= 0;
+                    end
+                end
+                S_OUTPUT_DRAIN: begin
+                    // Stream all N × PACKED_D packed outputs to top-level valid_n.
+                    output_drain_count <= output_drain_count + 1;
+                    if (output_drain_count + 1 == N_FC_OUT_WORDS)
+                        state <= S_OUTPUT_DONE;
+                end
+                S_OUTPUT_DONE: begin
+                    // Terminal — held forever (top-level has no rst path back).
                 end
                 default: state <= S_IDLE;
             endcase
@@ -463,9 +534,11 @@ module {top_name} #(
     end
 
     // ───────── outputs ─────────
-    assign data_out = dimm_out;
-    assign valid_n  = dimm_valid_n_w;
+    // Accept new X words only while feeding the FCs.
     assign ready_x  = (state == S_IDLE) || (state == S_STREAM_TOKENS);
+    assign data_out = dimm_out;
+    // valid_n asserts during S_OUTPUT_DRAIN for exactly N_FC_OUT_WORDS cycles.
+    assign valid_n  = (state == S_OUTPUT_DRAIN);
 
 endmodule
 

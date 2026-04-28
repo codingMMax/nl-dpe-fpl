@@ -79,21 +79,21 @@
       },
       "stages": {
         "linear_qkv": 4000,
-        "mac_qk": 509821,
-        "softmax_exp": 512028,
-        "softmax_norm": 509789,
-        "mac_sv": 509853,
-        "e2e": 517788
+        "mac_qk": 316174,
+        "softmax_exp": 318381,
+        "softmax_norm": 316142,
+        "mac_sv": 316206,
+        "e2e": 324205
       },
       "ns_breakdown": {
         "linear_qkv": 45506.56,
-        "mac_qk": 5800011.38,
-        "softmax_exp": 5825119.45,
-        "softmax_norm": 5799647.33,
-        "mac_sv": 5800375.43,
-        "e2e": 5890648.46
+        "mac_qk": 3596973.83,
+        "softmax_exp": 3622081.91,
+        "softmax_norm": 3596609.78,
+        "mac_sv": 3597337.88,
+        "e2e": 3688339.02
       },
-      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json post-2026-04-27 per-Q-row cascade model in azurelily/IMC/scheduler_stats/scheduler.py::run_attention_per_Q_row_cascade. AL head FSM uses a soft-reset loop (no K/V amortisation); each Q row pays DIMM_RST (4 cyc) + S_DIMM_FIRE (1664 cyc full Q+K+V re-stream) + S_DIMM_WAIT (≈2289 cyc DIMM internal cascade through mac_qk → clb_softmax → mac_sv), totalling ~4000 cyc/Q row × 128 = 513K cyc DIMM cascade. Pre-2026-04-27 (idealised pipeline): linear_qkv=4000, mac_qk=815, softmax_exp=12, softmax_norm=47, mac_sv=1450, e2e=6324. Post-2026-04-27 cascade: stages now ≈ 509-512K cyc each (full cascade window) and e2e ≈ 518K cyc, within ±0.5% of the RTL TB measurements. Same cascade-ns convention as NL: ns = arch_cycles × t_clk_at_Fmax (=11.3766 ns)."
+      "note": "Captured from azurelily/IMC/test.py --model attention --seq_length 128 --head_dim 64 --imc_file configs/azure_lily.json POST AH B-5 finish (2026-04-27 K/V amortization). AL head FSM rewritten to mirror NL's K/V amortization: K/V loaded ONCE in S_LOAD_KV (3341 cyc), then 128 Q rows iterate through DIMM cascade (each ~2450 cyc = mac_qk S_FEED_QK 2304 + softmax S_NORM tail ~130 + glue 16). Pre-B-5 finish (legacy soft-rst): e2e=517788. Post-B-5 finish (K/V amortization): e2e=324205 (1.6× speedup from K/V load amortization). Sim cycles match RTL within ±2% per stage / ±1% E2E (RTL=321661, sim=324205, Δ=-2544). The AL DIMM is bottlenecked by mac_qk's redundant-lane topology (W=16 lanes all process the SAME K row, no parallelism along K) — a deeper architectural change is needed to close the perf gap with NL (NL E2E=79033 cyc; AL E2E=321661 cyc; the 4× delta is from AL's redundant lanes vs NL's true W=16 lane parallelism)."
     }
   }
 }

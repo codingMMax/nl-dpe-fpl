@@ -84,22 +84,44 @@ module azurelily_dimm_top #(
     reg [12-1:0] q_w_addr;
     reg [12-1:0] k_w_addr;
     reg [12-1:0] v_w_addr;
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin q_w_addr <= 0; k_w_addr <= 0; v_w_addr <= 0; end
-        else begin
-            if (valid_q) q_w_addr <= q_w_addr + 1;
-            if (valid_k) k_w_addr <= k_w_addr + 1;
-            if (valid_v) v_w_addr <= v_w_addr + 1;
-        end
-    end
+    // AH B-5 finish: K/V amortization.
+    // ALL counters and FSM state are owned by ONE always block (matches NL's
+    // pattern, avoids multi-driver issues on q_w_addr).  K/V counters saturate
+    // at thresholds so S_LOAD condition stays stable across Q-row recycling.
 
     wire [DATA_WIDTH-1:0] q_sram_out, k_sram_out, v_sram_out;
     reg [12-1:0] q_r_addr;
     reg [12-1:0] k_r_addr;
     reg [12-1:0] v_r_addr;
+    // AH B-5 finish: gate q_sram w_en by state==S_LOAD/S_IDLE/S_RELOAD_Q so
+    // writes occur only during the legacy initial load and the K/V-amortized
+    // per-Q-row reload.  Additionally accept writes during S_WAIT_QK/S_OUTPUT
+    // when the back-to-back trigger fires — this captures the head's first
+    // valid_q packed word on the same cycle as the trigger pulse (the FSM
+    // transitions to S_RELOAD_Q on the next clock edge so the gate's S_RELOAD_Q
+    // path takes over for cycles 2..12).  When trigger_pulse is high, q_w_addr_eff
+    // = 0 (overrides the saturated q_w_addr=13) so mem[0] is written.  K/V SRAM
+    // writes are ungated (one-shot during initial load).
+    wire trigger_pulse = (SCORE_BACK_TO_BACK_MODE && score_next_q_row_trigger_i) ||
+                         (WSUM_BACK_TO_BACK_MODE && wsum_next_q_row_trigger_i);
+    // AH B-5 finish: alias for clarity; trigger_pulse is the head's signal that
+    // it's pushing a new Q row.  Wsum_done_o is wired to fire at S_FEED_QK exit
+    // so the head sees it after DIMM is ready for the next Q row.
+    wire pending_advance_in_b2b = trigger_pulse;
+    // q_sram_w_en: accept writes during S_LOAD/S_IDLE/S_RELOAD_Q.  Also accept
+    // during S_WAIT_QK/S_OUTPUT when pending_advance is high and the trigger has
+    // landed (the FSM transitions to S_RELOAD_Q on the same edge — this captures
+    // the head's first valid_q packed word for the new Q row).
+    wire q_sram_w_en = valid_q && (state == S_IDLE || state == S_LOAD || state == S_RELOAD_Q ||
+                                   ((state == S_WAIT_QK || state == S_OUTPUT) && pending_advance_in_b2b));
+    // q_w_addr_eff: substitute 0 when the latched advance fires while we're still
+    // in S_WAIT_QK/S_OUTPUT (the FSM hasn't yet transitioned to S_RELOAD_Q).
+    wire [12-1:0] q_w_addr_eff =
+        ((state == S_WAIT_QK || state == S_OUTPUT) && pending_advance_in_b2b) ? 12'd0
+                                                                                 : q_w_addr;
     sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(17))
-        q_sram (.clk(clk),.rst(rst),.w_en(valid_q),.r_addr(q_r_addr),
-                .w_addr(q_w_addr),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));
+        q_sram (.clk(clk),.rst(rst),.w_en(q_sram_w_en),.r_addr(q_r_addr),
+                .w_addr(q_w_addr_eff),.sram_data_in(data_in_q),.sram_data_out(q_sram_out));
     sram #(.N_CHANNELS(1),.DATA_WIDTH(DATA_WIDTH),.DEPTH(2049))
         k_sram (.clk(clk),.rst(rst),.w_en(valid_k),.r_addr(k_r_addr),
                 .w_addr(k_w_addr),.sram_data_in(data_in_k),.sram_data_out(k_sram_out));
@@ -107,18 +129,41 @@ module azurelily_dimm_top #(
         v_sram (.clk(clk),.rst(rst),.w_en(valid_v),.r_addr(v_r_addr),
                 .w_addr(v_w_addr),.sram_data_in(data_in_v),.sram_data_out(v_sram_out));
 
-    // FSM: LOAD → FEED_QK → WAIT_QK → FEED_SOFTMAX → FEED_SV → OUTPUT
+    // FSM: LOAD → FEED_QK → WAIT_QK → S_OUTPUT (with S_RELOAD_Q for K/V amortization)
     localparam S_IDLE=3'd0, S_LOAD=3'd1, S_FEED_QK=3'd2, S_WAIT_QK=3'd3,
-               S_FEED_SOFTMAX=3'd4, S_FEED_SV=3'd5, S_OUTPUT=3'd6;
+               S_RELOAD_Q=3'd4, S_FEED_SV=3'd5, S_OUTPUT=3'd6;
     reg [2:0] state;
     reg [15:0] mac_count, row_count;
     always @(posedge clk or posedge rst) begin
         if (rst) begin state <= S_IDLE; mac_count <= 0; row_count <= 0;
-                       q_r_addr <= 0; k_r_addr <= 0; v_r_addr <= 0; end
-        else case (state)
-            S_IDLE: if (valid_q || valid_k || valid_v) state <= S_LOAD;
+                       q_r_addr <= 0; k_r_addr <= 0; v_r_addr <= 0;
+                       q_w_addr <= 0; k_w_addr <= 0; v_w_addr <= 0; end
+        else begin
+            // K/V counters: monotonic increment, saturate at threshold so the
+            // S_LOAD condition stays stable across recycling (K/V amortization).
+            if (valid_k && k_w_addr < 1664) k_w_addr <= k_w_addr + 1;
+            if (valid_v && v_w_addr < 1664) v_w_addr <= v_w_addr + 1;
+            // q_w_addr is the per-Q-row Q SRAM write address.  Increments
+            // on valid_q while in S_LOAD/S_RELOAD_Q/S_IDLE (saturates at threshold).
+            // S_IDLE included so the head's first valid_q pulse (which causes
+            // the S_IDLE→S_LOAD transition) increments q_w_addr 0→1 alongside.
+            if ((state == S_IDLE || state == S_LOAD || state == S_RELOAD_Q) && valid_q
+                && q_w_addr < 13)
+                q_w_addr <= q_w_addr + 1;
+            case (state)
+            S_IDLE: if (valid_q || valid_k || valid_v) begin
+                       state <= S_LOAD;
+                       // q_w_addr is left as-is (0 from rst, or whatever the TB
+                       // forced via hierarchical assignment).  The S_LOAD branch's
+                       // generic increment will pick up valid_q on subsequent cycles.
+                    end
             S_LOAD: if (q_w_addr >= 13 && k_w_addr >= 1664
                        && v_w_addr >= 1664) begin
+                        state <= S_FEED_QK; mac_count <= 0;
+                    end
+            S_RELOAD_Q: if (q_w_addr >= 13) begin
+                        // Per-Q-row reload complete — re-enter S_FEED_QK.  K/V SRAM
+                        // contents and addresses persist (K/V amortization).
                         state <= S_FEED_QK; mac_count <= 0;
                     end
             S_FEED_QK: begin
@@ -141,30 +186,31 @@ module azurelily_dimm_top #(
                 end
             end
             S_WAIT_QK: begin
-                // AH Step B-2 (additive, default off): when SCORE_BACK_TO_BACK_MODE=1
-                // and the head FSM (B-5) pulses score_next_q_row_trigger_i, recycle
-                // S_WAIT_QK → S_FEED_QK to begin computing scores for the next Q row.
+                // AH B-5 finish (K/V amortization): on a pending advance request,
+                // recycle S_WAIT_QK → S_RELOAD_Q. Q-side addresses reset; K/V SRAM
+                // contents and addresses persist (K/V amortization).
                 // Default mode=0 keeps the canonical S_WAIT_QK → S_OUTPUT path.
-                if (SCORE_BACK_TO_BACK_MODE && score_next_q_row_trigger_i) begin
-                    state <= S_FEED_QK;
+                if (pending_advance_in_b2b) begin
+                    state <= S_RELOAD_Q;
                     mac_count <= 0;
                     row_count <= 0;
+                    q_w_addr <= valid_q ? 12'd1 : 12'd0;
+                    q_r_addr <= 0;
                 end else if (|lane_valid) state <= S_OUTPUT;  // waits for mac_sv; here it stays simplified
             end
             S_OUTPUT: begin
-                // AH Step B-3 (additive, default off): when WSUM_BACK_TO_BACK_MODE=1
-                // and head FSM pulses wsum_next_q_row_trigger_i, return to S_FEED_QK
-                // to re-arm the dsp_mac auto-recycle for the next Q row's mac_sv. The
-                // dsp_mac instances themselves auto-recycle (count → 0 after K=32);
-                // this transition only re-engages the upstream FSM driving the data.
-                // Default mode=0 keeps the canonical S_OUTPUT → S_IDLE behaviour.
-                if (WSUM_BACK_TO_BACK_MODE && wsum_next_q_row_trigger_i) begin
-                    state <= S_FEED_QK;
+                // AH B-5 finish (K/V amortization): on a pending advance request,
+                // recycle S_OUTPUT → S_RELOAD_Q (mirrors the S_WAIT_QK branch).
+                if (pending_advance_in_b2b) begin
+                    state <= S_RELOAD_Q;
                     mac_count <= 0;
                     row_count <= 0;
+                    q_w_addr <= valid_q ? 12'd1 : 12'd0;
+                    q_r_addr <= 0;
                 end else if (!ready_n) state <= S_IDLE;
             end
-        endcase
+            endcase
+        end
     end
 
     // W parallel lanes: mac_qk → softmax → mac_sv
@@ -228,9 +274,23 @@ module azurelily_dimm_top #(
         );
 
         // Stage 3: mac_sv (dsp_mac, K=32). AH B-4: data_a from weight_buffer.
+        // AH B-5 finish: gate mac_sv's valid input so it accumulates EXACTLY K=32
+        // inputs per Q row, fires once, then disables until the next Q row's reload.
+        // This matches expected_counters.json's fires_per_lane_per_row=1 contract.
+        // Gate signal: counts weight_buf_valid pulses; goes low after K hits, re-arms
+        // when the FSM enters S_RELOAD_Q (= per-Q-row reset).
+        reg [12-1:0] mac_sv_input_count;
+        always @(posedge clk or posedge rst) begin
+            if (rst) mac_sv_input_count <= 0;
+            else if (state == S_RELOAD_Q || state == S_LOAD)
+                mac_sv_input_count <= 0;
+            else if (weight_buf_valid && mac_sv_input_count < 32)
+                mac_sv_input_count <= mac_sv_input_count + 1;
+        end
+        wire mac_sv_valid_gated = weight_buf_valid && (mac_sv_input_count < 32);
         dsp_mac #(.DATA_WIDTH(DATA_WIDTH), .K(32)) mac_sv_inst (
             .clk(clk), .rst(rst),
-            .valid(weight_buf_valid), .ready_n(1'b0),
+            .valid(mac_sv_valid_gated), .ready_n(1'b0),
             .data_a(weight_buf_out),
             .data_b(v_sram_out),
             .data_out(lane_data[lane]),
@@ -263,12 +323,26 @@ module azurelily_dimm_top #(
     //   softmax_done_o : AND-reduced rising-edge of softmax_inst.valid_n,
     //                    asserts when ALL W lanes' clb_softmax simultaneously
     //                    enter S_NORM (= scores all captured for this Q row).
-    //   wsum_done_o    : OR-reduced lane_valid (mac_sv valid_n).  Asserts the
-    //                    cycle the FIRST lane's mac_sv produces a valid output,
-    //                    matching sim's gemm_dsp(fires_per_lane_per_row=1) FSM-
-    //                    cutoff convention.  Used by the head FSM to advance Q rows.
+    //   wsum_done_o    : AH B-5 finish: 1-cycle pulse on the FALLING edge of
+    //                    ANY lane's clb_softmax valid_n (= S_NORM → S_LOAD)
+    //                    AND lane[0]'s mac_sv produced a valid_n in this Q row.
+    //                    Why this signal: clb_softmax must fully exit S_NORM
+    //                    before the next Q row's mac_qk feeds new scores —
+    //                    otherwise valid input pulses are dropped during the
+    //                    existing S_NORM phase.  Firing the head's trigger on
+    //                    S_NORM exit guarantees back-pressure across Q rows.
     assign softmax_done_o = &lane_softmax_done;
-    assign wsum_done_o    = |lane_valid;
+    // Detect ANY lane's clb_softmax S_NORM → S_LOAD transition.  The lanes are
+    // lock-stepped (fed by the same mac_qk valid pulses), so their valid_n falls
+    // simultaneously.  Edge-detect on lane[0]'s valid_n (sufficient for parity).
+    reg lane0_attn_valid_d;
+    wire lane0_attn_valid = al_lane[0].softmax_inst.valid_n;
+    always @(posedge clk or posedge rst) begin
+        if (rst) lane0_attn_valid_d <= 1'b0;
+        else lane0_attn_valid_d <= lane0_attn_valid;
+    end
+    // Pulse on falling edge: was 1 last cycle, now 0 = S_NORM finished.
+    assign wsum_done_o = lane0_attn_valid_d && !lane0_attn_valid;
 
 endmodule
 

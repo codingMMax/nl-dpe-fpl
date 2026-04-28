@@ -15,24 +15,8 @@
       "deltas": []
     },
     "azurelily_attn_head_d64_c128": {
-      "deltas": [
-        {
-          "stage": "mac_sv",
-          "key": "dpe_fire_count",
-          "delta_count": 32,
-          "tolerance": 0,
-          "root_cause": "fc_verification/rtl/azurelily_attn_head_d64_c128.v:300-334 (S_DIMM_WAIT → S_DIMM_RST). Head FSM advances on first dimm_valid_n_w pulse, but DIMM_RST_CYCLES=4 (line 222) holds the soft-reset for 4 cycles before re-entering S_DIMM_FIRE. During the transition window (= the 1 cycle from advance decision until dimm_soft_rst settles for all 16 lanes via dimm_rst_internal = rst | dimm_soft_rst on line 184), lanes that were 1 K=32 cycle behind fire their valid_n right at the boundary. Aggregated across 128 Q-rows, this yields ~32 extra mac_sv valid_n rising edges (~0.25 per Q-row, summed across 16 lanes — matches edge-cycle FSM transition timing). Pure per-Q-row per-lane count is 1, so RTL ≈ M*W=2048 + ~16-32 boundary spillover = 2080. Sim's gemm_dsp models the FSM-cutoff as exactly M*W=2048 (no boundary spill). Classification: modelling_granularity.",
-          "classification": "modelling_granularity"
-        },
-        {
-          "stage": "mac_sv",
-          "key": "pass_count",
-          "delta_count": 32,
-          "tolerance": 0,
-          "root_cause": "Same as mac_sv.dpe_fire_count (FSM transition edge effect, pass_count is an alias).",
-          "classification": "modelling_granularity"
-        }
-      ]
+      "_note": "AH B-5 finish (2026-04-27): the AL head FSM's K/V amortization replaces the soft-rst loop with strict-serial cascade (S_LOAD_KV → S_CASCADE).  The mac_sv valid input is now gated to fire EXACTLY once per Q row per lane (mac_sv_input_count budget = K=32 inputs, re-armed only on S_RELOAD_Q entry).  This eliminates the FSM-transition edge spillover that produced the legacy +32 delta on the OLD soft-rst architecture.  Counter alignment is now Δ=0 across all stages — there is no longer a known counter delta for AL.",
+      "deltas": []
     }
   }
 }
