@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Attention Head — Workload Mapping & Sim ↔ RTL Pipelining</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --nl: #1d4ed8;
+    --al: #b45309;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --fg: #0f172a;
+    --muted: #475569;
+    --border: #cbd5e1;
+    --code-bg: #0f172a;
+    --code-fg: #e2e8f0;
+    --green: #15803d;
+    --green-light: #dcfce7;
+    --amber: #b45309;
+    --amber-light: #fef3c7;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 1400px;
+    margin: 1.5rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.85rem; margin: 0 0 0.3rem 0; }
+  h2 {
+    font-size: 1.35rem; margin: 2.5rem 0 0.6rem 0;
+    border-bottom: 2px solid var(--fg); padding-bottom: 0.4rem;
+  }
+  h3 { font-size: 1.1rem; margin: 1.4rem 0 0.5rem 0; color: var(--muted); }
+  h4 { font-size: 0.95rem; margin: 1.1rem 0 0.4rem 0; }
+  p.lede { color: var(--muted); margin: 0 0 1.5rem 0; font-size: 1rem; }
+
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "Menlo", monospace; font-size: 0.85rem; }
+  pre {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: 0.85rem 1rem; border-radius: 6px;
+    overflow-x: auto; font-size: 0.82rem; line-height: 1.5;
+  }
+  pre .cm { color: #94a3b8; font-style: italic; }
+  pre .num { color: #84cc16; }
+  pre .kw { color: #f59e0b; }
+
+  .diagram {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem; margin: 0.8rem 0;
+  }
+  .diagram-caption {
+    font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem;
+    font-style: italic;
+  }
+
+  .mermaid { background: white; }
+
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.88rem; }
+  th, td { padding: 0.45rem 0.7rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--bg); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+  td.center { text-align: center; }
+  tr.sum td { background: var(--bg); font-weight: 600; border-top: 2px solid var(--border); }
+  tr.dominant td { background: #fef3c7; }
+
+  .nl-color { color: var(--nl); }
+  .al-color { color: var(--al); }
+  .arch-tag { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 3px; }
+  .arch-tag.nl { color: var(--nl); border: 1px solid var(--nl); }
+  .arch-tag.al { color: var(--al); border: 1px solid var(--al); }
+
+  .arch-banner {
+    display: flex; align-items: center; gap: 1rem;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.6rem 1rem; margin: 1rem 0 0.5rem 0;
+  }
+  .arch-banner.nl { border-left: 6px solid var(--nl); }
+  .arch-banner.al { border-left: 6px solid var(--al); }
+  .arch-banner h3 { margin: 0; padding: 0; color: var(--fg); }
+
+  .meeting-point {
+    background: var(--green-light); border-left: 5px solid var(--green);
+    padding: 0.7rem 1rem; border-radius: 0 6px 6px 0; margin: 0.7rem 0; font-size: 0.92rem;
+  }
+  .meeting-point strong { color: var(--green); }
+
+  .approx, .todo {
+    background: var(--amber-light); border-left: 5px solid var(--amber);
+    padding: 0.6rem 1rem; border-radius: 0 6px 6px 0;
+    margin: 0.7rem 0; font-size: 0.9rem;
+  }
+  .approx strong, .todo strong { color: var(--amber); }
+
+  .toc {
+    background: var(--card); border: 1px solid var(--border);
+    padding: 0.6rem 1rem; border-radius: 6px; margin: 0.8rem 0; font-size: 0.92rem;
+  }
+  .toc ol { margin: 0.4rem 0 0 1.2rem; padding: 0; }
+  .toc a { color: var(--nl); text-decoration: none; }
+  .cite { font-size: 0.78rem; color: var(--muted); font-family: ui-monospace, monospace; }
+
+  /* side-by-side panels for sim vs RTL */
+  .side-by-side {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+    margin: 0.6rem 0;
+  }
+  .panel-sim, .panel-rtl {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.9rem 1rem;
+  }
+  .panel-sim { border-left: 5px solid var(--muted); }
+  .panel-rtl { border-left: 5px solid var(--fg); }
+
+  /* Pipeline schematic — VERIFICATION.md style with proportional cycle widths */
+  .pipe-schem {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1rem 1.2rem; margin: 0.8rem 0;
+  }
+  .pipe-row { display: flex; align-items: center; margin: 0.5rem 0; }
+  .pipe-label {
+    width: 180px; flex-shrink: 0; font-size: 0.82rem; color: var(--muted);
+    text-align: right; padding-right: 0.7rem;
+    font-family: ui-monospace, monospace; line-height: 1.2;
+  }
+  .pipe-label strong { color: var(--fg); display: block; font-size: 0.85rem; }
+  .pipe-bar { flex-grow: 1; display: flex; height: 38px; gap: 1px; }
+  .pipe-seg {
+    height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 0.72rem; font-weight: 600;
+    overflow: hidden; padding: 0 4px; box-sizing: border-box;
+    border-radius: 2px;
+    font-family: ui-monospace, monospace;
+    text-align: center; line-height: 1.1;
+  }
+  .pipe-seg.fc      { background: #b91c1c; }
+  .pipe-seg.bridge  { background: #475569; }
+  .pipe-seg.kv      { background: #059669; }
+  .pipe-seg.cascade { background: #2563eb; }
+  .pipe-seg.epilogue{ background: #92400e; }
+  .pipe-seg.qdrv    { background: #6366f1; }
+  .pipe-seg.macqk   { background: #2563eb; }
+  .pipe-seg.smexp   { background: #0891b2; }
+  .pipe-seg.smnorm  { background: #155e75; }
+  .pipe-seg.macsv   { background: #7c3aed; }
+  .pipe-seg.glue    { background: #94a3b8; color: var(--fg); }
+  .pipe-seg.crit    { background: #dc2626; }
+
+  .pipe-axis {
+    display: flex; margin-top: 0.2rem; font-size: 0.7rem; color: var(--muted);
+    font-family: ui-monospace, monospace;
+  }
+  .pipe-axis-label { width: 180px; flex-shrink: 0; padding-right: 0.7rem; }
+  .pipe-axis-track { flex-grow: 1; position: relative; height: 14px; border-top: 1px dashed var(--border); }
+  .pipe-tick { position: absolute; transform: translateX(-50%); top: 1px; }
+  .pipe-tick::before {
+    content: ""; position: absolute; top: -7px; left: 50%; width: 1px; height: 5px; background: var(--border);
+  }
+
+  .pipe-annot {
+    display: flex; margin-top: 0.4rem;
+    font-size: 0.78rem; color: var(--amber);
+    font-family: ui-monospace, monospace;
+  }
+  .pipe-annot-label { width: 180px; flex-shrink: 0; padding-right: 0.7rem; text-align: right; }
+  .pipe-annot-track { flex-grow: 1; position: relative; }
+  .pipe-annot-arrow { position: absolute; }
+  .pipe-attribution {
+    background: var(--bg); border-left: 4px solid var(--amber);
+    padding: 0.5rem 0.8rem; margin: 0.5rem 0; font-size: 0.85rem;
+    border-radius: 0 4px 4px 0;
+  }
+  .pipe-attribution table { font-size: 0.85rem; margin: 0.3rem 0; }
+  .pipe-attribution table th, .pipe-attribution table td { padding: 0.2rem 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>Attention Head — Workload Mapping & Sim ↔ RTL Pipelining</h1>
+<p class="lede">
+  End-to-end walkthrough: workload → hardware mapping → sim model → RTL implementation → structural differences.
+  Workload point: <span class="mono">N=128, d_head=64, d_model=128, W=16, K_id=2</span>. Commit <span class="mono">a8c9593</span>.
+  Authoritative source for L/F/D/S/W decomposition: <span class="mono">fc_verification/DIMM_pipeline_model_vs_rtl.md</span>.
+</p>
+
+<div class="toc">
+<strong>Contents</strong>
+<ol>
+  <li><a href="#workload">Attention head workload</a></li>
+  <li><a href="#mapping">Hardware mapping (NL vs AL)</a></li>
+  <li><a href="#sim">Simulator latency model</a></li>
+  <li><a href="#rtl">RTL latency model</a></li>
+  <li><a href="#diff">Sim vs RTL — structural differences</a></li>
+  <li><a href="#e2e">End-to-end latency comparison</a></li>
+  <li><a href="#credibility">Credibility summary</a></li>
+</ol>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="workload">1. Attention Head Workload</h2>
+
+<h3>1.1 Math primer</h3>
+<pre>Q = X · W_Q       <span class="cm"># N × d_model · d_model × d_head → N × d_head</span>
+K = X · W_K
+V = X · W_V
+S = Q · Kᵀ         <span class="cm"># N × N score matrix</span>
+W = softmax(S)     <span class="cm"># row-wise: exp(S) / sum_row(exp(S))</span>
+O = W · V          <span class="cm"># N × d_head attention output</span></pre>
+
+<h3>1.2 Data flow between stages</h3>
+<div class="diagram">
+<div class="mermaid">
+flowchart LR
+  X["X<br/>N×d_model<br/>128×128"]:::tensor
+  WQ["W_Q"]:::weight
+  WK["W_K"]:::weight
+  WV["W_V"]:::weight
+  X --> LQ["linear_Q"]:::stage1
+  X --> LK["linear_K"]:::stage1
+  X --> LV["linear_V"]:::stage1
+  WQ --> LQ
+  WK --> LK
+  WV --> LV
+  LQ --> Q["Q<br/>N×d_head<br/>128×64"]:::tensor
+  LK --> K["K<br/>N×d_head<br/>128×64"]:::tensor
+  LV --> V["V<br/>N×d_head<br/>128×64"]:::tensor
+  Q --> MQK["mac_qk<br/>Q · Kᵀ"]:::stage2
+  K --> MQK
+  MQK --> S["S<br/>N×N<br/>128×128"]:::tensor
+  S --> SE["softmax_exp"]:::stage3
+  SE --> SN["softmax_norm"]:::stage3
+  SN --> Wt["W<br/>N×N<br/>128×128"]:::tensor
+  Wt --> MSV["mac_sv<br/>W · V"]:::stage4
+  V --> MSV
+  MSV --> O["O<br/>N×d_head<br/>128×64"]:::tensor
+  classDef tensor fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef weight fill:#fef3c7,stroke:#92400e,color:#0f172a
+  classDef stage1 fill:#ede9fe,stroke:#7c3aed,color:#0f172a
+  classDef stage2 fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef stage3 fill:#fce7f3,stroke:#be185d,color:#0f172a
+  classDef stage4 fill:#cffafe,stroke:#0891b2,color:#0f172a
+</div>
+<div class="diagram-caption">Data flow. Four compute stages; tensor shapes for our workload point.</div>
+</div>
+
+<h3>1.3 Workload parameters</h3>
+<table>
+  <thead><tr><th>Parameter</th><th>Value</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>N (sequence length)</td><td>128</td><td>BERT-Tiny token count</td></tr>
+    <tr><td>d_head</td><td>64</td><td>Per-head dimension</td></tr>
+    <tr><td>d_model</td><td>128</td><td>Input dim (= 2 × d_head, BERT-Tiny config)</td></tr>
+    <tr><td>W (DIMM lanes)</td><td>16</td><td>Spatial parallelism</td></tr>
+    <tr><td>K_id (NL only)</td><td>2</td><td>= floor(C / d_head) = floor(128/64); identity-block packing</td></tr>
+    <tr><td>DSP_WIDTH (AL only)</td><td>4</td><td>int_sop_4: 4 products per cycle</td></tr>
+    <tr><td>Cycles per cell fire</td><td>~58 (NL) / ~18 (AL)</td><td>L+F+D phases per pass</td></tr>
+  </tbody>
+</table>
+
+<!-- =========================================================== -->
+<h2 id="mapping">2. Hardware Mapping</h2>
+
+<h3>2.1 NL-DPE datapath</h3>
+<div class="diagram">
+<div class="mermaid">
+flowchart LR
+  X["X<br/>(N×d_model)"] --> FC
+  subgraph FC["linear_qkv — 6 DPE units (3 arms × 2 ping-pong)"]
+    direction LR
+    FQ["Q arm<br/>2 DPE"]:::dpe
+    FK["K arm<br/>2 DPE"]:::dpe
+    FV["V arm<br/>2 DPE"]:::dpe
+  end
+  FC --> QKV["Q,K,V<br/>buffers"]:::buf
+  QKV --> DIMM
+  subgraph DIMM["DIMM-top — 64 dedicated DPEs (W=16 lanes × 4 DPEs/lane, NO sharing across stages)"]
+    direction LR
+    SCORE["score_inst<br/>1 DPE/lane (dimm_exp)<br/>= 16 DPEs total<br/>32 scores/cycle (W·K_id)"]:::dimm
+    SM["softmax_approx<br/>1 DPE/lane (sm_exp)<br/>= 16 DPEs total<br/>mode-switched: exp + norm"]:::dimm
+    WSUM["wsum_inst<br/>2 DPEs/lane (ws_log + ws_exp)<br/>= 32 DPEs total<br/>log-domain mac_sv"]:::dimm
+    SCORE --> SM --> WSUM
+  end
+  DIMM --> O["O<br/>(N×d_head)"]
+  classDef dpe fill:#dbeafe,stroke:#1d4ed8
+  classDef buf fill:#e2e8f0,stroke:#475569
+  classDef dimm fill:#dcfce7,stroke:#15803d
+</div>
+<div class="diagram-caption">NL-DPE: 70 DPE units total per head (6 FC + 64 DIMM = 16 + 16 + 32). <strong>mac_qk and mac_sv use physically separate DPEs</strong>; mac_sv requires 2 DPEs per lane (ws_log + ws_exp) because log-domain math needs log conversion + exp lookup.</div>
+</div>
+
+<h3>2.2 Azure-Lily datapath</h3>
+<div class="diagram">
+<div class="mermaid">
+flowchart LR
+  X["X<br/>(N×d_model)"] --> FC
+  subgraph FC["linear_qkv — 192 dsp_macs (3 arms × 64 parallel-output)"]
+    direction LR
+    FQ["Q arm<br/>64 dsp_macs"]:::dsp
+    FK["K arm<br/>64 dsp_macs"]:::dsp
+    FV["V arm<br/>64 dsp_macs"]:::dsp
+  end
+  FC --> QKV["Q,K,V<br/>buffers"]:::buf
+  QKV --> DIMM
+  subgraph DIMM["DIMM-top — W=16 lanes × (1 dsp_mac + 1 clb_softmax + 1 dsp_mac) = 48 units total"]
+    direction LR
+    SCORE["mac_qk_inst<br/>1 dsp_mac/lane (K=16)<br/>= 16 dsp_macs total<br/>4 products/cycle/lane"]:::dsp
+    SM["softmax_inst<br/>1 clb_softmax/lane<br/>= 16 instances total<br/>S_LOAD ⇄ mac_qk stream"]:::sm
+    WSUM["mac_sv_inst<br/>1 dsp_mac/lane (K=32)<br/>= 16 dsp_macs total<br/>parallel-output mode"]:::dsp
+    SCORE --> SM --> WSUM
+  end
+  DIMM --> O["O<br/>(N×d_head)"]
+  classDef dsp fill:#fef3c7,stroke:#b45309
+  classDef sm fill:#fce7f3,stroke:#be185d
+  classDef buf fill:#e2e8f0,stroke:#475569
+</div>
+<div class="diagram-caption">Azure-Lily: 224 dsp_macs + 16 clb_softmax per head (192 FC + 16 DIMM mac_qk + 16 mac_sv + 16 clb_softmax). <strong>mac_qk and mac_sv use separate dsp_macs</strong>; clb_softmax is CLB-based, not a dsp_mac. Source: <span class="mono">azurelily_dimm_top_d64_c128.v:218-299</span> (generate-loop over W lanes).</div>
+</div>
+
+<h3>2.3 Per-stage parallelism comparison</h3>
+<table>
+  <thead><tr>
+    <th>Stage</th>
+    <th>NL primitive</th>
+    <th class="num">NL count</th>
+    <th>NL throughput/cycle</th>
+    <th>AL primitive</th>
+    <th class="num">AL count</th>
+    <th>AL throughput/cycle</th>
+    <th>Passes per Q row</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>linear_qkv</td>
+      <td>DPE ping-pong</td><td class="num">6</td><td>1 packed word / arm</td>
+      <td>parallel-out dsp_mac</td><td class="num">192</td><td>64 outputs / arm</td>
+      <td>streaming N tokens</td>
+    </tr>
+    <tr>
+      <td>mac_qk</td>
+      <td>dimm_exp DPE</td><td class="num">16</td><td><strong>32 scores</strong> (W·K_id)</td>
+      <td>dsp_mac (K=16)</td><td class="num">16</td><td><strong>64 scores</strong> (W·DSP_WIDTH)</td>
+      <td>NL: 4 / AL: <strong>128 K iters</strong></td>
+    </tr>
+    <tr>
+      <td>softmax (exp+norm)</td>
+      <td>sm_exp DPE (mode-switched)</td><td class="num">16</td><td>16 lane fold</td>
+      <td>clb_softmax (CLB)</td><td class="num">16</td><td>1 / lane</td>
+      <td>1 (W folded for NL; 128 SM_NORM cyc for AL)</td>
+    </tr>
+    <tr>
+      <td>mac_sv</td>
+      <td>ws_log + ws_exp DPEs</td><td class="num">32</td><td>16 outputs (after log+exp pair)</td>
+      <td>dsp_mac (K=32)</td><td class="num">16</td><td>64 channels parallel-output</td>
+      <td>NL: 5 (1 ws_log + 4 ws_exp) / AL: 1 wave</td>
+    </tr>
+    <tr class="sum">
+      <td>Total per head</td>
+      <td colspan="3">70 DPE units (6 FC + 16 + 16 + 32 DIMM)</td>
+      <td colspan="3">224 dsp_macs + 16 clb_softmax (192 FC + 16 + 16 DIMM dsp_macs + 16 softmax)</td>
+      <td>—</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="meeting-point">
+  <strong>Apple-to-apple methodology:</strong> Same lane count (W=16). Same total work (counter Δ=0 — both produce 8,192 mac_qk fires per Q row). Different parallelism shape: NL packs K dimension via K_id=2 + analog parallelism (32 scores/cycle); AL serializes K dimension via S_FEED_QK loop.
+</div>
+
+<h3>2.4 Per-lane pipeline — exactly which DPE / dsp_mac handles what</h3>
+
+<p>The datapath diagrams above show stage-level structure. The diagrams below zoom into <strong>one lane</strong> and show exactly which physical primitive consumes/produces each tensor. This is the unit that's replicated W=16 times.</p>
+
+<h4>NL-DPE — one lane (4 DPEs, log-domain math)</h4>
+<div class="diagram">
+<div class="mermaid">
+flowchart TD
+  Qrow["Q row<br/>(d_head=64 packed)"]:::input
+  Kdata["K rows<br/>(persistent in K SRAM<br/>after S_LOAD_KV)"]:::input
+  Vdata["V rows<br/>(persistent, log-pre-converted)"]:::input
+
+  subgraph mqk["mac_qk stage — 1 DPE per lane"]
+    score_dpe["dimm_exp DPE<br/>(analog ACAM crossbar)<br/>K-identity packing K_id=2<br/>4 passes × 58 cyc = 232 cyc/Q row"]:::dpe1
+  end
+  Qrow --> score_dpe
+  Kdata --> score_dpe
+  score_dpe --> score_sram["score_sram<br/>(per-lane, B-4 widened to N×N)"]:::sram
+
+  subgraph sm["softmax stage — 1 DPE per lane (mode-switched)"]
+    sm_load["SM_LOAD<br/>read from score_sram"]:::state
+    sm_exp_state["SM_EXP<br/>sm_exp DPE<br/>ACAM mode 1 = exp lookup"]:::dpe2
+    sm_norm_state["SM_NORMALIZE<br/>SAME sm_exp DPE<br/>mode-switched to inverse"]:::dpe2
+    sm_load --> sm_exp_state --> sm_norm_state
+  end
+  score_sram --> sm_load
+  sm_norm_state --> attn_sram["attn_sram<br/>(per-lane, holds W[i][:])"]:::sram
+
+  subgraph msv["mac_sv stage — 2 DPEs per lane (log + exp)"]
+    ws_log["ws_log DPE<br/>ACAM: convert attn → log<br/>(1 pass per Q row)"]:::dpe3
+    clb_add["CLB add<br/>log(attn[j]) + log(V[j])<br/>(no DPE — pure digital)"]:::clb
+    ws_exp["ws_exp DPE<br/>ACAM: exp(sum)<br/>(4 passes per Q row, one per output column group)"]:::dpe4
+    clb_accum["CLB Σ<br/>accumulator over j<br/>(no DPE)"]:::clb
+    ws_log --> clb_add --> ws_exp --> clb_accum
+  end
+  attn_sram --> ws_log
+  Vdata --> clb_add
+  clb_accum --> Output["O row<br/>(d_head/W = 4 channels per lane)"]:::output
+
+  classDef input fill:#dbeafe,stroke:#1d4ed8
+  classDef sram fill:#e0e7ff,stroke:#4338ca
+  classDef state fill:#fef3c7,stroke:#92400e
+  classDef dpe1 fill:#bbf7d0,stroke:#15803d,stroke-width:2px
+  classDef dpe2 fill:#a7f3d0,stroke:#15803d,stroke-width:2px
+  classDef dpe3 fill:#86efac,stroke:#15803d,stroke-width:2px
+  classDef dpe4 fill:#6ee7b7,stroke:#15803d,stroke-width:2px
+  classDef clb fill:#f5f5f5,stroke:#525252
+  classDef output fill:#dbeafe,stroke:#1d4ed8
+</div>
+<div class="diagram-caption">
+  <strong>Per-NL-lane pipeline.</strong> Four physically distinct DPEs (green boxes, increasing shade): <span class="mono">dimm_exp</span> (mac_qk), <span class="mono">sm_exp</span> (softmax — mode-switched between exp and norm via <span class="mono">nl_dpe_control</span>), <span class="mono">ws_log</span> (mac_sv log-conversion), <span class="mono">ws_exp</span> (mac_sv exp lookup). CLB digital adds/accumulators between DPEs implement the log-domain identity O = Σ exp(log(attn) + log(V)). 4 DPEs per lane × 16 lanes = 64 DIMM DPEs per head. Source: <span class="mono">nldpe_dimm_top_d64_c128.v:77 generate loop</span>.
+</div>
+</div>
+
+<h4>Azure-Lily — one lane (1 dsp_mac + 1 clb_softmax + 1 dsp_mac, linear-domain math)</h4>
+<div class="diagram">
+<div class="mermaid">
+flowchart TD
+  Qrow["Q row<br/>(d_head=64 packed)"]:::input
+  Kdata["K rows<br/>(persistent in K SRAM<br/>after S_LOAD_KV)"]:::input
+  Vdata["V rows<br/>(persistent in V SRAM)"]:::input
+
+  subgraph mqk["mac_qk stage — 1 dsp_mac per lane (K=16)"]
+    mqk_dsp["dsp_mac (K=16)<br/>int_sop_4: 4 products/cycle<br/>S_FEED_QK iterates 128 K rows<br/>= 18 cyc/K row × 128 = 2304 cyc/Q row"]:::dsp1
+  end
+  Qrow --> mqk_dsp
+  Kdata --> mqk_dsp
+  mqk_dsp --> stream["score stream<br/>(1 score every 18 cyc)"]:::wire
+
+  subgraph sm["softmax stage — 1 clb_softmax per lane (CLB-based, not dsp_mac)"]
+    sload["S_LOAD<br/>SRAM-backed buffer fills<br/>AS mac_qk produces<br/>(intra-stage pipelining!)"]:::state
+    sinv["S_INV<br/>1 cyc reciprocal LUT"]:::state
+    snorm["S_NORM<br/>128 cyc sequential normalize<br/>(this gates downstream!)"]:::state
+    sload --> sinv --> snorm
+  end
+  stream --> sload
+  snorm --> wbuf["weight_buffer<br/>(B-4 added; per-lane SRAM<br/>holds N×N weights)"]:::sram
+
+  subgraph msv["mac_sv stage — 1 dsp_mac per lane (K=32, parallel-output)"]
+    msv_dsp["dsp_mac (K=32)<br/>int_sop_4: 4 products/cycle<br/>parallel-output mode<br/>= 32 cyc first-fire<br/>produces 4 output channels per lane"]:::dsp2
+  end
+  wbuf --> msv_dsp
+  Vdata --> msv_dsp
+  msv_dsp --> Output["O row<br/>(d_head/W = 4 channels per lane,<br/>16 lanes × 4 = 64 channels total)"]:::output
+
+  classDef input fill:#fef3c7,stroke:#b45309
+  classDef sram fill:#fed7aa,stroke:#c2410c
+  classDef wire fill:#fff7ed,stroke:#92400e
+  classDef state fill:#fce7f3,stroke:#be185d
+  classDef dsp1 fill:#fcd34d,stroke:#b45309,stroke-width:2px
+  classDef dsp2 fill:#fbbf24,stroke:#b45309,stroke-width:2px
+  classDef output fill:#fef3c7,stroke:#b45309
+</div>
+<div class="diagram-caption">
+  <strong>Per-AL-lane pipeline.</strong> Three primitives per lane: <span class="mono">mac_qk_inst</span> (dsp_mac K=16, 1 dsp_mac/lane), <span class="mono">softmax_inst</span> (clb_softmax — CLB-based, not a dsp_mac), <span class="mono">mac_sv_inst</span> (dsp_mac K=32, 1 dsp_mac/lane). Operates in <strong>linear domain</strong> (no log conversion needed) — clb_softmax handles exp/norm directly via SRAM-backed FSM. The <span class="mono">S_LOAD</span> state pipelines with mac_qk's output stream (only intra-stage pipelining anywhere). Source: <span class="mono">azurelily_dimm_top_d64_c128.v:218-299 generate loop</span>.
+</div>
+</div>
+
+<h4>Why NL needs 4 DPEs per lane while AL needs 3 primitives per lane</h4>
+
+<table>
+  <thead><tr><th>Operation</th><th>NL approach</th><th>AL approach</th><th>Hardware difference</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>QK<sup>T</sup> (mac_qk)</td>
+      <td>1 ACAM crossbar (dimm_exp): K-identity packed</td>
+      <td>1 dsp_mac (K=16): 4 products/cycle</td>
+      <td>NL: parallel bit-line eval. AL: serial K-tile.</td>
+    </tr>
+    <tr>
+      <td>exp(score)</td>
+      <td>1 DPE (sm_exp) ACAM mode 1</td>
+      <td>CLB-based LUT inside clb_softmax</td>
+      <td>NL: analog exp via ACAM. AL: digital LUT.</td>
+    </tr>
+    <tr>
+      <td>1/sum (normalize)</td>
+      <td>SAME DPE (sm_exp) mode-switched to inverse</td>
+      <td>CLB-based inversion inside clb_softmax</td>
+      <td>NL: ACAM mode-switching saves a DPE. AL: same module.</td>
+    </tr>
+    <tr>
+      <td>log(attn)</td>
+      <td>1 DPE (ws_log) ACAM</td>
+      <td>(not needed — AL stays in linear domain)</td>
+      <td>NL pays an extra DPE here for log conversion.</td>
+    </tr>
+    <tr>
+      <td>attn·V (mac_sv core)</td>
+      <td>CLB add + 1 DPE (ws_exp) ACAM exp</td>
+      <td>1 dsp_mac (K=32) parallel-output</td>
+      <td>NL: log-domain add + exp pair. AL: direct multiply.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="meeting-point">
+  <strong>Architectural rationale.</strong> NL avoids analog multiplication (expensive in ReRAM) by working in the log domain: <span class="mono">a · b = exp(log(a) + log(b))</span>. The cost is two extra DPE passes (ws_log + ws_exp) per mac_sv. AL stays in linear domain because digital MACs are cheap. This is why NL has 32 mac_sv DPEs while AL has 16 mac_sv dsp_macs — NL trades 2× cell count for analog efficiency per cell.
+</div>
+
+<!-- =========================================================== -->
+<h2 id="sim">3. Simulator Latency Model</h2>
+
+<h3>3.1 Per-stage analytical formulas</h3>
+
+<table>
+  <thead><tr><th>Stage</th><th>NL formula (per Q row, M=1)</th><th>AL formula (per Q row, M=1)</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>linear_qkv</td>
+      <td><span class="mono">max(_run_linear) over Q,K,V arms</span><br/>≈ 2,424 cyc total stream</td>
+      <td><span class="mono">max(_run_linear) over Q,K,V arms</span><br/>≈ 4,000 cyc total stream</td>
+    </tr>
+    <tr>
+      <td>mac_qk</td>
+      <td><span class="mono">cycles_per_pass × cols_per_dpe</span><br/>= (feed+fire+drain) × 4 ≈ <strong>230 cyc</strong></td>
+      <td><span class="mono">18 × N</span><br/>= 18 × 128 = <strong>2,304 cyc</strong></td>
+    </tr>
+    <tr>
+      <td>softmax_exp</td>
+      <td><span class="mono">t_dimm/W + log₂(W)</span> ≈ <strong>22 cyc</strong></td>
+      <td>folded into mac_qk stream</td>
+    </tr>
+    <tr>
+      <td>softmax_norm</td>
+      <td>symmetric to softmax_exp ≈ <strong>22 cyc</strong></td>
+      <td><span class="mono">1 + N (S_INV + S_NORM tail)</span> = <strong>129 cyc</strong></td>
+    </tr>
+    <tr>
+      <td>mac_sv</td>
+      <td><span class="mono">cycles_per_pass × cols_per_dpe</span> ≈ <strong>222 cyc</strong></td>
+      <td><span class="mono">k_tile_sv = ⌈N/4⌉ = 32</span> ≈ <strong>32 cyc</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="cite">Source: <span class="mono">azurelily/IMC/scheduler_stats/scheduler.py:54-510</span> (<span class="mono">run_attention_per_Q_row_cascade</span>). Per-row primitives: <span class="mono">_gemm_log_per_row_cyc</span>, <span class="mono">_gemm_dsp_per_row_cyc</span>, <span class="mono">dimm_nonlinear</span>.</p>
+
+<h3>3.2 Intra-stage pipelining — sim folds L+F+D into one cycle count</h3>
+<div class="diagram">
+<div class="mermaid">
+gantt
+  title Sim's view of one DPE/DSP pass (cycle axis)
+  dateFormat X
+  axisFormat %s
+  section Sim (folded)
+  L Load 30 cyc :a1, 0, 30
+  F Fire 1 :a2, after a1, 1
+  D Drain 26 cyc :a3, after a2, 26
+  section RTL (preview, real cycles)
+  S Prime 4 :b1, 0, 4
+  L Load 26 :b2, after b1, 26
+  F Fire 1 :b3, after b2, 1
+  D Drain 26 :b4, after b3, 26
+  S WAIT_DPE 1 :b5, after b4, 1
+  W WRITE_B 1 :b6, after b5, 1
+</div>
+<div class="diagram-caption">Sim folds Sync/Write phases into adjacent L/D. RTL has explicit state flops (4 cyc prime + 2 cyc S+W) — the +4 cyc/iter residual.</div>
+</div>
+
+<h3>3.3 Inter-stage scheduling — strictly serial within one Q row</h3>
+<p>Each arch shown on its own scale (per-Q-row cycles differ ~4.5×, so a shared axis hides NL detail). Same-color stages = same compute role.</p>
+
+<h4>NL one Q row — sim model (552 cyc, no overlap)</h4>
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim NL</strong>552 cyc</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg qdrv"   style="width: 2.54%">Q 14</div>
+      <div class="pipe-seg macqk"  style="width: 41.67%">mac_qk 230</div>
+      <div class="pipe-seg smexp"  style="width: 3.99%">sm_e 22</div>
+      <div class="pipe-seg smnorm" style="width: 3.99%">sm_n 22</div>
+      <div class="pipe-seg macsv"  style="width: 40.22%">mac_sv 222</div>
+      <div class="pipe-seg glue"   style="width: 7.61%">glue 42</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 18.1%">100</span>
+      <span class="pipe-tick" style="left: 36.2%">200</span>
+      <span class="pipe-tick" style="left: 54.3%">300</span>
+      <span class="pipe-tick" style="left: 72.5%">400</span>
+      <span class="pipe-tick" style="left: 90.6%">500</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">NL one Q row: 4 mac_qk passes (~230 cyc) + tiny softmax (44 cyc) + 4 mac_sv passes (~222 cyc) + glue. Stages strictly sequential. <strong>mac_qk and mac_sv take similar time</strong> because both use 4 passes through the analog crossbar.</div>
+</div>
+
+<h4>AL one Q row — sim model (2,494 cyc, no overlap)</h4>
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim AL</strong>2,494 cyc</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg qdrv"  style="width: 0.52%">Q 13</div>
+      <div class="pipe-seg macqk" style="width: 92.38%">mac_qk 2304 — S_FEED_QK serial 128 K-rows × 18 cyc</div>
+      <div class="pipe-seg smexp" style="width: 5.17%">sm tail 129</div>
+      <div class="pipe-seg macsv" style="width: 1.28%">SV 32</div>
+      <div class="pipe-seg glue"  style="width: 0.64%">g</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 20%">500</span>
+      <span class="pipe-tick" style="left: 40%">1000</span>
+      <span class="pipe-tick" style="left: 60%">1500</span>
+      <span class="pipe-tick" style="left: 80%">2000</span>
+      <span class="pipe-tick" style="left: 100%">2494</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">AL one Q row: <strong>mac_qk dominates (92%)</strong> because the dsp_mac processes K rows serially (128 iterations × 18 cyc/row). Softmax tail is small (S_LOAD pipelines with mac_qk's stream); mac_sv is fast (parallel-output dsp_mac, 32 cyc first-fire).</div>
+</div>
+
+<div class="meeting-point">
+  <strong>Why NL mac_qk (230 cyc) is 10× faster than AL mac_qk (2,304 cyc):</strong> Architectural — not engineering.
+  <ul style="margin: 0.4rem 0 0 1rem;">
+    <li><strong>NL throughput per cycle</strong>: W=16 lanes × K_id=2 = <strong>32 scores/cycle</strong> (parallel ACAM bit-line eval, K-identity packing)</li>
+    <li><strong>AL throughput per cycle</strong>: DSP_WIDTH=4 elements/cycle, but processes K rows <strong>one at a time</strong> in S_FEED_QK loop = <strong>4 scores/cycle effective</strong></li>
+    <li>Same total work (counter Δ=0), different schedule. Counters confirm both archs do the same N²·d MAC operations.</li>
+  </ul>
+</div>
+
+<h3>3.4 Cross-Q-row scheduling — also strictly serial (no pipelining)</h3>
+<p>128 Q rows fire one at a time. No pipelining across Q rows in either sim or RTL.</p>
+
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>NL E2E</strong>78,094 cyc<br/>(sim)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg fc"       style="width: 3.10%">FC 2424</div>
+      <div class="pipe-seg kv"       style="width: 4.26%">KV 3328</div>
+      <div class="pipe-seg cascade"  style="width: 0.71%">Q0</div>
+      <div class="pipe-seg cascade"  style="width: 0.71%; opacity: 0.92"></div>
+      <div class="pipe-seg cascade"  style="width: 0.71%; opacity: 0.84"></div>
+      <div class="pipe-seg cascade"  style="width: 86.36%; background: linear-gradient(90deg, #2563eb, #1d4ed8); opacity: 0.85">Q3 .. Q127 — 125 more rows × 552 cyc</div>
+      <div class="pipe-seg cascade"  style="width: 0.71%; opacity: 0.92">Q127</div>
+      <div class="pipe-seg epilogue" style="width: 2.16%">drain 1686</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 25%">~20K</span>
+      <span class="pipe-tick" style="left: 50%">~40K</span>
+      <span class="pipe-tick" style="left: 75%">~60K</span>
+      <span class="pipe-tick" style="left: 100%">78K</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">
+  E2E = FC + KV_load + 128 × per_row_cascade + epilogue. Each Q row block is ~552 cyc — strict-serial cascade through all 128 rows. <strong>No cross-Q-row pipelining</strong>: the next Q row's mac_qk does NOT start until current Q row's mac_sv finishes. AL same shape but cascade stretches to 315K cyc.
+</div>
+</div>
+
+<h3>3.5 Sim E2E formula</h3>
+<pre>e2e_cyc = linear_qkv
+        + bridge_cyc
+        + KV_load_one_time_cyc                    <span class="cm"># N=128 hardcoded — TODO parameterize</span>
+        + N · per_row_cascade_cyc
+        + epilogue_cyc                            <span class="cm"># N=128 hardcoded — TODO parameterize</span>
+
+per_row_cascade_cyc = DIMM_Q_WORDS
+                    + mac_qk_per_row_cyc
+                    + softmax_exp_per_row_cyc
+                    + softmax_norm_per_row_cyc
+                    + mac_sv_per_row_cyc
+                    + per_row_glue_cyc</pre>
+
+<div class="todo">
+  <strong>TODO (open task):</strong> <span class="mono">KV_load_one_time_cyc</span> and <span class="mono">epilogue_cyc</span> are hardcoded constants frozen at N=128 (specifically 3328 and 1728). For the paper's scaling claims across sequence lengths, these need to become functions of N: <span class="mono">KV_load = N·(PACKED_K + PACKED_V)</span>, <span class="mono">epilogue = PHASE_DRAIN + N·PACKED_NQ</span>. ~5-line scheduler.py refactor.
+</div>
+
+<!-- =========================================================== -->
+<h2 id="rtl">4. RTL Latency Model</h2>
+
+<h3>4.1 Head FSM (shared across NL and AL)</h3>
+<div class="diagram">
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> S_IDLE
+  S_IDLE --> S_FEED_X : valid_x
+  S_FEED_X --> S_DRAIN_FC : N tokens streamed
+  S_DRAIN_FC --> S_LOAD_KV : FC outputs settled
+  S_LOAD_KV --> S_CASCADE : Q0 + K + V loaded
+  S_CASCADE --> S_CASCADE : wsum_done, q_row++
+  S_CASCADE --> S_OUTPUT_DRAIN : q_row == N
+  S_OUTPUT_DRAIN --> S_OUTPUT_DONE : N PACKED_NQ words drained
+  S_OUTPUT_DONE --> [*]
+</div>
+<div class="diagram-caption">Head FSM (both archs identical). S_CASCADE iterates 128 Q rows, advancing on dimm_wsum_done_o pulse. Source: gen_{nldpe,azurelily}_attn_head_top.py.</div>
+</div>
+
+<h3>4.2 NL DIMM-top sub-FSMs <span class="arch-tag nl">NL</span></h3>
+
+<h4>NL score FSM (mac_qk inner)</h4>
+<div class="diagram">
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> S_IDLE
+  S_IDLE --> S_LOAD_Q : valid_q
+  S_LOAD_Q --> S_LOAD_K : 14 cyc
+  S_LOAD_K --> S_COMPUTE : 1664 cyc, or skip if K persists
+  S_COMPUTE --> S_WAIT_DPE : DPE fires, 58 cyc per pass
+  S_WAIT_DPE --> S_WRITE_B : 1 cyc flop
+  S_WRITE_B --> S_COMPUTE : pass lt 4
+  S_WRITE_B --> S_OUTPUT : pass eq 4
+  S_OUTPUT --> S_LOAD_Q : b2b trigger, q_w_addr reset
+</div>
+<div class="diagram-caption">NL score FSM. 4 passes per Q row through S_COMPUTE → S_WAIT_DPE → S_WRITE_B. B2b mode resets Q-side, persists K/V SRAMs. Source: nldpe_dimm_top_d64_c128.v:322-415.</div>
+</div>
+
+<h4>NL softmax_approx FSM</h4>
+<div class="diagram">
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> SM_IDLE
+  SM_IDLE --> SM_LOAD : score valid_n
+  SM_LOAD --> SM_EXP : N/W = 8 cyc/lane
+  SM_EXP --> SM_NORMALIZE : 9 cyc
+  SM_NORMALIZE --> SM_OUTPUT : 9 cyc
+  SM_OUTPUT --> SM_IDLE : softmax_next_q_row_trigger
+</div>
+<div class="diagram-caption">NL softmax. W-lane fold: each lane processes N/W=8 elements. Source: nldpe_dimm_top_d64_c128.v:578-621.</div>
+</div>
+
+<h4>NL wsum FSM (mac_sv)</h4>
+<div class="diagram">
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> WS_IDLE
+  WS_IDLE --> WS_LOAD_A : softmax valid_n
+  WS_LOAD_A --> WS_LOG_FEED : 8 cyc one-time setup
+  WS_LOG_FEED --> WS_LOG_DRAIN : 1 cyc
+  WS_LOG_DRAIN --> WS_EXP_FEED : 1 cyc
+  WS_EXP_FEED --> WS_EXP_DRAIN : 27 cyc
+  WS_EXP_DRAIN --> WS_EXP_FEED : col_idx lt 4
+  WS_EXP_DRAIN --> WS_OUTPUT : col_idx eq 4
+  WS_OUTPUT --> WS_LOAD_A : wsum_next_q_row_trigger
+</div>
+<div class="diagram-caption">NL wsum (mac_sv). One-time setup (12 cyc) + 4 columns × 60 cyc each + handoffs. Source: nldpe_dimm_top_d64_c128.v:660+.</div>
+</div>
+
+<h3>4.3 AL DIMM-top sub-FSMs <span class="arch-tag al">AL</span></h3>
+
+<h4>AL DIMM-top FSM (combined mac_qk + mac_sv)</h4>
+<div class="diagram">
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> S_IDLE
+  S_IDLE --> S_LOAD : valid_q or valid_k
+  S_LOAD --> S_FEED_QK : Q ge 13, K ge 1664, V ge 1664
+  S_FEED_QK --> S_WAIT_QK : 128 K rows x 18 cyc = 2304 cyc
+  S_WAIT_QK --> S_RELOAD_Q : score b2b trigger, q_w reset
+  S_WAIT_QK --> S_FEED_SV : softmax done
+  S_RELOAD_Q --> S_FEED_QK : q_w_addr eq 13
+  S_FEED_SV --> S_OUTPUT : k_tile_sv = 32 cyc
+  S_OUTPUT --> S_LOAD : wsum_next_q_row_trigger
+</div>
+<div class="diagram-caption">AL DIMM-top. S_FEED_QK serializes 128 K rows. b2b mode reloads Q (13 cyc), K/V persist. Source: azurelily_dimm_top_d64_c128.v:133-211.</div>
+</div>
+
+<h4>AL clb_softmax FSM</h4>
+<div class="diagram">
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> S_IDLE
+  S_IDLE --> S_LOAD : score data starts
+  S_LOAD --> S_INV : N=128 cyc, pipelined with mac_qk
+  S_INV --> S_NORM : 1 cyc
+  S_NORM --> S_OUTPUT : N=128 cyc
+  S_OUTPUT --> S_IDLE
+</div>
+<div class="diagram-caption">AL clb_softmax. SM_LOAD pipelines with mac_qk's output stream — only intra-stage pipelining anywhere in either arch.</div>
+</div>
+
+<h3>4.4 Per-Q-row handshake protocol</h3>
+<div class="diagram">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant H as Head FSM
+  participant D as DIMM-top
+  participant S as score_inst
+  participant SM as softmax_inst
+  participant W as wsum_inst
+
+  Note over H,D: S_LOAD_KV phase (one-time)
+  H->>D: valid_q (Q row 0, 14 cyc NL / 13 cyc AL)
+  H->>D: valid_k (1664 cyc, full K tensor)
+  H->>D: valid_v (1664 cyc, full V tensor)
+
+  Note over H,W: S_CASCADE phase (× 128 Q rows)
+  loop For each Q row k = 0..127
+    H->>D: valid_q for next Q row (13-14 cyc)
+    D->>S: trigger compute
+    S->>SM: score data via valid_n
+    SM->>W: weights via valid_n
+    W->>D: mac_sv output
+    D->>H: dimm_wsum_done_o (1-cyc pulse)
+    H->>D: score/softmax/wsum_next_q_row_trigger (synchronous)
+    H->>H: q_row_idx++
+  end
+  Note over H: S_OUTPUT_DRAIN: stream N×PACKED_NQ words
+</div>
+<div class="diagram-caption">Per-Q-row protocol. Within one Q row: stages serialize via valid_n cascade (NL) or FSM transitions (AL). Cross-Q-row: head FSM advances on wsum_done_o pulse — strict serial cascade.</div>
+</div>
+
+<h3>4.5 Intra-stage pipelining (RTL has some, sim doesn't)</h3>
+
+<h4>NL — strictly serial within one Q row (RTL FSM detail)</h4>
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL NL</strong>539 cyc<br/>(single-fire)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg macqk"  style="width: 11.32%">S_LOAD_Q 14</div>
+      <div class="pipe-seg macqk"  style="width: 12.06%">pass 0 (65)</div>
+      <div class="pipe-seg macqk"  style="width: 12.06%; opacity: 0.92">pass 1 (65)</div>
+      <div class="pipe-seg macqk"  style="width: 12.06%; opacity: 0.84">pass 2 (65)</div>
+      <div class="pipe-seg macqk"  style="width: 12.06%; opacity: 0.76">pass 3 (65)</div>
+      <div class="pipe-seg smexp"  style="width: 1.48%">L8</div>
+      <div class="pipe-seg smexp"  style="width: 1.67%">E9</div>
+      <div class="pipe-seg smnorm" style="width: 1.67%">N9</div>
+      <div class="pipe-seg macsv"  style="width: 2.23%">setup12</div>
+      <div class="pipe-seg macsv"  style="width: 11.13%">WS_EXP_0 60</div>
+      <div class="pipe-seg macsv"  style="width: 11.13%; opacity: 0.92">WS_EXP_1 60</div>
+      <div class="pipe-seg macsv"  style="width: 11.13%; opacity: 0.84">WS_EXP_2 60</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 18.6%">100</span>
+      <span class="pipe-tick" style="left: 37.1%">200</span>
+      <span class="pipe-tick" style="left: 55.7%">300</span>
+      <span class="pipe-tick" style="left: 74.2%">400</span>
+      <span class="pipe-tick" style="left: 92.8%">500</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">NL one Q row ≈ 539 cyc cycle-accurate. Score (4 × 65 = 260) → softmax (27) → wsum (12 setup + 4 × 60 = 252) — all strictly sequential. No intra-stage pipelining beyond DPE's internal L+F+D per pass.</div>
+</div>
+
+<h4>AL — clb_softmax SM_LOAD overlaps with mac_qk output stream</h4>
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL AL</strong>2,340 cyc<br/>(single-fire)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg macqk" style="width: 98.46%">mac_qk: S_FEED_QK loops 128 K rows × 18 cyc = 2,304 cyc</div>
+      <div class="pipe-seg smexp" style="width: 0.04%"></div>
+      <div class="pipe-seg smnorm" style="width: 5.47%">SM_NORM 128</div>
+      <div class="pipe-seg macsv"  style="width: 1.37%">SV 32</div>
+    </div>
+  </div>
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>SM_LOAD</strong>pipelined<br/>with mac_qk</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg crit" style="width: 98.46%; opacity: 0.6">SM_LOAD ← consumes scores from mac_qk stream as produced (intra-stage pipelining!)</div>
+      <div class="pipe-seg smexp" style="width: 0.04%">I</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 21.4%">500</span>
+      <span class="pipe-tick" style="left: 42.7%">1000</span>
+      <span class="pipe-tick" style="left: 64.1%">1500</span>
+      <span class="pipe-tick" style="left: 85.5%">2000</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">AL one Q row ≈ 2,340 cyc. <strong>SM_LOAD (red, pipelined row)</strong> overlaps with mac_qk's S_FEED_QK output — clb_softmax loads scores AS mac_qk produces them. SM_NORM 128 cyc + SV 32 cyc tail in series. <strong>Only intra-stage overlap in either arch.</strong></div>
+</div>
+
+<h3>4.6 Full RTL inference schedule</h3>
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL NL</strong>79,033 cyc<br/>(head FSM)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg fc"       style="width: 4.19%">S_FEED_X 3315</div>
+      <div class="pipe-seg bridge"   style="width: 0.6%">br</div>
+      <div class="pipe-seg kv"       style="width: 4.21%">S_LOAD_KV 3328</div>
+      <div class="pipe-seg cascade"  style="width: 89.40%">S_CASCADE × 128 Q rows = 70,656 cyc</div>
+      <div class="pipe-seg epilogue" style="width: 2.10%">drain 1664</div>
+      <div class="pipe-seg epilogue" style="width: 0.08%; opacity: 0.7"></div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 25%">~20K</span>
+      <span class="pipe-tick" style="left: 50%">~40K</span>
+      <span class="pipe-tick" style="left: 75%">~60K</span>
+      <span class="pipe-tick" style="left: 100%">79K</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">RTL NL E2E: linear_qkv 3,315 + bridge 6 + KV_load 3,328 + cascade 70,656 + epilogue 1,728 ≈ 79,033 cyc. <strong>Cascade dominates 89%.</strong> AL same shape; cascade stretches to ~315,136 cyc (4× longer per Q row).</div>
+</div>
+
+<!-- =========================================================== -->
+<h2 id="diff">5. Sim vs RTL — Structural Differences</h2>
+
+<h3>5.1 Side-by-side: one Q row in NL DIMM-top</h3>
+<div class="diagram">
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim NL</strong>497 cyc<br/>(analytical)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg qdrv"   style="width: 2.60%">Q 14</div>
+      <div class="pipe-seg macqk"  style="width: 45.27%">mac_qk 244</div>
+      <div class="pipe-seg smexp"  style="width: 3.15%">sm 17</div>
+      <div class="pipe-seg macsv"  style="width: 43.78%">mac_sv 236</div>
+    </div>
+  </div>
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL NL</strong>539 cyc<br/>(FSM-accurate)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg qdrv"   style="width: 2.60%">Q 14</div>
+      <div class="pipe-seg macqk"  style="width: 45.64%">mac_qk 260</div>
+      <div class="pipe-seg crit"   style="width: 2.97%">+16★</div>
+      <div class="pipe-seg smexp"  style="width: 3.15%">sm 17</div>
+      <div class="pipe-seg crit"   style="width: 1.86%">+10★</div>
+      <div class="pipe-seg macsv"  style="width: 43.78%">mac_sv 236</div>
+      <div class="pipe-seg crit"   style="width: 2.97%">+16★</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 18.6%">100</span>
+      <span class="pipe-tick" style="left: 37.1%">200</span>
+      <span class="pipe-tick" style="left: 55.7%">300</span>
+      <span class="pipe-tick" style="left: 74.2%">400</span>
+      <span class="pipe-tick" style="left: 92.8%">500</span>
+    </div>
+  </div>
+</div>
+<div class="diagram-caption">
+  +42 cyc total residual (★ red marks). Sources: <strong>SRAM-pipeline prime</strong> (4 cyc/iter × 4 mac_qk iters = +16), <strong>probe placement</strong> (8 cyc trailing SM_LOAD + 2 flops = +10), <strong>wsum one-time setup</strong> (12 cyc + 4 per-m handoffs = +16). All <span class="mono">modelling_granularity</span>, file:line cited in <span class="mono">DIMM_pipeline_model_vs_rtl.md §6</span>.
+</div>
+</div>
+
+<h3>5.2 Structural diff enumeration</h3>
+<table>
+  <thead><tr>
+    <th>What sim folds / approximates</th><th>What RTL pays explicitly</th><th class="num">Δ cyc</th><th>File:line</th>
+  </tr></thead>
+  <tbody>
+    <tr>
+      <td>Sync flops folded into L</td>
+      <td>S_WAIT_DPE state flop, SM_LOAD→EXP, etc.</td>
+      <td class="num">1 cyc/state</td>
+      <td>:285, :454, :472</td>
+    </tr>
+    <tr>
+      <td>Write states folded into D</td>
+      <td>S_WRITE_B, score_sram commit</td>
+      <td class="num">1 cyc/iter</td>
+      <td>:295</td>
+    </tr>
+    <tr>
+      <td>SRAM-pipeline prime (= 0)</td>
+      <td>2-cyc dead before w_buf_en (mac_count ≥ 2 gate)</td>
+      <td class="num">2 cyc/iter</td>
+      <td>:193</td>
+    </tr>
+    <tr>
+      <td>Probe placement assumed at SM_EXP</td>
+      <td>Probe opens mid-SM_LOAD (8 cyc trailing)</td>
+      <td class="num">+8 cyc</td>
+      <td>:452</td>
+    </tr>
+    <tr>
+      <td>Wsum setup amortized</td>
+      <td>Explicit WS_LOAD_A + WS_LOG_FEED/DRAIN (12 cyc)</td>
+      <td class="num">+12 cyc</td>
+      <td>:713-727</td>
+    </tr>
+    <tr>
+      <td>Output drain not in sim</td>
+      <td>S_OUTPUT_DRAIN streams N·PACKED_NQ words</td>
+      <td class="num">+1664 cyc</td>
+      <td>output_drain</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.3 Sim approximations and calibration constants</h3>
+
+<div class="approx">
+  <strong>Modelling approximations:</strong>
+  <ul style="margin: 0.4rem 0 0 1rem;">
+    <li><span class="mono">softmax_norm_per_row_cyc</span> set symmetric to <span class="mono">softmax_exp_per_row_cyc</span> (NL only). RTL's SM_NORMALIZE has slightly different cycle count. Δ ≈ −1,727 cyc on E2E softmax_norm span.</li>
+    <li>Probe placement convention: sim assumes probe at SM_EXP entry; RTL probe opens at score's S_OUTPUT (mid-SM_LOAD). Moving probe → close Δ to 0 — not a real cost.</li>
+  </ul>
+</div>
+
+<div class="approx">
+  <strong>Calibration constants — what they encode:</strong>
+  <table style="margin-top: 0.4rem; background: white;">
+    <thead><tr><th>Constant</th><th>NL value</th><th>AL value</th><th>What it captures</th><th>N-invariant?</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">per_row_glue_cyc</span></td><td class="num">64</td><td class="num">16</td><td>FSM transitions per Q row</td><td>✓</td></tr>
+      <tr><td><span class="mono">bridge_cyc</span></td><td class="num">6</td><td class="num">0</td><td>FC→DIMM single-state transition</td><td>✓</td></tr>
+      <tr><td><span class="mono">phase_drain_cyc</span></td><td class="num">64</td><td class="num">64</td><td>S_DRAIN_FINAL</td><td>✓</td></tr>
+      <tr><td><span class="mono">KV_load_one_time_cyc</span></td><td class="num">3328</td><td class="num">3341</td><td>Hardcoded N=128: <span class="mono">DIMM_K_WORDS + DIMM_V_WORDS</span></td><td><strong>✗ TODO</strong></td></tr>
+      <tr><td><span class="mono">output_drain_cyc</span></td><td class="num">1664</td><td class="num">1664</td><td>Hardcoded N=128: <span class="mono">N · PACKED_NQ</span></td><td><strong>✗ TODO</strong></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="todo">
+  <strong>Open task (visible):</strong> The N-dependent constants need to become functions of N for the paper's scaling claims. Without the fix, sim silently introduces ~3-4% extra error at N=256 and grows with N. The fix is ~5 lines in <span class="mono">scheduler.py:317-319</span>.
+</div>
+
+<!-- =========================================================== -->
+<h2 id="e2e">6. End-to-End Latency Comparison</h2>
+
+<h3>6.1 Both formulas side by side</h3>
+<div class="side-by-side">
+  <div class="panel-sim">
+    <h4>Sim (analytical)</h4>
+    <pre>e2e = linear_qkv
+    + bridge_cyc
+    + KV_load_one_time_cyc
+    + N · per_row_cascade
+    + epilogue_cyc
+
+per_row_cascade = DIMM_Q_WORDS
+                + mac_qk_per_row
+                + softmax_exp_per_row
+                + softmax_norm_per_row
+                + mac_sv_per_row
+                + per_row_glue_cyc</pre>
+  </div>
+  <div class="panel-rtl">
+    <h4>RTL (TB-measured)</h4>
+    <pre>e2e_cyc = T_data_out_last_valid
+        − T_x_first_valid
+        + 1
+
+<span class="cm"># per-stage spans (OR-aggregated across W=16 lanes):</span>
+linear_qkv = T_fc_last - T_fc_first
+mac_qk     = T_score_last - T_score_first
+softmax_*  = ...
+mac_sv     = T_wsum_last - T_wsum_first</pre>
+  </div>
+</div>
+
+<h3>6.2 Cycle attribution (see §6.4 below for full pipeline schematic with annotations)</h3>
+<p>The full sim-vs-RTL pipeline schematic in VERIFICATION.md style is in <strong>§6.4</strong> below — proportional bars with per-phase Δ attribution. The numerical breakdown is in §6.3.</p>
+</div>
+
+<h3>6.3 Final numbers</h3>
+<table>
+  <thead><tr>
+    <th>Stage</th>
+    <th class="num">NL RTL</th><th class="num">NL Sim</th><th class="num">NL Δ</th>
+    <th class="num">AL RTL</th><th class="num">AL Sim</th><th class="num">AL Δ</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>linear_qkv</td><td class="num">3,315</td><td class="num">2,424</td><td class="num">+891</td><td class="num">4,458</td><td class="num">4,000</td><td class="num">+458</td></tr>
+    <tr class="dominant"><td>mac_qk</td><td class="num">73,746</td><td class="num">73,692</td><td class="num">+54</td><td class="num">311,913</td><td class="num">316,174</td><td class="num">−4,261</td></tr>
+    <tr><td>softmax_exp</td><td class="num">71,744</td><td class="num">73,473</td><td class="num">−1,729</td><td class="num">311,913</td><td class="num">318,381</td><td class="num">−6,468</td></tr>
+    <tr><td>softmax_norm</td><td class="num">71,746</td><td class="num">73,473</td><td class="num">−1,727</td><td class="num">309,753</td><td class="num">316,142</td><td class="num">−6,389</td></tr>
+    <tr><td>mac_sv</td><td class="num">73,468</td><td class="num">73,684</td><td class="num">−216</td><td class="num">309,627</td><td class="num">316,206</td><td class="num">−6,579</td></tr>
+    <tr class="sum"><td>E2E</td><td class="num">79,033</td><td class="num">78,094</td><td class="num">+939 (+1.2%)</td><td class="num">321,661</td><td class="num">324,205</td><td class="num">−2,544 (−0.8%)</td></tr>
+  </tbody>
+</table>
+
+<h3>6.4 Pipeline schematic — full attention head E2E</h3>
+
+<p>
+  Following the style of <span class="mono">VERIFICATION.md §"Pipeline schematic"</span>: stacked sim vs RTL with cycle-proportional bars, aligned on the same time axis. Each segment annotates the cycles contributed; differences highlighted with their root cause.
+</p>
+
+<h4>NL-DPE attention head (E2E ≈ 79K cyc)</h4>
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim</strong>78,094 cyc<br>(analytical)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg fc"       style="width: 3.10%">linear_qkv 2424</div>
+      <div class="pipe-seg kv"       style="width: 4.26%">KV 3328</div>
+      <div class="pipe-seg cascade"  style="width: 90.48%">128 × per_row_cascade = 70,656 cyc (dominates)</div>
+      <div class="pipe-seg epilogue" style="width: 2.16%">drain 1686</div>
+    </div>
+  </div>
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL</strong>79,033 cyc<br>(TB-measured)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg fc"       style="width: 4.19%">linear_qkv 3315</div>
+      <div class="pipe-seg bridge"   style="width: 0.6%">br</div>
+      <div class="pipe-seg kv"       style="width: 4.21%">KV 3328</div>
+      <div class="pipe-seg cascade"  style="width: 89.40%">128 × per_row_cascade = 70,656 cyc</div>
+      <div class="pipe-seg epilogue" style="width: 2.19%">drain 1728</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 25%">~20K</span>
+      <span class="pipe-tick" style="left: 50%">~40K</span>
+      <span class="pipe-tick" style="left: 75%">~60K</span>
+      <span class="pipe-tick" style="left: 100%">79K</span>
+    </div>
+  </div>
+  <div class="pipe-attribution">
+    <strong>Δ attribution (sim 78,094 vs RTL 79,033 = +939 cyc, +1.2%):</strong>
+    <table>
+      <thead><tr><th>Phase</th><th class="num">Sim</th><th class="num">RTL</th><th class="num">Δ</th><th>Root cause</th></tr></thead>
+      <tbody>
+        <tr><td>linear_qkv</td><td class="num">2424</td><td class="num">3315</td><td class="num">+891</td><td>FC streaming FSM glue (per-token handshake) not in <span class="mono">_run_linear</span> analytical formula</td></tr>
+        <tr><td>FC→DIMM bridge</td><td class="num">0</td><td class="num">6</td><td class="num">+6</td><td>S_DRAIN_FC → S_LOAD_KV state transition</td></tr>
+        <tr><td>KV one-time load</td><td class="num">3328</td><td class="num">3328</td><td class="num">0</td><td>Both: 14 + 1664 + 1664 (Q row 0 + K + V)</td></tr>
+        <tr><td>cascade × 128</td><td class="num">70,656</td><td class="num">70,656</td><td class="num">0</td><td>Calibrated: per_row_glue_cyc = 64 absorbs FSM bookkeeping per Q row</td></tr>
+        <tr><td>epilogue</td><td class="num">1686</td><td class="num">1728</td><td class="num">+42</td><td>S_OUTPUT_DRAIN + S_OUTPUT_DONE FSM cycles</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h4>Azure-Lily attention head (E2E ≈ 322K cyc)</h4>
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim</strong>324,205 cyc<br>(analytical)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg fc"       style="width: 1.23%">FC 4000</div>
+      <div class="pipe-seg kv"       style="width: 1.03%">KV</div>
+      <div class="pipe-seg cascade"  style="width: 97.21%">128 × per_row_cascade = 315,136 cyc (mac_qk dominates each row)</div>
+      <div class="pipe-seg epilogue" style="width: 0.53%">d</div>
+    </div>
+  </div>
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL</strong>321,661 cyc<br>(TB-measured)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg fc"       style="width: 1.39%">FC 4458</div>
+      <div class="pipe-seg kv"       style="width: 1.04%">KV</div>
+      <div class="pipe-seg cascade"  style="width: 97.04%">128 × per_row_cascade ≈ 312,374 cyc</div>
+      <div class="pipe-seg epilogue" style="width: 0.54%">d</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 25%">~80K</span>
+      <span class="pipe-tick" style="left: 50%">~160K</span>
+      <span class="pipe-tick" style="left: 75%">~240K</span>
+      <span class="pipe-tick" style="left: 100%">322K</span>
+    </div>
+  </div>
+  <div class="pipe-attribution">
+    <strong>AL E2E Δ = sim 324,205 − RTL 321,661 = −2,544 cyc (−0.8%):</strong>
+    Sim slightly over-counts each per-Q-row cascade (~20 cyc/row × 128); fits within the ±5% calibration band. Cascade dominates 97% of E2E because of AL's serial K-row iteration in S_FEED_QK (2,304 cyc/Q row).
+  </div>
+</div>
+
+<h3>6.5 Pipeline schematic — one Q row inside the DIMM-top (NL)</h3>
+
+<p>
+  Zoom into <strong>one cascade iteration</strong>. This is where the L/F/D/S/W phase decomposition lives — sim folds, RTL has explicit FSM states.
+</p>
+
+<h4>NL one Q row (single-fire DIMM-top, the doc's territory: ~539 cyc)</h4>
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim</strong>497 cyc<br>(analytical)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg macqk"   style="width: 49.10%">score: 4 passes × (L 30 + F 1 + D 26) = 244</div>
+      <div class="pipe-seg smexp"   style="width: 3.42%">sm 17</div>
+      <div class="pipe-seg macsv"   style="width: 47.48%">wsum: 4 iters × (L 27 + F 1 + D 26) + 5 = 236</div>
+    </div>
+  </div>
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL</strong>539 cyc<br>(FSM-accurate)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg macqk"   style="width: 48.24%">score: 4 × 65 = 260 cyc</div>
+      <div class="pipe-seg crit"    style="width: 0.74%">★</div>
+      <div class="pipe-seg smexp"   style="width: 5.01%">softmax 27</div>
+      <div class="pipe-seg macsv"   style="width: 44.71%">wsum: 252 cyc (12 setup + 4×60)</div>
+      <div class="pipe-seg crit"    style="width: 1.30%">★</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 18.6%">100</span>
+      <span class="pipe-tick" style="left: 37.1%">200</span>
+      <span class="pipe-tick" style="left: 55.7%">300</span>
+      <span class="pipe-tick" style="left: 74.2%">400</span>
+      <span class="pipe-tick" style="left: 92.8%">500</span>
+    </div>
+  </div>
+  <div class="pipe-attribution">
+    <strong>Δ attribution per stage (single-fire DIMM-top, +42 cyc total):</strong>
+    <table>
+      <thead><tr><th>Stage</th><th class="num">Sim</th><th class="num">RTL</th><th class="num">Δ</th><th>Root cause (file:line)</th></tr></thead>
+      <tbody>
+        <tr><td>score (mac_qk)</td><td class="num">244</td><td class="num">260</td><td class="num">+16</td><td>4 iters × 4-cyc SRAM-fill prefix (mac_count ≥ 2 gate, <span class="mono">:193</span>)</td></tr>
+        <tr><td>softmax</td><td class="num">17</td><td class="num">27</td><td class="num">+10</td><td>Probe opens mid-SM_LOAD (8 cyc trailing) + 2 state flops (<span class="mono">:452, :454, :472</span>)</td></tr>
+        <tr><td>wsum (mac_sv)</td><td class="num">236</td><td class="num">252</td><td class="num">+16</td><td>One-time setup 12 cyc + 4 per-m handoffs 4 cyc (<span class="mono">:713-747</span>)</td></tr>
+        <tr><td><strong>E2E</strong></td><td class="num"><strong>497</strong></td><td class="num"><strong>539</strong></td><td class="num"><strong>+42</strong></td><td>All <span class="mono">modelling_granularity</span></td></tr>
+      </tbody>
+    </table>
+    <strong>★ markers</strong> show where RTL pays explicit FSM-flop cycles that sim folds away.
+    <strong>In cascade mode</strong> (after Q row 0), the per-row glue calibration constant (<span class="mono">per_row_glue_cyc=64</span>) absorbs these +42 cyc into the sim's per_row_cascade target — that's how sim and RTL match at the cascade level.
+  </div>
+</div>
+
+<h4>AL one Q row (single-fire DIMM-top: 2,340 cyc, post-Phase-6A)</h4>
+<div class="pipe-schem">
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>Sim</strong>2,338 cyc<br>(analytical)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg macqk"   style="width: 0.77%">QK</div>
+      <div class="pipe-seg smexp"   style="width: 97.86%">softmax: 127 × 18 streaming + S_INV + first S_NORM = 2288 cyc</div>
+      <div class="pipe-seg macsv"   style="width: 1.37%">SV 32</div>
+    </div>
+  </div>
+  <div class="pipe-row">
+    <div class="pipe-label"><strong>RTL</strong>2,340 cyc<br>(FSM-accurate)</div>
+    <div class="pipe-bar">
+      <div class="pipe-seg macqk"   style="width: 0.77%">QK</div>
+      <div class="pipe-seg smexp"   style="width: 97.86%">softmax: 127 × 18 streaming + S_INV + first S_NORM = 2289 cyc</div>
+      <div class="pipe-seg crit"    style="width: 0.04%"></div>
+      <div class="pipe-seg macsv"   style="width: 1.37%">SV 32</div>
+    </div>
+  </div>
+  <div class="pipe-axis">
+    <div class="pipe-axis-label">cycles</div>
+    <div class="pipe-axis-track">
+      <span class="pipe-tick" style="left: 0%">0</span>
+      <span class="pipe-tick" style="left: 21.4%">500</span>
+      <span class="pipe-tick" style="left: 42.7%">1000</span>
+      <span class="pipe-tick" style="left: 64.1%">1500</span>
+      <span class="pipe-tick" style="left: 85.5%">2000</span>
+    </div>
+  </div>
+  <div class="pipe-attribution">
+    <strong>Δ attribution per stage (single-fire AL DIMM-top, +2 cyc total):</strong>
+    <table>
+      <thead><tr><th>Stage</th><th class="num">Sim</th><th class="num">RTL</th><th class="num">Δ</th><th>Root cause</th></tr></thead>
+      <tbody>
+        <tr><td>score (first row out)</td><td class="num">18</td><td class="num">18</td><td class="num">0</td><td>P6A folded SRAM prime into k_tile_qk</td></tr>
+        <tr><td>softmax (dominant)</td><td class="num">2288</td><td class="num">2289</td><td class="num">+1</td><td>NBA-commit boundary on first S_NORM output</td></tr>
+        <tr><td>wsum (first col)</td><td class="num">32</td><td class="num">32</td><td class="num">0</td><td>k_tile_sv = ⌈N/4⌉ = 32, exact</td></tr>
+        <tr><td><strong>E2E</strong></td><td class="num"><strong>2338</strong></td><td class="num"><strong>2340</strong></td><td class="num"><strong>+2</strong></td><td>Sub-0.1% — softmax stage dominates because clb_softmax data-rate-bound by mac_qk's 18-cyc/K-row stream</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>6.6 One DPE/DSP-MAC pass (deepest zoom — see VERIFICATION.md)</h3>
+<p>
+  At one level deeper, each <span class="mono">S_COMPUTE</span> iteration in NL (or one <span class="mono">dsp_mac</span> fire in AL) decomposes into the L/F/D/S/W phases. The full schematic is in <span class="mono">fc_verification/VERIFICATION.md §"Pipeline schematic"</span> (gemm_log section): sim 60 cyc vs RTL 65 cyc, Δ +5 cyc per pass attributed to nl_dpe_control delay, DPE drain, score write.
+</p>
+<pre><span class="cm">// Reproduced from VERIFICATION.md (gemm_log, NL one DPE pass):</span>
+Sim (analytical, 60 cyc):
+  [Feed L 30][Comp F 4][max(Out, Reduce) D 26]
+
+RTL (cycle-accurate, 65 cyc):
+  [Feed L 30][Ctrl S 3][Cmp F 3][Out+Accum D 26][Drain+Wr S+W 3]
+                                                              \________________/
+                                                              +5 cyc residual</pre>
+
+<!-- =========================================================== -->
+<h2 id="credibility">7. Credibility Summary</h2>
+
+<table>
+  <thead><tr><th>Property</th><th>Strength</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Counter equivalence</strong></td><td>same total work</td><td>dpe_fire_count, pass_count, row_count, lane_count Δ=0 across all stages, both archs</td></tr>
+    <tr><td><strong>Cycle alignment</strong></td><td>same schedule (within FSM bookkeeping)</td><td>NL E2E Δ=+1.2%, AL E2E Δ=−0.8%; per-stage residuals ≤ 2.1% all <span class="mono">modelling_granularity</span></td></tr>
+    <tr><td><strong>Functional pass</strong></td><td>same outputs</td><td>1664 valid_n pulses match expected; output bits checked at each Q row</td></tr>
+    <tr><td><strong>Apple-to-apple</strong></td><td>same FSM topology</td><td>both archs use identical S_LOAD_KV → S_CASCADE → S_OUTPUT_DRAIN; same K/V amortization; same cascade composer</td></tr>
+    <tr><td><strong>Residual traceability</strong></td><td>every Δ explained</td><td>all residuals file:line cited in <span class="mono">DIMM_pipeline_model_vs_rtl.md §6</span> + <span class="mono">phase{3,5,7}_known_deltas.json</span></td></tr>
+    <tr><td><strong>Open limitations flagged</strong></td><td>not hidden</td><td>KV_load / output_drain hardcoded at N=128 (TODO for scaling claims)</td></tr>
+  </tbody>
+</table>
+
+<p class="cite" style="margin-top: 1.5rem;">
+  <strong>References:</strong>
+  Authoritative: <span class="mono">fc_verification/DIMM_pipeline_model_vs_rtl.md</span> (L/F/D/S/W decomposition + single-Q-row alignment).
+  Sim: <span class="mono">azurelily/IMC/scheduler_stats/scheduler.py:54-510</span>.
+  NL RTL: <span class="mono">fc_verification/rtl/nldpe_dimm_top_d64_c128.v</span>, <span class="mono">nldpe_attn_head_d64_c128.v</span>.
+  AL RTL: <span class="mono">fc_verification/rtl/azurelily_dimm_top_d64_c128.v</span>, <span class="mono">azurelily_attn_head_d64_c128.v</span>.
+</p>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#dbeafe',
+      primaryTextColor: '#0f172a',
+      primaryBorderColor: '#1d4ed8',
+      lineColor: '#475569',
+      fontFamily: '-apple-system, sans-serif',
+      fontSize: '13px'
+    },
+    gantt: {
+      barHeight: 22,
+      barGap: 4,
+      topPadding: 50,
+      leftPadding: 130
+    }
+  });
+</script>
+
+</body>
+</html>
