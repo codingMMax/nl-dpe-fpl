@@ -2,10 +2,15 @@
 // behavior model (FIDELITY_METHODOLOGY.md §11 step 5: "TB drives generated
 // RTL with weights and inputs, checks VMM result matches oracle").
 //
-// Architecture switch: compile-time `+define+ARCH_NLDPE` or `+define+ARCH_AL`.
-//   ARCH_NLDPE  -> instantiates dpe_stub_nldpe     (R=256, C=256, BUF=40)
-//   ARCH_AL     -> instantiates dpe_stub_azurelily (R=512, C=128, BUF=16)
-// If neither is defined, defaults to ARCH_NLDPE.
+// The DPE module name is `dpe` for both architectures (matches the VTR
+// arch XML <model name="dpe"> blackbox port contract). The two arch
+// behavior models live in different files:
+//   ARCH_NLDPE  -> dpe_nldpe.v     (R=256, C=256, BUF=40)
+//   ARCH_AL     -> dpe_azurelily.v (R=512, C=128, BUF=16)
+// (only one of those files may be compiled into a given iverilog run
+// because both define `module dpe`).
+// Architecture switch in this TB: compile-time `+define+ARCH_NLDPE` or
+// `+define+ARCH_AL`. If neither is defined, defaults to ARCH_NLDPE.
 //
 // Test pattern (architecture-agnostic):
 //   weights[r][r] = 1 for r = 0 .. min(R,C)-1; all other weights = 0.
@@ -14,13 +19,19 @@
 //                      = 0                                otherwise.
 //   For NL-DPE: ACAM_MODE=0 (ADC), so vmm_result is the raw VMM.
 //
+// Compute timing (Model Y): the DPE itself has NO compute counter. The
+// TB-as-controller asserts nl_dpe_control = 2'b11 from the first LOAD
+// strobe through CCYC = (PRECISION + PIPELINE_DEPTH - 1) cycles after
+// the VMM fires, then deasserts. The DPE's S_COMPUTE waits for the
+// deassert and then transitions to S_OUTPUT.
+//
 // Cycle measurement (per task spec):
 //   T_first_load = cycle on which the first w_buf_en posedge is sampled
 //   T_done_last  = last cycle in S_OUTPUT (i.e. final cycle in which
 //                  data_out carries an output strobe)
 //   total_cycles = T_done_last - T_first_load + 1
-//   Expected     = LOAD_STROBES + COMPUTE_CYCLES + OUTPUT_CYCLES
-//                  (= T_fill from §4 / per-arch dpe_stub header).
+//   Expected     = LOAD_STROBES + CCYC + OUTPUT_CYCLES
+//                  (= T_fill from §4 of FIDELITY_METHODOLOGY.md).
 
 `timescale 1ns / 1ps
 
@@ -65,7 +76,12 @@ module tb_dpe_vmm;
     //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=3 ...
     // (R must be >= C; BUF in {16, 40}.)
     //
-    // Precision-driven compute pipeline (arch-agnostic):
+    // Precision lives ENTIRELY on the controller (TB) side now.
+    // The DPE module is precision-agnostic; it stays in S_COMPUTE while
+    // nl_dpe_control == 2'b11 and transitions out when it deasserts.
+    // The TB holds nl_dpe_control = 2'b11 for CCYC additional cycles
+    // after fire to emulate a (PRECISION + PIPELINE_DEPTH - 1)-cycle
+    // bit-serial compute pipeline.
     //   CCYC = PRECISION + PIPELINE_DEPTH - 1
     // For INT8 with 3-stage (fire -> VMM -> accumulate): CCYC = 10.
 `ifndef PRECISION_TB
@@ -92,12 +108,10 @@ module tb_dpe_vmm;
     localparam PRECISION      = `PRECISION_TB;
     localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
     localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
-    dpe_stub_nldpe #(
+    dpe #(
         .KERNEL_WIDTH(R),
         .NUM_COLS(C),
-        .DPE_BUF_WIDTH(BUF),
-        .PRECISION_BITS(PRECISION),
-        .PIPELINE_DEPTH(PIPELINE_DEPTH)
+        .DPE_BUF_WIDTH(BUF)
     ) dut (
         .clk(clk),
         .reset(reset),
@@ -135,12 +149,10 @@ module tb_dpe_vmm;
     localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
     // AL DPE_BUF_WIDTH=BUF, so wire only the low BUF bits.
     wire [BUF-1:0] data_out_al;
-    dpe_stub_azurelily #(
+    dpe #(
         .KERNEL_WIDTH(R),
         .NUM_COLS(C),
-        .DPE_BUF_WIDTH(BUF),
-        .PRECISION_BITS(PRECISION),
-        .PIPELINE_DEPTH(PIPELINE_DEPTH)
+        .DPE_BUF_WIDTH(BUF)
     ) dut (
         .clk(clk),
         .reset(reset),
@@ -264,6 +276,19 @@ module tb_dpe_vmm;
         // Stop driving w_buf_en
         w_buf_en = 1'b0;
         data_in_full = 40'h0;
+
+        // ── Controller-side compute hold (Model Y) ──
+        // The DPE has no internal compute counter. We hold
+        // nl_dpe_control = 2'b11 for CCYC-1 more posedges past the
+        // fire posedge, then deassert. The very next posedge after
+        // deassertion samples ctrl != 2'b11 and transitions
+        // S_COMPUTE -> S_OUTPUT, yielding total state==S_COMPUTE
+        // duration = CCYC cycles.
+        if (CCYC > 1) begin
+            repeat (CCYC - 1) @(posedge clk);
+            #1;
+        end
+        nl_dpe_control = 2'b00;
 
         // ── Capture output bytes ──
         // Wait until state == S_OUTPUT (3'd4). Then sample data_out on every

@@ -1,7 +1,9 @@
 // tb_dpe_acam.v -- primitive-level ACAM smoke TB for the NL-DPE behavior
 // model (FIDELITY_METHODOLOGY.md §3 ACAM modes — exp approximation).
 //
-// Compile and run only against dpe_stub_nldpe.v (Azure-Lily has no ACAM).
+// The DPE module name is `dpe` (matches VTR arch XML
+// <model name="dpe"> contract). Compile and run only against
+// dpe_nldpe.v (Azure-Lily has no ACAM).
 //
 // Test pattern:
 //   ACAM_MODE = 1 (exp approximation: 1 + x + (x*x)/2)
@@ -13,8 +15,13 @@
 //                                                  R == C for NL-DPE.)
 //   Expected output[c] (8-bit slice): 2  for all c in 0..255.
 //
+// Compute timing (Model Y): the DPE itself has NO compute counter. The
+// TB-as-controller asserts nl_dpe_control = 2'b11 from the first LOAD
+// strobe through CCYC = (PRECISION + PIPELINE_DEPTH - 1) cycles past
+// the fire posedge, then deasserts.
+//
 // Cycle measurement: identical to tb_dpe_vmm.v.
-//   total_cycles == LOAD_STROBES + COMPUTE_CYCLES + OUTPUT_CYCLES
+//   total_cycles == LOAD_STROBES + CCYC + OUTPUT_CYCLES
 //                 = 52 + 10 + 52 = 114 for NL-DPE defaults
 //                   (R=256, C=256, BUF=40, PRECISION=8, PIPELINE_DEPTH=3).
 
@@ -82,12 +89,10 @@ module tb_dpe_acam;
     localparam OCYC = (C + EPS - 1) / EPS;
     localparam T_FILL_EXPECTED = LSTR + CCYC + OCYC;
 
-    dpe_stub_nldpe #(
+    dpe #(
         .KERNEL_WIDTH(R),
         .NUM_COLS(C),
         .DPE_BUF_WIDTH(BUF),
-        .PRECISION_BITS(PRECISION),
-        .PIPELINE_DEPTH(PIPELINE_DEPTH),
         .ACAM_MODE(1)   // 1 = exp approximation (1 + x + x^2/2)
     ) dut (
         .clk(clk),
@@ -180,6 +185,17 @@ module tb_dpe_acam;
         end
         w_buf_en = 1'b0;
         data_in_full = 40'h0;
+
+        // ── Controller-side compute hold (Model Y) ──
+        // Hold nl_dpe_control = 2'b11 for CCYC-1 more posedges past the
+        // fire posedge, then deassert. The next posedge after deassertion
+        // transitions S_COMPUTE -> S_OUTPUT, yielding total state==S_COMPUTE
+        // duration = CCYC cycles.
+        if (CCYC > 1) begin
+            repeat (CCYC - 1) @(posedge clk);
+            #1;
+        end
+        nl_dpe_control = 2'b00;
 
         // Wait for S_OUTPUT
         i = 0;

@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """DPE / DSP-MAC behavior model smoke test sweep.
 
-Exercises the three primitive behavior models (dpe_stub_nldpe.v,
-dpe_stub_azurelily.v, dsp_mac.v) across multiple geometries via the
+Exercises the three primitive behavior models (dpe_nldpe.v,
+dpe_azurelily.v, dsp_mac.v) across multiple geometries via the
 `+define+` CLI parameter mechanism on tb_dpe_vmm.v / tb_dpe_acam.v /
 tb_dsp_mac.v.
+
+Both DPE arch files declare `module dpe` (matching the VTR arch XML
+<model name="dpe"> blackbox port contract); only one of the two files
+is compiled per case.
 
 Verifies for each (arch, R, C, BUF, PRECISION, PIPELINE_DEPTH) combo:
   1. functional correctness (TB asserts byte-level match)
   2. cycle count matches T_fill = LOAD + COMPUTE + OUTPUT (§4 pipeline)
 
-DPE COMPUTE_CYCLES is derived from the precision-driven bit-serial
-pipeline model (FIDELITY_METHODOLOGY.md §3):
+The DPE module is precision-agnostic (Model Y). PRECISION_TB and
+PIPELINE_DEPTH_TB +defines control the TB controller's hold duration
+on nl_dpe_control = 2'b11; the DPE's S_COMPUTE waits for ctrl deassert.
 
     CCYC = PRECISION_BITS + PIPELINE_DEPTH - 1
 
@@ -106,7 +111,7 @@ def _add_dpe_cases(cases, precision, pipeline_depth, quick):
             label=f"VMM_NLDPE_R{R}_C{C}_{tag}",
             defines=defs,
             expected_cycles=_t_fill_dpe(R, C, 40, precision, pipeline_depth),
-            src_v=[str(RTL / "dpe_stub_nldpe.v"), str(TB_DIR / "tb_dpe_vmm.v")],
+            src_v=[str(RTL / "dpe_nldpe.v"), str(TB_DIR / "tb_dpe_vmm.v")],
             tb="dpe_vmm",
         ))
 
@@ -122,7 +127,7 @@ def _add_dpe_cases(cases, precision, pipeline_depth, quick):
             label=f"VMM_AL_R{R}_C{C}_{tag}",
             defines=defs,
             expected_cycles=_t_fill_dpe(R, C, 16, precision, pipeline_depth),
-            src_v=[str(RTL / "dpe_stub_azurelily.v"), str(TB_DIR / "tb_dpe_vmm.v")],
+            src_v=[str(RTL / "dpe_azurelily.v"), str(TB_DIR / "tb_dpe_vmm.v")],
             tb="dpe_vmm",
         ))
 
@@ -138,7 +143,7 @@ def _add_dpe_cases(cases, precision, pipeline_depth, quick):
             label=f"ACAM_NLDPE_R{R}_C{C}_{tag}",
             defines=defs,
             expected_cycles=_t_fill_dpe(R, C, 40, precision, pipeline_depth),
-            src_v=[str(RTL / "dpe_stub_nldpe.v"), str(TB_DIR / "tb_dpe_acam.v")],
+            src_v=[str(RTL / "dpe_nldpe.v"), str(TB_DIR / "tb_dpe_acam.v")],
             tb="dpe_acam",
         ))
 
@@ -164,7 +169,7 @@ def build_cases(quick: bool, precision_override: int | None) -> list[Case]:
                          "PIPELINE_DEPTH_TB": DEFAULT_PIPELINE_DEPTH},
                 expected_cycles=_t_fill_dpe(256, 256, 40, prec,
                                             DEFAULT_PIPELINE_DEPTH),
-                src_v=[str(RTL / "dpe_stub_nldpe.v"),
+                src_v=[str(RTL / "dpe_nldpe.v"),
                        str(TB_DIR / "tb_dpe_vmm.v")],
                 tb="dpe_vmm",
             ))
@@ -177,7 +182,7 @@ def build_cases(quick: bool, precision_override: int | None) -> list[Case]:
                          "PIPELINE_DEPTH_TB": DEFAULT_PIPELINE_DEPTH},
                 expected_cycles=_t_fill_dpe(512, 128, 16, prec,
                                             DEFAULT_PIPELINE_DEPTH),
-                src_v=[str(RTL / "dpe_stub_azurelily.v"),
+                src_v=[str(RTL / "dpe_azurelily.v"),
                        str(TB_DIR / "tb_dpe_vmm.v")],
                 tb="dpe_vmm",
             ))
@@ -190,7 +195,7 @@ def build_cases(quick: bool, precision_override: int | None) -> list[Case]:
                          "PIPELINE_DEPTH_TB": DEFAULT_PIPELINE_DEPTH},
                 expected_cycles=_t_fill_dpe(256, 256, 40, prec,
                                             DEFAULT_PIPELINE_DEPTH),
-                src_v=[str(RTL / "dpe_stub_nldpe.v"),
+                src_v=[str(RTL / "dpe_nldpe.v"),
                        str(TB_DIR / "tb_dpe_acam.v")],
                 tb="dpe_acam",
             ))

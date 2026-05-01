@@ -3,26 +3,49 @@
 DPE behavior model generator (FIDELITY_METHODOLOGY.md §3).
 
 Reads a per-arch config JSON and emits one Verilog file per architecture
-into fc_verification/rtl/dpe_stub_<arch>.v.
+into fc_verification/rtl/dpe_<arch>.v.
+
+The emitted module is named `dpe` (not `dpe_<arch>`) so that it matches
+the VTR arch XML's <model name="dpe"> blackbox port contract for both
+nl_dpe/nl_dpe_22nm_auto.xml and
+azurelily_TACO_experiments/azure_lily_22nm_with_dpe_550x550.xml.
+
+Both arch XMLs declare an identical port list:
+  inputs : clk, reset, data_in, nl_dpe_control, shift_add_control,
+           w_buf_en, shift_add_bypass, load_output_reg, load_input_reg
+  outputs: data_out, MSB_SA_Ready, dpe_done, reg_full, shift_add_done,
+           shift_add_bypass_ctrl
+
+VTR ignores Verilog parameters on the blackbox; the parameters are
+sim-only. To exercise both archs in the same simulator run is impossible
+because both files declare `module dpe`; pick the appropriate file when
+compiling for a given workload.
 
 Both arch outputs share:
   - Handshake protocol (clk, reset, data_in, nl_dpe_control[1:0],
     shift_add_control, w_buf_en, shift_add_bypass, load_output_reg,
     load_input_reg, MSB_SA_Ready, data_out, dpe_done, reg_full,
-    shift_add_done, shift_add_bypass_ctrl). Matches the legacy
-    dpe_stub.v port list exactly minus the weight_wen interface
-    (TBs hierarchical-force `dut.weights[r][c]` instead).
+    shift_add_done, shift_add_bypass_ctrl).
   - FSM (S_IDLE -> S_LOAD -> S_WAIT_EXEC -> S_COMPUTE -> S_OUTPUT
     -> S_DRAIN).
-  - Behavioral 1-clock VMM at S_WAIT_EXEC fire-time.
-  - Cycle counters from config:
-        LOAD_STROBES   = ceil(KERNEL_WIDTH * 8 / DPE_BUF_WIDTH)
-        OUTPUT_CYCLES  = ceil(NUM_COLS    * 8 / DPE_BUF_WIDTH)
-        COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1
-                         (precision-driven bit-serial pipeline model:
-                          fire -> VMM -> accumulate; default 8+3-1=10)
+  - Behavioral 1-clock VMM at the moment S_WAIT_EXEC samples
+    nl_dpe_control == 2'b11 (or, on the last LOAD strobe combinationally
+    when the same condition holds).
+  - Cycle counters (LOAD_STROBES, OUTPUT_CYCLES) derived from the
+    arch's KERNEL_WIDTH / NUM_COLS / DPE_BUF_WIDTH parameters.
 
-Differ only in:
+Compute timing (Model Y):
+  - DPE stays in S_COMPUTE while nl_dpe_control == 2'b11.
+  - DPE transitions to S_OUTPUT on the cycle where nl_dpe_control
+    deasserts.
+  - The VMM math runs ONCE upon entering S_COMPUTE; vmm_result[]
+    holds the values; S_COMPUTE is a wait-loop on control deassert.
+  - The DPE has NO internal compute counter. Compute duration is
+    controller-driven: the controller (workload top / TB) asserts
+    nl_dpe_control = 2'b11 for (PRECISION + PIPELINE_DEPTH - 1)
+    cycles to emulate the bit-serial pipeline.
+
+Differ between archs only by:
   - ACAM_MODE param + branch present iff capabilities.analog_nonlinear
     is true (NL-DPE only).
 
@@ -35,9 +58,6 @@ Usage:
 
     # both archs at once (default config paths):
     python nl_dpe/gen_dpe_stub.py
-
-    # with non-default precision / pipeline depth:
-    python nl_dpe/gen_dpe_stub.py --precision 4 --pipeline-depth 3
 """
 import argparse
 import json
@@ -62,13 +82,7 @@ ARCH_SUFFIX = {
 
 
 def _load_arch_cfg(cfg_path):
-    """Load arch geometry / capabilities via simulator's Config class.
-
-    We intentionally do NOT instantiate IMCCore — under the new
-    precision-driven model the RTL's COMPUTE_CYCLES is derived from
-    PRECISION_BITS + PIPELINE_DEPTH - 1 (a hardware invariant), not
-    from the simulator's analytical _pipeline_pass_cycles.
-    """
+    """Load arch geometry / capabilities via simulator's Config class."""
     imc_root = os.path.join(REPO, "azurelily", "IMC")
     if imc_root not in sys.path:
         sys.path.insert(0, imc_root)
@@ -76,21 +90,12 @@ def _load_arch_cfg(cfg_path):
     return Config(cfg_path)
 
 
-def derive_arch_params(cfg_path, precision_bits, pipeline_depth):
+def derive_arch_params(cfg_path):
     """Read per-arch JSON and return canonical RTL params.
 
-    COMPUTE_CYCLES is derived from the precision-driven bit-serial
-    pipeline model (FIDELITY_METHODOLOGY.md §3):
-
-        COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1
-
-    This is arch-agnostic — both NL-DPE (analog crossbar) and AL DPE
-    (digital, no ACAM) implement the same fire -> VMM -> accumulate
-    3-stage compute pipeline; for INT8 (default) CCYC = 8 + 3 - 1 = 10.
-
     Returns dict with keys:
-        arch_suffix, R, C, BUF, COMPUTE_CYCLES, PRECISION_BITS,
-        PIPELINE_DEPTH, has_acam, load_strobes, output_cycles
+        arch_suffix, R, C, BUF, has_acam, load_strobes, output_cycles,
+        core_name
     """
     with open(cfg_path, "r") as fh:
         cfg_json = json.load(fh)
@@ -114,16 +119,11 @@ def derive_arch_params(cfg_path, precision_bits, pipeline_depth):
     rtl_output = math.ceil(C * 8 / BUF)
     assert elems_per_strobe >= 1, f"BUF={BUF} < 8 not supported"
 
-    compute_cycles = int(precision_bits) + int(pipeline_depth) - 1
-
     return {
         "arch_suffix": arch_suffix,
         "R": R,
         "C": C,
         "BUF": BUF,
-        "COMPUTE_CYCLES": compute_cycles,
-        "PRECISION_BITS": int(precision_bits),
-        "PIPELINE_DEPTH": int(pipeline_depth),
         "has_acam": has_acam,
         "load_strobes": int(rtl_load),
         "output_cycles": int(rtl_output),
@@ -132,51 +132,54 @@ def derive_arch_params(cfg_path, precision_bits, pipeline_depth):
 
 
 def emit_dpe_verilog(params):
-    """Return Verilog source string for the DPE behavior model."""
+    """Return Verilog source string for the DPE behavior model.
+
+    Module name is always `dpe` to match the VTR arch XML
+    <model name="dpe"> port contract.
+    """
     arch = params["arch_suffix"]
     R = params["R"]
     C = params["C"]
     BUF = params["BUF"]
-    COMPUTE = params["COMPUTE_CYCLES"]
-    PREC = params["PRECISION_BITS"]
-    PDEPTH = params["PIPELINE_DEPTH"]
     has_acam = params["has_acam"]
     load_strobes = params["load_strobes"]
     output_cycles = params["output_cycles"]
     elems_per_strobe = BUF // 8
-    module_name = f"dpe_stub_{arch}"
 
     lines = []
     a = lines.append
 
-    a(f"// {module_name}.v -- behavioral DPE model")
+    a(f"// dpe_{arch}.v -- behavioral DPE model")
     a(f"// Generated by nl_dpe/gen_dpe_stub.py from per-arch JSON config.")
-    a(f"// Architecture        : {arch} ({params['core_name']})")
-    a(f"// KERNEL_WIDTH (rows) : {R}")
-    a(f"// NUM_COLS            : {C}")
-    a(f"// DPE_BUF_WIDTH       : {BUF}  (elems/strobe = {elems_per_strobe})")
-    a(f"// PRECISION_BITS      : {PREC}")
-    a(f"// PIPELINE_DEPTH      : {PDEPTH}  (fire -> VMM -> accumulate)")
-    a(f"// COMPUTE_CYCLES      : {COMPUTE}  (= PRECISION_BITS + PIPELINE_DEPTH - 1)")
-    a(f"// LOAD_STROBES        : {load_strobes}")
-    a(f"// OUTPUT_CYCLES       : {output_cycles}")
-    a(f"// T_fill              : {load_strobes + COMPUTE + output_cycles}")
-    a(f"// T_steady (max LCO)  : {max(load_strobes, COMPUTE, output_cycles)}")
-    a(f"// ACAM branch present : {has_acam}")
+    a(f"// Module name      : dpe  (matches VTR arch XML <model name=\"dpe\"> contract)")
+    a(f"// File arch tag    : {arch} ({params['core_name']})")
+    a(f"// KERNEL_WIDTH (R) : {R}")
+    a(f"// NUM_COLS     (C) : {C}")
+    a(f"// DPE_BUF_WIDTH    : {BUF}  (elems/strobe = {elems_per_strobe})")
+    a(f"// LOAD_STROBES     : {load_strobes}")
+    a(f"// OUTPUT_CYCLES    : {output_cycles}")
+    a(f"// ACAM_MODE param  : {'present' if has_acam else 'absent'}")
+    a("//")
+    a("// Compute timing (Model Y):")
+    a("//   DPE stays in S_COMPUTE while nl_dpe_control == 2'b11.")
+    a("//   Transitions to S_OUTPUT on the cycle nl_dpe_control deasserts.")
+    a("//   No internal compute counter; precision/pipeline depth is owned")
+    a("//   by the controller (workload top / TB), which holds")
+    a("//   nl_dpe_control = 2'b11 for (PRECISION + PIPELINE_DEPTH - 1)")
+    a("//   cycles to emulate the bit-serial pipeline.")
     a("//")
     a("// FSM:  S_IDLE -> S_LOAD -> S_WAIT_EXEC -> S_COMPUTE -> S_OUTPUT -> S_DRAIN")
-    a("// Behavioral single-clock VMM at S_WAIT_EXEC fire-time.")
+    a("// Behavioral single-clock VMM at S_WAIT_EXEC fire-time")
+    a("// (or on the last LOAD strobe combinationally when ctrl is already 2'b11).")
     a("// Weights are loaded by the TB through hierarchical force:")
     a("//     dut.weights[r][c] = <int8>;   (no weight_wen port).")
     a("")
-    a(f"module {module_name} #(")
+    a("module dpe #(")
     a(f"    parameter KERNEL_WIDTH   = {R},")
     a(f"    parameter NUM_COLS       = {C},")
-    a(f"    parameter DPE_BUF_WIDTH  = {BUF},")
-    a(f"    parameter PRECISION_BITS = {PREC},")
-    a(f"    parameter PIPELINE_DEPTH = {PDEPTH}" + ("," if has_acam else ""))
+    a(f"    parameter DPE_BUF_WIDTH  = {BUF}" + ("," if has_acam else ""))
     if has_acam:
-        a("    parameter ACAM_MODE      = 0  // 0=ADC/VMM (no NL), 1=exp(approx 1+x+x^2/2), 2=log(approx x-1)")
+        a("    parameter ACAM_MODE      = 0  // 0=ADC/VMM, 1=exp(approx 1+x+x^2/2), 2=log(approx x-1)")
     a(")(")
     a("    input  wire                       clk,")
     a("    input  wire                       reset,")
@@ -204,9 +207,6 @@ def emit_dpe_verilog(params):
     a("    localparam ELEMS_PER_STROBE = DPE_BUF_WIDTH / 8;")
     a("    localparam LOAD_STROBES  = (KERNEL_WIDTH + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;")
     a("    localparam OUTPUT_CYCLES = (NUM_COLS    + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;")
-    a("    // Precision-driven bit-serial compute pipeline:")
-    a("    // fire -> VMM -> accumulate; total cycles = PRECISION + DEPTH - 1.")
-    a("    localparam COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1;")
     a("")
     a("    // Weight memory (hierarchical-force loaded from TB)")
     a("    reg signed [7:0] weights [0:KERNEL_WIDTH-1][0:NUM_COLS-1];")
@@ -219,7 +219,6 @@ def emit_dpe_verilog(params):
     a("    // VMM accumulators (full int32 per output column)")
     a("    reg signed [31:0] vmm_result [0:NUM_COLS-1];")
     a("    reg [15:0] output_col_idx;")
-    a("    reg [15:0] compute_cycle_cnt;")
     a("")
     a("    // Initialise weight memory to zero (sim-only)")
     a("    integer wi, wj;")
@@ -251,7 +250,6 @@ def emit_dpe_verilog(params):
     a("            MSB_SA_Ready <= 1;")
     a("            shift_add_done <= 1;")
     a("            shift_add_bypass_ctrl <= 1;")
-    a("            compute_cycle_cnt <= 0;")
     a("            output_col_idx <= 0;")
     a("        end else begin")
     a("            dpe_done <= 0;  // default low (one-shot in S_OUTPUT)")
@@ -262,7 +260,6 @@ def emit_dpe_verilog(params):
     a("                    shift_add_done <= 1;")
     a("                    load_count <= 0;")
     a("                    strobe_count <= 0;")
-    a("                    compute_cycle_cnt <= 0;")
     a("                    output_col_idx <= 0;")
     a("                    if (w_buf_en) begin")
     a("                        for (b = 0; b < ELEMS_PER_STROBE; b = b + 1)")
@@ -289,7 +286,7 @@ def emit_dpe_verilog(params):
     a("                            // freshly-loaded final bytes (mixing blocking +")
     a("                            // non-blocking is sim-only behavioural; there is")
     a("                            // no synthesised hardware here). Then fire VMM")
-    a("                            // combinationally so T_fill = L + C + O matches §4.")
+    a("                            // combinationally when ctrl is already 2'b11.")
     a("                            for (b = 0; b < ELEMS_PER_STROBE; b = b + 1)")
     a("                                if (load_count + b < KERNEL_WIDTH)")
     a("                                    input_buffer[load_count + b] = data_in[b*8 +: 8];")
@@ -315,7 +312,6 @@ def emit_dpe_verilog(params):
         a("                                    for (c = 0; c < NUM_COLS; c = c + 1)")
         a("                                        vmm_result[c] = vmm_result[c] - 1;")
         a("                                end")
-    a("                                compute_cycle_cnt <= 0;")
     a("                                output_col_idx <= 0;")
     a("                                state <= S_COMPUTE;")
     a("                            end else begin")
@@ -352,14 +348,14 @@ def emit_dpe_verilog(params):
         a("                            for (c = 0; c < NUM_COLS; c = c + 1)")
         a("                                vmm_result[c] = vmm_result[c] - 1;")
         a("                        end")
-    a("                        compute_cycle_cnt <= 0;")
     a("                        output_col_idx <= 0;")
     a("                        state <= S_COMPUTE;")
     a("                    end")
     a("                end")
     a("                S_COMPUTE: begin")
-    a("                    compute_cycle_cnt <= compute_cycle_cnt + 1;")
-    a("                    if (compute_cycle_cnt >= COMPUTE_CYCLES - 1) begin")
+    a("                    // Model Y: stay here while controller holds nl_dpe_control = 2'b11.")
+    a("                    // Transition to S_OUTPUT when controller deasserts (precision-driven).")
+    a("                    if (nl_dpe_control != 2'b11) begin")
     a("                        MSB_SA_Ready <= 1;")
     a("                        shift_add_done <= 1;")
     a("                        output_col_idx <= 0;")
@@ -398,19 +394,16 @@ def emit_dpe_verilog(params):
     return "\n".join(lines)
 
 
-def write_arch(cfg_path, precision_bits, pipeline_depth):
-    params = derive_arch_params(cfg_path, precision_bits, pipeline_depth)
+def write_arch(cfg_path):
+    params = derive_arch_params(cfg_path)
     src = emit_dpe_verilog(params)
     os.makedirs(OUT_DIR, exist_ok=True)
-    out_path = os.path.join(OUT_DIR, f"dpe_stub_{params['arch_suffix']}.v")
+    out_path = os.path.join(OUT_DIR, f"dpe_{params['arch_suffix']}.v")
     with open(out_path, "w") as fh:
         fh.write(src)
     print(f"[gen_dpe_stub] wrote {out_path}")
-    print(f"               arch={params['arch_suffix']} R={params['R']} "
+    print(f"               module=dpe arch={params['arch_suffix']} R={params['R']} "
           f"C={params['C']} BUF={params['BUF']} "
-          f"PREC={params['PRECISION_BITS']} "
-          f"DEPTH={params['PIPELINE_DEPTH']} "
-          f"COMPUTE_CYCLES={params['COMPUTE_CYCLES']} "
           f"L={params['load_strobes']} O={params['output_cycles']} "
           f"has_acam={params['has_acam']}")
     return out_path
@@ -421,23 +414,13 @@ def main(argv=None):
     p.add_argument("--config", default=None,
                    help="Per-arch JSON config path. If omitted, both default "
                         "configs are emitted.")
-    p.add_argument("--precision", type=int, default=8,
-                   help="Compute precision (bit-slices). Default 8 (INT8).")
-    p.add_argument("--pipeline-depth", type=int, default=3,
-                   help="Compute pipeline depth (fire -> VMM -> accumulate). "
-                        "Default 3.")
     args = p.parse_args(argv)
 
-    if args.precision < 1:
-        raise SystemExit("--precision must be >= 1")
-    if args.pipeline_depth < 1:
-        raise SystemExit("--pipeline-depth must be >= 1")
-
     if args.config is not None:
-        write_arch(args.config, args.precision, args.pipeline_depth)
+        write_arch(args.config)
     else:
         for cfg_path in DEFAULT_CFG_PATHS:
-            write_arch(cfg_path, args.precision, args.pipeline_depth)
+            write_arch(cfg_path)
 
 
 if __name__ == "__main__":
