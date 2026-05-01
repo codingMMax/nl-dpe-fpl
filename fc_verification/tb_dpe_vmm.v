@@ -56,9 +56,49 @@ module tb_dpe_vmm;
     wire        shift_add_done;
     wire        shift_add_bypass_ctrl;
 
+    // Per-arch RTL params. Single source of truth: the TB sets these
+    // localparams, and the DUT is instantiated with parameter overrides
+    // so the two cannot drift out of sync. To test a different geometry
+    // or precision, either change the defaults below or override at
+    // compile time:
+    //   iverilog -DARCH_NLDPE -DR_TB=1024 -DC_TB=128 -DBUF_TB=40 \
+    //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=3 ...
+    // (R must be >= C; BUF in {16, 40}.)
+    //
+    // Precision-driven compute pipeline (arch-agnostic):
+    //   CCYC = PRECISION + PIPELINE_DEPTH - 1
+    // For INT8 with 3-stage (fire -> VMM -> accumulate): CCYC = 10.
+`ifndef PRECISION_TB
+  `define PRECISION_TB 8
+`endif
+`ifndef PIPELINE_DEPTH_TB
+  `define PIPELINE_DEPTH_TB 3
+`endif
+
 `ifdef ARCH_NLDPE
     `define ARCH_NAME "NL-DPE"
-    dpe_stub_nldpe dut (
+  `ifndef R_TB
+    `define R_TB 256
+  `endif
+  `ifndef C_TB
+    `define C_TB 256
+  `endif
+  `ifndef BUF_TB
+    `define BUF_TB 40
+  `endif
+    localparam R              = `R_TB;
+    localparam C              = `C_TB;
+    localparam BUF            = `BUF_TB;
+    localparam PRECISION      = `PRECISION_TB;
+    localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
+    localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
+    dpe_stub_nldpe #(
+        .KERNEL_WIDTH(R),
+        .NUM_COLS(C),
+        .DPE_BUF_WIDTH(BUF),
+        .PRECISION_BITS(PRECISION),
+        .PIPELINE_DEPTH(PIPELINE_DEPTH)
+    ) dut (
         .clk(clk),
         .reset(reset),
         .data_in(data_in_full),
@@ -78,12 +118,33 @@ module tb_dpe_vmm;
 `endif
 `ifdef ARCH_AL
     `define ARCH_NAME "AzureLily"
-    // AL DPE_BUF_WIDTH=16, so wire only the low 16 bits.
-    wire [15:0] data_out_al;
-    dpe_stub_azurelily dut (
+  `ifndef R_TB
+    `define R_TB 512
+  `endif
+  `ifndef C_TB
+    `define C_TB 128
+  `endif
+  `ifndef BUF_TB
+    `define BUF_TB 16
+  `endif
+    localparam R              = `R_TB;
+    localparam C              = `C_TB;
+    localparam BUF            = `BUF_TB;
+    localparam PRECISION      = `PRECISION_TB;
+    localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
+    localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
+    // AL DPE_BUF_WIDTH=BUF, so wire only the low BUF bits.
+    wire [BUF-1:0] data_out_al;
+    dpe_stub_azurelily #(
+        .KERNEL_WIDTH(R),
+        .NUM_COLS(C),
+        .DPE_BUF_WIDTH(BUF),
+        .PRECISION_BITS(PRECISION),
+        .PIPELINE_DEPTH(PIPELINE_DEPTH)
+    ) dut (
         .clk(clk),
         .reset(reset),
-        .data_in(data_in_full[15:0]),
+        .data_in(data_in_full[BUF-1:0]),
         .nl_dpe_control(nl_dpe_control),
         .shift_add_control(shift_add_control),
         .w_buf_en(w_buf_en),
@@ -97,24 +158,12 @@ module tb_dpe_vmm;
         .shift_add_done(shift_add_done),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl)
     );
-    assign data_out_full = {24'h000000, data_out_al};
+    assign data_out_full = {{(40-BUF){1'b0}}, data_out_al};
 `endif
 
-    // Per-arch RTL params. These mirror the values baked into the
-    // generator-emitted dpe_stub_<arch>.v module (FIDELITY_METHODOLOGY.md
-    // §3 single source of truth).
-`ifdef ARCH_NLDPE
-    localparam R    = 256;
-    localparam C    = 256;
-    localparam BUF  = 40;
-    localparam CCYC = 3;
-`endif
-`ifdef ARCH_AL
-    localparam R    = 512;
-    localparam C    = 128;
-    localparam BUF  = 16;
-    localparam CCYC = 43;
-`endif
+    // Derived from per-arch R / C / BUF / CCYC declared above (single
+    // source of truth — both TB and DUT use the same values via the
+    // parameter override at instantiation).
     localparam EPS  = BUF / 8;
     localparam LSTR = (R + EPS - 1) / EPS;
     localparam OCYC = (C + EPS - 1) / EPS;

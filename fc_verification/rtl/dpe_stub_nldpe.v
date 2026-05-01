@@ -4,10 +4,12 @@
 // KERNEL_WIDTH (rows) : 256
 // NUM_COLS            : 256
 // DPE_BUF_WIDTH       : 40  (elems/strobe = 5)
-// COMPUTE_CYCLES      : 3  (sim-derived: §3 single source of truth)
+// PRECISION_BITS      : 8
+// PIPELINE_DEPTH      : 3  (fire -> VMM -> accumulate)
+// COMPUTE_CYCLES      : 10  (= PRECISION_BITS + PIPELINE_DEPTH - 1)
 // LOAD_STROBES        : 52
 // OUTPUT_CYCLES       : 52
-// T_fill              : 107
+// T_fill              : 114
 // T_steady (max LCO)  : 52
 // ACAM branch present : True
 //
@@ -20,7 +22,8 @@ module dpe_stub_nldpe #(
     parameter KERNEL_WIDTH   = 256,
     parameter NUM_COLS       = 256,
     parameter DPE_BUF_WIDTH  = 40,
-    parameter COMPUTE_CYCLES = 3,
+    parameter PRECISION_BITS = 8,
+    parameter PIPELINE_DEPTH = 3,
     parameter ACAM_MODE      = 0  // 0=ADC/VMM (no NL), 1=exp(approx 1+x+x^2/2), 2=log(approx x-1)
 )(
     input  wire                       clk,
@@ -49,6 +52,9 @@ module dpe_stub_nldpe #(
     localparam ELEMS_PER_STROBE = DPE_BUF_WIDTH / 8;
     localparam LOAD_STROBES  = (KERNEL_WIDTH + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;
     localparam OUTPUT_CYCLES = (NUM_COLS    + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;
+    // Precision-driven bit-serial compute pipeline:
+    // fire -> VMM -> accumulate; total cycles = PRECISION + DEPTH - 1.
+    localparam COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1;
 
     // Weight memory (hierarchical-force loaded from TB)
     reg signed [7:0] weights [0:KERNEL_WIDTH-1][0:NUM_COLS-1];

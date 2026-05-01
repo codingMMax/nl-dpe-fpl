@@ -14,14 +14,13 @@ Both arch outputs share:
     (TBs hierarchical-force `dut.weights[r][c]` instead).
   - FSM (S_IDLE -> S_LOAD -> S_WAIT_EXEC -> S_COMPUTE -> S_OUTPUT
     -> S_DRAIN).
-  - Behavioral 1-clock VMM at S_WAIT_EXEC fire (no bit-serial decomp).
+  - Behavioral 1-clock VMM at S_WAIT_EXEC fire-time.
   - Cycle counters from config:
         LOAD_STROBES   = ceil(KERNEL_WIDTH * 8 / DPE_BUF_WIDTH)
         OUTPUT_CYCLES  = ceil(NUM_COLS    * 8 / DPE_BUF_WIDTH)
-        COMPUTE_CYCLES = derived from the simulator's
-                         IMCCore._pipeline_pass_cycles(workload="vmm")
-                         so RTL and sim share a single source of truth
-                         (per FIDELITY_METHODOLOGY.md §3).
+        COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1
+                         (precision-driven bit-serial pipeline model:
+                          fire -> VMM -> accumulate; default 8+3-1=10)
 
 Differ only in:
   - ACAM_MODE param + branch present iff capabilities.analog_nonlinear
@@ -36,6 +35,9 @@ Usage:
 
     # both archs at once (default config paths):
     python nl_dpe/gen_dpe_stub.py
+
+    # with non-default precision / pipeline depth:
+    python nl_dpe/gen_dpe_stub.py --precision 4 --pipeline-depth 3
 """
 import argparse
 import json
@@ -59,30 +61,36 @@ ARCH_SUFFIX = {
 }
 
 
-def _import_imc_core():
-    """Make `azurelily.IMC.imc_core.IMCCore` importable.
+def _load_arch_cfg(cfg_path):
+    """Load arch geometry / capabilities via simulator's Config class.
 
-    The simulator package is laid out as `azurelily/IMC/{imc_core, ...}`
-    with sibling-relative imports (e.g. `from scheduler_stats.common
-    import log`), so we add `azurelily/IMC` to sys.path.
+    We intentionally do NOT instantiate IMCCore — under the new
+    precision-driven model the RTL's COMPUTE_CYCLES is derived from
+    PRECISION_BITS + PIPELINE_DEPTH - 1 (a hardware invariant), not
+    from the simulator's analytical _pipeline_pass_cycles.
     """
     imc_root = os.path.join(REPO, "azurelily", "IMC")
     if imc_root not in sys.path:
         sys.path.insert(0, imc_root)
     from imc_core.config import Config  # noqa: WPS433
-    from imc_core.imc_core import IMCCore  # noqa: WPS433
-    return Config, IMCCore
+    return Config(cfg_path)
 
 
-def derive_arch_params(cfg_path):
-    """Read per-arch JSON + simulator and return canonical RTL params.
+def derive_arch_params(cfg_path, precision_bits, pipeline_depth):
+    """Read per-arch JSON and return canonical RTL params.
+
+    COMPUTE_CYCLES is derived from the precision-driven bit-serial
+    pipeline model (FIDELITY_METHODOLOGY.md §3):
+
+        COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1
+
+    This is arch-agnostic — both NL-DPE (analog crossbar) and AL DPE
+    (digital, no ACAM) implement the same fire -> VMM -> accumulate
+    3-stage compute pipeline; for INT8 (default) CCYC = 8 + 3 - 1 = 10.
 
     Returns dict with keys:
-        arch_suffix, R, C, BUF, COMPUTE_CYCLES, has_acam,
-        load_strobes, output_cycles
-    where COMPUTE_CYCLES exactly matches what the simulator emits as
-    the `C` element of (L, C, O) for workload="vmm" — RTL and sim are
-    a single source of truth (FIDELITY_METHODOLOGY.md §3).
+        arch_suffix, R, C, BUF, COMPUTE_CYCLES, PRECISION_BITS,
+        PIPELINE_DEPTH, has_acam, load_strobes, output_cycles
     """
     with open(cfg_path, "r") as fh:
         cfg_json = json.load(fh)
@@ -95,42 +103,27 @@ def derive_arch_params(cfg_path):
             f"known: {list(ARCH_SUFFIX)}"
         )
 
-    Config, IMCCore = _import_imc_core()
-    cfg = Config(cfg_path)
-
-    class _StubStats:
-        def record_energy_breakdown(self, *a, **k): pass
-        def record_resource(self, *a, **k): pass
-
-    class _StubMem:
-        def energy(self, *a, **k): return 0.0
-
-    imc = IMCCore(cfg, _StubMem(), _StubStats())
-    feed_cycles, compute_cycles, output_cycles = imc._pipeline_pass_cycles(workload="vmm")
-
+    cfg = _load_arch_cfg(cfg_path)
     R = int(cfg.rows)
     C = int(cfg.cols)
     BUF = int(cfg.dpe_buf_width)
     has_acam = bool(cfg.analoge_nonlinear_support)
 
-    # Sanity check that derived L, O match what the RTL would compute.
     elems_per_strobe = BUF // 8
     rtl_load = math.ceil(R * 8 / BUF)
     rtl_output = math.ceil(C * 8 / BUF)
-    assert rtl_load == feed_cycles, (
-        f"L mismatch: sim={feed_cycles} rtl={rtl_load} (R={R} BUF={BUF})"
-    )
-    assert rtl_output == output_cycles, (
-        f"O mismatch: sim={output_cycles} rtl={rtl_output} (C={C} BUF={BUF})"
-    )
     assert elems_per_strobe >= 1, f"BUF={BUF} < 8 not supported"
+
+    compute_cycles = int(precision_bits) + int(pipeline_depth) - 1
 
     return {
         "arch_suffix": arch_suffix,
         "R": R,
         "C": C,
         "BUF": BUF,
-        "COMPUTE_CYCLES": int(compute_cycles),
+        "COMPUTE_CYCLES": compute_cycles,
+        "PRECISION_BITS": int(precision_bits),
+        "PIPELINE_DEPTH": int(pipeline_depth),
         "has_acam": has_acam,
         "load_strobes": int(rtl_load),
         "output_cycles": int(rtl_output),
@@ -145,6 +138,8 @@ def emit_dpe_verilog(params):
     C = params["C"]
     BUF = params["BUF"]
     COMPUTE = params["COMPUTE_CYCLES"]
+    PREC = params["PRECISION_BITS"]
+    PDEPTH = params["PIPELINE_DEPTH"]
     has_acam = params["has_acam"]
     load_strobes = params["load_strobes"]
     output_cycles = params["output_cycles"]
@@ -160,7 +155,9 @@ def emit_dpe_verilog(params):
     a(f"// KERNEL_WIDTH (rows) : {R}")
     a(f"// NUM_COLS            : {C}")
     a(f"// DPE_BUF_WIDTH       : {BUF}  (elems/strobe = {elems_per_strobe})")
-    a(f"// COMPUTE_CYCLES      : {COMPUTE}  (sim-derived: §3 single source of truth)")
+    a(f"// PRECISION_BITS      : {PREC}")
+    a(f"// PIPELINE_DEPTH      : {PDEPTH}  (fire -> VMM -> accumulate)")
+    a(f"// COMPUTE_CYCLES      : {COMPUTE}  (= PRECISION_BITS + PIPELINE_DEPTH - 1)")
     a(f"// LOAD_STROBES        : {load_strobes}")
     a(f"// OUTPUT_CYCLES       : {output_cycles}")
     a(f"// T_fill              : {load_strobes + COMPUTE + output_cycles}")
@@ -176,7 +173,8 @@ def emit_dpe_verilog(params):
     a(f"    parameter KERNEL_WIDTH   = {R},")
     a(f"    parameter NUM_COLS       = {C},")
     a(f"    parameter DPE_BUF_WIDTH  = {BUF},")
-    a(f"    parameter COMPUTE_CYCLES = {COMPUTE}" + ("," if has_acam else ""))
+    a(f"    parameter PRECISION_BITS = {PREC},")
+    a(f"    parameter PIPELINE_DEPTH = {PDEPTH}" + ("," if has_acam else ""))
     if has_acam:
         a("    parameter ACAM_MODE      = 0  // 0=ADC/VMM (no NL), 1=exp(approx 1+x+x^2/2), 2=log(approx x-1)")
     a(")(")
@@ -206,6 +204,9 @@ def emit_dpe_verilog(params):
     a("    localparam ELEMS_PER_STROBE = DPE_BUF_WIDTH / 8;")
     a("    localparam LOAD_STROBES  = (KERNEL_WIDTH + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;")
     a("    localparam OUTPUT_CYCLES = (NUM_COLS    + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;")
+    a("    // Precision-driven bit-serial compute pipeline:")
+    a("    // fire -> VMM -> accumulate; total cycles = PRECISION + DEPTH - 1.")
+    a("    localparam COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1;")
     a("")
     a("    // Weight memory (hierarchical-force loaded from TB)")
     a("    reg signed [7:0] weights [0:KERNEL_WIDTH-1][0:NUM_COLS-1];")
@@ -397,8 +398,8 @@ def emit_dpe_verilog(params):
     return "\n".join(lines)
 
 
-def write_arch(cfg_path):
-    params = derive_arch_params(cfg_path)
+def write_arch(cfg_path, precision_bits, pipeline_depth):
+    params = derive_arch_params(cfg_path, precision_bits, pipeline_depth)
     src = emit_dpe_verilog(params)
     os.makedirs(OUT_DIR, exist_ok=True)
     out_path = os.path.join(OUT_DIR, f"dpe_stub_{params['arch_suffix']}.v")
@@ -407,6 +408,8 @@ def write_arch(cfg_path):
     print(f"[gen_dpe_stub] wrote {out_path}")
     print(f"               arch={params['arch_suffix']} R={params['R']} "
           f"C={params['C']} BUF={params['BUF']} "
+          f"PREC={params['PRECISION_BITS']} "
+          f"DEPTH={params['PIPELINE_DEPTH']} "
           f"COMPUTE_CYCLES={params['COMPUTE_CYCLES']} "
           f"L={params['load_strobes']} O={params['output_cycles']} "
           f"has_acam={params['has_acam']}")
@@ -418,13 +421,23 @@ def main(argv=None):
     p.add_argument("--config", default=None,
                    help="Per-arch JSON config path. If omitted, both default "
                         "configs are emitted.")
+    p.add_argument("--precision", type=int, default=8,
+                   help="Compute precision (bit-slices). Default 8 (INT8).")
+    p.add_argument("--pipeline-depth", type=int, default=3,
+                   help="Compute pipeline depth (fire -> VMM -> accumulate). "
+                        "Default 3.")
     args = p.parse_args(argv)
 
+    if args.precision < 1:
+        raise SystemExit("--precision must be >= 1")
+    if args.pipeline_depth < 1:
+        raise SystemExit("--pipeline-depth must be >= 1")
+
     if args.config is not None:
-        write_arch(args.config)
+        write_arch(args.config, args.precision, args.pipeline_depth)
     else:
         for cfg_path in DEFAULT_CFG_PATHS:
-            write_arch(cfg_path)
+            write_arch(cfg_path, args.precision, args.pipeline_depth)
 
 
 if __name__ == "__main__":

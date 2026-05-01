@@ -35,10 +35,34 @@ module tb_dsp_mac;
 
     // K_INPUT = 64 selected to match attention head N=128 d=64 (the
     // canonical DIMM K-tile in FIDELITY_METHODOLOGY.md §6 Stage 2).
-    localparam K_INPUT        = 64;
-    localparam DPE_BUF_WIDTH  = 16;
+    // Override at compile time via:
+    //   iverilog -DK_TB=128 -DBUF_TB=16 -DDSP_WIDTH_TB=4 ...
+`ifndef K_TB
+    `define K_TB 64
+`endif
+`ifndef BUF_TB
+    `define BUF_TB 16
+`endif
+`ifndef DSP_WIDTH_TB
+    `define DSP_WIDTH_TB 4
+`endif
+    localparam K_INPUT        = `K_TB;
+    localparam DPE_BUF_WIDTH  = `BUF_TB;
     localparam PRECISION_BITS = 8;
-    localparam DSP_WIDTH      = 4;
+    localparam DSP_WIDTH      = `DSP_WIDTH_TB;
+
+    // Expected mac_result for the test pattern below:
+    //   weight[k] = (k%2==0) ? 1 : 0     (alternating 1, 0)
+    //   input[k]  = k + 1                 (1, 2, 3, ..., K_INPUT)
+    // mac = sum of input[k] for even k
+    //     = 1 + 3 + 5 + ... = (number of even k in 0..K-1)^2
+    //     = ((K + 1) / 2)^2
+    // Note: int8 aliasing breaks this pattern for K >= 256 (input
+    // values wrap and signed cancellation occurs). For K >= 256 the TB
+    // currently FAILs; pattern needs to be redesigned (open question).
+    localparam EVEN_COUNT  = (K_INPUT + 1) / 2;
+    localparam EXPECTED_MAC  = EVEN_COUNT * EVEN_COUNT;
+    localparam [7:0] EXPECTED_BYTE = EXPECTED_MAC[7:0];
     localparam EPS  = DPE_BUF_WIDTH / 8;
     localparam LSTR = (K_INPUT * PRECISION_BITS + DPE_BUF_WIDTH - 1) / DPE_BUF_WIDTH;
     localparam CCYC = (K_INPUT + DSP_WIDTH - 1) / DSP_WIDTH;
@@ -178,21 +202,22 @@ module tb_dsp_mac;
 
         @(posedge clk); #1;
 
-        // Compare
-        if (mac_full_observed !== 32'sd1024) begin
-            $display("[tb_dsp_mac] MISMATCH mac_result expected=1024 got=%0d", mac_full_observed);
+        // Compare against EXPECTED_MAC = ((K+1)/2)^2 (sum of odd numbers 1..K-1
+        // when K even, or 1..K when K odd — see localparam derivation above).
+        if (mac_full_observed !== EXPECTED_MAC) begin
+            $display("[tb_dsp_mac] MISMATCH mac_result expected=%0d got=%0d", EXPECTED_MAC, mac_full_observed);
             error_count = error_count + 1;
         end
-        if (data_out_low_observed !== 8'h00) begin
-            $display("[tb_dsp_mac] MISMATCH data_out[7:0] expected=0x00 (1024 mod 256) got=0x%02h", data_out_low_observed);
+        if (data_out_low_observed !== EXPECTED_BYTE) begin
+            $display("[tb_dsp_mac] MISMATCH data_out[7:0] expected=0x%02h (%0d mod 256) got=0x%02h", EXPECTED_BYTE, EXPECTED_MAC, data_out_low_observed);
             error_count = error_count + 1;
         end
 
         $display("[tb_dsp_mac] T_first_load=%0d  T_done_last=%0d  total_cycles=%0d  T_fill_expected=%0d", T_first_load, T_done_last, T_done_last - T_first_load + 1, T_FILL_EXPECTED);
-        $display("[tb_dsp_mac] mac_result observed=%0d (expected 1024)  data_out[7:0]=0x%02h (expected 0x00)", mac_full_observed, data_out_low_observed);
+        $display("[tb_dsp_mac] mac_result observed=%0d (expected %0d)  data_out[7:0]=0x%02h (expected 0x%02h)", mac_full_observed, EXPECTED_MAC, data_out_low_observed, EXPECTED_BYTE);
 
         if ((error_count == 0) && ((T_done_last - T_first_load + 1) == T_FILL_EXPECTED))
-            $display("[tb_dsp_mac] PASS: mac_result=1024, data_out=0x00, cycles=%0d (expected %0d)", T_done_last - T_first_load + 1, T_FILL_EXPECTED);
+            $display("[tb_dsp_mac] PASS: mac_result=%0d, data_out=0x%02h, cycles=%0d (expected %0d)", EXPECTED_MAC, EXPECTED_BYTE, T_done_last - T_first_load + 1, T_FILL_EXPECTED);
         else
             $display("[tb_dsp_mac] FAIL: %0d errors; cycles=%0d (expected %0d)", error_count, T_done_last - T_first_load + 1, T_FILL_EXPECTED);
         $finish;

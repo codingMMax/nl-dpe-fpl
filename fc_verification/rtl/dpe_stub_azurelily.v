@@ -4,10 +4,12 @@
 // KERNEL_WIDTH (rows) : 512
 // NUM_COLS            : 128
 // DPE_BUF_WIDTH       : 16  (elems/strobe = 2)
-// COMPUTE_CYCLES      : 43  (sim-derived: §3 single source of truth)
+// PRECISION_BITS      : 8
+// PIPELINE_DEPTH      : 3  (fire -> VMM -> accumulate)
+// COMPUTE_CYCLES      : 10  (= PRECISION_BITS + PIPELINE_DEPTH - 1)
 // LOAD_STROBES        : 256
 // OUTPUT_CYCLES       : 64
-// T_fill              : 363
+// T_fill              : 330
 // T_steady (max LCO)  : 256
 // ACAM branch present : False
 //
@@ -20,7 +22,8 @@ module dpe_stub_azurelily #(
     parameter KERNEL_WIDTH   = 512,
     parameter NUM_COLS       = 128,
     parameter DPE_BUF_WIDTH  = 16,
-    parameter COMPUTE_CYCLES = 43
+    parameter PRECISION_BITS = 8,
+    parameter PIPELINE_DEPTH = 3
 )(
     input  wire                       clk,
     input  wire                       reset,
@@ -48,6 +51,9 @@ module dpe_stub_azurelily #(
     localparam ELEMS_PER_STROBE = DPE_BUF_WIDTH / 8;
     localparam LOAD_STROBES  = (KERNEL_WIDTH + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;
     localparam OUTPUT_CYCLES = (NUM_COLS    + ELEMS_PER_STROBE - 1) / ELEMS_PER_STROBE;
+    // Precision-driven bit-serial compute pipeline:
+    // fire -> VMM -> accumulate; total cycles = PRECISION + DEPTH - 1.
+    localparam COMPUTE_CYCLES = PRECISION_BITS + PIPELINE_DEPTH - 1;
 
     // Weight memory (hierarchical-force loaded from TB)
     reg signed [7:0] weights [0:KERNEL_WIDTH-1][0:NUM_COLS-1];

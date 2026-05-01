@@ -15,7 +15,8 @@
 //
 // Cycle measurement: identical to tb_dpe_vmm.v.
 //   total_cycles == LOAD_STROBES + COMPUTE_CYCLES + OUTPUT_CYCLES
-//                 = 52 + 3 + 52 = 107 for NL-DPE.
+//                 = 52 + 10 + 52 = 114 for NL-DPE defaults
+//                   (R=256, C=256, BUF=40, PRECISION=8, PIPELINE_DEPTH=3).
 
 `timescale 1ns / 1ps
 
@@ -45,7 +46,48 @@ module tb_dpe_acam;
     wire        shift_add_done;
     wire        shift_add_bypass_ctrl;
 
+    // Single source of truth: TB sets these localparams, DUT instantiated
+    // with parameter overrides so the two cannot drift out of sync.
+    // Override at compile time via:
+    //   iverilog -DR_TB=1024 -DC_TB=128 -DBUF_TB=40 \
+    //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=3 ...
+    // (R >= C constraint applies. NL-DPE only.)
+    //
+    // Precision-driven compute pipeline (arch-agnostic):
+    //   CCYC = PRECISION + PIPELINE_DEPTH - 1
+    // For INT8 with 3-stage (fire -> VMM -> accumulate): CCYC = 10.
+`ifndef R_TB
+    `define R_TB 256
+`endif
+`ifndef C_TB
+    `define C_TB 256
+`endif
+`ifndef BUF_TB
+    `define BUF_TB 40
+`endif
+`ifndef PRECISION_TB
+    `define PRECISION_TB 8
+`endif
+`ifndef PIPELINE_DEPTH_TB
+    `define PIPELINE_DEPTH_TB 3
+`endif
+    localparam R              = `R_TB;
+    localparam C              = `C_TB;
+    localparam BUF            = `BUF_TB;
+    localparam PRECISION      = `PRECISION_TB;
+    localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
+    localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
+    localparam EPS  = BUF / 8;
+    localparam LSTR = (R + EPS - 1) / EPS;
+    localparam OCYC = (C + EPS - 1) / EPS;
+    localparam T_FILL_EXPECTED = LSTR + CCYC + OCYC;
+
     dpe_stub_nldpe #(
+        .KERNEL_WIDTH(R),
+        .NUM_COLS(C),
+        .DPE_BUF_WIDTH(BUF),
+        .PRECISION_BITS(PRECISION),
+        .PIPELINE_DEPTH(PIPELINE_DEPTH),
         .ACAM_MODE(1)   // 1 = exp approximation (1 + x + x^2/2)
     ) dut (
         .clk(clk),
@@ -64,16 +106,6 @@ module tb_dpe_acam;
         .shift_add_done(shift_add_done),
         .shift_add_bypass_ctrl(shift_add_bypass_ctrl)
     );
-
-    // NL-DPE constants
-    localparam R    = 256;
-    localparam C    = 256;
-    localparam BUF  = 40;
-    localparam CCYC = 3;
-    localparam EPS  = BUF / 8;
-    localparam LSTR = (R + EPS - 1) / EPS;
-    localparam OCYC = (C + EPS - 1) / EPS;
-    localparam T_FILL_EXPECTED = LSTR + CCYC + OCYC;
 
     integer cycle_count;
     always @(posedge clk) cycle_count <= cycle_count + 1;
