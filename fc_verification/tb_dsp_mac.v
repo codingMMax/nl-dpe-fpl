@@ -2,26 +2,34 @@
 // model (FIDELITY_METHODOLOGY.md §3 + §5: AL DIMM lane on int_sop_4 hard
 // block, DSP_WIDTH = 4 int8 MACs/cycle).
 //
-// Test pattern:
-//   K_INPUT = 64
-//   weight[k]       = 1 for even k, 0 for odd k    (alternating)
-//   input_buffer[k] = (k + 1)                       (1, 2, 3, ..., 64)
-//   Expected MAC    = sum_k input[k] * weight[k]
-//                   = 1 + 3 + 5 + ... + 63
-//                   = 32 * 32 = 1024  (overflow into 32-bit accumulator,
-//                                      truncated to int8 on output port).
-//   Expected data_out[7:0] = 1024 mod 256 = 0x00.
+// Test pattern (K-agnostic):
+//   weight[k]       = 1   for all k
+//   input_buffer[k] = 1   for all k
+//   Expected MAC    = sum_{k=0..K-1}(1 * 1) = K_INPUT
+//   Expected data_out[7:0] = K_INPUT mod 256
+//
+// Why this pattern: the original `(k+1) mod 256` input pattern aliased
+// at K >= 256 because int8 sign-extension caused positive/negative
+// cancellation in the MAC. The all-ones × all-ones pattern fits
+// trivially in int8 (no wrapping), so mac_result = K exactly for any K
+// up to ~2 billion (int32 accumulator).
 //
 // Cycle measurement: identical to tb_dpe_vmm.v.
 //   total_cycles == LOAD + COMPUTE + OUTPUT
-//                = ceil(K_INPUT*8/DPE_BUF_WIDTH)         // 32
-//                + ceil(K_INPUT/DSP_WIDTH)               // 16
-//                + max(1, ceil(PRECISION_BITS/DPE_BUF_WIDTH))  // 1
-//                = 49 cycles total.
+//                = ceil(K_INPUT*8/DPE_BUF_WIDTH)         // L
+//                + ceil(K_INPUT/DSP_WIDTH)               // C
+//                + max(1, ceil(PRECISION_BITS/DPE_BUF_WIDTH))  // O
+//   For K=64, BUF=16, DSP_WIDTH=4: 32+16+1 = 49 cycles.
+//
+// Task #86 note: the DSP-MAC primitive has no bit-serial pipeline of
+// the (PRECISION + PIPELINE_DEPTH - 1) form — its CCYC is K-driven
+// (one DSP iteration per ceil(K/DSP_WIDTH) cycles). The per-arch
+// (PIPELINE_DEPTH, ACAM_CYCLES) decomposition introduced in Task #86
+// is orthogonal to DSP-MAC's compute model and does not apply here.
 //
 // Output check: the TB tracks the FULL 32-bit MAC accumulator hierarchically
-// via dut.mac_result so we can compare the actual integer value (1024) and
-// also confirm the data_out byte is the truncated low byte (0x00).
+// via dut.mac_result so we can compare the actual integer value (K_INPUT)
+// and also confirm the data_out byte is the truncated low byte (K_INPUT mod 256).
 
 `timescale 1ns / 1ps
 
@@ -52,23 +60,22 @@ module tb_dsp_mac;
     localparam DSP_WIDTH      = `DSP_WIDTH_TB;
 
     // Expected mac_result for the test pattern below:
-    //   weight[k] = (k%2==0) ? 1 : 0     (alternating 1, 0)
-    //   input[k]  = k + 1                 (1, 2, 3, ..., K_INPUT)
-    // mac = sum of input[k] for even k
-    //     = 1 + 3 + 5 + ... = (number of even k in 0..K-1)^2
-    //     = ((K + 1) / 2)^2
-    // Note: int8 aliasing breaks this pattern for K >= 256 (input
-    // values wrap and signed cancellation occurs). For K >= 256 the TB
-    // currently FAILs; pattern needs to be redesigned (open question).
-    localparam EVEN_COUNT  = (K_INPUT + 1) / 2;
-    localparam EXPECTED_MAC  = EVEN_COUNT * EVEN_COUNT;
+    //   weight[k] = 1   (all 1's)
+    //   input[k]  = 1   (all 1's)
+    // mac = sum_{k=0..K-1}(1 * 1) = K_INPUT
+    // K-agnostic; no int8 sign-wrap cancellation for any K.
+    // (Both operands fit trivially in int8; mac_result accumulates in
+    //  int32, so exact integer K is the expected value for any K up to ~2B.)
+    localparam EXPECTED_MAC  = K_INPUT;
     localparam [7:0] EXPECTED_BYTE = EXPECTED_MAC[7:0];
     localparam EPS  = DPE_BUF_WIDTH / 8;
-    localparam LSTR = (K_INPUT * PRECISION_BITS + DPE_BUF_WIDTH - 1) / DPE_BUF_WIDTH;
+    localparam LCYC = (K_INPUT * PRECISION_BITS + DPE_BUF_WIDTH - 1) / DPE_BUF_WIDTH;
     localparam CCYC = (K_INPUT + DSP_WIDTH - 1) / DSP_WIDTH;
     localparam OCYC_RAW = (PRECISION_BITS + DPE_BUF_WIDTH - 1) / DPE_BUF_WIDTH;
     localparam OCYC = (OCYC_RAW < 1) ? 1 : OCYC_RAW;
-    localparam T_FILL_EXPECTED = LSTR + CCYC + OCYC;
+    // Task #87 Phase 1: T_fill = LCYC + CCYC + OCYC + 2 (FSM register-propagation
+    // overhead — 1 cycle each for LOAD→COMPUTE and COMPUTE→OUTPUT handoffs).
+    localparam T_FILL_EXPECTED = LCYC + CCYC + OCYC + 2;
 
     // Stimuli
     reg [DPE_BUF_WIDTH-1:0] data_in;
@@ -124,11 +131,11 @@ module tb_dsp_mac;
     wire [2:0] state_now = dut.state;
 
     integer error_count;
-    integer load_strobe_idx;
+    integer load_cycle_idx;
     integer cap_done;
 
     initial begin
-        $display("[tb_dsp_mac] arch=AzureLily DSP-MAC K_INPUT=%0d BUF=%0d DSP_WIDTH=%0d EPS=%0d LSTR=%0d CCYC=%0d OCYC=%0d T_fill_expected=%0d", K_INPUT, DPE_BUF_WIDTH, DSP_WIDTH, EPS, LSTR, CCYC, OCYC, T_FILL_EXPECTED);
+        $display("[tb_dsp_mac] arch=AzureLily DSP-MAC K_INPUT=%0d BUF=%0d DSP_WIDTH=%0d EPS=%0d LCYC=%0d CCYC=%0d OCYC=%0d T_fill_expected=%0d", K_INPUT, DPE_BUF_WIDTH, DSP_WIDTH, EPS, LCYC, CCYC, OCYC, T_FILL_EXPECTED);
 
         reset = 1;
         w_buf_en = 0;
@@ -149,29 +156,25 @@ module tb_dsp_mac;
         reset = 0;
         @(posedge clk); #1;
 
-        // Hierarchical-force the weight vector: alternating 1, 0, 1, 0, ...
-        for (k = 0; k < K_INPUT; k = k + 1) begin
-            if ((k % 2) == 0)
-                dut.weight[k] = 8'h01;
-            else
-                dut.weight[k] = 8'h00;
-        end
+        // Hierarchical-force the weight vector: all 1's.
+        // K-agnostic; no int8 sign-wrap concerns for any K_INPUT.
+        for (k = 0; k < K_INPUT; k = k + 1)
+            dut.weight[k] = 8'h01;
 
         nl_dpe_control = 2'b11;
 
-        // Drive LSTR = 32 strobes; each carries 2 bytes (BUF=16).
-        // Strobe k -> input_buffer[k*EPS + b] = (k*EPS + b + 1) for b in 0..1
-        // -> packed: data_in[0..7] = byte0, data_in[8..15] = byte1.
-        for (load_strobe_idx = 0; load_strobe_idx < LSTR; load_strobe_idx = load_strobe_idx + 1) begin
+        // Drive LCYC strobes; each carries EPS bytes of `1` (all 1's).
+        // mac = sum_{k=0..K-1}(1 * 1) = K_INPUT (exact integer, any K).
+        for (load_cycle_idx = 0; load_cycle_idx < LCYC; load_cycle_idx = load_cycle_idx + 1) begin
             data_in = 0;
             for (b = 0; b < EPS; b = b + 1) begin
-                if (load_strobe_idx * EPS + b < K_INPUT) begin
-                    data_in[b*8 +: 8] = (load_strobe_idx * EPS + b + 1);  // 1..64
+                if (load_cycle_idx * EPS + b < K_INPUT) begin
+                    data_in[b*8 +: 8] = 8'h01;
                 end
             end
             w_buf_en = 1'b1;
             @(posedge clk); #1;
-            if (load_strobe_idx == 0) T_first_load = cycle_count;
+            if (load_cycle_idx == 0) T_first_load = cycle_count;
         end
         w_buf_en = 1'b0;
         data_in = 0;

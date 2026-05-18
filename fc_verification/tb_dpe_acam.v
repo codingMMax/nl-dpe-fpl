@@ -17,13 +17,23 @@
 //
 // Compute timing (Model Y): the DPE itself has NO compute counter. The
 // TB-as-controller asserts nl_dpe_control = 2'b11 from the first LOAD
-// strobe through CCYC = (PRECISION + PIPELINE_DEPTH - 1) cycles past
-// the fire posedge, then deasserts.
+// strobe through CCYC = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES
+// cycles past the fire posedge, then deasserts.
+//
+// Per-arch CCYC decomposition (Task #86): NL-DPE only is exercised here.
+//   NL-DPE: PIPELINE_DEPTH=2 (MAC, Acc) + ACAM_CYCLES=1 (read-out)
+//           → CCYC = P + 2.  INT8: 10 cycles.
+// Legacy single-knob compat: if ACAM_CYCLES_TB undefined, defaults 0;
+// callers passing -DPIPELINE_DEPTH_TB=3 alone reproduce pre-Task-#86
+// behaviour.
 //
 // Cycle measurement: identical to tb_dpe_vmm.v.
-//   total_cycles == LOAD_STROBES + CCYC + OUTPUT_CYCLES
-//                 = 52 + 10 + 52 = 114 for NL-DPE defaults
-//                   (R=256, C=256, BUF=40, PRECISION=8, PIPELINE_DEPTH=3).
+//   total_cycles == LOAD_CYCLES + CCYC + OUTPUT_CYCLES + 2
+//                 = 52 + 10 + 52 + 2 = 116 for NL-DPE defaults
+//                   (R=256, C=256, BUF=40, PRECISION=8,
+//                    PIPELINE_DEPTH=2, ACAM_CYCLES=1).
+//   The +2 is the Task #87 Phase 1 FSM register-propagation overhead
+//   (1 cycle each for LOAD→COMPUTE and COMPUTE→OUTPUT handoffs).
 
 `timescale 1ns / 1ps
 
@@ -57,12 +67,12 @@ module tb_dpe_acam;
     // with parameter overrides so the two cannot drift out of sync.
     // Override at compile time via:
     //   iverilog -DR_TB=1024 -DC_TB=128 -DBUF_TB=40 \
-    //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=3 ...
+    //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=2 -DACAM_CYCLES_TB=1 ...
     // (R >= C constraint applies. NL-DPE only.)
     //
-    // Precision-driven compute pipeline (arch-agnostic):
-    //   CCYC = PRECISION + PIPELINE_DEPTH - 1
-    // For INT8 with 3-stage (fire -> VMM -> accumulate): CCYC = 10.
+    // Precision-driven compute pipeline (per-arch, Task #86):
+    //   CCYC = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES
+    // NL-DPE: PIPELINE_DEPTH=2, ACAM_CYCLES=1 → CCYC = P + 2 (INT8: 10).
 `ifndef R_TB
     `define R_TB 256
 `endif
@@ -78,21 +88,28 @@ module tb_dpe_acam;
 `ifndef PIPELINE_DEPTH_TB
     `define PIPELINE_DEPTH_TB 3
 `endif
+`ifndef ACAM_CYCLES_TB
+    `define ACAM_CYCLES_TB 0
+`endif
     localparam R              = `R_TB;
     localparam C              = `C_TB;
     localparam BUF            = `BUF_TB;
     localparam PRECISION      = `PRECISION_TB;
     localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
-    localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
+    localparam ACAM_CYCLES    = `ACAM_CYCLES_TB;
+    localparam CCYC           = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES;
     localparam EPS  = BUF / 8;
-    localparam LSTR = (R + EPS - 1) / EPS;
+    localparam LCYC = (R + EPS - 1) / EPS;
     localparam OCYC = (C + EPS - 1) / EPS;
-    localparam T_FILL_EXPECTED = LSTR + CCYC + OCYC;
+    // Task #87 Phase 1: T_fill = LCYC + CCYC + OCYC + 2 (FSM register-propagation
+    // overhead — 1 cycle each for LOAD→COMPUTE and COMPUTE→OUTPUT handoffs).
+    localparam T_FILL_EXPECTED = LCYC + CCYC + OCYC + 2;
 
     dpe #(
         .KERNEL_WIDTH(R),
         .NUM_COLS(C),
         .DPE_BUF_WIDTH(BUF),
+        .COMPUTE_CYCLES(CCYC),
         .ACAM_MODE(1)   // 1 = exp approximation (1 + x + x^2/2)
     ) dut (
         .clk(clk),
@@ -126,11 +143,11 @@ module tb_dpe_acam;
     wire [2:0] state_now = dut.state;
 
     integer error_count;
-    integer load_strobe_idx;
+    integer load_cycle_idx;
     integer cap_idx;
 
     initial begin
-        $display("[tb_dpe_acam] arch=NL-DPE ACAM_MODE=1 (exp 1+x+x^2/2) R=%0d C=%0d BUF=%0d EPS=%0d LSTR=%0d CCYC=%0d OCYC=%0d T_fill_expected=%0d", R, C, BUF, EPS, LSTR, CCYC, OCYC, T_FILL_EXPECTED);
+        $display("[tb_dpe_acam] arch=NL-DPE ACAM_MODE=1 (exp 1+x+x^2/2) R=%0d C=%0d BUF=%0d EPS=%0d LCYC=%0d CCYC=%0d (P=%0d + (D=%0d - 1) + A=%0d) OCYC=%0d T_fill_expected=%0d", R, C, BUF, EPS, LCYC, CCYC, PRECISION, PIPELINE_DEPTH, ACAM_CYCLES, OCYC, T_FILL_EXPECTED);
 
         reset = 1;
         w_buf_en = 0;
@@ -172,16 +189,16 @@ module tb_dpe_acam;
         nl_dpe_control = 2'b11;
 
         // Drive 52 strobes, each carrying 5 bytes of `1`.
-        for (load_strobe_idx = 0; load_strobe_idx < LSTR; load_strobe_idx = load_strobe_idx + 1) begin
+        for (load_cycle_idx = 0; load_cycle_idx < LCYC; load_cycle_idx = load_cycle_idx + 1) begin
             data_in_full = 40'h0;
             for (b = 0; b < EPS; b = b + 1) begin
-                if (load_strobe_idx * EPS + b < R) begin
+                if (load_cycle_idx * EPS + b < R) begin
                     data_in_full[b*8 +: 8] = 8'h01;
                 end
             end
             w_buf_en = 1'b1;
             @(posedge clk); #1;
-            if (load_strobe_idx == 0) T_first_load = cycle_count;
+            if (load_cycle_idx == 0) T_first_load = cycle_count;
         end
         w_buf_en = 1'b0;
         data_in_full = 40'h0;

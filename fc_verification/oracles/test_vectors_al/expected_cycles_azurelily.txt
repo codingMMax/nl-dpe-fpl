@@ -1,0 +1,9 @@
+# Azure-Lily faithful primitive, Option A1 (Task #98 unified), R=512 C=128 BUF=16 INT8
+LCYC=256 OCYC=64 CCYC=10
+T_fill=330  (= LCYC + CCYC + OCYC; no compensation constants)
+T_steady=264  (= max(LCYC+PRECISION, CCYC, OCYC))
+# NOTE: RTL pays +2 NBA-handoff cost in T_fill (once); rtl_obs = T(M) + 2.
+M=1: T(M) = T_fill + (1-1)*T_steady = 330  (rtl_obs=332, delta=+2)
+M=2: T(M) = T_fill + (2-1)*T_steady = 594  (rtl_obs=596, delta=+2)
+M=4: T(M) = T_fill + (4-1)*T_steady = 1122  (rtl_obs=1124, delta=+2)
+M=8: T(M) = T_fill + (8-1)*T_steady = 2178  (rtl_obs=2180, delta=+2)

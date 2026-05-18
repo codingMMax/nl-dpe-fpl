@@ -30,8 +30,9 @@
 //   T_done_last  = last cycle in S_OUTPUT (i.e. final cycle in which
 //                  data_out carries an output strobe)
 //   total_cycles = T_done_last - T_first_load + 1
-//   Expected     = LOAD_STROBES + CCYC + OUTPUT_CYCLES
-//                  (= T_fill from §4 of FIDELITY_METHODOLOGY.md).
+//   Expected     = LOAD_CYCLES + CCYC + OUTPUT_CYCLES + 2
+//                  (= T_fill from §4 of FIDELITY_METHODOLOGY.md; the +2
+//                   is Task #87 Phase 1 FSM register-propagation overhead).
 
 `timescale 1ns / 1ps
 
@@ -73,22 +74,38 @@ module tb_dpe_vmm;
     // or precision, either change the defaults below or override at
     // compile time:
     //   iverilog -DARCH_NLDPE -DR_TB=1024 -DC_TB=128 -DBUF_TB=40 \
-    //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=3 ...
+    //            -DPRECISION_TB=4 -DPIPELINE_DEPTH_TB=2 -DACAM_CYCLES_TB=1 ...
     // (R must be >= C; BUF in {16, 40}.)
     //
     // Precision lives ENTIRELY on the controller (TB) side now.
     // The DPE module is precision-agnostic; it stays in S_COMPUTE while
     // nl_dpe_control == 2'b11 and transitions out when it deasserts.
     // The TB holds nl_dpe_control = 2'b11 for CCYC additional cycles
-    // after fire to emulate a (PRECISION + PIPELINE_DEPTH - 1)-cycle
-    // bit-serial compute pipeline.
-    //   CCYC = PRECISION + PIPELINE_DEPTH - 1
-    // For INT8 with 3-stage (fire -> VMM -> accumulate): CCYC = 10.
+    // after fire to emulate the per-arch bit-serial compute pipeline:
+    //
+    //   CCYC = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES
+    //
+    // Per-arch decomposition (Task #86):
+    //   NL-DPE     (2-stage pipeline (MAC, Acc) + 1-cycle ACAM read-out):
+    //              PIPELINE_DEPTH=2, ACAM_CYCLES=1 → CCYC = P + 2
+    //   Azure-Lily (3-stage pipeline (MAC, ADC, SA), no ACAM):
+    //              PIPELINE_DEPTH=3, ACAM_CYCLES=0 → CCYC = P + 2
+    //
+    // Both arches give CCYC = P + 2 under current params — structural
+    // symmetry, not coincidence. INT8 → CCYC=10; INT4 → 6; INT16 → 18.
+    //
+    // Legacy single-knob compat: if ACAM_CYCLES_TB is not defined, it
+    // defaults to 0 so callers that only pass PIPELINE_DEPTH_TB (e.g.
+    // -DPIPELINE_DEPTH_TB=3) reproduce the pre-Task-#86 single-knob
+    // behaviour (CCYC = P + 2 at PD=3, ACAM_CYCLES=0).
 `ifndef PRECISION_TB
   `define PRECISION_TB 8
 `endif
 `ifndef PIPELINE_DEPTH_TB
   `define PIPELINE_DEPTH_TB 3
+`endif
+`ifndef ACAM_CYCLES_TB
+  `define ACAM_CYCLES_TB 0
 `endif
 
 `ifdef ARCH_NLDPE
@@ -107,11 +124,13 @@ module tb_dpe_vmm;
     localparam BUF            = `BUF_TB;
     localparam PRECISION      = `PRECISION_TB;
     localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
-    localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
+    localparam ACAM_CYCLES    = `ACAM_CYCLES_TB;
+    localparam CCYC           = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES;
     dpe #(
         .KERNEL_WIDTH(R),
         .NUM_COLS(C),
-        .DPE_BUF_WIDTH(BUF)
+        .DPE_BUF_WIDTH(BUF),
+        .COMPUTE_CYCLES(CCYC)
     ) dut (
         .clk(clk),
         .reset(reset),
@@ -146,13 +165,15 @@ module tb_dpe_vmm;
     localparam BUF            = `BUF_TB;
     localparam PRECISION      = `PRECISION_TB;
     localparam PIPELINE_DEPTH = `PIPELINE_DEPTH_TB;
-    localparam CCYC           = PRECISION + PIPELINE_DEPTH - 1;
+    localparam ACAM_CYCLES    = `ACAM_CYCLES_TB;
+    localparam CCYC           = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES;
     // AL DPE_BUF_WIDTH=BUF, so wire only the low BUF bits.
     wire [BUF-1:0] data_out_al;
     dpe #(
         .KERNEL_WIDTH(R),
         .NUM_COLS(C),
-        .DPE_BUF_WIDTH(BUF)
+        .DPE_BUF_WIDTH(BUF),
+        .COMPUTE_CYCLES(CCYC)
     ) dut (
         .clk(clk),
         .reset(reset),
@@ -177,9 +198,11 @@ module tb_dpe_vmm;
     // source of truth — both TB and DUT use the same values via the
     // parameter override at instantiation).
     localparam EPS  = BUF / 8;
-    localparam LSTR = (R + EPS - 1) / EPS;
+    localparam LCYC = (R + EPS - 1) / EPS;
     localparam OCYC = (C + EPS - 1) / EPS;
-    localparam T_FILL_EXPECTED = LSTR + CCYC + OCYC;
+    // Task #87 Phase 1: T_fill = LCYC + CCYC + OCYC + 2 (FSM register-propagation
+    // overhead — 1 cycle each for LOAD→COMPUTE and COMPUTE→OUTPUT handoffs).
+    localparam T_FILL_EXPECTED = LCYC + CCYC + OCYC + 2;
 
     // ── Cycle counter ──
     // Incremented in a free-running posedge always block. Read after the
@@ -204,11 +227,11 @@ module tb_dpe_vmm;
 
     // TB locals
     integer error_count;
-    integer load_strobe_idx;
+    integer load_cycle_idx;
     integer cap_idx;
 
     initial begin
-        $display("[tb_dpe_vmm] arch=%0s R=%0d C=%0d BUF=%0d EPS=%0d LSTR=%0d CCYC=%0d OCYC=%0d T_fill_expected=%0d", `ARCH_NAME, R, C, BUF, EPS, LSTR, CCYC, OCYC, T_FILL_EXPECTED);
+        $display("[tb_dpe_vmm] arch=%0s R=%0d C=%0d BUF=%0d EPS=%0d LCYC=%0d CCYC=%0d (P=%0d + (D=%0d - 1) + A=%0d) OCYC=%0d T_fill_expected=%0d", `ARCH_NAME, R, C, BUF, EPS, LCYC, CCYC, PRECISION, PIPELINE_DEPTH, ACAM_CYCLES, OCYC, T_FILL_EXPECTED);
 
         // Initialise stimuli + capture buffers
         reset = 1;
@@ -255,23 +278,23 @@ module tb_dpe_vmm;
         // LOAD strobe combinationally (T_fill = L+C+O exactly).
         nl_dpe_control = 2'b11;
 
-        // ── Drive LOAD_STROBES strobes ──
+        // ── Drive LOAD_CYCLES strobes ──
         // Convention: T_first_load = cycle_count value sampled (after #1
         // settle) on the cycle when w_buf_en is FIRST seen high by the FSM.
         // The FSM samples on the next posedge after we set w_buf_en=1.
-        for (load_strobe_idx = 0; load_strobe_idx < LSTR; load_strobe_idx = load_strobe_idx + 1) begin
-            // Pack EPS input bytes [load_strobe_idx*EPS + b] (1-indexed values).
+        for (load_cycle_idx = 0; load_cycle_idx < LCYC; load_cycle_idx = load_cycle_idx + 1) begin
+            // Pack EPS input bytes [load_cycle_idx*EPS + b] (1-indexed values).
             data_in_full = 40'h0;
             for (b = 0; b < EPS; b = b + 1) begin
-                if (load_strobe_idx * EPS + b < R) begin
+                if (load_cycle_idx * EPS + b < R) begin
                     // input[r] = (r+1) mod 128
-                    data_in_full[b*8 +: 8] = ((load_strobe_idx * EPS + b + 1) & 8'h7F);
+                    data_in_full[b*8 +: 8] = ((load_cycle_idx * EPS + b + 1) & 8'h7F);
                 end
             end
             w_buf_en = 1'b1;
             @(posedge clk); #1;
             // First strobe: snapshot cycle counter for T_first_load
-            if (load_strobe_idx == 0) T_first_load = cycle_count;
+            if (load_cycle_idx == 0) T_first_load = cycle_count;
         end
         // Stop driving w_buf_en
         w_buf_en = 1'b0;

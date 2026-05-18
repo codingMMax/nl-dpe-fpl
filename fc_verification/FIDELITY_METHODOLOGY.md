@@ -120,7 +120,7 @@ about what the hardware fundamentally costs.
 
 **Single source of truth:** both the simulator and the DPE generator
 consume the same JSON. The DPE primitive cycle accounting
-(`LOAD_STROBES = ceil(KW × 8 / BUF)`, `OUTPUT_CYCLES = ceil(C × 8 / BUF)`,
+(`LOAD_CYCLES = ceil(KW × 8 / BUF)`, `OUTPUT_CYCLES = ceil(C × 8 / BUF)`,
 `COMPUTE_CYCLES = config_value`) is derived from config at runtime / RTL
 emission time. **No hand-pinned constants in either side. No
 `sram_read_latency` magic numbers.**
@@ -137,7 +137,7 @@ Both arch outputs share:
   - Same FSM (S_IDLE → S_LOAD → S_WAIT_EXEC → S_COMPUTE → S_OUTPUT
     → S_DRAIN)
   - Same behavioral 1-clock VMM at fire time
-  - Same parameterized LOAD_STROBES, OUTPUT_CYCLES derivations
+  - Same parameterized LOAD_CYCLES, OUTPUT_CYCLES derivations
 
 Differ only in:
   - ACAM_MODE branch (log/exp computation) present iff config.has_acam == true
@@ -150,39 +150,450 @@ The cycle-emulation FSM stays: load_strobes / compute_cycles /
 output_cycles hold-counters. The math/timing separation already exists
 in today's `dpe_stub.v` and is preserved.
 
+### §3.1 Per-arch CCYC decomposition (Task #86)
+
+The DPE primitive's `COMPUTE_CYCLES` parameter is the per-pass
+bit-serial pipeline latency. Two architectures, two distinct internal
+pipelines:
+
+**NL-DPE** has a 2-stage internal bit-serial pipeline plus 1 cycle for
+ACAM read-out at the end of each pass. **ACAM always fires** regardless
+of activation mode — it is the read-out path; activation mode just
+selects the LUT contents. So:
+
+```
+NL-DPE bit-serial pipeline (2 stages + 1 ACAM read-out)
+
+Cycle:    0    1    2    3    4    5    6    7    8    9
+bit b0:  MAC──Acc
+bit b1:       MAC──Acc
+bit b2:            MAC──Acc
+bit b3:                 MAC──Acc
+bit b4:                      MAC──Acc
+bit b5:                           MAC──Acc
+bit b6:                                MAC──Acc
+bit b7:                                     MAC──Acc
+                                                  └─ all slices accumulated end of cycle 8
+                                                 ACAM fires cycle 9
+                                                 (always, regardless of activation mode)
+
+CCYC_NL = PRECISION + (PIPELINE_DEPTH_NL - 1) + ACAM_CYCLES
+        = 8 + (2 - 1) + 1
+        = 10
+```
+
+**Azure-Lily** has a 3-stage internal bit-serial pipeline (no ACAM):
+
+```
+Azure-Lily bit-serial pipeline (3 stages, no ACAM)
+
+Cycle:    0    1    2    3    4    5    6    7    8    9
+bit b0:  MAC──ADC──SA
+bit b1:       MAC──ADC──SA
+bit b2:            MAC──ADC──SA
+bit b3:                 MAC──ADC──SA
+bit b4:                      MAC──ADC──SA
+bit b5:                           MAC──ADC──SA
+bit b6:                                MAC──ADC──SA
+bit b7:                                     MAC──ADC──SA
+                                                       └─ last bit drains end of cycle 9
+
+CCYC_AL = PRECISION + (PIPELINE_DEPTH_AL - 1) + ACAM_CYCLES
+        = 8 + (3 - 1) + 0
+        = 10
+```
+
+**General formula** (used by `nl_dpe/gen_dpe_stub.py`, all TBs, and
+the smoke drivers):
+
+```
+CCYC = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES
+```
+
+**Per-arch config keys** (under `capabilities` in the per-arch JSON):
+
+| arch       | pipeline_depth | acam_cycles | stage description                       |
+|------------|----------------|-------------|-----------------------------------------|
+| NL-DPE     | 2              | 1           | (crossbar MAC, analog Acc) + ACAM       |
+| Azure-Lily | 3              | 0           | (crossbar MAC, ADC, shift-add); no ACAM |
+
+**Note (ACAM always fires for NL-DPE):** even when ACAM_MODE=0
+(identity passthrough) the read-out path consumes 1 cycle. Activation
+mode selects the LUT contents (identity, ReLU, exp, log), not whether
+ACAM fires.
+
+**Note (structural symmetry, not coincidence):** both arches give
+`CCYC = PRECISION + 2` at every precision under current parameters.
+This is structural: `(D_NL - 1) + ACAM_NL = (D_AL - 1) + ACAM_AL = 2`.
+If either side's pipeline depth or ACAM latency changes, the symmetry
+breaks immediately.
+
+| Precision | NL CCYC                  | AL CCYC                | Match? |
+|-----------|--------------------------|------------------------|--------|
+| INT4      | 4 + (2-1) + 1 = 6        | 4 + (3-1) + 0 = 6      | yes    |
+| INT8      | 8 + (2-1) + 1 = 10       | 8 + (3-1) + 0 = 10     | yes    |
+| INT16     | 16 + (2-1) + 1 = 18      | 16 + (3-1) + 0 = 18    | yes    |
+
+**Backward compatibility:** if the per-arch JSON omits the
+`pipeline_depth` / `acam_cycles` keys, the generator falls back to
+the legacy single-knob defaults `(3, 0)` — exactly the pre-Task-#86
+behaviour where `CCYC = PRECISION + 3 - 1 = PRECISION + 2` at PD=3,
+AC=0.
+
+See `fc_verification/DPE_PRIMITIVE_WALKTHROUGH.md` §10a for a
+deeper walkthrough of the two-layer model (combinational functional
+VMM fire + cycle-accurate timing burn) and how the per-arch
+decomposition flows from JSON → generator → emitted Verilog → TBs
+→ Python drivers.
+
+### §3.2 Input substrate layout: double-buffered slice-major (Task #99)
+
+The DPE input substrate is organized **bit-slice-major** and
+**double-buffered** — two physically separate substrates A and B that
+ping-pong via a `load_phase` selector:
+
+```
+input_buf_slice_a[0..PRECISION-1][0..R-1]
+input_buf_slice_b[0..PRECISION-1][0..R-1]
+load_phase  : selector (1 bit) — toggles each pass; LOAD writes
+              substrate indicated by load_phase, COMPUTE reads the
+              other substrate
+```
+
+Each substrate is PRECISION banks of R bit cells; bank `b` holds
+bit-position `b` of every row for the pass currently parked there. The
+crossbar reads one bank per cycle of the substrate the COMPUTE
+sub-FSM is currently tagged to (pass-tagged ring discipline).
+
+**The LOAD interface remains byte-major.** BRAM stores byte-major data
+(the natural format for host data and inter-layer activations); the
+wrapper streams 5 bytes/cycle for NL (BUF=40) or 2 bytes/cycle for AL
+(BUF=16). The DPE applies a **corner-turn** (fixed bit permutation) to
+distribute the incoming bytes across the PRECISION bit-slice banks of
+whichever substrate `load_phase` currently selects. Per LOAD cycle,
+EPS bytes × 8 bits are routed as:
+
+```verilog
+// substrate := (load_phase == 0) ? slice_a : slice_b
+for (j = 0; j < ELEMS_PER_STROBE; j = j + 1)            // EPS = BUF/8
+  for (i_bit = 0; i_bit < PRECISION; i_bit = i_bit + 1)
+    substrate[i_bit][load_cycle*EPS + j] <= data_in[j*8 + i_bit];
+```
+
+This is pure wiring + one shared address counter + one ping-pong
+selector; no decode logic. The corner-turn LOAD pattern is preserved
+exactly as in the single-substrate design — only the destination
+substrate now alternates.
+
+**Two input substrates, single mac/output substrates.** The input
+substrate is doubled (A and B) for ping-pong; `mac_acc[0..C-1]` and
+`acam_out[0..C-1]` remain single substrates (a pass-tagged ring of
+depth 4 carries pass IDs through COMPUTE → OUTPUT, but the storage
+itself is one bank each). Total DPE storage thus has **two input
+banks + one mac bank + one output bank**. Area cost vs the
+single-substrate Task #93 design: **+1× the input buffer**
+(an extra PRECISION × R flops per DPE — e.g., 8 × 256 = 2048 flops for
+NL R=256; 8 × 512 = 4096 flops for AL R=512). This area increment is
+already accounted for in the arch budget.
+
+**No LOAD-gate, no `load_safe` register, no WAR hazard.** Because
+pass-(k+1) LOAD writes substrate B while pass-k COMPUTE reads
+substrate A (and vice versa on the next pass), the two read/write
+windows touch disjoint physical cells. The Task #93 LOAD-gate
+(`load_safe`) and its `+PRECISION` cycle cost are retired. The honest
+cycle cost of the double-buffered design is **zero extra cycles per
+pass** — `T_steady` reduces to `max(LCYC, CCYC, OCYC)` (see §4).
+
+This is the double-buffered slice-major / corner-turn design adopted
+in Task #99 (superseding the Task #93 / Option A1 single-substrate +
+LOAD-gate design). The `dpe_*_faithful.v` modules implement it; the
+legacy `dpe_*.v` modules retain the 4-slot ring buffer pending the
+faithful migration of `fc_top.v`.
+
+### §3.3 Data transpose strategy: corner-turn LOAD into a double-buffered substrate
+
+The DPE input substrate is **slice-major** (bit-stratified), but BRAM
+storage in the rest of the system is **byte-major** (a host writes byte-
+major activations, every layer's output is byte-major, every layer's
+input is byte-major). At some boundary the byte→slice transpose has to
+happen. The Task #99 design pairs:
+
+**On-the-fly transpose (corner-turn LOAD):**
+- LOAD applies a **corner-turn** (fixed bit permutation, zero pipeline
+  depth, no extra storage) that distributes each cycle's 40 input bits
+  across all 8 slice banks — 5 bits per slice at positions `5k..5k+4`
+  of the substrate currently selected by `load_phase`.
+- BRAM stays byte-major (universal across the whole system).
+- Hardware cost in DPE outside the substrates themselves: zero beyond
+  wiring.
+- Hardware cost outside DPE: zero.
+
+**Double-buffered substrate (substrates A + B, `load_phase` selector):**
+- Two physically separate input substrates. Pass-(k+1) LOAD writes
+  whichever substrate `load_phase` selects; pass-k COMPUTE reads the
+  other one.
+- Eliminates the write-after-read hazard that was unavoidable in the
+  single-substrate corner-turn design (every LOAD cycle touches all
+  PRECISION slices simultaneously, so pass-(k+1) writes would corrupt
+  any slices pass-k COMPUTE still has to read).
+- Storage cost in DPE: **2× input substrate** (one extra PRECISION × R
+  flops per DPE — e.g., 2048 flops for NL, 4096 for AL). No extra
+  buffer outside the DPE; no dual-port read-old/write-new semantics
+  required.
+- Pipeline cost: **zero extra cycles per pass.** `T_steady = max(LCYC,
+  CCYC, OCYC)` — no `+PRECISION` term, no `+1` NBA-safety term, no
+  inter-pass stall.
+
+### Why the double-buffer pairing wins
+
+| Resource | Single-substrate + LOAD-gate (retired, Task #93) | Double-buffer + corner-turn (Task #99) |
+|---|---|---|
+| Input substrate storage | PRECISION × R bit cells | 2 × (PRECISION × R) bit cells |
+| Other DPE storage | 0 extra | 0 extra |
+| BRAM format constraint | byte-major (universal) | byte-major (universal) |
+| Inter-layer data flow | direct | direct |
+| Substrate port arity | single-port | single-port (two substrates) |
+| Per-pass cycle cost | `+PRECISION` (LOAD-gate) | 0 (overlapped on disjoint substrate) |
+| Net cycles saved vs Task #93 | — | `PRECISION × (M-1)` per workload |
+
+At our typical R values, the area trade is `2 × PRECISION × R` extra
+flops per DPE — modest at the DPE level (a few KB) — in exchange for
+eliminating the `+PRECISION × (M-1)` cycle cost that Task #93's
+LOAD-gate paid on every multi-pass workload. The save scales linearly
+with M; for M=8 it's 56 cycles, for M=128 batched attention it's 1016
+cycles per DPE. With the area cost already in the arch budget, the
+silicon-faithful choice for this system is to pay the area and keep
+the steady-state cadence unblocked.
+
+The methodology consequence: the pipeline formula simplifies to
+`T_steady = max(LCYC, CCYC, OCYC)`. A future system that would prefer
+the smaller input buffer at the cost of the LOAD-gate cycles can
+revert to a single-substrate Task #93 design, and the formula updates
+back to `T_steady = max(LCYC + PRECISION, CCYC, OCYC)`. Both formulas
+are silicon-faithful; they describe different silicon choices.
+
 ---
 
 ## §4 Pipeline model
 
-**Single-buffered with drain-load overlap.**
+**Double-buffered slice-major LOAD with overlapped COMPUTE (Task #99,
+superseding Task #93 / Option A1).**
 
 Per pass:
-- LOAD    (L cycles): SRAM → DPE input buffer
-- COMPUTE (C_cyc cycles): DPE bit-serial computation (uses `compute_cycles` from config)
-- OUTPUT  (O cycles): DPE output buffer → SRAM
+- LOAD    (L cycles): BRAM → corner-turn → `input_buf_slice_a` or
+                      `input_buf_slice_b` (selected by `load_phase`)
+- COMPUTE (C_cyc cycles): bit-fire (PRECISION) + tail
+                          (PIPELINE_DEPTH−1) + ACAM_CYCLES, reading
+                          from the substrate not currently being
+                          written
+- OUTPUT  (O cycles): `acam_out` (NL) or `mac_acc` (AL) → BRAM
 
-Drain of pass k can overlap with load of pass k+1 (independent SRAM
-ports). Compute is sandwiched between load and output and cannot
-overlap across passes.
+Storage: **two input substrates + one mac substrate + one output
+substrate**, the doubled input pair matching the ping-pong discipline
+needed to overlap LOAD and COMPUTE without WAR conflicts. Multi-pass
+overlap is unconstrained: pass-(k+1) LOAD runs concurrently with
+pass-k COMPUTE on a physically separate substrate, so the steady-state
+cadence reduces to the natural pipeline-overlap maximum of LOAD,
+COMPUTE, OUTPUT.
+
+**Task #99 — double-buffered LOAD.** Pass-(k+1) writes substrate B
+while pass-k COMPUTE reads substrate A; the substrates are physically
+separate registers, so the write-after-read hazard that Task #93's
+single substrate had to gate against (with `load_safe` and a
+`+PRECISION` cost in `T_steady`) does not exist in Task #99. No
+`load_safe` register, no wrapper-side inter-pass stall in `fc_top.v`,
+no `+PRECISION` term in the formula.
 
 **Steady-state interval = max(L, C_cyc, O).**
 
-Total latency for M passes (per parallel lane):
+For typical configs:
+
+| Arch | L   | C_cyc | O  | T_steady = max(L, C, O) |
+|---|---|---|---|---|
+| NL   | 52  | 10    | 52 | max(52, 10, 52) = **52**  |
+| AL   | 256 | 10    | 64 | max(256, 10, 64) = **256**|
+
+**Unified analytical formula at every layer** (primitive and workload,
+Task #98 unification + Task #99 LOAD model):
 
 ```
-T(M) = (L + C_cyc + O) + (M − 1) × max(L, C_cyc, O)
-       └─── T_fill ───┘    └────── (M−1) × T_steady ──────┘
+T_fill        = LCYC + CCYC + OCYC                       (architectural minimum)
+T_steady      = max(LCYC, CCYC, OCYC)                    (Task #99 double-buffer)
+T_total(M)    = T_fill + (M − 1) × T_steady
 ```
 
-**This model applies to BOTH the simulator and the RTL.** The simulator
-emits T(M) analytically. The RTL is designed so its FSM achieves the
-same drain-load overlap. Cycle delta between sim and RTL is purely
-FSM/control overhead.
+**No additive constants in the formula.** The `+2` NBA sub-FSM handoff
+(primitive), `TREE_PIPE` (CLB adder tree pipeline for V > 1),
+`CLB_NEEDED` (activation LUT cycle), and `+6` wrapper structural
+overhead all exist in real RTL but are reported as per-stage deltas
+in `CYCLE_ACCOUNTING.md`, not embedded in the sim formula.
+
+**The simulator emits this exact formula.** No fudge factors, no
+calibration constants — per §1's principle.
+
+**The RTL emits this exact formula.** Double-buffered slice-major
+storage with `load_phase` ping-pong. Per-cycle behaviour is observable
+via TB probes (`dut.load_phase`, `dut.compute_busy`, `dut.bit_idx_s0`).
+
+**Fidelity:** primitive-level cycle counts match the formula exactly
+(0% delta in both NL and AL faithful primitives, M ∈ {1, 2, 4, 8}) up
+to the +2 NBA handoff that surfaces once in T_fill. Workload-level
+cycle counts diverge by the synthesizable wrapper's structural
+register overhead (paid once in T_fill, not per pass). Per-stage
+breakdown in §4.2. All 12 primitive + 13 workload smoke cases PASS
+under post-Task-#99 cadence; deltas decompose cleanly into
+`wrap + tree + clb` with `nba = 0` at the workload layer.
+
+For per-testcase cycle traces, see `CYCLE_ACCOUNTING.md`.
+For the workload-level (FC/GEMM) formula extension, see §4.1.
+
+### §4.1 Workload-level cycle model (FC/GEMM)
+
+**The workload sim uses the same formula as the primitive sim**
+(Task #98 unification + Task #99 double-buffered LOAD):
+
+```
+T_fill        = LCYC + CCYC + OCYC                       (architectural minimum)
+T_steady      = max(LCYC, CCYC, OCYC)                    (Task #99 double-buffer)
+T_wrkld(M)    = T_fill + (M − 1) × T_steady
+```
+
+The workload's architectural extras — CLB adder tree pipeline depth
+(`TREE_PIPE = ⌈log₂(V)⌉`), activation LUT cycle (`CLB_NEEDED = (V > 1) OR
+(activation_mode AND NOT has_acam)`), and the synthesizable wrapper's
+six structural registers — are real RTL cycles **but they are reported
+as per-stage deltas, not embedded in the sim formula**. See
+`CYCLE_ACCOUNTING.md §6` for the per-workload delta decomposition
+(`nba + tree + clb + wrap`).
+
+**TREE_PIPE is architectural, not implementation overhead:** a
+pipelined balanced adder tree of fanin V has depth ⌈log₂(V)⌉ by basic
+combinational-logic theory. For V=1 (single tile) the tree is just a
+pass-through, TREE_PIPE = 0. For V=2, one stage. Etc.
+
+**CLB_NEEDED is architectural:** one CLB-stage cycle between DPE OUTPUT
+and the final write to output_sram, present iff there is a CLB-side
+transformation (V-fold for V>1, or activation LUT for AL+act). The
+ACAM-fused activation in NL-DPE (V=1 case) eliminates that CLB cycle.
+
+### §4.2 RTL cycles vs sim formula — per-stage delta breakdown
+
+Under the unified formula (Task #98) with Task #99's double-buffered
+LOAD, `T_fill = LCYC + CCYC + OCYC` and `T_steady = max(LCYC, CCYC,
+OCYC)` are the **architectural minima** emitted by the sim at every
+layer. The RTL pays additional cycles for specific named structural
+reasons, each documented per-stage in `CYCLE_ACCOUNTING.md` and
+summarised here.
+
+### Primitive layer
+
+| Workload | sim_exp | rtl_obs | delta | source |
+|---|---|---|---|---|
+| NL faithful (any test, any M) | LCYC + CCYC + OCYC + (M−1)·T_steady | sim_exp + 2 | **+2** | 2 NBA sub-FSM handoffs (LOAD→COMPUTE, COMPUTE→OUTPUT) |
+| AL faithful (any test, any M) | same | sim_exp + 2 | **+2** | same |
+
+All 12 primitive testcases (NL T1–T7 + AL T1–T5) show uniform `+2`
+delta paid once in T_fill. T_steady is bit-exact between sim and RTL.
+
+### Workload layer
+
+The workload delta decomposes into four per-stage contributors:
+
+```
+   delta_total = nba + tree + clb + wrap
+```
+
+| Contributor | Value | Source |
+|---|---|---|
+| `nba` | 0 | Primitive's NBA handoffs absorbed by wrapper's BRAM-read pipeline + registered handshake |
+| `tree` | ⌈log₂(V)⌉ | CLB adder tree pipeline depth (V > 1) |
+| `clb` | 1 if (V > 1) OR (act AND NOT has_acam), else 0 | Activation LUT cycle (post-tree) |
+| `wrap` | 6 | Six structural registers in `fc_top.v` (BRAM-read pipe, registered DPE handshake, sign-extend latch, BRAM-write tap, in-BRAM register, done-detect latch) |
+
+Post-Task-#99 deltas observed across the 13-case workload smoke:
+
+| Configuration | delta | nba | tree | clb | wrap |
+|---|---|---|---|---|---|
+| V=1, no act, NL+has_acam (e.g., `gemm_trivial_NL`) | **+6** | 0 | 0 | 0 | 6 |
+| V=1, act, NL+has_acam (e.g., `bert_qkv_proj_NL`) | **+6** | 0 | 0 | 0 | 6 |
+| V=1, act, AL+NO has_acam (e.g., `bert_qkv_proj_AL`) | **+7** | 0 | 0 | 1 | 6 |
+| V>1, any act (e.g., `lenet_fc1_NL`, `gemm_v2_AL`) | **+8** | 0 | 1 | 1 | 6 |
+| V=1, H>1, any act (e.g., `bert_ffn1_NL`) | **+6** | 0 | 0 | 0 | 6 |
+| M>1, V=1, H=1, NL+has_acam (e.g., `gemm_batch8_NL`) | **+6** | 0 | 0 | 0 | 6 |
+| M>1, V=1, H=1, AL+NO has_acam (e.g., `gemm_batched_AL`) | **+6** | 0 | 0 | 0 | 6 |
+
+The delta is **constant in M** (`wrap + tree + clb` are all paid
+once in T_fill; T_steady is bit-exact between sim and RTL because
+the double-buffered LOAD removes the inter-pass stall).
+| V=1, any act, H>1 (e.g., `bert_ffn1_NL`) | **+6** | 0 | 0 | 0 | 6 |
+
+T_steady is bit-exact between sim and RTL — the delta is always paid
+**once in T_fill**, never multiplied by M.
+
+For per-testcase cycle log of all 12 primitive + 13 workload cases
+with full delta decomposition, see `CYCLE_ACCOUNTING.md §4 + §6`.
+
+**Verifier (post Task #93 / #94 / #97 / #98 / #99)**:
+- 12/12 faithful primitive cases PASS (functional only); cycle delta = +2 uniform
+- 13/13 fc_smoke cases PASS (functional only); cycle delta = `nba + tree + clb + wrap`
+- 52/52 lazy `dpe_smoke` cases PASS (lazy primitive unchanged, retained for compile-link sanity)
+- 8/8 `azurelily/IMC/test.py` sanity tests PASS with the unified sim formula
+
+**Per-arch CCYC derivation:** `C_cyc` above is the per-arch
+`COMPUTE_CYCLES`, derived from `§3.1`'s decomposition
+`CCYC = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES`. For NL-DPE
+(`PD=2, AC=1`) and Azure-Lily (`PD=3, AC=0`), both yield `CCYC = P + 2`
+at every precision — structural symmetry, not coincidence.
+
+Precision sweep — ideal sim T_fill (NL-DPE R=256 C=256 BUF=40, M=1,
+V=1), under Task #99's double-buffered LOAD (`T_steady = max(LCYC,
+CCYC, OCYC)`):
+
+| Precision | CCYC | T_fill_ideal (= L + CCYC + O) | T_steady |
+|-----------|------|--------------------------------|----------|
+| INT4      | 6    | 52 + 6 + 52 = 110              | 52       |
+| INT8      | 10   | 52 + 10 + 52 = 114             | 52       |
+| INT16     | 18   | 52 + 18 + 52 = 122             | 52       |
+
+The RTL pays +2 over each (T_fill_rtl primitive = 112/116/124); the
+synthesizable fc_top.v wrapper adds another +4 (T_fill_wrapper =
+116/120/128). Both gaps surface as fidelity.
 
 Note: this supersedes the "Regime A vs Regime B" terminology used in
 `paper/methodology/dpe_pipeline_model.md` (which was framed around an
 older sim that lacked the drain-load overlap). Those labels are not
 used here.
+
+**Historical note (pre-Task #87 / pre-Task #88)**: earlier iterations
+of the methodology baked the +2 (Task #87) and +4 (Task #88) into the
+analytical model so that sim and RTL agreed by construction. Task #90
+rolled both constants back: baking implementation-specific overhead
+into the simulator is circular validation. Sim now emits the ideal
+cycle count per §1 principle, RTL discloses real overhead, fidelity
+is the honest measurement of the gap.
+
+**Historical note (Task #93 — Option A1 single-substrate refactor,
+superseded by Task #99)**: prior to Task #93, the faithful primitives
+used a 4-slot byte-major ring buffer (a simulation convenience). Task
+#93 rewrote the primitives to use single-substrate slice-major storage
+with corner-turn LOAD and a `load_safe` gate, exposing the silicon
+constraint as `+PRECISION` per additional pass in `T_steady = max(LCYC
++ PRECISION, CCYC, OCYC)`.
+
+**Task #99 — double-buffered LOAD**: the LOAD-gate cost from Task #93
+was paid because every corner-turn LOAD cycle touched all PRECISION
+slices simultaneously, so pass-(k+1) writes could not overlap any of
+pass-k COMPUTE's slice reads on the same substrate. Task #99 keeps the
+corner-turn LOAD but adds a second physical input substrate
+(`input_buf_slice_b`) and a `load_phase` selector that ping-pongs the
+two substrates per pass. pass-(k+1) LOAD writes substrate B while
+pass-k COMPUTE reads substrate A; substrates are physically separate,
+so there is no WAR hazard and no LOAD-gate is required. `load_safe`
+and the wrapper-side PRECISION-cycle inter-pass stall in `fc_top.v`
+are both retired. The cycle cost reduces to `T_steady = max(LCYC,
+CCYC, OCYC)`; the area cost is one extra PRECISION × R bit cells per
+DPE (already in the arch budget). See §3.2 for the storage layout and
+§3.3 for the on-the-fly transpose vs double-buffer trade.
 
 ---
 
@@ -191,25 +602,66 @@ used here.
 The DPE+ACAM hardware supports two workload classes. They differ in
 ACAM mode, crossbar contents, and the workload→pass mapping.
 
-### VMM workload — weight-persistent matmul (Stage 1 GEMM)
+### VMM workload — weight-persistent matmul (Stage 1 GEMM, Path A)
 
 Crossbar holds an R × C **weight matrix W**. ACAM in **ADC mode**.
 Per pass: input vector of R elements × W → output vector of C elements.
 
-For matmul A[M × K] × W[K × N], with crossbar R × C:
-- K-tile: `ceil(K / R)` passes per output row (along inner dim)
-- N-tile: `ceil(N / C)` parallel DPE column-tiles
-- Per output row m: `ceil(K/R) × ceil(N/C / n_parallel_lanes)` passes
+For matmul Y[M × N] = X[M × K] @ W[K × N], with crossbar R × C, **Path A
+weight-stationary array**:
+- V = `ceil(K / R)`   (K-axis tiles)
+- H = `ceil(N / C)`   (N-axis tiles)
+- **V × H DPE primitives instantiated in parallel**, each holding one
+  weight tile `W[v·R:(v+1)·R, h·C:(h+1)·C]` *permanently* (weight-stationary).
+- For each output row m, **all V·H DPEs fire once in lockstep**.
+  - DPE_(v, h) input: `X[m, v·R:(v+1)·R]` (per-v K-slice; broadcast over h)
+  - DPE_(v, h) output: `partial[v, h] = sum_k X[m, k] · W[k, h·C:(h+1)·C]`
+                       for `k ∈ [v·R, (v+1)·R)`
+  - CLB tree across v: `Y[m, h·C:(h+1)·C] = sum_v partial[v, h]`
+  - Output mux across h: stitches the H tile-columns into Y[m, 0:N]
+- Per-DPE firing count = M (one fire per output row, **NOT M·V**).
 
-**Total VMM passes per lane:**
+**Total VMM passes per lane (Path A):**
 
 ```
-passes_per_lane = M × ceil(K/R) × ceil(N / C / n_parallel_lanes)
-total_cycles    = T(passes_per_lane)   per §4 pipeline model
+n_parallel_lanes = V * H
+passes_per_lane  = M × ceil(V·H / n_parallel_lanes) = M
+total_cycles     = T_wrkld(M) + (1 if CLB_NEEDED else 0)
+                 = T_fill_wrkld + (M − 1) × T_steady + (1 if CLB_NEEDED else 0)
+                                                       per §4.1 workload formula
+T_fill_wrkld     = L + C_cyc + O + TREE_PIPE          (ideal — no FSM/wrapper)
+TREE_PIPE        = ⌈log₂(V)⌉ for V > 1, else 0        (architectural tree depth)
+CLB_NEEDED       = (V > 1) OR (activation_mode AND !has_acam)
 ```
 
-This is what `imc_core.run_gemm` computes for latency. The current
-`run_gemm` bug: latency only multiplies by M, missing `ceil(K/R)`.
+RTL pays +2 (FSM) + +4 (synthesizable wrapper) cycles on T_fill that
+the simulator does not model. Surfaces as fidelity. See §4.2.
+
+Path A claims V·H weight-stationary silicon yields T(M) latency, faster
+than Path B (K-time-multiplexed) which would be T(M·V) on H DPEs. We
+choose Path A because (i) AH-track precedent counts DPEs as V·H tiles;
+(ii) DSE infrastructure assumes V·H silicon; (iii) real analog crossbars
+are weight-stationary by physics; (iv) Path A's T(M) is faster per fixed
+silicon. See `fc_verification/FC_GEMM_WALKTHROUGH.md` §13 for the full
+discussion.
+
+**+1 CLB-stage cycle** (`CLB_NEEDED`) gating rule — one CLB-side stage
+between DPE OUTPUT and final output_sram write:
+
+| (V, ACTIVATION_MODE, HAS_ACAM)              | CLB_NEEDED | Why |
+|---|---|---|
+| V > 1, any ACT, any HAS_ACAM                 | TRUE        | CLB tree must combine V partial sums |
+| V = 1, ACT = 1, HAS_ACAM = 0  (AL+ReLU)      | TRUE        | CLB ReLU LUT (AL has no ACAM) |
+| V = 1, ACT = 0, HAS_ACAM = 0  (AL no act)    | **FALSE**   | No CLB transformation needed |
+| V = 1, ACT = 1, HAS_ACAM = 1  (NL+ReLU)      | FALSE       | ACAM-fused activation (note 1) |
+| V = 1, ACT = 0, HAS_ACAM = 1  (NL no act)    | FALSE       | No CLB stage |
+
+Note 1: NL-DPE behavior model writes raw VMM bytes for the V=1 ReLU case;
+this is a methodology approximation. See `FC_GEMM_WALKTHROUGH.md` §6.
+
+`imc_core.run_gemm` accepts `activation_mode` (default False) so callers
+that don't pass it (e.g. plain GEMM benchmarks) won't pay an unnecessary
++1 cycle on AL.
 
 ### DIMM workload — log-domain matmul (Stage 2 Attention's mac_qk / mac_sv)
 
@@ -263,13 +715,16 @@ use **DIMM workload**.
 
 ### VMM workload tiling
 
-Straightforward: K-tile × N-tile per output row, distributed across
-`n_parallel_lanes` DPEs. Pass count formula in §5.
+Path A weight-stationary V × H array: V·H DPEs in parallel, each holding
+one weight tile permanently. Per output row m, all V·H DPEs fire once in
+lockstep. Per-DPE firing count = M (one fire per output row). See §5 for
+the pass count formula and the CLB_NEEDED gate.
 
 Each DPE has private SRAM for its weight tile (W matrix slice) and its
-output column slice. Inputs broadcast naturally (one input row goes to
-all DPE column-tiles). Reduction across K-tiles happens in CLB adder
-tree per DPE.
+output column slice. Inputs are per-v K-slices (broadcast across h);
+weights are unique per (v, h). Reduction across V (K-axis tiles) happens
+in a CLB adder tree; concatenation across H (N-axis tiles) is an output
+mux. Both fold into the single CLB_NEEDED cycle when applicable.
 
 ### DIMM workload tiling — W-lane row-parallel with shared B + broadcast
 
@@ -338,8 +793,8 @@ For attention head N=128, d=K=64, W=16, C=128:
 Each top module contains:
 - DPE primitive instance(s) — generated by DPE generator (§3)
 - Handshake interconnect
-- FSM (load → fire → compute → output → drain, single-buffered with
-  drain-load overlap per §4)
+- FSM (load → fire → compute → output → drain, double-buffered LOAD
+  with overlapped COMPUTE per §4)
 - Necessary storage (lane-private SRAMs + shared SRAMs per §7)
 
 Each top module **does not** contain:
@@ -523,10 +978,11 @@ boundary is part of the methodology, not an exception to it.
 - **Lane parallelism:** number of MACs an architecture computes per
   cycle in steady state. Architecture-specific.
 - **DPE-axiom:** per-DPE-fire latency =
-  `LOAD_STROBES + COMPUTE_CYCLES + OUTPUT_CYCLES`. Derived from
+  `LOAD_CYCLES + COMPUTE_CYCLES + OUTPUT_CYCLES`. Derived from
   per-arch config; physics-bound.
-- **Pipeline model:** §4 — single-buffered with drain-load overlap.
-  Both sim and RTL implement this. Cycle delta = FSM/control overhead.
+- **Pipeline model:** §4 — double-buffered slice-major LOAD with
+  overlapped COMPUTE (Task #99). Both sim and RTL implement this.
+  Cycle delta = FSM/control overhead.
 - **VMM workload:** weight-persistent matmul; ACAM in ADC mode;
   crossbar holds W matrix.
 - **DIMM workload:** log-domain matmul; ACAM in log/exp mode;

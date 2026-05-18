@@ -1,44 +1,72 @@
 # CLAUDE.md — NL-DPE FPGA Research Project
 
 ## Project in One Line
-NL-DPE FPGA hard block research: crossbar-size DSE (complete) + BERT-Tiny end-to-end workload (in progress) for a paper comparing NL-DPE vs Azure-Lily.
+NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim alignment for paper-target workloads (in progress) for a paper comparing NL-DPE vs Azure-Lily.
 
 ## Session Start Protocol
-1. Read SESSION_STATE.md → understand where we are
-2. Read this file's "Active TODO Tracks" section below → current in-flight work
+1. Read this file's "Active TODO Track" section below → current in-flight work
+2. Read `fc_verification/FIDELITY_METHODOLOGY.md` if working on RTL behavior models or RTL/sim alignment (it is the canonical methodology anchor)
 3. Run `git status` to see uncommitted changes
 4. (If touching DSE) check `dse/results/` for CSVs and `dse/round1/` for partial VTR outputs
 
-Note: `TASKS.md` is the **prior-submission** sprint log (historical only as of
+**Important historical context (2026-05-01)**: previous CLAUDE.md described
+"AH track" (attention head verification) and "P4 track" (multi-pass DIMM
+pipelined model) as active and "all phases closed". Both lived in agent
+worktrees that were **never merged to main**. They have been removed from
+this file. The actual current state on main is documented in the "Active
+TODO Track" section below. `SESSION_STATE.md` is also stale for the same
+reason — pending update.
+
+`TASKS.md` is the **prior-submission** sprint log (historical only as of
 2026-04-18). Do not treat its open `[ ]` items as active without cross-checking
-the live tracks below.
+the live track below.
 
 ## Key Paths
+
+### RTL behavior models + verification (live, on main)
 | Path | Role |
 |------|------|
-| `gemv_dse.py` | DSE orchestrator: Round 1 (`--round 1`), Round 2 prototype (`--round2-proto`), Round 2 full (`--round2-full`) |
-| `nl_dpe/gen_arch_xml.py` | VTR arch XML generator (auto / fixed_clb_replace / fixed_dsp_bram / fixed_dsp_clb_replace) |
-| `nl_dpe/gen_gemv_wrappers.py` | Verilog RTL generator (GEMV and FC modes) |
-| `nl_dpe/gen_gemm_wrapper.py` | P-replica GEMM wrapper generator (Round 2, imports from gen_gemv_wrappers) |
-| `nl_dpe/gen_attention_wrapper.py` | Parameterized attention head RTL generator (DIMM stages) |
-| `nl_dpe/gen_azurelily_fc_wrapper.py` | Azure-Lily FC wrapper generator (dsp_mac, AH track T1) |
-| `fc_verification/rtl/{nldpe,azurelily}_attn_head_d64_c128.v` | Composed attention-head top RTL (FC_QKV + DIMM + FC_O), AH track T2 |
-| `nl_dpe/area_power.py` | DPE physical specs: `dpe_specs(rows, cols)` → tile W/H/area/power |
-| `nl_dpe/run_vtr.py` | VTR flow runner (called by gemv_dse.py) |
+| `fc_verification/FIDELITY_METHODOLOGY.md` | **Canonical** RTL/sim alignment methodology (§3 DPE arch, §4 single-buffered drain-load overlap pipeline, §5 workload classes VMM/DIMM, §7 tiling) |
+| `fc_verification/FC_RTL_PLAN.md` | FC/GEMM RTL build-out plan (Stage 1A→1D) |
+| `fc_verification/rtl/dpe_nldpe.v` | NL-DPE behavior model (Model Y FSM, precision-agnostic, ACAM modes) |
+| `fc_verification/rtl/dpe_azurelily.v` | Azure-Lily DPE behavior model (Model Y FSM, no ACAM) |
+| `fc_verification/rtl/dsp_mac.v` | Azure-Lily DSP-MAC behavior model (int_sop_4 hard block, DSP_WIDTH=4) |
+| `fc_verification/rtl/fc_top.v` | Parameterized FC/GEMM top (V/H ≥ 1; Stage 1A V=1 H=1 validated) |
+| `fc_verification/tb_dpe_vmm.v`, `tb_dpe_acam.v`, `tb_dsp_mac.v`, `tb_fc.v` | Primitive + FC smoke TBs |
+| `fc_verification/Makefile` | CLI build harness (R/C/BUF/PRECISION/PIPELINE_DEPTH/K/DSP_WIDTH knobs) |
+| `fc_verification/run_dpe_smoke.py` | Primitive smoke sweep harness (36 cases) |
+| `fc_verification/run_fc_smoke.py` | FC smoke sweep harness (Stage 1A subset) |
+| `nl_dpe/gen_dpe_stub.py` | DPE behavior model generator (writes `fc_verification/rtl/dpe_*.v` from per-arch JSON) |
+| `nl_dpe/gen_dsp_mac.py` | DSP-MAC behavior model generator |
+
+### Simulator (live, on main)
+| Path | Role |
+|------|------|
 | `azurelily/IMC/test.py` | IMC energy/latency simulator (supports `fc`, `attention`, `bert_tiny` models) |
+| `azurelily/IMC/imc_core/imc_core.py` | Canonical `run_gemm` encoding (passes_per_dpe + pipeline cycle formula) |
 | `azurelily/models/attention.py` | Attention energy model (linear_Q/K/V + mac_qk + softmax + mac_sv) |
 | `azurelily/models/bert_tiny.py` | BERT-Tiny model (2L/2H/128d/512ff, embedding + LayerNorm + multi-head attention + FFN) |
 | `azurelily/nn/layernorm_layer.py` | LayerNorm layer class for scheduler dispatch |
 | `azurelily/nn/embedding_layer.py` | Embedding layer class for scheduler dispatch |
-| `dse_experiment_plan.md` | Full methodology spec (authoritative) |
-| `paper_outline.md` | Paper structure and narrative |
-| `paper/methodology/attention_dimm_mapping.md` | Attention → DPE/DSP mapping, K-identity, W=16 lane spec |
-| `paper/methodology/dpe_pipeline_model.md` | Per-pass DPE dataflow model (Layout A vs B, transpose, multi-pass pipelining) — §8.1 has open TODOs |
-| `fc_verification/VERIFICATION.md` | RTL↔sim verification story, Phase H-N results |
+
+### DSE infrastructure (complete, on main)
+| Path | Role |
+|------|------|
+| `gemv_dse.py` | DSE orchestrator: Round 1 (`--round 1`), Round 2 prototype (`--round2-proto`), Round 2 full (`--round2-full`) |
+| `nl_dpe/gen_arch_xml.py` | VTR arch XML generator (auto / fixed_clb_replace / fixed_dsp_bram / fixed_dsp_clb_replace) |
+| `nl_dpe/area_power.py` | DPE physical specs: `dpe_specs(rows, cols)` → tile W/H/area/power |
+| `nl_dpe/run_vtr.py` | VTR flow runner (called by gemv_dse.py) |
 | `dse/results/` | CSVs, JSONs, plots, analysis (DSE outputs) |
 | `dse/round1/<config>/<workload>/` | Per-run VTR outputs (Round 1) |
-| `dse/round2_proto/` | Per-run VTR outputs (Round 2 prototype, fc_2048_256 only) |
-| `dse/round2_full/` | Per-run VTR outputs (Round 2 full sweep, all workloads) |
+| `dse/round2_proto/`, `dse/round2_full/` | Per-run VTR outputs (Round 2) |
+
+### Methodology docs
+| Path | Role |
+|------|------|
+| `dse_experiment_plan.md` | Full DSE methodology spec |
+| `paper_outline.md` | Paper structure and narrative |
+| `paper/methodology/attention_dimm_mapping.md` | Attention → DPE/DSP mapping, K-identity, W=16 lane spec |
+| `paper/methodology/dpe_pipeline_model.md` | Per-pass DPE dataflow model (Layout A vs B, transpose, multi-pass pipelining) — design-space reference |
 
 ## Architecture Constants (do not hardcode elsewhere)
 - CLB_tile_um2 = 2239 µm²  (from routing-aware formula: SB=688, CB=303)
@@ -81,226 +109,61 @@ the live tracks below.
 ## Context Economy Rules
 - Do NOT re-read paper_outline.md or dse_experiment_plan.md unless working on paper narrative or methodology changes
 - Do NOT re-run VTR on already-completed configs (check `dse/round1/`)
-- SESSION_STATE.md is ground truth for project status — update it after every milestone
-- TASKS.md is the **prior-submission** sprint log (historical). Current work
-  is tracked in the "Active TODO Tracks" section of this file, the relevant
-  methodology docs (`paper/methodology/*.md` §TODOs), and user memory
-  (`project_multipass_dpe_todos.md` for the P4 track).
+- TASKS.md is the **prior-submission** sprint log (historical). Current work is tracked in:
+  1. The "Active TODO Track" section of this file
+  2. The task tools (TaskList) — task IDs #67+ describe in-flight RTL/sim work
+  3. `fc_verification/FIDELITY_METHODOLOGY.md` for canonical methodology
+- `SESSION_STATE.md` is currently stale (describes worktree-only AH/P4 work that didn't merge); pending update.
 
-## Active TODO Tracks
+## Active TODO Track
 
-- **AH — Attention Head RTL verification + latency alignment**
-  (opened 2026-04-24): **T2v2/T3v2/T4v2 closed (commit `e118b11`,
-  2026-04-24).** Streaming FC refactor + sim oracle + arch-tagged
-  `phase7_known_deltas.json` + `run_checks.py` AH dispatcher all
-  landed.
+**RTL build-out on main, FIDELITY_METHODOLOGY-aligned** (opened 2026-05-01)
 
-  **Stage 1 of counter-based gate refactor LANDED 2026-04-25:**
-  Replaces Fmax-dependent cycle gate with Fmax-independent
-  **architectural-invariants gate** (DPE/DSP fire counts, output rows,
-  parallel lanes). Fmax was a placeholder (no VTR data yet on AH
-  RTL); cycle deltas were shadows of that placeholder. New canonical
-  gate uses integer counters that describe the SAME hardware on both
-  sides without comparing cycles or ns. Cycle gate retained as
-  advisory only.
+The project is rebuilding the RTL/sim alignment cascade on main, anchored to
+`fc_verification/FIDELITY_METHODOLOGY.md`. The previous AH-track and P4-track
+work documented in older CLAUDE.md versions lived in agent worktrees that
+were never merged; they are reference material only.
 
-  **Counter gate STATUS (current, 2026-04-25): FAILS for both AH
-  configs — surfacing 3 architectural bugs that the cycle gate
-  masked.** Per task instructions, infrastructure committed but
-  bugs left UNFIXED for user review.
+### Status (as of 2026-05-01)
 
-  **Surfaced bugs (require Stage 2 fix before counter gate passes):**
-  1. RTL — single-row DIMM fire (head only fires DIMM once for 1 Q × N
-     K × N V, instead of N times for N attention rows).
-     Evidence: NL-DPE `mac_qk dpe_fire_count` RTL=64 vs sim=4096
-     (Δ=-4032); AL `mac_qk` RTL=2048 vs sim=16384 (Δ=-14336).
-  2. NL-DPE RTL — sm_exp and ws_log DPEs never fire in iverilog
-     because they're instantiated without `#(KERNEL_WIDTH=1)` params
-     (default KW=128 + LOAD_STROBES=26 vs FSM-fed 8 strobes).
-     Evidence: NL-DPE `softmax_exp dpe_fire_count` RTL=0 vs sim=128.
-  3. AL sim — `n_parallel_outputs=N` (=128) but RTL has W=16 lanes.
+**Done — committed**:
+- DPE behavior model primitives — `dpe_nldpe.v`, `dpe_azurelily.v`, `dsp_mac.v`. Module name `dpe` matches VTR arch XML `<model name="dpe">` contract. Model Y FSM: precision-agnostic, controller-driven compute hold (commits `202cdf1`, `6a7fdd6`, `d60493d`).
+- Generators — `nl_dpe/gen_dpe_stub.py`, `gen_dsp_mac.py` emit primitives from per-arch JSON.
+- Primitive smoke TBs — `tb_dpe_vmm.v`, `tb_dpe_acam.v`, `tb_dsp_mac.v`. 36-case smoke sweep: ALL PASS (commit `d60493d`).
+- Build harness — `Makefile` with CLI knobs for R/C/BUF/PRECISION/PIPELINE_DEPTH/K/DSP_WIDTH (commit `618f8c1`).
+- Methodology anchor — `FIDELITY_METHODOLOGY.md` (commit `511126e`).
+- Simulator alignment — Azure-Lily principle fixes (F1.5 always-CLB activation, F2/F3/F4 §4 refactor, F5 W=16 DIMM lanes); `Config.patch` runtime override (commits `0f41295`, `8933ae9`, `bd7ef8c`, `ec7ccd5`).
 
-  **Stage 5b — counter-gate refactor stages (now in plan):**
-  - Stage 1 ✓ landed 2026-04-25 (this commit). Infrastructure +
-    surfaced bugs in `known_count_deltas.json`.
-  - Stage 2 — fix the 3 bugs above. Awaiting user sign-off.
-  - Stage 3 — VTR 3-seed re-synth (was T5v2). Real Fmax replaces
-    placeholder; cycle gate re-enables alongside counter gate.
+**Done — uncommitted (working tree, post Tasks #82/#83/#84)**:
+- Plan doc — `fc_verification/FC_RTL_PLAN.md`.
+- Walkthrough docs — `fc_verification/DPE_PRIMITIVE_WALKTHROUGH.md` (primitive FSM), `fc_verification/FC_GEMM_WALKTHROUGH.md` (workload-level fc_top + TB + driver).
+- TB pattern fix — `tb_dsp_mac.v` (all-ones × all-ones to avoid int8 sign-wrap aliasing).
+- **Task #82 — DPE primitive overlap refactor**: `dpe_nldpe.v`, `dpe_azurelily.v`, `dsp_mac.v` + generators implement single-buffered drain-load overlap with 3 parallel sub-FSMs (LOAD/COMPUTE/OUTPUT) and a depth-4 pass-tagged ring buffer. Single-pass M=1 byte-identical to legacy serial FSM. Primitive smoke 52/52 PASS (36 originals + 16 M-sweep).
+- **Stage 1A FC top** — `fc_top.v`, `tb_fc.v`, `run_fc_smoke.py`, Makefile additions. Hierarchical-force weights/inputs; FSM controller; 7 fc_smoke cases.
+- **Stages 1B + 1C extension** — V>1 K-tile reduction (CLB adder tree), V=1 H>1 N-tile concatenation (output mux). 6 additional fc_smoke cases.
+- **Task #83 — Path A architectural fix (sim + methodology + driver)**: simulator's `imc_core.run_gemm` uses Path A formula `passes_per_dpe = M` (V·H weight-stationary, all DPEs fire in parallel per row). FIDELITY_METHODOLOGY.md §5 rewritten. `+1` CLB cycle gate: `(V > 1) OR (ACTIVATION_MODE AND not HAS_ACAM)`. activation_mode threaded through `run_gemm`. azurelily/IMC/test.py 8/8 PASS.
+- **Task #84 — Path A architectural fix (RTL + TB)**: `fc_top.v` v_round/v_round_out redundancy removed; each DPE fires M times (one per output row), not M·V. tb_fc.v cycle expectation matches Path A. Functional pattern (all-ones × all-ones identity weights) verified including ReLU truncation for lenet_fc1_NL.
+- **Verifier**: `run_dpe_smoke.py` 52/52 PASS; `run_fc_smoke.py` 13/13 PASS, all 0% fidelity (Stages 1A+1B+1C). Stage 1A regression byte-identical to baseline (114, 114, 270, 478, 331, 330, 1098).
 
-  **Updated gate command list (post-Stage 1):**
-  ```
-  python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1 — PASS
-  python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # T1 14/14 — PASS
-  python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # Phase 3+4 — PASS
-  python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # Phase 5+6A — PASS
-  python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128       # Phase 7 NL-DPE — FAILS (Stage 1 surfaces bugs)
-  python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128   # Phase 7 AL — FAILS (Stage 1 surfaces bugs)
-  ```
-  All 4 pre-AH gates remain green. The 2 AH gates fail by design,
-  surfacing the bugs surfaced above. Add `--gate cycles` for legacy
-  cycle-level diagnostic (advisory).
+### In flight: Stage 1D — general V·H
 
-  T5v2 (VTR 3-seed) renamed to Stage 3, dependent on Stage 2 closure.
-  T6 (BERT-Tiny generator refinement) remains future follow-up.
+After commit of Tasks #82/#83/#84, dispatch Stage 1D agent: combined K-tile reduction (V>1) and N-tile concatenation (H>1). Same `fc_top.v` module, parameter elaboration only. Workloads: vgg_fc3 (V=16 H=4), resnet_fc (V=2 H=4), bert_qkv_batched (M=128 V=1 H=1). Stage 1D may need `vgg_fc2` (V=16 H=16) abbreviated due to iverilog elaboration cost on 256 DPE instances.
 
-  **Scope anchor (frozen):** single config point N=128, d=64, C=128,
-  W=16, W_DPE=40, K_id=2 — inherits verified DIMM-top surface.
-  Configs: `nldpe_attn_head_d64_c128`, `azurelily_attn_head_d64_c128`.
+After Stage 1D lands: Task #73 (DIMM RTL) and Task #74 (attention head RTL) per the forward plan.
 
-  **Final per-stage alignment** (RTL ↔ sim, all residuals classified
-  in `phase7_known_deltas.json`; post-2026-04-25 softmax row-parallel
-  fix in `azurelily/IMC/scheduler_stats/scheduler.py`
-  `_run_softmax_exp/_run_softmax_norm` — outer rows multiplier now
-  `rows_per_lane = ceil(rows/W_softmax)` for W=16):
+### Forward plan (after overlap refactor lands)
 
-  | Stage | NL-DPE RTL/sim/Δ/class | AL RTL/sim/Δ/class |
-  |---|---|---|
-  | linear_qkv  | 3,315 / 2,424 / +891 / m.g. | 4,458 / 4,000 / +458 / m.g. |
-  | mac_qk      | 3,069 / 5,428 / −2,359 / structural | 2,287 / 815 / +1,472 / m.g. |
-  | softmax_exp | 8 / 41 / −33 / m.g. | 2,287 / 12 / +2,275 / m.g. |
-  | softmax_norm| 10 / 24 / −14 / m.g. | 127 / 47 / +80 / m.g. |
-  | mac_sv      | 2,791 / 5,077 / −2,286 / structural | 65 / 1,450 / −1,385 / structural |
-  | **E2E**     | **8,358 / 12,993 / −4,635 / structural** | **8,598 / 6,324 / +2,274 / m.g.** |
+| Task | Scope | Notes |
+|---|---|---|
+| Stage 1B | `fc_top.v` validates V>1 H=1 K-tile reduction; CLB adder tree + activation LUT cycle | Workloads: lenet_fc1 (M=1 K=400 N=120), vgg_fc1_v synthetic |
+| Stage 1C | Validates V=1 H>1 N-tile concatenation (output mux) | Workloads: bert_ffn1 (M=1 K=128 N=512), synthetic_h2 |
+| Stage 1D | Validates general V×H | Workloads: vgg_fc2/3, resnet_fc, bert_qkv (M=128 batched-attention input) |
+| DIMM RTL (Task #73) | Behavioral DIMM module instantiated against new overlap-aware primitives | Uses `paper/methodology/attention_dimm_mapping.md` |
+| Attention head RTL (Task #74) | Composed attention head, end-to-end RTL/sim alignment at N=128 d=64 C=128 W=16 | Replaces worktree-only AH-track work |
+| BERT-Tiny end-to-end | Multi-head + LayerNorm + residual + embedding, full inference | Per `azurelily/models/bert_tiny.py` |
 
-  Negative residuals on `mac_qk` (NL-DPE) and `mac_sv` (both archs)
-  remain `structural` because the sim's `gemm_log` / `gemm_dsp`
-  analytical bodies are conservative single-lane lower-bounds while
-  the RTL realises W=16 hardware-lane parallelism. The 2026-04-25
-  softmax row-parallel fix collapsed the softmax-axis residuals
-  ~16× (NL-DPE softmax_exp/norm −642/−366 → −33/−14; AL softmax_norm
-  −623 → +80) and reclassified them from `structural` to
-  `modelling_granularity`. AL `softmax_exp` residual grew (+2099 →
-  +2275) because the sim now correctly W=16-parallelises softmax
-  while the AL `clb_softmax` RTL is data-rate-bound by upstream
-  `mac_qk`'s serial 128-row FSM — that's an AL-specific FSM-coarseness
-  modelling gap, not a parallelism mismatch.
-
-  **Resource counts (per head):**
-  - NL-DPE: 6 DPE (3 arms × 2 ping-pong) + 64 DIMM = **70 DPE**
-  - Azure-Lily: 192 dsp_mac (3 arms × 64 parallel-output) + 32 DIMM
-    + 16 clb_softmax = **224 dsp_mac + 16 softmax**
-
-  **Stages:**
-  - **T1 ✓ closed (commit `9e6a913`)** — AL FC Phase-2 harness, 14/14
-    unified gate (NL-DPE 12/12 + AL 2/2).
-  - **T2 v0 closed (commit `2f5956e`); T2v2 ✓ closed (commit
-    `e118b11`)** — streaming FC composition matching sim's
-    `attention_model`. New `nl_dpe/gen_nldpe_attn_head_top.py`
-    (instantiates `fc_top_qkv_streaming.v` ping-pong DPE) + new
-    `nl_dpe/gen_azurelily_attn_head_top.py` (N parallel dsp_macs
-    parallel-output streaming, 64 dsp_macs per arm). `gen_gemv_wrappers.py`
-    extended with additive `streaming=True` mode (default off,
-    preserves T1 / Phase-2 single-inference behaviour). Both head
-    RTLs drop O projection per sim's attention_model definition.
-  - **T3v2 ✓ closed (commit `e118b11`, partial in `2e0c559`)** —
-    Combined functional+latency TBs `tb_{nldpe,azurelily}_attn_head_v2.v`
-    drive N=128 tokens with identity Q/K/V weights. AL sim
-    `total_softmax_lanes` config + 3 AL RTL composition bugs fixed
-    en route (commit `2e0c559`). Functional Overall=PASS for both archs.
-  - **T4v2 ✓ closed (commit `e118b11`)** — Sim oracle invokes
-    `attention_model` at full N-token scope, captured into
-    `expected_cycles.json`. Per-stage probes (linear_qkv, mac_qk,
-    softmax_exp/norm, mac_sv, e2e) emit timestamped boundaries.
-    `phase7_known_deltas.json` arch-tagged with file:line root-cause
-    citations for every residual. `run_checks.py` extended with AH
-    dispatcher (`check_ah_attn_head`) including AL softmax_exp+norm
-    fold semantics. Gate: both `run_checks.py --config
-    *_attn_head_d64_c128` exit 0.
-  - **T5v2 — VTR + regression (PENDING user sign-off, separate
-    stage).** Strict counts target: NL-DPE DPE=70, AL
-    DSP≈224. Will append to `VERIFICATION.md §Phase 7` gate list
-    once VTR 3-seed numbers land.
-  - **T6 — BERT-Tiny generator refinement (post-T5 follow-up).** The
-    verified head becomes the canonical reference for diffing against
-    `gen_bert_tiny_wrapper.py`. Surfaces likely bugs (W=1 vs paper-spec
-    W=16, etc.) in the BERT-Tiny benchmark RTL family. Out of scope
-    for the AH track gate.
-
-  **Gate command list (all 5 commands exit 0 post-`e118b11`):**
-  ```
-  python3 azurelily/IMC/test_gemm_log_regime_b.py                          # Phase 1
-  python3 fc_verification/run_fc_phase2.py --arch both --skip-vtr           # T1 14/14 PASS
-  python3 fc_verification/run_checks.py --config nldpe_dimm_top_d64_c128    # P3+P4
-  python3 fc_verification/run_checks.py --config azurelily_dimm_top_d64_c128  # P5+P6A
-  python3 fc_verification/run_checks.py --config nldpe_attn_head_d64_c128   # P7 NL-DPE
-  python3 fc_verification/run_checks.py --config azurelily_attn_head_d64_c128  # P7 AL
-  ```
-
-  **Dependency DAG:** T1 ∥ T2 are independent; T3 needs T2 only;
-  T4 needs both T1 and T2 (residual attribution join point);
-  T5 needs T4.
-
-  **Explicitly deferred (out of this plan):**
-  - Multi-N attention head — re-emit DIMM + head at N ∈ {256, 512,
-    1024} and re-run Phase 3/5 per N before composing. Separate
-    track after Stage 5 closes; prerequisite for paper-wide seq_len
-    scaling story.
-  - Multi-head + BERT-block composition (2 heads, LayerNorm,
-    residual, embedding). Partly covered by monolithic
-    `benchmarks/rtl/bert_tiny_*.v` (VTR-only, no cycle alignment).
-  - d ≠ 64 regime (d=128 → K_id=1, d=32 → K_id=4) — FSM paths
-    untested.
-
-  **Authoritative plan:**
-  `fc_verification/plans/ATTENTION_HEAD_VERIFICATION_PLAN.md`
-  **Upstream plan (closed):**
-  `fc_verification/plans/DIMM_FULL_VERIFICATION_PLAN.md`
-  **Session-recovery memory:** `project_attention_head_todos.md`
-
-- **P4 — multi-pass pipelined DPE model** (opened 2026-04-18, scope
-  reduced 2026-04-19 to Layout A + Regime B only): **ALL PHASES CLOSED
-  2026-04-20.** Layout A + Regime B committed path; sim and RTL
-  aligned with annotated FSM-granularity residuals. No structural
-  deltas remain.
-
-  **Final DIMM-top alignment** (NL-DPE, N=128 d=64 W=16):
-  score 260/244 Δ+16 · softmax 27/17 Δ+10 · wsum 252/236 Δ+16 ·
-  E2E 539/497 Δ+42 — all classified `modelling_granularity` with
-  file:line citations in `fc_verification/phase3_known_deltas.json`.
-
-  **Phases (all closed):**
-  - **Phase 1 — sim Regime B swap (Layout A):** ✅ `c15797f` / `92bbb00`.
-    `gemm_log` emits `T(M) = L_A · M + O`.
-  - **Phase 2 — FC RTL re-verify + func + latency + VTR:** ✅
-    `1678443`, `86e539b`. 12/12 FC configs pass; +4 compute /
-    +1 valid_n annotated. Block-level comparison figures regenerable
-    from `block_comp_apr_11/results/block_comparison_results.csv`
-    via `plot_block_comparison.py`.
-  - **Phase 2.1 — GEMM DSE smoke:** ✅ `81b2517`, `7431af0`. 48-point
-    DSE on 4 real-benchmark GEMM shapes; winner **512×128** (matches
-    Round-1). PDFs in `dse/gemm_phase2_1/results/`.
-  - **Phase 3 — DIMM RTL re-verify under Regime-B sim:** ✅ `145a85e`.
-    TB NBA race fixed; stage extraction updated; all residuals
-    annotated as modelling_granularity.
-  - **Phase 4 — wsum RTL widening (1×1 → 128×128):** ✅ `844b4a8`.
-    Closed the last structural delta. Fmax +14% (90.1 → 102.9 MHz),
-    CLB −10%, BRAM −50% on DIMM top.
-  - **Docs — apple-to-apple pipeline comparison:** ✅ `3cceca7`.
-    `fc_verification/DIMM_pipeline_model_vs_rtl.md` shows sim and RTL
-    in a shared 5-phase notation (L / F / D / S / W) with per-cycle
-    delta attribution.
-
-  **Follow-ups (non-blocking):**
-  - Phase 2.1 full sweep — extend 4 workloads to 6 (BERT FFN1,
-    VGG-16 block-4 conv) for paper-wide GEMM DSE coverage.
-  - Softmax probe-placement tidy — cosmetic, +10 Δ is probe-convention.
-  - Azure-Lily DIMM functional parser regex — pre-existing, orthogonal.
-
-  **Out of scope — retired / archived** (design-space reference only
-  in the model doc §§3.2, 4, 5.4, 5.7): Layout B as an active
-  alternative (archived), the transpose block (retired, was TODO 2.1),
-  and Regime C / double-buffering (retired, was TODO 3 — archived as
-  reference only).
-
-  - **Model & assumptions:** `paper/methodology/dpe_pipeline_model.md`
-    §§1–7 (analog IMC primer, Layout A vs B design-space references,
-    multi-pass timing, Layout A 512×128 walkthrough in §5.3.1, committed
-    layout choice in §5.7)
-  - **What is implemented today:** same doc §8 (RTL = Layout A +
-    Regime B; sim = Regime A pre-Phase 1, Regime B post-Phase 1)
-  - **Phase definitions with detail:** same doc §8.1
-  - **Mapping-doc scope of changes:** `paper/methodology/attention_dimm_mapping.md` §10
-  - **Verification baseline to beat:** `fc_verification/VERIFICATION.md`
-    Phase I.2 (score 260 / softmax 27 / wsum 274 / E2E 561 cyc,
-    Layout A, Regime A sim — post-Phase 1 sim moves to Regime B)
-  - **Session-recoverable sequencing:** memory `project_multipass_dpe_todos.md`
+### Authoritative docs
+- Methodology: `fc_verification/FIDELITY_METHODOLOGY.md` (§3 DPE arch, §4 pipeline, §5 workload classes, §7 tiling)
+- Plan: `fc_verification/FC_RTL_PLAN.md` (Stage 1A→1D)
+- Pipeline model context: `paper/methodology/dpe_pipeline_model.md` (design-space reference; some sections describe retired Layout B / transpose block / Regime C — design-space reference only, not implemented)
+- Attention mapping: `paper/methodology/attention_dimm_mapping.md`

@@ -76,3 +76,8 @@ block_comp_apr_11/tb/tb_*
 
 # VCD waveform dumps — regenerable from testbench runs
 *.vcd
+
+# fc_verification local build / smoke run artifacts (regenerable)
+fc_verification/build/
+fc_verification/results/*.log
+fc_verification/results/vtr_smoke_*/

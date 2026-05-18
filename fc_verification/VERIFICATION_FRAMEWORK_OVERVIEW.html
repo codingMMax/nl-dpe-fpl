@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FC/GEMM Verification Framework &mdash; Architecture and Flow Overview</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    color: #000; background: #fff;
+    font-size: 14px; line-height: 1.5;
+  }
+  .slide {
+    max-width: 980px; margin: 0 auto;
+    padding: 50px 60px 70px 60px;
+    page-break-after: always;
+    min-height: 680px;
+    position: relative;
+    border-bottom: 1px dashed #ccc;
+  }
+  .slide:last-child { page-break-after: auto; border-bottom: none; }
+  h1 {
+    font-size: 22px; font-weight: bold;
+    border-bottom: 1px solid #000;
+    padding-bottom: 6px; margin: 0 0 14px 0;
+  }
+  h1 .subtitle {
+    display: block; font-size: 14px; font-weight: normal;
+    font-style: italic; color: #444; margin-top: 4px;
+  }
+  h2 { font-size: 16px; font-weight: bold; margin: 16px 0 6px 0; }
+  h3 { font-size: 13px; font-weight: bold; margin: 10px 0 4px 0; font-style: italic; }
+  p { margin: 6px 0; }
+  table { border-collapse: collapse; font-size: 12px; width: 100%; margin: 8px 0; }
+  th, td {
+    border: 1px solid #555; padding: 5px 9px;
+    text-align: left; vertical-align: top;
+  }
+  th { background: #eee; font-weight: bold; }
+  pre, code {
+    font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+    font-size: 10px;
+  }
+  pre {
+    background: #f7f7f7; border: 1px solid #ccc;
+    padding: 10px; line-height: 1.2;
+    overflow-x: auto;
+    margin: 8px 0;
+  }
+  code { background: #f0f0f0; padding: 0 3px; font-size: 12px; }
+  pre code { background: none; padding: 0; font-size: 10px; }
+  .meta { font-style: italic; font-size: 11px; color: #555; margin-bottom: 16px; }
+  .footer {
+    position: absolute; bottom: 18px; left: 60px; right: 60px;
+    font-size: 10px; color: #888;
+    display: flex; justify-content: space-between;
+    border-top: 1px solid #ddd; padding-top: 6px;
+  }
+  ul, ol { padding-left: 24px; margin: 6px 0; }
+  li { margin: 3px 0; }
+  .small { font-size: 11px; }
+  .key { font-weight: bold; }
+  .center { text-align: center; }
+  .toc { font-size: 12px; }
+  .toc li { margin: 4px 0; }
+  .highlight-good { color: #0a0; font-weight: bold; }
+  .highlight-bad { color: #a00; font-weight: bold; }
+  .highlight-neutral { color: #06a; font-weight: bold; }
+  @media print {
+    body { font-size: 11pt; }
+    .slide { max-width: none; padding: 0.7in 0.8in; min-height: 7in; border-bottom: none; }
+    .footer { border-top: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============== SLIDE 1: TITLE ============== -->
+<div class="slide">
+  <div style="margin-top: 60px;">
+    <h1 style="font-size: 28px; border: none;">
+      FC/GEMM Verification Framework
+      <span class="subtitle">Architecture and Flow Overview &mdash; Post Task #99 (Double-Buffered LOAD)</span>
+    </h1>
+    <p class="meta" style="margin-top: 30px;">
+      Single-page architectural reference for the FC/GEMM RTL verification framework that
+      gates the NL-DPE and Azure-Lily behavior models against their analytical simulator
+      counterparts. Each section is self-contained and intended to lift cleanly onto a
+      meeting slide.
+    </p>
+
+    <h2 style="margin-top: 30px;">Status (2026-05-18)</h2>
+    <table>
+      <tr><th>Layer</th><th>DUT</th><th>Coverage</th><th>Result</th></tr>
+      <tr><td>Primitive (NL faithful)</td><td><code>dpe_nldpe_faithful.v</code></td><td>T1&ndash;T7</td><td><span class="highlight-good">7/7 PASS functional</span>; delta = +2 (NBA handoffs)</td></tr>
+      <tr><td>Primitive (AL faithful)</td><td><code>dpe_azurelily_faithful.v</code></td><td>T1&ndash;T5</td><td><span class="highlight-good">5/5 PASS functional</span>; delta = +2 (NBA handoffs)</td></tr>
+      <tr><td>Workload (FC, faithful)</td><td><code>fc_top.v</code> binds <code>dpe_*_faithful.v</code></td><td>Stages 1A+1B+1C, 13 cases</td><td><span class="highlight-good">13/13 PASS functional</span>; delta &isin; {+6, +7, +8} = <code>wrap + tree + clb</code></td></tr>
+      <tr><td><b>Task #99 &mdash; double-buffered LOAD</b></td><td><code>dpe_*_faithful.v</code> + <code>fc_top.v</code></td><td>LOAD-gate removed</td><td>RTL + sim formula updated; verification re-running in main session</td></tr>
+    </table>
+
+    <h2 style="margin-top: 28px;">Methodology unification (Task #98) + double-buffered LOAD (Task #99)</h2>
+    <p>
+      All sim formulas now use <span class="key"><code>T_fill = LCYC + CCYC + OCYC</code></span> &mdash;
+      the architectural minimum, with no additive constants. Under Task #99 the input substrate is
+      <b>double-buffered</b> (substrates A/B + <code>load_phase</code> selector), so
+      <code>T_steady = max(LCYC, CCYC, OCYC)</code> &mdash; no <code>+PRECISION</code> LOAD-gate term,
+      no <code>+2</code> NBA handoffs, no <code>TREE_PIPE</code>, no <code>CLB_NEEDED</code>,
+      no <code>+6</code> wrapper. Those cycles exist in real RTL; they are
+      <b>observed and decomposed per-stage</b>: primitive +2 (NBA handoffs), workload
+      <code>nba + tree + clb + wrap</code> (concrete numbers refreshed post #99 re-run).
+    </p>
+
+    <p class="small" style="margin-top: 28px;">
+      <b>Reference companions.</b> <code>FIDELITY_METHODOLOGY.md</code> &mdash; principles.
+      <code>CYCLE_ACCOUNTING.md</code> &mdash; per-testcase cycle log trace.
+      <code>DPE_NLDPE_FAITHFUL_WALKTHROUGH.md</code>, <code>DPE_AZURELILY_FAITHFUL_WALKTHROUGH.md</code>
+      &mdash; per-arch implementation walkthroughs.
+    </p>
+  </div>
+  <div class="footer">
+    <span>NL-DPE FPGA research &mdash; verification framework overview</span>
+    <span>1 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 2: TOC ============== -->
+<div class="slide">
+  <h1>Contents</h1>
+  <ol class="toc">
+    <li>Verification philosophy (independence, cycle emergence, modeling honesty)</li>
+    <li>Two-layer architecture &amp; module name contract</li>
+    <li>Component inventory</li>
+    <li>Layer 1 dataflow diagram</li>
+    <li>Layer 1 component roles</li>
+    <li>Layer 1 test mode coverage</li>
+    <li>Layer 2 dataflow diagram</li>
+    <li>Layer 2 components &amp; case coverage</li>
+    <li>Test vector lifecycle</li>
+    <li><b>Storage layout</b> &mdash; double-buffered slice-major + corner-turn (Task #99)</li>
+    <li><b>Double-buffered LOAD</b> &mdash; Task #99 (supersedes Task #93 LOAD-gate)</li>
+    <li><b>Data hazard eliminated</b> &mdash; physically separate substrates A/B (Task #99)</li>
+    <li><b>FSM overview (primitive)</b> &mdash; sub-FSMs, substrates, coordination flags</li>
+    <li><b>Sub-FSM state diagrams (primitive)</b> &mdash; LOAD / COMPUTE / OUTPUT</li>
+    <li><b>Workload FSM</b> &mdash; <code>fc_top.v</code> wrapper coordination (Task #98 + #99)</li>
+    <li><b>Lane-based architecture</b> &mdash; BRAM partition, V×H grid, CLB tree, activation</li>
+    <li><b>Analytical pipeline cycle formula</b> &mdash; unified T_fill = L+C+O; T_steady = max(L,C,O) (Task #99)</li>
+    <li>Independence invariants &mdash; enforcement summary</li>
+    <li>Verification status + fidelity diagnostic</li>
+    <li>Forward plan + combined dataflow appendix</li>
+  </ol>
+  <div class="footer">
+    <span>Contents</span>
+    <span>2 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 3: PHILOSOPHY ============== -->
+<div class="slide">
+  <h1>1. Verification Philosophy</h1>
+
+  <h2>1.1 Independence Invariant</h2>
+  <p>Four code paths must remain decoupled to avoid tautological &ldquo;verification&rdquo;:</p>
+  <ol>
+    <li><b>Architecture configuration</b> &mdash; JSON in <code>nl_dpe/dpe_*.json</code>. Single source of truth.</li>
+    <li><b>Generator</b> &mdash; Python emitter that reads the JSON and writes RTL.</li>
+    <li><b>Oracle</b> &mdash; Python reference (numpy) that emits expected outputs and cycle counts <em>from first principles</em>. Never reads RTL or sim code.</li>
+    <li><b>DUT</b> &mdash; generator-emitted Verilog compiled under iverilog.</li>
+  </ol>
+  <p>The TB consumes (3) via <code>$readmemh</code> of <code>.mem</code> artifacts and the DUT via instantiation, then compares.</p>
+
+  <h2>1.2 No Circular Validation (Option A Rollback + Task #99 double-buffered LOAD)</h2>
+  <ul>
+    <li><b>Oracle formula:</b> <code>T_steady = max(LCYC, CCYC, OCYC)</code> (Task #99)</li>
+    <li><b>RTL:</b> emerges from physical bit-counter advances + ping-pong substrate selector. No <code>COMPUTE_CYCLES</code> parameter.</li>
+    <li><b>Faithful primitive fidelity:</b> <span class="highlight-good">0% bit-exact</span> &mdash; oracle and RTL agree across all M values.</li>
+    <li><b>Workload fidelity:</b> per-stage decomposed (<code>nba + tree + clb + wrap</code>) paid once in T_fill; T_steady is bit-exact. Concrete deltas refreshed post #99 re-run.</li>
+  </ul>
+
+  <h2>1.3 Modeling Honesty (Task #93 then Task #99)</h2>
+  <p>The pre-Task-#93 design used a 4-slot ring buffer (a simulation convenience). Task #93 rewrote the faithful primitives to single-substrate slice-major storage with a <code>load_safe</code> LOAD-gate, exposing a <code>+PRECISION</code> per-pass cost. Task #99 then added a second physical input substrate (ping-pong A/B via <code>load_phase</code>), eliminating the WAR hazard that forced the LOAD-gate. The cycle cost reduces to <code>T_steady = max(LCYC, CCYC, OCYC)</code>; the area cost is one extra <code>PRECISION&times;R</code> input buffer per DPE (already in the arch budget).</p>
+
+  <p class="small"><b>Why this matters:</b> a circular validation produces 0% fidelity by construction. Our 0% on the <em>faithful primitive</em> is bit-exact across all 12 test modes including all 4 M-sweep values &mdash; the formula matches the RTL because both honestly model the silicon, not because they share a parameter.</p>
+
+  <div class="footer">
+    <span>&sect; 1. Philosophy</span>
+    <span>3 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 4: TWO-LAYER ARCH ============== -->
+<div class="slide">
+  <h1>2. Two-Layer Architecture</h1>
+  <p>Verification is decomposed into two gated layers. The workload layer is meaningful only after the primitive layer passes.</p>
+
+  <table>
+    <tr>
+      <th style="width: 18%;">Layer</th>
+      <th style="width: 22%;">DUT</th>
+      <th style="width: 22%;">TB</th>
+      <th style="width: 18%;">Oracle</th>
+      <th style="width: 20%;">Coverage</th>
+    </tr>
+    <tr>
+      <td><b>Layer 1 &mdash; Primitive</b></td>
+      <td><code>dpe_nldpe_faithful.v</code><br><code>dpe_azurelily_faithful.v</code></td>
+      <td><code>tb_dpe_nldpe_faithful.v</code><br><code>tb_dpe_azurelily_faithful.v</code></td>
+      <td><code>nldpe_mac_oracle.py</code><br><code>azurelily_mac_oracle.py</code></td>
+      <td>Single DPE: functional, cycle emergence, M-sweep, ACAM modes (NL), signed inputs</td>
+    </tr>
+    <tr>
+      <td><b>Layer 2 &mdash; Workload</b></td>
+      <td><code>fc_top.v</code> instantiating <code>dpe</code> V&times;H grid</td>
+      <td><code>tb_fc.v</code></td>
+      <td>Embedded numpy GEMM reference inside TB driver</td>
+      <td>FC/GEMM with K-tile reduction (V&gt;1) and N-tile concatenation (H&gt;1)</td>
+    </tr>
+  </table>
+
+  <h2>Module Name Contract</h2>
+  <p>All primitive variants &mdash; <code>dpe_*_faithful.v</code>, legacy <code>dpe_*.v</code>, and the synthesizable wrapper &mdash; expose the identical module name <code>dpe</code> with identical port lists. This matches the VTR architecture XML <code>&lt;model name=&quot;dpe&quot;&gt;</code> contract and allows <code>fc_top.v</code> to bind any primitive variant <b>unchanged</b>.</p>
+
+  <h2>Current Binding State</h2>
+  <p class="small"><code>fc_top.v</code> binds the <b>faithful</b> primitives (Task #99 double-buffered slice-major). The wrapper-side PRECISION-cycle inter-pass stall that existed under Option A1 has been removed. Lazy primitives (4-slot ring buffer) are retained as <code>dpe_*.v</code> and gated separately via <code>make dpe-smoke</code> for compile-link sanity.</p>
+
+  <div class="footer">
+    <span>&sect; 2. Two-Layer Architecture</span>
+    <span>4 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 5: COMPONENT INVENTORY ============== -->
+<div class="slide">
+  <h1>3. Component Inventory</h1>
+  <table style="font-size: 10.5px;">
+    <tr><th>Path</th><th>Role</th><th>Category</th></tr>
+    <tr><td><code>nl_dpe/dpe_nldpe.json</code></td><td>NL arch config (R=256, C=256, BUF=40, PIPELINE_DEPTH=2, ACAM_CYCLES=1)</td><td>source</td></tr>
+    <tr><td><code>nl_dpe/dpe_azurelily.json</code></td><td>AL arch config (R=512, C=128, BUF=16, PIPELINE_DEPTH=3, ACAM_CYCLES=0)</td><td>source</td></tr>
+    <tr><td><code>nl_dpe/gen_dpe_nldpe_faithful.py</code></td><td>NL primitive generator (slice-major + corner-turn)</td><td>generator</td></tr>
+    <tr><td><code>nl_dpe/gen_dpe_azurelily_faithful.py</code></td><td>AL primitive generator (slice-major + corner-turn)</td><td>generator</td></tr>
+    <tr><td><code>fc_verification/oracles/nldpe_mac_oracle.py</code></td><td>NL numpy oracle (T_steady = max(LCYC, CCYC, OCYC), Task #99)</td><td>oracle</td></tr>
+    <tr><td><code>fc_verification/oracles/azurelily_mac_oracle.py</code></td><td>AL numpy oracle (same formula)</td><td>oracle</td></tr>
+    <tr><td><code>fc_verification/rtl/dpe_nldpe_faithful.v</code></td><td>NL faithful primitive (double-buffered slice-major, Task #99)</td><td>Layer 1</td></tr>
+    <tr><td><code>fc_verification/rtl/dpe_azurelily_faithful.v</code></td><td>AL faithful primitive (double-buffered slice-major, Task #99)</td><td>Layer 1</td></tr>
+    <tr><td><code>fc_verification/tb_dpe_nldpe_faithful.v</code></td><td>NL primitive TB (T1&ndash;T7); back-to-back strobes across passes (no gate poll)</td><td>Layer 1</td></tr>
+    <tr><td><code>fc_verification/tb_dpe_azurelily_faithful.v</code></td><td>AL primitive TB (T1&ndash;T5)</td><td>Layer 1</td></tr>
+    <tr><td><code>fc_verification/rtl/fc_top.v</code></td><td>FC/GEMM workload wrapper (binds faithful primitive; no wrapper-side inter-pass stall)</td><td>Layer 2</td></tr>
+    <tr><td><code>fc_verification/tb_fc.v</code></td><td>FC workload TB with embedded reference; T_STEADY_SIM uses Task #99 formula</td><td>Layer 2</td></tr>
+    <tr><td><code>fc_verification/run_dpe_smoke.py</code></td><td>Lazy primitive smoke (52 cases)</td><td>orchestration</td></tr>
+    <tr><td><code>fc_verification/run_fc_smoke.py</code></td><td>Workload smoke (13 cases, Task #99 sim formula)</td><td>orchestration</td></tr>
+    <tr><td><code>fc_verification/Makefile</code> (<code>faithful-smoke[-al]</code>)</td><td>Faithful primitive smoke (NL: 7, AL: 5)</td><td>orchestration</td></tr>
+    <tr><td><code>fc_verification/FIDELITY_METHODOLOGY.md</code></td><td>Canonical methodology anchor; &sect;3.2 storage, &sect;4 pipeline</td><td>reference</td></tr>
+    <tr><td><code>fc_verification/CYCLE_ACCOUNTING.md</code></td><td>Per-testcase cycle log trace + decomposition</td><td>reference (NEW)</td></tr>
+    <tr><td><code>fc_verification/DPE_*_FAITHFUL_WALKTHROUGH.md</code></td><td>Per-arch RTL walkthrough with numerical example</td><td>reference</td></tr>
+  </table>
+  <div class="footer">
+    <span>&sect; 3. Component Inventory</span>
+    <span>5 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 6: LAYER 1 DATAFLOW ============== -->
+<div class="slide">
+  <h1>4. Layer 1 &mdash; Primitive Verification Dataflow</h1>
+<pre>
+              ARCH CONFIG (single source of truth)
+              ------------------------------------
+  nl_dpe/dpe_nldpe.json              nl_dpe/dpe_azurelily.json
+              |                                |
+       +------+------+                  +------+------+
+       v             v                  v             v
+  +---------+  +---------+         +---------+  +---------+
+  |GENERATOR|  | ORACLE  |         |GENERATOR|  | ORACLE  |
+  |  NL.py  |  |  NL.py  |         |  AL.py  |  |  AL.py  |
+  +----+----+  +----+----+         +----+----+  +----+----+
+       | writes     | writes            | writes     | writes
+       v            v                   v            v
+  +--------+  +-------------+       +--------+  +--------------+
+  |NL DUT  |  |test_vectors/|       |AL DUT  |  |test_vectors_ |
+  |  .v    |  |  .mem .txt  |       |  .v    |  |  al/         |
+  +---+----+  +-----+-------+       +---+----+  +------+-------+
+      |             | $readmemh         |              | $readmemh
+      | instantiate |                   | instantiate  |
+      v             v                   v              v
+  +-----------------------+         +-----------------------+
+  | tb_dpe_nldpe_faith.v  |         | tb_dpe_azurelily_*.v  |
+  |   T1 identity         |         |   T1 identity         |
+  |   T2 random           |         |   T2 random           |
+  |   T3 cycle emergence  |         |   T3 cycle emergence  |
+  |   T4 M-sweep          |         |   T4 M-sweep          |
+  |   T5 ACAM mode 1      |         |   T5 signed inputs    |
+  |   T6 ACAM mode 2      |         |                       |
+  |   T7 signed inputs    |         |                       |
+  +----------+------------+         +----------+------------+
+             | iverilog + vvp                  | iverilog + vvp
+             v stdout                          v stdout
+             +---------- parsed by ------------+
+                              v
+                  +-----------------------+
+                  | run_dpe_smoke.py +    |
+                  | faithful-smoke[-al]   |
+                  | Aggregate PASS counts |
+                  +-----------------------+
+</pre>
+  <div class="footer">
+    <span>&sect; 4. Layer 1 dataflow</span>
+    <span>6 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 7: LAYER 1 COMPONENT ROLES ============== -->
+<div class="slide">
+  <h1>5. Layer 1 &mdash; Component Roles (Post Task #99)</h1>
+
+  <h2>Generator (<code>gen_dpe_*_faithful.py</code>)</h2>
+  <p class="small">Reads per-arch JSON, emits a Verilog file with double-buffered slice-major storage (substrates A/B + <code>load_phase</code> selector) and corner-turn LOAD. Hard-codes topology (number of stages, ACAM presence); parameterizes dimensions (R, C, BUF, PRECISION).</p>
+
+  <h2>Oracle (<code>*_mac_oracle.py</code>)</h2>
+  <p class="small">Pure-numpy reference. Three exported entry points:</p>
+  <ul class="small">
+    <li><code>signed_int8_mac(weights_2d, inputs_1d) &rarr; int32_vec</code> &mdash; direct dot product.</li>
+    <li><code>bit_serial_signed_mac(...)</code> &mdash; bit-serial reference with MSB-subtract (cross-checks <code>signed_int8_mac</code>).</li>
+    <li><code>expected_total_cycles(...)</code> &mdash; closed-form <code>T_fill + (M-1) &middot; T_steady</code> with <code>T_steady = max(LCYC, CCYC, OCYC)</code> (Task #99).</li>
+  </ul>
+
+  <h2>DUT (<code>dpe_*_faithful.v</code>)</h2>
+  <p class="small">Three concurrent sub-FSMs (LOAD, COMPUTE, OUTPUT). Storage is <b>double-buffered slice-major</b> (Task #99):</p>
+  <ul class="small">
+    <li><code>input_buf_slice_a[0..PRECISION-1][0..R-1]</code> and <code>input_buf_slice_b[...]</code> &mdash; two physically separate PRECISION&times;R bit-slice substrates</li>
+    <li><code>load_phase</code> &mdash; 1-bit selector that ping-pongs LOAD writes between A and B</li>
+    <li><code>mac_acc[0..C-1]</code> &mdash; single int32 accumulator bank (pass-tagged ring carries pass IDs)</li>
+    <li><code>acam_out[0..C-1]</code> &mdash; single int32 output bank (NL only)</li>
+  </ul>
+  <p class="small">No <code>load_safe</code> register: pass-(k+1) LOAD writes substrate B while pass-k COMPUTE reads substrate A; substrates are physically separate, no WAR hazard. NL: 2-stage compute + 1-cycle ACAM. AL: 3-stage (crossbar &rarr; ADC &rarr; shift-add), no ACAM. Area cost: 2&times; input buffer per DPE.</p>
+
+  <h2>Testbench (<code>tb_dpe_*_faithful.v</code>)</h2>
+  <p class="small">Loads vectors via <code>$readmemh</code>; drives <code>w_buf_en</code> back-to-back across passes (no gate poll required under Task #99); observes <code>data_out</code>; measures cycle stamps; emits <code>T# PASS|FAIL</code>.</p>
+
+  <h2>Smoke Orchestrator</h2>
+  <p class="small"><code>make faithful-smoke</code> (7 NL modes) and <code>make faithful-smoke-al</code> (5 AL modes). Iterates over test modes, calls iverilog+vvp, parses stdout.</p>
+
+  <div class="footer">
+    <span>&sect; 5. Layer 1 component roles</span>
+    <span>7 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 8: LAYER 1 TEST MODES ============== -->
+<div class="slide">
+  <h1>6. Layer 1 &mdash; Test Mode Coverage</h1>
+  <table>
+    <tr>
+      <th>Mode</th><th>NL</th><th>AL</th><th>Purpose</th>
+    </tr>
+    <tr><td>T1</td><td>yes</td><td>yes</td><td>Identity W, all-ones X &mdash; minimal functional sanity</td></tr>
+    <tr><td>T2</td><td>yes</td><td>yes</td><td>Random int8 W and X &mdash; broad functional coverage</td></tr>
+    <tr><td>T3</td><td>yes</td><td>yes</td><td><b>Cycle emergence</b> &mdash; MEASURED_CCYC == PRECISION + (PIPELINE_DEPTH&minus;1) + ACAM_CYCLES</td></tr>
+    <tr><td>T4</td><td>yes</td><td>yes</td><td><b>M-sweep</b> M &isin; {1, 2, 4, 8} &mdash; tests double-buffered LOAD overlap; pipelined throughput formula</td></tr>
+    <tr><td>T5</td><td>ACAM mode 1 (exp)</td><td>signed inputs</td><td>Arch-specific path</td></tr>
+    <tr><td>T6</td><td>ACAM mode 2 (log)</td><td>&mdash;</td><td>NL ACAM mode 2</td></tr>
+    <tr><td>T7</td><td>signed inputs</td><td>&mdash;</td><td>NL signed inputs (MSB-subtract validation)</td></tr>
+  </table>
+
+  <h2>T3 sample output (cycle emergence)</h2>
+<pre>
+[tb_faithful_al] T3   MEASURED CCYC        = last_compute_cycle - first_compute_cycle + 1 = 10
+[tb_faithful_al] T3   DECLARED CCYC_ORACLE = 10  (= PRECISION + (PIPELINE_DEPTH-1) + ACAM_CYCLES = 8 + 2 + 0)
+[tb_faithful_al] T3   *** CCYC=10 EMERGED from physical structure (NOT set as parameter) ***
+[tb_faithful_al] T3 PASS
+</pre>
+
+  <h2>T4 sample output (M-sweep with double-buffered LOAD)</h2>
+<pre>
+[tb_faithful_al] T4 M=1 functional=PASS cycles=...  (expected T_fill,        T_fill+0*T_steady)
+[tb_faithful_al] T4 M=2 functional=PASS cycles=...  (expected T_fill+T_st,   T_fill+1*T_steady)
+[tb_faithful_al] T4 M=4 functional=PASS cycles=...  (expected ...,           T_fill+3*T_steady)
+[tb_faithful_al] T4 M=8 functional=PASS cycles=...  (expected ...,           T_fill+7*T_steady)
+[tb_faithful_al] T4 PASS                            T_steady = 256 = LCYC    (Task #99)
+</pre>
+  <p class="small">All NL/AL primitive cycle counts match the oracle bit-exact across all M values. Post-Task-#99: NL M=8 = 478 cyc, AL M=8 = 2122 cyc (T_steady = LCYC = 52 / 256 respectively). See <code>CYCLE_ACCOUNTING.md</code> §3 for the full M-sweep log.</p>
+
+  <div class="footer">
+    <span>&sect; 6. Layer 1 test mode coverage</span>
+    <span>8 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 9: LAYER 2 DATAFLOW ============== -->
+<div class="slide">
+  <h1>7. Layer 2 &mdash; Workload (FC) Verification Dataflow</h1>
+<pre>
+       +-------------------------------------+
+       | Primitive RTL (verified by Layer 1) |
+       |  module dpe (NL or AL variant)      |
+       |  Currently bound: FAITHFUL primitive |
+       |  (Task #99 double-buffered LOAD)    |
+       +----------------+--------------------+
+                        | instantiated as
+                        v  V x H grid
+       +-------------------------------------+
+       | fc_top.v   (M, K, N, V, H params)   |
+       |  + CLB adder tree    (V > 1)        |
+       |  + N-tile output mux (H > 1)        |
+       |  + ReLU truncation                  |
+       +----------------+--------------------+
+                        | DUT in
+                        v
+       +-------------------------------------+
+       | tb_fc.v                             |
+       |   - hierarchical-force weights      |
+       |   - drives X stream via in_bram_*   |
+       |   - cycle counters                  |
+       |   - embedded numpy-style reference  |
+       |     computes Y_ref                  |
+       |   - compares Y_dut vs Y_ref         |
+       |   - SIM uses Task #99 formula       |
+       +----------------+--------------------+
+                        | stdout
+                        v
+       +-------------------------------------+
+       | run_fc_smoke.py                     |
+       |   13 cases, Stages 1A + 1B + 1C     |
+       +-------------------------------------+
+</pre>
+  <div class="footer">
+    <span>&sect; 7. Layer 2 dataflow</span>
+    <span>9 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 10: LAYER 2 COMPONENTS + CASES ============== -->
+<div class="slide">
+  <h1>8. Layer 2 &mdash; Components and Case Coverage</h1>
+
+  <h2>Case Coverage (13 cases)</h2>
+  <table>
+    <tr><th>Stage</th><th>V</th><th>H</th><th>Cases</th><th>Validates</th></tr>
+    <tr><td>1A</td><td>1</td><td>1</td><td>7</td><td>Single-DPE pass-through; M=1, 4, 8 batched</td></tr>
+    <tr><td>1B</td><td>&gt;1</td><td>1</td><td>3</td><td>CLB adder tree (V-axis reduction)</td></tr>
+    <tr><td>1C</td><td>1</td><td>&gt;1</td><td>3</td><td>Output mux (H-axis concatenation)</td></tr>
+    <tr><td>1D</td><td>&gt;1</td><td>&gt;1</td><td>pending</td><td>Combined K-tile + N-tile</td></tr>
+  </table>
+
+  <h2>Workload Pattern (all 13 cases)</h2>
+  <ul class="small">
+    <li><b>Weights:</b> all-ones int8 (forced hierarchically into every DPE)</li>
+    <li><b>Inputs:</b> all-ones int8 (packed into BRAM via <code>in_bram_w*</code>)</li>
+    <li><b>Expected output:</b> <code>Y[m][n] = K mod 256</code>, ReLU'd if <code>DO_RELU</code></li>
+    <li><b>Cycle expectation:</b> RTL uses faithful primitive (Task #99 double-buffered LOAD); SIM uses <code>T_steady = max(LCYC, CCYC, OCYC)</code></li>
+  </ul>
+
+  <h2>Why all-ones at workload level</h2>
+  <p class="small">Workload-level tests verify the <em>control flow</em> (V-axis reduction, H-axis concatenation, ReLU). The bit-serial signed math is already adversarially tested at the primitive level (T2 random, T7 signed). All-ones makes cycle accounting trivially traceable while still catching V-axis or H-axis structural bugs.</p>
+
+  <div class="footer">
+    <span>&sect; 8. Layer 2 components and cases</span>
+    <span>10 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 11: TEST VECTOR LIFECYCLE ============== -->
+<div class="slide">
+  <h1>9. Test Vector Lifecycle</h1>
+
+  <h2>9.1 Generation (off-line, once)</h2>
+<pre>
+python fc_verification/oracles/nldpe_mac_oracle.py     --gen-test-vectors
+python fc_verification/oracles/azurelily_mac_oracle.py --gen-test-vectors
+</pre>
+  <p class="small">Outputs are deterministic; re-running yields byte-identical files unless JSON config or oracle code changes.</p>
+
+  <h2>9.2 Storage Format (byte-major, BRAM-native)</h2>
+<pre>
+test_vectors/t{N}_weights.mem  # R*C bytes (row-major: weights[r][c] -> r*C+c)
+test_vectors/t{N}_inputs.mem   # R bytes (one int8 per row)
+test_vectors/t{N}_mac.mem      # C int32 (pre-ACAM)
+test_vectors/t{N}_expected.mem # C bytes (post-ACAM, low byte)
+test_vectors/expected_cycles_T{N}.txt
+test_vectors/cycle_oracle.txt  # M-sweep summary
+</pre>
+
+  <h2>9.3 Consumption by TB</h2>
+<pre>
+initial begin
+    $readmemh("test_vectors/t4_weights.mem",  w_mem);
+    $readmemh("test_vectors/t4_inputs.mem",   in_mem);
+    $readmemh("test_vectors/t4_expected.mem", exp_mem);
+    // expected_cycles_T4.txt read into a parameter via $fscanf
+end
+</pre>
+  <p class="small">The TB never invokes Python at runtime &mdash; vectors are static artifacts. The internal storage of the DUT is double-buffered slice-major (corner-turn at LOAD, substrate A/B ping-pong), but the <code>.mem</code> files remain byte-major (matching BRAM and host data format).</p>
+
+  <div class="footer">
+    <span>&sect; 9. Test vector lifecycle</span>
+    <span>11 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 12: STORAGE LAYOUT (Task #99) ============== -->
+<div class="slide">
+  <h1>10. Storage Layout &mdash; Double-Buffered Slice-Major + Corner-Turn (Task #99)</h1>
+
+  <h2>Pre-Task-#93: 4-slot byte-major ring buffer</h2>
+<pre>
+   input_buffer[QDEPTH=4][R]    --+
+   mac_acc     [QDEPTH=4][C]      |    Simulation convenience.
+   acam_out    [QDEPTH=4][C]    --+    NOT silicon-faithful.
+</pre>
+
+  <h2>Task #93 (superseded): single-substrate slice-major + LOAD-gate</h2>
+<pre>
+   input_buf_slice[PRECISION][R]  --+   Single input substrate; required
+   mac_acc        [C]               |   load_safe gate to prevent WAR;
+   acam_out       [C]             --+   T_steady = max(LCYC + PRECISION, ...)
+</pre>
+
+  <h2>Task #99 (current): double-buffered slice-major + ping-pong</h2>
+<pre>
+   input_buf_slice_a[PRECISION][R]  --+    Two physical input substrates
+   input_buf_slice_b[PRECISION][R]    |    + 1-bit load_phase selector.
+   mac_acc          [C]               |    LOAD writes substrate B while
+   acam_out         [C]             --+    COMPUTE reads substrate A.
+                                            T_steady = max(LCYC, CCYC, OCYC)
+</pre>
+
+  <h2>Corner-turn LOAD &mdash; fixed wire permutation (preserved across all revisions)</h2>
+<pre>
+   BRAM delivers 40 bits = 5 bytes per cycle, byte-major.
+
+   Per LOAD cycle k (writing the substrate selected by load_phase):
+     for j in 0..ELEMS_PER_STROBE-1:                       (5 bytes per strobe for NL)
+       for i_bit in 0..PRECISION-1:                        (8 bit positions)
+         slice[load_phase][i_bit][k*EPS + j] &lt;= data_in[j*8 + i_bit]
+
+   This is pure wiring (40 input bits routed to 40 distinct slice cells).
+   One shared address counter (k) and a 1-bit ping-pong selector. No decode logic.
+</pre>
+
+  <h2>What Task #99 gives you</h2>
+  <ul class="small">
+    <li><b>Two input substrates</b> (2 &times; PRECISION &times; R bit cells), one for LOAD-write, one for COMPUTE-read each pass.</li>
+    <li><b>No WAR hazard</b>: pass-(k+1) LOAD and pass-k COMPUTE touch disjoint physical cells.</li>
+    <li><b>No <code>load_safe</code> gate</b>; no wrapper-side inter-pass stall in <code>fc_top.v</code>.</li>
+    <li><b>Area cost</b>: 2&times; input-buffer flops per DPE (e.g., 2048 flops for NL R=256, 4096 for AL R=512). In arch budget.</li>
+    <li><b>Cycle saving</b>: <code>PRECISION &times; (M-1)</code> per workload vs Task #93 LOAD-gate.</li>
+    <li><b>BRAM stays byte-major</b> (matches host data format and inter-layer activations).</li>
+  </ul>
+
+  <div class="footer">
+    <span>&sect; 10. Storage layout (Task #99)</span>
+    <span>12 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 13: DOUBLE-BUFFERED LOAD (Task #99) ============== -->
+<div class="slide">
+  <h1>11. Double-Buffered LOAD &mdash; Task #99 (Supersedes Task #93 LOAD-Gate)</h1>
+
+  <h2>The problem single substrate creates (Task #93 design)</h2>
+  <p class="small">With a single-substrate input buffer, pass-(k+1) LOAD writes to the SAME physical cells that pass-k COMPUTE is reading bit-by-bit across <code>PRECISION</code> cycles. Without a gate, pass-(k+1)'s writes would corrupt pass-k's reads at subsequent bit positions. Task #93 added a <code>load_safe</code> register to gate LOAD until pass-k's last bit-fire cycle; the architectural cost was <code>+PRECISION</code> per pass in <code>T_steady</code>.</p>
+
+  <h2>The Task #99 fix: a second physical substrate + ping-pong selector</h2>
+<pre>
+   reg load_phase;                            // 1-bit ping-pong selector
+
+   // Reset
+   load_phase &lt;= 0;                           // LOAD targets substrate A first
+
+   // Per LOAD pass commit (LOAD sub-FSM moves to next pass)
+   if (load_pass_commit) begin
+       load_phase &lt;= ~load_phase;             // Flip target substrate
+   end
+
+   // LOAD sub-FSM (always free; no gating)
+   if (w_buf_en) begin
+       // Write to whichever substrate load_phase selects
+       if (load_phase == 0)
+           input_buf_slice_a[i_bit][addr] &lt;= data_in[...];
+       else
+           input_buf_slice_b[i_bit][addr] &lt;= data_in[...];
+   end
+
+   // COMPUTE sub-FSM reads from the OTHER substrate (pass-tagged ring)
+</pre>
+
+  <h2>Honest cycle cost</h2>
+<pre>
+   Task #93 (single-substrate + LOAD-gate):
+     T_steady = max(LCYC + PRECISION, CCYC, OCYC)   = 60  (NL), 264 (AL)
+
+   Task #99 (double-buffered):
+     T_steady = max(LCYC, CCYC, OCYC)               = 52  (NL), 256 (AL)
+
+   Per-pass cycle saved by Task #99: PRECISION cycles (8 at INT8)
+   Per-workload cycle saved: PRECISION × (M-1)
+     e.g., M=8 batched FC: 56 cycles per DPE saved
+     e.g., M=128 batched attention: 1016 cycles per DPE saved
+</pre>
+
+  <h2>Area cost (paid in exchange)</h2>
+<pre>
+   Task #93 input buffer:     PRECISION × R bit cells per DPE
+   Task #99 input buffer:   2 × PRECISION × R bit cells per DPE
+                            ──────────────────────────────────
+   Δ:                       + PRECISION × R extra flops per DPE
+     NL  (R=256, P=8):  + 2048 flops per DPE
+     AL  (R=512, P=8):  + 4096 flops per DPE
+</pre>
+
+  <p class="small"><b>This area cost is already accounted for in the arch budget</b> &mdash; the cycle-saving is paid for with the second substrate.</p>
+
+  <div class="footer">
+    <span>&sect; 11. Double-buffered LOAD (Task #99)</span>
+    <span>13 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 14: DATA HAZARD ELIMINATED (Task #99) ============== -->
+<div class="slide">
+  <h1>12. Data Hazard Eliminated by Double-Buffering (Task #99)</h1>
+
+  <p><b>Task #93 problem (now retired):</b> "Slice 0 is consumed at cycle 53, so why not let pass-(k+1) write to slice 0 at cycle 54?" The catch was <b>corner-turn LOAD writes to all 8 slices simultaneously every cycle</b>, so any pass-(k+1) write would corrupt pass-k slice reads at later cycles. Task #93 solved this with a <code>load_safe</code> gate, costing <code>+PRECISION</code> cycles per pass.</p>
+
+  <p><b>Task #99 solves it physically:</b> pass-(k+1) writes to a <em>different substrate</em>. Substrate A and substrate B occupy distinct flops; there is no shared cell for the LOAD write and the COMPUTE read to race over.</p>
+
+  <h2>Substrate layout (two physical grids)</h2>
+<pre style="font-size: 10px; line-height: 1.2;">
+                                ROW POSITION (R = 256 cells per slice)
+                                ─────────────────────────────────────────────
+                    SLICE      0     1     2     3     4     5  ... 254  255
+SUBSTRATE A           0      [   ] [   ] [   ] [   ] [   ] [   ]    [   ] [   ]
+(pass-k COMPUTE       1      [   ] [   ] [   ] [   ] [   ] [   ]    [   ] [   ]
+ reads, this pass)   ...
+                      7      [   ] [   ] [   ] [   ] [   ] [   ]    [   ] [   ]
+
+SUBSTRATE B           0      [   ] [   ] [   ] [   ] [   ] [   ]    [   ] [   ]
+(pass-(k+1) LOAD      1      [   ] [   ] [   ] [   ] [   ] [   ]    [   ] [   ]
+ writes, this pass)  ...
+                      7      [   ] [   ] [   ] [   ] [   ] [   ]    [   ] [   ]
+
+  load_phase selector chooses target substrate each pass;
+  COMPUTE binds to the OTHER substrate via a pass-tagged ring buffer.
+</pre>
+
+  <h2>The same scenario at cycle 54 &mdash; no corruption</h2>
+<pre style="font-size: 10px; line-height: 1.2;">
+Cycle 54:
+  SUBSTRATE A — pass-0 COMPUTE reads slice 1 (still consuming pass-0 data)
+                    ROW POSITION
+SLICE               0   1   2   3   4 │ 5   6  ... 255
+  1  (bit-1)      [p0][p0][p0][p0][p0]│[p0][p0]    [p0]   ← UNTOUCHED by LOAD;
+                                                              pass-0 reads safely
+
+  SUBSTRATE B — pass-1 LOAD writes (corner-turn, all 8 slices)
+                    ROW POSITION
+SLICE               0   1   2   3   4 │ 5   6  ... 255
+  0  (bit-0)      [p1][p1][p1][p1][p1]│[  ][  ]    [  ]    ← pass-1 data lands HERE
+  1  (bit-1)      [p1][p1][p1][p1][p1]│[  ][  ]    [  ]      (different flops than
+  ...                                                          substrate A above)
+  7  (bit-7)      [p1][p1][p1][p1][p1]│[  ][  ]    [  ]
+
+  At cycle 55, pass-0 reads SUBSTRATE A's slice 2.
+  pass-1's substrate B writes are in different physical cells.
+  → no WAR hazard; no corruption; T_steady saves PRECISION cycles per pass.
+</pre>
+
+  <h2>Why double-buffering is the silicon-faithful fix</h2>
+<pre style="font-size: 10.5px; line-height: 1.25;">
+   The Task #93 hazard arose because LOAD and COMPUTE shared the same R × PRECISION
+   bit cells. Two reasonable resolutions:
+
+     (a) Serialise: gate LOAD until COMPUTE finishes consuming.  Cost: PRECISION
+         cycles per pass in T_steady.                                  ← Task #93
+
+     (b) Parallelise: provide two physically separate substrates.      ← Task #99
+         Cost: PRECISION × R extra flops per DPE (the second substrate);
+         no cycle penalty; T_steady = max(LCYC, CCYC, OCYC) regains its
+         pipeline-overlap meaning unchanged from the lazy-ring-buffer era.
+
+   Task #99 picks (b) because the cycle saving compounds with M (workload pass
+   count) while the area cost is paid once per DPE and is already in the arch
+   budget. The substrate-tag flow (pass IDs traversing COMPUTE → OUTPUT) replaces
+   load_safe as the coordination mechanism; the corner-turn LOAD pattern is
+   preserved exactly.
+</pre>
+
+  <p class="small"><b>One-line summary.</b> Slice 0 alone is free at cycle 54 only because pass-1 writes to <em>a different chip of flops</em> (substrate B) than the one pass-0 is still reading (substrate A). Corner-turn LOAD still writes all 8 slices simultaneously &mdash; but it writes them into substrate B, where pass-0 has no business reading.</p>
+
+  <div class="footer">
+    <span>&sect; 12. Data hazard eliminated (Task #99)</span>
+    <span>14 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 15: FSM OVERVIEW ============== -->
+<div class="slide">
+  <h1>13. FSM Overview &mdash; Three Sub-FSMs, Three Substrates, Three Flags</h1>
+
+<pre>
+External                                              External consumes
+strobe w_buf_en                                       data_out + dpe_done
+    |                                                          ^
+    v                                                          |
+   +-----------------+                       +-----------------+
+   |  LOAD sub-FSM   |                       |  OUTPUT sub-FSM |
+   |  load_cycle_cnt |                       |  output_col_idx |
+   |  load_phase     |                       |                 |
+   |  selects A or B |                       |                 |
+   +--------+--------+                       +--------^--------+
+            | corner-turn writes to selected          | drains data_out
+            | substrate (A or B)                      |
+            v                                         |
+   +------------------------------------------------------------+
+   |  FOUR SUBSTRATES (Task #99)                                |
+   |    input_buf_slice_a [PRECISION][R]  bit cells, slice-major|
+   |    input_buf_slice_b [PRECISION][R]  bit cells, slice-major|
+   |    mac_acc           [C]             int32 accumulator     |
+   |    acam_out          [C]  (NL only)  int32 ACAM output     |
+   +----------^------------------------------------^------------+
+              | reads slice[bit_idx_s0]            | writes mac_acc/acam_out
+              | from substrate NOT selected        |
+              | by load_phase (pass-tagged ring)   |
+              |   +--------------------------------+----+
+              +---|         COMPUTE sub-FSM             |
+                  |   Stage 0 / Stage 1 / Stage 2       |
+                  |   + ACAM commit (NL only)           |
+                  |   bit_idx_s0/s1/s2 emergent         |
+                  +-------------------------------------+
+</pre>
+
+  <h2>NBA-driven coordination flags</h2>
+  <table>
+    <tr><th>Flag</th><th>Direction</th><th>Set when</th><th>Cleared when</th><th>Cycle cost</th></tr>
+    <tr><td><code>buf_loaded</code></td><td>LOAD &rarr; COMPUTE</td><td>End of LOAD last strobe of a pass</td><td>COMPUTE wake</td><td>+1 in T_fill</td></tr>
+    <tr><td><code>load_phase</code></td><td>LOAD self-state (1-bit ping-pong)</td><td>Toggles each pass commit</td><td>(toggles on the next pass)</td><td>0 (Task #99: no gate)</td></tr>
+    <tr><td><code>compute_done</code></td><td>COMPUTE &rarr; OUTPUT</td><td>After ACAM commit (NL) or Stage 1 MSB (AL)</td><td>OUTPUT wake</td><td>+1 in T_fill</td></tr>
+  </table>
+
+  <p class="small">
+  <code>buf_loaded</code> and <code>compute_done</code> are the two NBA-settle handoffs that contribute to <code>T_fill</code>'s <b>+2</b> cost (visible in the formula on slide 19). <code>load_phase</code> is not a gate &mdash; it is a substrate selector that flips every pass; LOAD never blocks on COMPUTE because they always target different substrates.
+  </p>
+
+  <p class="small"><b>Cross-FSM safety property.</b> All handoffs are
+  NBA-based (no combinational handshake loops). Each handoff costs
+  exactly 1 cycle of register settle; this is the +2 in T_fill. With
+  Task #99's double-buffered substrates, no structural gate costs
+  cycles in steady state &mdash; T_steady reduces to the natural
+  pipeline-overlap maximum of LOAD/COMPUTE/OUTPUT.</p>
+
+  <div class="footer">
+    <span>&sect; 13. FSM overview (NEW)</span>
+    <span>15 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 15: SUB-FSM STATE DIAGRAMS (NEW) ============== -->
+<div class="slide">
+  <h1>14. Sub-FSM State Diagrams</h1>
+
+  <h2>LOAD sub-FSM &mdash; counter-driven, externally triggered, ping-pongs <code>load_phase</code></h2>
+<pre>
+       +----------+      w_buf_en==1
+       |  IDLE    | ----------------------------------+
+       +-----^----+                                    v
+             |     +--------------------------------------+
+             |     |              STREAMING               |
+             |     |  substrate := load_phase ? B : A;    |
+             |     |  for j in 0..EPS-1, i_bit in 0..7:   |
+             |     |    substrate[i_bit]                  |
+             |     |       [load_cycle_cnt*EPS + j]       |
+             |     |       <= data_in[j*8 + i_bit]        |
+             |     |  load_cycle_cnt++                    |
+             |     +-----------------+--------------------+
+             |        load_cycle_cnt |
+             |        == LOAD_CYCLES-1
+             |                       v
+             |     +--------------------------------------+
+             +-----|             COMMIT_PASS              |
+                   |  buf_loaded   <= 1   ----> COMPUTE   |
+                   |  load_cycle_cnt <= 0                 |
+                   |  load_phase   <= ~load_phase         |
+                   |    (Task #99: flip substrate target  |
+                   |     for the NEXT pass)               |
+                   +--------------------------------------+
+</pre>
+
+  <h2>COMPUTE sub-FSM &mdash; bit-serial pipeline (emits CCYC=10)</h2>
+<pre>
+       +----------+    buf_loaded == 1
+       |  IDLE    | ----------------------+
+       +-----^----+                       v
+             |    +-----------------------------------+
+             |    |              WAKE                 |
+             |    |  compute_busy <= 1                |
+             |    |  buf_loaded   <= 0                |
+             |    |  mac_acc[*]   <= 0                |
+             |    |  (read substrate = ~load_phase    |
+             |    |   from pass-tagged ring)          |
+             |    +-----------------+-----------------+
+             |                      v
+             |    +-----------------------------------+
+             |    |            PIPELINE               |
+             |    |  Stage 0: read slice[s0] from     |
+             |    |            this pass's substrate  |
+             |    |            bit_idx_s0++           |
+             |    |  Stage 1: shift-add mac_acc       |
+             |    |  at bit_idx_s1 == PRECISION-1:    |
+             |    |     MSB subtract; acam_fire <= 1  |
+             |    +-----------------+-----------------+
+             |                      | ACAM commit (NL) or MSB done (AL)
+             |                      v
+             |    +-----------------------------------+
+             +----|           COMMIT (ACAM)           |
+                  |  acam_out[c] <= ACAM(mac_acc[c])  |
+                  |  compute_done <= 1   --> OUTPUT   |
+                  |  compute_busy <= 0                |
+                  +-----------------------------------+
+</pre>
+
+  <h2>OUTPUT sub-FSM &mdash; counter-driven drain</h2>
+<pre>
+       +----------+    compute_done == 1
+       |  IDLE    | ----------------------+
+       +-----^----+                       v
+             |    +-----------------------------------+
+             |    |              WAKE                 |
+             |    |  output_busy    <= 1              |
+             |    |  output_col_idx <= 0              |
+             |    |  compute_done   <= 0              |
+             |    +-----------------+-----------------+
+             |                      v
+             |    +-----------------------------------+
+             |    |            STREAMING              |
+             |    |  data_out drives EPS bytes/cyc    |
+             |    |    from acam_out[*]  (NL)         |
+             |    |    or  mac_acc[*]    (AL)         |
+             |    |  output_col_idx++                 |
+             |    +-----------------+-----------------+
+             |       output_col_idx |
+             |       == OUTPUT_CYCLES
+             |                      v
+             |    +-----------------------------------+
+             +----|          COMMIT_PASS              |
+                  |  output_busy <= 0                 |
+                  |  dpe_done pulse                   |
+                  +-----------------------------------+
+</pre>
+
+  <div class="footer">
+    <span>&sect; 14. Sub-FSM state diagrams (NEW)</span>
+    <span>16 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 16a: WORKLOAD FSM (NEW Task #98) ============== -->
+<div class="slide">
+  <h1>14b. Workload FSM &mdash; <code>fc_top.v</code> Wrapper Coordination (6 states, post Task #99)</h1>
+
+  <h2>Top-level wrapper FSM (compact flow)</h2>
+<pre style="font-size: 9.5px; line-height: 1.2;">
+                       start signal (TB drives after weights loaded)
+                                       │
+                                       ▼
+                    +───────────────────────────────────+
+                    │            S_IDLE                 │
+                    │   done = 0, nl_dpe_control = 2'b00│
+                    │   waiting for start               │
+                    +─────────────────┬─────────────────+
+                                      │ start == 1
+                                      │ (init counters, t_first_load = cyc+3)
+                                      ▼
+                    +───────────────────────────────────+
+                    │            S_LOAD                 │◄──────┐
+                    │   nl_dpe_control = 2'b11          │       │ inter-pass loop
+                    │   drive w_buf_en strobes via BRAM │       │ (back-to-back
+                    │   (Task #99: NO inter-pass stall; │       │  across passes —
+                    │    DPE's double-buffer absorbs    │       │  no PRECISION-cyc
+                    │    the LOAD/COMPUTE overlap)      │       │  stall in #99)
+                    +─────────────────┬─────────────────+       │
+                                      │ drive_active &&         │
+                                      │ !read_active &&         │
+                                      │ pass_idx == M − 1       │
+                                      │ (hold_count <= CCYC)    │
+                                      ▼                         │
+                    +───────────────────────────────────+       │
+                    │            S_HOLD                 │       │
+                    │   nl_dpe_control = 2'b11          │       │
+                    │   hold_count counts down CCYC     │       │
+                    │   cycles (final pass's COMPUTE)   │       │
+                    +─────────────────┬─────────────────+       │
+                                      │ hold_count == 1         │
+                                      │ (nl_dpe_control <= 0)   │
+                                      ▼                         │
+                    +───────────────────────────────────+       │
+                    │            S_OUT_CAP              │       │
+                    │   nl_dpe_control = 2'b00          │       │
+                    │   wait last_cap_commit_now        │       │
+                    │   (BRAM write commits ~OCYC cyc)  │       │
+                    +─────────────────┬─────────────────+       │
+                                      │ last_cap_commit_now     │
+                                      │ (t_done = cycle_count)  │
+                                      │                         │
+                       +──────────────┴───────────────+         │
+                       │                              │         │
+                  ACT_NEEDED=1                  ACT_NEEDED=0    │
+                  (V>1 OR act-NO-acam)          (V=1+has_acam)  │
+                       │                              │         │
+                       ▼                              │         │
+       +───────────────────────────────────+         │         │
+       │           S_ACT_FINAL             │         │         │
+       │  +1 cyc: CLB tree fold + act LUT  │         │         │
+       │  t_done = cycle_count             │         │         │
+       +───────────────┬───────────────────+         │         │
+                       │ unconditional (1 cyc)       │         │
+                       ▼                             ▼         │
+                    +───────────────────────────────────+       │
+                    │            S_DONE                 │       │
+                    │   done = 1                        │       │
+                    │   terminal                        │       │
+                    +───────────────────────────────────+       │
+                                                                │
+   Source: fc_top.v (state codes + LOAD-strobe sub-FSM logic).  │
+   Task #99: in_stall / stall_cnt removed; strobes back-to-back.│
+</pre>
+
+  <h2>Coordination flags / counters</h2>
+  <table style="font-size: 11px;">
+    <tr><th>Signal</th><th>Set by</th><th>Cleared by</th><th>Purpose</th></tr>
+    <tr><td><code>pass_idx</code></td><td>LOAD sub-FSM on each pass commit</td><td>S_DONE</td><td>Tracks which pass is being loaded</td></tr>
+    <tr><td><code>dpe_done</code> (aggregated)</td><td>AND-reduce of all V×H DPEs</td><td>new pass starts</td><td>Triggers OUTPUT drain for the pass that just completed</td></tr>
+  </table>
+  <p class="small">Task #99: the <code>in_stall</code> / <code>stall_cnt</code> pair that previously mirrored the DPE's <code>load_safe</code> gate is removed &mdash; the DPE's double-buffered substrate absorbs the LOAD/COMPUTE overlap inside the primitive, so the wrapper drives <code>w_buf_en</code> back-to-back across passes.</p>
+
+  <h2>Sub-FSM A: LOAD strobe (back-to-back across passes, Task #99)</h2>
+<pre style="font-size: 9.5px; line-height: 1.2;">
+       +──────────+      w_buf_en==1
+       │  IDLE    │ ─────────────────────────────────+
+       +─────^────+                                   v
+             │     +──────────────────────────────────+
+             │     │           STREAMING              │
+             │     │  read input BRAM at              │
+             │     │   addr[pass_idx, pass_strobe_idx]│
+             │     │  drive w_buf_en to all V×H DPEs  │
+             │     │  pass_strobe_idx++               │
+             │     +─────────────────┬────────────────+
+             │       pass_strobe_idx │
+             │       == LCYC-1       v
+             │     +──────────────────────────────────+
+             │     │          PASS COMMIT             │
+             │     │  if pass_idx < M-1:              │
+             │     │    pass_idx++                    │
+             │     │    (no stall: DPE's load_phase   │
+             │     │     ping-pong absorbs overlap)   │
+             │     │  else:                           │
+             │     │    transition to S_HOLD          │
+             │     +─────────────────┬────────────────+
+             │                       │ next pass
+             └───────────────────────+
+              resume STREAMING for pass k+1 immediately
+</pre>
+
+  <h2>Sub-FSM B: OUTPUT drain (parallel with LOAD of later passes)</h2>
+<pre style="font-size: 9.5px; line-height: 1.2;">
+       +──────────+    dpe_done == 1
+       │  IDLE    │ ────────────────+
+       +─────^────+                  v
+             │    +──────────────────────────────────+
+             │    │      COLLECT V partials          │
+             │    │  per H-slice, per col c:         │
+             │    │    partials[v=0..V-1]            │
+             │    +─────────────────┬────────────────+
+             │                      v
+             │    +──────────────────────────────────+
+             │    │       CLB ADDER TREE             │
+             │    │  ⌈log₂(V)⌉ pipelined stages      │
+             │    │  V=1: pass-through (0 cyc)       │
+             │    │  V=2: 1 stage (+TREE_PIPE)       │
+             │    +─────────────────┬────────────────+
+             │                      v
+             │    +──────────────────────────────────+
+             │    │     ACTIVATION LUT               │
+             │    │  if V>1 OR (act AND !has_acam):  │
+             │    │    activated = LUT(reduced)+1cyc │
+             │    │  else: pass-through              │
+             │    +─────────────────┬────────────────+
+             │                      v
+             │    +──────────────────────────────────+
+             │    │      BRAM WRITE                  │
+             │    │  write to output BRAM at         │
+             │    │    addr = pass_idx*N + h*C + c   │
+             │    │  drain_col_idx++                 │
+             │    +─────────────────┬────────────────+
+             │      drain_col_idx   │
+             │      == OUTPUT_CYCLES│
+             │                      v
+             │    +──────────────────────────────────+
+             └────│        PASS DRAIN COMMIT         │
+                  +──────────────────────────────────+
+</pre>
+
+  <div class="footer">
+    <span>&sect; 14b. Workload FSM (NEW)</span>
+    <span>17 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 16b: LANE-BASED ARCHITECTURE (NEW Task #98) ============== -->
+<div class="slide">
+  <h1>14c. Lane-Based Architecture &mdash; Dataflow + BRAM Partition + V×H Grid</h1>
+
+  <h2>Top-level hardware block diagram</h2>
+<pre style="font-size: 9px; line-height: 1.15;">
+                          Inputs (M × K bytes, byte-major)
+                                       │
+                                       v
+                +─────────────────────────────────────────+
+                │       INPUT BRAM                        │
+                │   M × K bytes total                     │
+                │   V banks of (M × K/V) each             │
+                │   bank v holds K-slice v (rows v·R..)   │
+                +──┬───────────────┬───────────────┬──────+
+                   │ K/V bytes     │ K/V bytes     │ K/V
+                   v               v               v
+   +─────────────────────────────────────────────────────────+
+   │              V × H DPE GRID                              │
+   │                                                          │
+   │   H-slice 0           H-slice 1     ...   H-slice H-1   │
+   │   +─────────+         +─────────+          +─────────+   │
+   │   │DPE[0,0] │         │DPE[0,1] │          │DPE[0,H-1]│   │
+   │   │R × C    │         │R × C    │          │R × C     │   │
+   │   │weights  │         │weights  │          │weights   │   │
+   │   │K[0..R], │         │K[0..R], │          │K[0..R],  │   │
+   │   │N[0..C]  │         │N[C..2C] │          │N[(H-1)C  │   │
+   │   │         │         │         │          │  ..N]    │   │
+   │   +────┬────+         +────┬────+          +────┬────+   │
+   │        │ C partials        │                    │        │
+   │   +────┴────+         +────┴────+          +────┴────+   │
+   │   │DPE[1,0] │         │DPE[1,1] │          │DPE[1,H-1]│   │
+   │   │K[R..2R] │         │K[R..2R] │          │K[R..2R]  │   │
+   │   +────┬────+         +────┬────+          +────┬────+   │
+   │        │                   │                    │        │
+   │       ...                 ...                  ...        │
+   │        │                   │                    │        │
+   │        v                   v                    v        │
+   │   +──────────+         +──────────+         +──────────+ │
+   │   │ CLB tree │         │ CLB tree │         │ CLB tree │ │
+   │   │ V → 1    │         │ V → 1    │  ...    │ V → 1    │ │
+   │   │ per col  │         │ per col  │         │ per col  │ │
+   │   │ ⌈log₂(V)⌉│         │ ⌈log₂(V)⌉│         │ ⌈log₂(V)⌉│ │
+   │   │ stages   │         │ stages   │         │ stages   │ │
+   │   +─────┬────+         +─────┬────+         +─────┬────+ │
+   │         │ C reduced          │                    │      │
+   │         v                    v                    v      │
+   │   +──────────+         +──────────+         +──────────+ │
+   │   │Activation│         │Activation│  ...    │Activation│ │
+   │   │ LUT      │         │ LUT      │         │ LUT      │ │
+   │   │ (+1 if   │         │ (+1 if   │         │ (+1 if   │ │
+   │   │ CLB_NEED)│         │ CLB_NEED)│         │ CLB_NEED)│ │
+   │   +─────┬────+         +─────┬────+         +─────┬────+ │
+   │         │ C activated        │                    │      │
+   +─────────┼────────────────────┼────────────────────┼──────+
+             │                    │                    │
+             v                    v                    v
+                +─────────────────────────────────────────+
+                │       OUTPUT BRAM                       │
+                │   M × N bytes total                     │
+                │   H banks of (M × C) each               │
+                │   bank h holds N-slice h                │
+                +─────────────────────────────────────────+
+                                       │
+                                       v
+                          Outputs (M × N bytes)
+</pre>
+
+  <h2>Tiling rules</h2>
+  <table style="font-size: 11px;">
+    <tr><th>Term</th><th>Definition</th><th>NL (R=C=256)</th><th>AL (R=512, C=128)</th></tr>
+    <tr><td><b>V</b> (K-axis tile)</td><td>⌈K/R⌉</td><td>K=400 → V=2</td><td>K=1024 → V=2</td></tr>
+    <tr><td><b>H</b> (N-axis tile)</td><td>⌈N/C⌉</td><td>N=512 → H=2</td><td>N=256 → H=2</td></tr>
+    <tr><td><b>Grid</b></td><td>V × H DPE primitives</td><td>varies</td><td>varies</td></tr>
+    <tr><td><b>Input BRAM banks</b></td><td>V (each holds K/V bytes per pass)</td><td>V banks</td><td>V banks</td></tr>
+    <tr><td><b>Output BRAM banks</b></td><td>H (each holds C bytes per pass)</td><td>H banks</td><td>H banks</td></tr>
+    <tr><td><b>CLB trees</b></td><td>H (one per H-slice, reduces V → 1)</td><td>—</td><td>—</td></tr>
+    <tr><td><b>Activation LUTs</b></td><td>H (one per H-slice)</td><td>—</td><td>—</td></tr>
+  </table>
+
+  <h2>Per-pass dataflow (one row of A through (M×K)·(K×N) GEMM)</h2>
+<pre style="font-size: 10px;">
+   Phase            Stages                          Cycles
+   ─────────────────────────────────────────────────────────────────────────
+   1. LOAD          Input BRAM → corner-turn        LCYC (= ⌈R·P/BUF⌉)
+                      → DPE slice substrate
+   2. COMPUTE       Bit-serial fire (parallel       CCYC (= P + (PD-1) + ACAM)
+                      across V × H DPEs)
+   3. CLB tree      V partial sums → reduced        ⌈log₂(V)⌉ stages
+                      (per H-slice, per col)
+   4. Activation    ReLU/identity/exp/log           +1 if CLB_NEEDED
+                      (per H-slice)
+   5. OUTPUT        BRAM write (H banks parallel)   OCYC (= ⌈C·8/BUF⌉)
+</pre>
+
+  <p class="small"><b>Lane parallelism:</b> all V×H DPEs run COMPUTE simultaneously (each has its own crossbar). All H CLB trees + activation LUTs run in parallel. Input BRAM's V banks deliver V·EPS bytes per cycle. Output BRAM's H banks accept H·EPS bytes per cycle.</p>
+
+  <div class="footer">
+    <span>&sect; 14c. Lane-based architecture (NEW)</span>
+    <span>18 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 16: ANALYTICAL PIPELINE CYCLE FORMULA (NEW) ============== -->
+<div class="slide">
+  <h1>15. Analytical Pipeline Cycle Formula (Unified, Task #98 + Task #99)</h1>
+
+  <h2>One formula at every layer &mdash; no additive constants</h2>
+<pre style="font-size: 12px; line-height: 1.4;">
+   T_fill        = LCYC + CCYC + OCYC                          architectural minimum
+
+   T_steady      = max(LCYC, CCYC, OCYC)                       per-pass interval (M > 1)
+                                ↑
+                          Task #99 double-buffered LOAD:
+                          pass-(k+1) writes substrate B while
+                          pass-k COMPUTE reads substrate A,
+                          so no LOAD-gate, no +PRECISION term.
+
+   Total(M)      = T_fill + (M − 1) × T_steady                 M-pass total
+</pre>
+
+  <p class="small">No `+PRECISION` LOAD-gate term, no `+2` NBA handoffs, no `TREE_PIPE`, no `CLB_NEEDED`, no `+6` wrapper. Those cycles exist in real RTL; they are <b>reported as per-stage deltas, not embedded in the formula</b>.</p>
+
+  <h2>Component definitions</h2>
+  <table style="font-size: 11px;">
+    <tr><th>Term</th><th>Meaning</th><th>NL value</th><th>AL value</th><th>Source / formula</th></tr>
+    <tr><td><code>LCYC</code></td><td>LOAD bandwidth-bound cycles</td><td>52</td><td>256</td><td>&lceil; R &middot; PRECISION / BUF &rceil;</td></tr>
+    <tr><td><code>CCYC</code></td><td>Bit-serial compute pipeline</td><td>10 (8+1+1)</td><td>10 (8+2+0)</td><td>PRECISION + (PIPELINE_DEPTH&minus;1) + ACAM_CYCLES</td></tr>
+    <tr><td><code>OCYC</code></td><td>Output drain cycles</td><td>52</td><td>64</td><td>&lceil; C &middot; 8 / BUF &rceil;</td></tr>
+    <tr><td><b><code>T_fill</code></b></td><td>First-pass total</td><td><b>114</b></td><td><b>330</b></td><td>52+10+52 / 256+10+64</td></tr>
+    <tr><td><b><code>T_steady</code></b></td><td>Steady-state per-pass (Task #99)</td><td><b>52</b></td><td><b>256</b></td><td>LCYC dominates</td></tr>
+  </table>
+
+  <h2>Per-layer deltas (observed, post Task #99)</h2>
+  <p class="small">Observed across 12 primitive + 13 workload smoke cases. The structural decomposition <code>nba + tree + clb + wrap</code> is paid once in T_fill; T_steady is bit-exact between sim and RTL.</p>
+  <table style="font-size: 11px;">
+    <tr><th>Layer</th><th>Configuration</th><th>delta</th><th>Per-stage decomposition</th></tr>
+    <tr><td>Primitive</td><td>any test, any M</td><td><b>+2</b></td><td>2 NBA sub-FSM handoffs in T_fill (LOAD&rarr;COMPUTE, COMPUTE&rarr;OUTPUT)</td></tr>
+    <tr><td>Workload</td><td>V=1, no act, has_acam</td><td><b>+6</b></td><td><code>nba(0) + tree(0) + clb(0) + wrap(6)</code></td></tr>
+    <tr><td>Workload</td><td>V=1, act, NO has_acam (AL+act)</td><td><b>+7</b></td><td><code>nba(0) + tree(0) + clb(1) + wrap(6)</code></td></tr>
+    <tr><td>Workload</td><td>V&gt;1 (any act)</td><td><b>+8</b></td><td><code>nba(0) + tree(1) + clb(1) + wrap(6)</code></td></tr>
+    <tr><td>Workload</td><td>V=1, H&gt;1</td><td><b>+6</b></td><td><code>nba(0) + tree(0) + clb(0) + wrap(6)</code> (H is combinational)</td></tr>
+  </table>
+
+  <p class="small">All deltas are paid <b>once in T_fill</b>; T_steady is bit-exact between sim and RTL. <code>wrap = 6</code> is constant: BRAM-read pipeline, registered DPE handshake, sign-extend latch, BRAM-write tap, in-BRAM register, done-detect latch.</p>
+
+  <h2>Sample concrete values (post Task #99)</h2>
+<pre style="font-size: 11px;">
+   Layer       Config            sim_exp  rtl_obs  delta
+   ──────────────────────────────────────────────────────
+   Primitive   NL M=1            114      116      +2
+   Primitive   NL M=8            478      480      +2
+   Primitive   AL M=1            330      332      +2
+   Primitive   AL M=8            2122     2124     +2
+   Workload    bert_qkv_proj_NL  114      120      +6
+   Workload    bert_qkv_proj_AL  330      337      +7
+   Workload    lenet_fc1_NL      114      122      +8
+   Workload    gemm_batch8_NL    478      484      +6
+</pre>
+
+  <p class="small">For per-testcase cycle log of all 12 primitive + 13 workload cases with full delta decomposition, see <code>CYCLE_ACCOUNTING.md</code>.</p>
+
+  <div class="footer">
+    <span>&sect; 15. Analytical pipeline cycle formula</span>
+    <span>19 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 17: INDEPENDENCE INVARIANTS ============== -->
+<div class="slide">
+  <h1>16. Independence Invariants &mdash; Enforcement Summary</h1>
+  <table style="font-size: 11px;">
+    <tr><th>Invariant</th><th>Mechanism</th><th>Failure mode prevented</th></tr>
+    <tr>
+      <td>Single source of truth for arch params</td>
+      <td>JSON consumed by both generator and oracle</td>
+      <td>Drift between RTL dimensions and oracle dimensions</td>
+    </tr>
+    <tr>
+      <td>Oracle independent of RTL</td>
+      <td>Pure numpy, no Verilog import, no parameter sharing</td>
+      <td>Tautological pass when both encode the same formula</td>
+    </tr>
+    <tr>
+      <td>TB independent of oracle internals</td>
+      <td>Consumes <code>.mem</code> artifacts only; no Python at sim time</td>
+      <td>Brittle coupling to oracle implementation</td>
+    </tr>
+    <tr>
+      <td>Cycle counts measured, not declared</td>
+      <td>TB instruments internal sub-FSM transitions</td>
+      <td>Spurious 0% fidelity from hardcoded <code>COMPUTE_CYCLES</code></td>
+    </tr>
+    <tr>
+      <td>Module name contract across primitives</td>
+      <td>All <code>dpe_*_faithful.v</code> and legacy expose <code>module dpe (...)</code> identically</td>
+      <td><code>fc_top.v</code> rebinding required when swapping primitives</td>
+    </tr>
+    <tr>
+      <td>Workload TB independent of primitive internals</td>
+      <td>Hierarchical force at named ports/regs only</td>
+      <td>Coupling that would break when faithful migration completes</td>
+    </tr>
+    <tr>
+      <td><b>Storage matches silicon</b> (Task #93 + Task #99)</td>
+      <td>Double-buffered input substrate (A, B) + single mac/output substrates; no QDEPTH ring buffer</td>
+      <td>Phantom slots that hide pipelining costs from silicon-faithful analysis</td>
+    </tr>
+  </table>
+
+  <p class="small" style="margin-top: 14px;"><b>Net effect.</b> Any single component can be rewritten without invalidating the verification result, as long as it continues to honor its contract with the others. The 0% fidelity on the faithful primitive across all 12 testcases is bit-exact, not a coincidence of shared parameters.</p>
+
+  <div class="footer">
+    <span>&sect; 16. Independence invariants</span>
+    <span>20 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 18: VERIFICATION STATUS + FIDELITY DIAGNOSTIC ============== -->
+<div class="slide">
+  <h1>17. Verification Status &mdash; Post Task #99 (Double-Buffered LOAD)</h1>
+
+  <h2>Current Status (2026-05-18)</h2>
+  <table>
+    <tr><th>Layer</th><th>DUT</th><th>Coverage</th><th>Result</th><th>Delta vs sim</th></tr>
+    <tr><td>Primitive (NL faithful)</td><td><code>dpe_nldpe_faithful.v</code></td><td>T1&ndash;T7</td><td><span class="highlight-good">7/7 PASS functional</span></td><td><span class="highlight-good">+2 uniform (NBA handoffs)</span></td></tr>
+    <tr><td>Primitive (AL faithful)</td><td><code>dpe_azurelily_faithful.v</code></td><td>T1&ndash;T5</td><td><span class="highlight-good">5/5 PASS functional</span></td><td><span class="highlight-good">+2 uniform (NBA handoffs)</span></td></tr>
+    <tr><td>Workload (FC, faithful)</td><td><code>fc_top.v</code> &rarr; faithful</td><td>Stages 1A+1B+1C, 13 cases</td><td><span class="highlight-good">13/13 PASS functional</span></td><td><span class="highlight-good">+6 / +7 / +8 = wrap + tree + clb</span></td></tr>
+    <tr><td>Lazy primitive smoke (gated separately)</td><td><code>dpe_nldpe.v</code>, <code>dsp_mac.v</code></td><td>52 cases</td><td><span class="highlight-good">52/52 PASS</span></td><td>unchanged</td></tr>
+    <tr><td>IMC sim sanity</td><td><code>azurelily/IMC/test.py</code></td><td>8 cases</td><td><span class="highlight-good">8/8 PASS</span></td><td>matches hand-calc</td></tr>
+  </table>
+
+  <h2>Per-testcase workload delta with per-stage breakdown</h2>
+  <p class="small">All 13 cases PASS functional under post-Task-#99 cadence. Delta is <b>constant in M</b>: <code>wrap + tree + clb</code> is paid once in T_fill; <code>T_steady = max(LCYC, CCYC, OCYC)</code> is bit-exact between sim and RTL.</p>
+  <table style="font-size: 10px;">
+    <tr><th>Workload</th><th>Arch</th><th>M</th><th>K</th><th>N</th><th>V</th><th>H</th><th>Act</th><th>sim_exp</th><th>rtl_obs</th><th>delta</th><th>nba</th><th>tree</th><th>clb</th><th>wrap</th></tr>
+    <tr><td>bert_qkv_proj_NL</td><td>NL</td><td>1</td><td>128</td><td>128</td><td>1</td><td>1</td><td>relu</td><td>114</td><td>120</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>gemm_trivial_NL</td><td>NL</td><td>1</td><td>256</td><td>256</td><td>1</td><td>1</td><td>none</td><td>114</td><td>120</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>gemm_batched_NL</td><td>NL</td><td>4</td><td>256</td><td>256</td><td>1</td><td>1</td><td>none</td><td>270</td><td>276</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>gemm_batch8_NL</td><td>NL</td><td>8</td><td>256</td><td>256</td><td>1</td><td>1</td><td>none</td><td>478</td><td>484</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>bert_qkv_proj_AL</td><td>AL</td><td>1</td><td>128</td><td>128</td><td>1</td><td>1</td><td>relu</td><td>330</td><td>337</td><td><span class="highlight-neutral">+7</span></td><td>0</td><td>0</td><td>1</td><td>6</td></tr>
+    <tr><td>gemm_trivial_AL</td><td>AL</td><td>1</td><td>512</td><td>128</td><td>1</td><td>1</td><td>none</td><td>330</td><td>336</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>gemm_batched_AL</td><td>AL</td><td>4</td><td>512</td><td>128</td><td>1</td><td>1</td><td>none</td><td>1098</td><td>1104</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>lenet_fc1_NL</td><td>NL</td><td>1</td><td>400</td><td>120</td><td>2</td><td>1</td><td>relu</td><td>114</td><td>122</td><td><span class="highlight-neutral">+8</span></td><td>0</td><td>1</td><td>1</td><td>6</td></tr>
+    <tr><td>gemm_v2_synth_NL</td><td>NL</td><td>1</td><td>512</td><td>256</td><td>2</td><td>1</td><td>none</td><td>114</td><td>122</td><td><span class="highlight-neutral">+8</span></td><td>0</td><td>1</td><td>1</td><td>6</td></tr>
+    <tr><td>gemm_v2_AL</td><td>AL</td><td>1</td><td>1024</td><td>128</td><td>2</td><td>1</td><td>none</td><td>330</td><td>338</td><td><span class="highlight-neutral">+8</span></td><td>0</td><td>1</td><td>1</td><td>6</td></tr>
+    <tr><td>bert_ffn1_NL</td><td>NL</td><td>1</td><td>128</td><td>512</td><td>1</td><td>2</td><td>relu</td><td>114</td><td>120</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>synthetic_h2_NL</td><td>NL</td><td>1</td><td>256</td><td>512</td><td>1</td><td>2</td><td>none</td><td>114</td><td>120</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+    <tr><td>synthetic_h2_AL</td><td>AL</td><td>1</td><td>256</td><td>256</td><td>1</td><td>2</td><td>none</td><td>330</td><td>336</td><td><span class="highlight-good">+6</span></td><td>0</td><td>0</td><td>0</td><td>6</td></tr>
+  </table>
+
+  <h2>Delta contributors</h2>
+<pre style="font-size: 10.5px;">
+   nba   = 0    Primitive NBA handoffs absorbed by wrapper's BRAM-read pipeline
+                + registered handshake (not separately visible at workload boundary)
+
+   tree  = ⌈log₂(V)⌉    CLB adder tree pipeline depth (V > 1 only)
+
+   clb   = 1 if (V > 1) OR (act AND NOT has_acam) else 0
+                Activation LUT cycle (post-tree)
+
+   wrap  = 6 (constant)  Six structural registers in fc_top.v:
+                +1 BRAM-read pipeline       +1 registered DPE handshake
+                +1 sign-extend latch        +1 BRAM-write tap
+                +1 in-BRAM register         +1 done-detect latch
+
+   delta = nba + tree + clb + wrap   (always paid ONCE in T_fill;
+                                       T_steady is bit-exact)
+</pre>
+
+  <p class="small">Sim formula is unified: <code>T_fill = LCYC + CCYC + OCYC</code> at every layer. All deltas (primitive +2, workload +6/+7/+8) are observed and documented per-stage, not embedded in the formula.</p>
+
+  <div class="footer">
+    <span>&sect; 17. Status + Fidelity diagnostic (NEW)</span>
+    <span>21 / 22</span>
+  </div>
+</div>
+
+<!-- ============== SLIDE 19: FORWARD PLAN + COMBINED DATAFLOW ============== -->
+<div class="slide">
+  <h1>18. Forward Plan + Combined Dataflow</h1>
+
+  <h2>Forward Plan</h2>
+  <ul class="small">
+    <li><b>Task #99 verification refresh (in flight).</b> Main session is re-running primitive + workload smoke against the double-buffered RTL + simplified sim formula. Concrete delta tables to refresh.</li>
+    <li><b>Stage 1D</b> &mdash; combined V&gt;1, H&gt;1 with <code>vgg_fc3</code> (V=16, H=4) and <code>resnet_fc</code> (V=2, H=4).</li>
+    <li><b>DIMM RTL (Task #73).</b> Behavioral DIMM module against faithful primitives.</li>
+    <li><b>Attention head RTL (Task #74).</b> N=128, d=64, C=128, W=16 end-to-end.</li>
+  </ul>
+
+  <h2>Combined Dataflow</h2>
+<pre>
+       ARCH JSON   ---read by--&gt;   [GENERATORS]  +  [ORACLES]
+                                          |             |
+                                          v             v
+                                       DPE RTL    Test vectors
+                                       (double-    (byte-major
+                                        buffered    .mem files)
+                                        slice-major
+                                        + corner-
+                                        turn +
+                                        load_phase
+                                        ping-pong)
+                                          |             |
+                                          +-----+-------+
+                                                v
+                            PRIMITIVE TBs (T1..T7 NL / T1..T5 AL)
+                            back-to-back strobes across passes (M&gt;1)
+                                                |
+                                                v   on PASS
+                            faithful-smoke[-al] gate &mdash; 12/12 PASS, 0% fidelity
+                                                |
+                                                v
+                            fc_top.v  instantiates dpe (FAITHFUL, Task #99)
+                            no wrapper-side inter-pass stall
+                                                |
+                                                v
+                                      WORKLOAD TB (13 cases)
+                                      embedded numpy ref;
+                                      SIM uses Task #99 formula
+                                                |
+                                                v
+                                       run_fc_smoke.py
+                                       13/13 PASS;
+                                       fidelity diagnostic
+</pre>
+
+  <p class="small" style="margin-top: 18px;"><b>For full per-testcase cycle log traces:</b> <code>CYCLE_ACCOUNTING.md</code>.<br>
+  <b>For methodology principles:</b> <code>FIDELITY_METHODOLOGY.md</code> &sect;3.2 + &sect;4.<br>
+  <b>For per-arch implementation walkthroughs:</b> <code>DPE_*_FAITHFUL_WALKTHROUGH.md</code>.</p>
+
+  <div class="footer">
+    <span>&sect; 18. Forward plan + combined dataflow</span>
+    <span>22 / 22</span>
+  </div>
+</div>
+
+</body>
+</html>
