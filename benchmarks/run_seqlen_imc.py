@@ -26,6 +26,7 @@ from peripherals.memory import MemoryModel
 from scheduler_stats.stats import Stats
 from scheduler_stats.scheduler import Scheduler
 from models.bert_tiny import bert_tiny_model
+from area_power import dpe_specs
 
 CLB_TILE_UM2 = 2239
 
@@ -123,6 +124,14 @@ def run_bert_sim(arch_name, fmax, vtr_resources, seq_len):
     cfg.total_clb = vtr_resources["clb_used"]
     cfg.total_mem = vtr_resources["bram_used"]
     cfg.total_dimm_dpes = max(0, vtr_resources["dpe_used"] - _functional_dpes(R, C))
+
+    # The per-op energy constants in the JSON describe a 256x256 array.  Setting
+    # rows/cols alone leaves them stale for every other geometry, so rescale from
+    # the physical model — the same thing gemv_dse.patch_imc_config() does.
+    if cfg.analoge_nonlinear_support:
+        specs = dpe_specs(R, C, freq_ghz=cfg.core_freq_MHz / 1000.0)
+        cfg.e_analoge_pj = specs["e_analogue_pj"]
+        cfg.e_digital_pj = specs["e_digital_pj"]
 
     stats = Stats()
     mem = MemoryModel(cfg, stats)

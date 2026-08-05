@@ -1,0 +1,7 @@
+label,model,imc_config,rows,cols,fmax_mhz,total_energy_pj,total_latency_ns
+ResNet-9 NL-DPE Proposed,resnet9,nl_dpe,1024,128,171.5,255084.51,427869.97
+ResNet-9 NL-DPE AL-Matched,resnet9,nl_dpe,1024,256,163.5,297343.89,490465.55
+ResNet-9 Azure-Lily,resnet9,azure_lily,512,128,227.1,9853008.57,707132.38
+VGG-11 NL-DPE Proposed,vgg11,nl_dpe,1024,128,132.3,195441.42,172165.92
+VGG-11 NL-DPE AL-Matched,vgg11,nl_dpe,1024,256,142.8,203138.25,170775.48
+VGG-11 Azure-Lily,vgg11,azure_lily,512,128,194.2,7826897.03,243097.11
