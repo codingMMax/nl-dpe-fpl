@@ -47,6 +47,34 @@ Fmax = 3-seed average; resources are seed-invariant. Cycles are measured
 | Azure-Lily | 512×128 | 128 | 2338 | 64 | 0 | 284 | 48.41 | 99 | 2.045 | 489,031 | 76,001 | 4.639 |
 | Azure-Lily | 512×128 | 256 | 2625 | 64 | 0 | 284 | 43.38 | 323 | 7.445 | 134,313 | 303,419 | 4.630 |
 
+### 2.05 Supply-matched Azure-Lily (E=5) — the fair baseline
+
+The E=16 Azure-Lily above was granted as much operand bandwidth as the fabric
+would give (128-bit words = 4 physical 512×40 BRAMs per memory). NL's 5
+elements/cycle/lane is forced by the DPE's 40-bit port. **AL (E=5)** rebuilds
+the same block with a 40 bit/cycle feed — one DPE port's worth — so the
+comparison isolates the exp mechanism (LUT ROM vs ACAM) instead of interface
+width. Measured, not extrapolated:
+
+| Point | CLB | DSP | BRAM | Grid | Area used | Fmax | Cycles | Latency | Matrices/s |
+|---|---|---|---|---|---|---|---|---|---|
+| AL E=16, S=128 | 2338 | 64 | 284 | 98×98 | 9.68 mm² | 48.41 | 99 | 2.05 µs | 489,031 |
+| **AL E=5, S=128** | 1027 | 22 | 94 | 52×52 | **3.79 mm²** | **69.96** | 279 | 3.99 µs | 250,745 |
+| AL E=16, S=256 | 2625 | 64 | 284 | 98×98 | 10.32 mm² | 43.38 | 323 | 7.45 µs | 134,313 |
+| **AL E=5, S=256** | 1283 | 22 | 143 | 68×68 | **4.90 mm²** | **58.95** | 971 | 16.47 µs | 60,710 |
+
+Narrowing AL raised its Fmax by 45%/36% (48.4 → 70.0, 43.4 → 59.0 MHz) and cut
+its area by 2.1–2.6×: shallower trees, 5 ROMs instead of 16, 40-bit memories
+(1 BRAM each instead of 4), and a 52×52 grid instead of 98×98. Holding Fmax
+fixed while narrowing — as an analytical estimate would have — was wrong by
+36–45%, which is why this point was measured.
+
+**Cycles at matched supply are a dead tie**: AL 279 vs P1/P2 290 at S=128
+(AL +4%), AL 971 vs P2 956 at S=256 (P2 +2%). Both are bound by the same
+⌈S/5⌉ per-row streaming rate. P1's S=256 lead (514 cycles) comes from buying
+a second DPE port per lane — 33 tiles instead of 17 — which the per-area
+metrics below charge it for.
+
 ### 2.1 Area-normalized (Azure-Lily = 1.00 at each S)
 
 Raw latency is not a fair comparison — AL buys its speed with silicon (64 DSP
@@ -76,6 +104,35 @@ not efficiency: it is the largest design at both sequence lengths.
 At S=128 AL retains a genuine per-area throughput edge (P1 0.76×), but still
 costs 2.5× the energy density. Proposed-2 trails on throughput/mm² at both S
 (0.62× / 0.56×) and wins only the energy metric — consistent with §3-F4.
+
+### 2.2 Normalized to the supply-matched AL (E=5) = 1.00
+
+The comparison the study actually rests on: every architecture fed at the same
+40 bit/cycle/lane, so nothing is granted extra interface width.
+
+| Arch | S | Throughput | Tput/mm² used | Tput/mm² grid | Total energy | Energy/mm² used |
+|---|---|---|---|---|---|---|
+| Proposed-1 | 128 | 1.03 | 0.58 | 0.39 | **0.28** | **0.16** |
+| Proposed-2 | 128 | 1.06 | 0.47 | 0.31 | **0.32** | **0.14** |
+| AL (E=5) | 128 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| AL (E=16) | 128 | 1.95 | 0.76 | 0.55 | 1.00 | 0.39 |
+| Proposed-1 | 256 | **1.98** | **1.03** | **1.30** | **0.28** | **0.15** |
+| Proposed-2 | 256 | 1.10 | 0.58 | 0.55 | **0.25** | **0.14** |
+| AL (E=5) | 256 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| AL (E=16) | 256 | 2.21 | 1.05 | 1.07 | 1.00 | 0.48 |
+
+Reading it:
+
+- **Raw throughput**: NL is at parity at S=128 (1.03–1.06×) and Proposed-1 is
+  2× ahead at S=256 — it spends a second DPE per lane to double its port
+  bandwidth, which AL at E=5 cannot do without widening its feed.
+- **Throughput/mm²**: AL(E=5) is the most area-efficient design at S=128
+  (NL 0.47–0.58×). At S=256 Proposed-1 pulls level (1.03× used-block, 1.30×
+  device-grid). Note AL(E=16) lands at 0.76–1.05× of AL(E=5) — i.e. widening
+  AL buys throughput almost exactly proportional to the area it costs, so
+  AL's throughput/mm² is roughly width-invariant, as predicted.
+- **Total energy**: NL wins 3.1–3.9× (0.25–0.32×) at every point, and this is
+  the one axis that no width choice on either side can move.
 
 Caveat: AL's 64 `dsp_top` tiles exceed `azure_lily.json`'s `total_dsp: 16` by
 4×. The area comparison implicitly grants AL four times its own configured DSP

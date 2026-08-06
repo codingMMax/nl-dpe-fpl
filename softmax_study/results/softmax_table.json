@@ -40,10 +40,12 @@
       "dsp": 0.0,
       "total": 21358.1
     },
-    "n_thr_used": 0.764,
-    "n_thr_grid": 0.718,
-    "n_energy_used": 0.407,
-    "n_energy_grid": 0.382
+    "n_thr_used": 0.583,
+    "n_thr_grid": 0.394,
+    "n_energy_used": 0.159,
+    "n_energy_grid": 0.108,
+    "n_energy_total": 0.281,
+    "n_throughput": 1.029
   },
   {
     "arch": "Proposed-1",
@@ -61,9 +63,9 @@
     "area_grid_mm2": 15.798,
     "fmax_mhz": 61.89,
     "fmax_seeds": [
-      63.33,
       61.99,
-      60.35
+      60.35,
+      63.33
     ],
     "cycles": 514,
     "latency_us": 8.305,
@@ -86,10 +88,12 @@
       "dsp": 0.0,
       "total": 84672.8
     },
-    "n_thr_used": 0.981,
-    "n_thr_grid": 1.22,
-    "n_energy_used": 0.305,
-    "n_energy_grid": 0.38
+    "n_thr_used": 1.03,
+    "n_thr_grid": 1.3,
+    "n_energy_used": 0.145,
+    "n_energy_grid": 0.183,
+    "n_energy_total": 0.279,
+    "n_throughput": 1.983
   },
   {
     "arch": "Proposed-2",
@@ -132,10 +136,12 @@
       "dsp": 0.0,
       "total": 24342.6
     },
-    "n_thr_used": 0.621,
-    "n_thr_grid": 0.565,
-    "n_energy_used": 0.367,
-    "n_energy_grid": 0.334
+    "n_thr_used": 0.474,
+    "n_thr_grid": 0.31,
+    "n_energy_used": 0.144,
+    "n_energy_grid": 0.094,
+    "n_energy_total": 0.32,
+    "n_throughput": 1.058
   },
   {
     "arch": "Proposed-2",
@@ -178,13 +184,111 @@
       "dsp": 0.0,
       "total": 77057.2
     },
-    "n_thr_used": 0.555,
-    "n_thr_grid": 0.516,
-    "n_energy_used": 0.285,
-    "n_energy_grid": 0.265
+    "n_thr_used": 0.583,
+    "n_thr_grid": 0.549,
+    "n_energy_used": 0.135,
+    "n_energy_grid": 0.127,
+    "n_energy_total": 0.254,
+    "n_throughput": 1.095
   },
   {
-    "arch": "Azure-Lily",
+    "arch": "AL (E=5)",
+    "rxc": "512x128",
+    "S": 128,
+    "clb": 1027,
+    "dsp": 22,
+    "wc": 0,
+    "bram": 94,
+    "grid": [
+      52,
+      52
+    ],
+    "area_used_mm2": 3.786,
+    "area_grid_mm2": 6.054,
+    "fmax_mhz": 69.96,
+    "fmax_seeds": [
+      70.71,
+      67.09,
+      72.07
+    ],
+    "cycles": 279,
+    "latency_us": 3.988,
+    "matrices_per_s": 250745,
+    "rows_per_s": 32095365,
+    "energy_pj": 76001.4,
+    "pj_per_element": 4.6388,
+    "dpe_pj": 0.0,
+    "dpe_pj_per_element": 0.0,
+    "thr_per_mm2_used": 66233.9,
+    "thr_per_mm2_grid": 41416.3,
+    "energy_per_mm2_used": 20075.7,
+    "energy_per_mm2_grid": 12553.4,
+    "breakdown": {
+      "clb_compare": 4298.0,
+      "clb_add": 2773.9,
+      "bram": 5677.1,
+      "lut_rom": 43591.7,
+      "dsp": 19660.8,
+      "dpe": 0.0,
+      "total": 76001.4
+    },
+    "n_thr_used": 1.0,
+    "n_thr_grid": 1.0,
+    "n_energy_used": 1.0,
+    "n_energy_grid": 1.0,
+    "n_energy_total": 1.0,
+    "n_throughput": 1.0
+  },
+  {
+    "arch": "AL (E=5)",
+    "rxc": "512x128",
+    "S": 256,
+    "clb": 1283,
+    "dsp": 22,
+    "wc": 0,
+    "bram": 143,
+    "grid": [
+      68,
+      68
+    ],
+    "area_used_mm2": 4.9,
+    "area_grid_mm2": 10.353,
+    "fmax_mhz": 58.95,
+    "fmax_seeds": [
+      62.24,
+      57.77,
+      56.84
+    ],
+    "cycles": 971,
+    "latency_us": 16.472,
+    "matrices_per_s": 60710,
+    "rows_per_s": 15541872,
+    "energy_pj": 303419.1,
+    "pj_per_element": 4.6298,
+    "dpe_pj": 0.0,
+    "dpe_pj_per_element": 0.0,
+    "thr_per_mm2_used": 12389.4,
+    "thr_per_mm2_grid": 5864.0,
+    "energy_per_mm2_used": 61919.9,
+    "energy_per_mm2_grid": 29307.0,
+    "breakdown": {
+      "clb_compare": 17259.6,
+      "clb_add": 11117.2,
+      "bram": 22708.2,
+      "lut_rom": 173690.9,
+      "dsp": 78643.2,
+      "dpe": 0.0,
+      "total": 303419.1
+    },
+    "n_thr_used": 1.0,
+    "n_thr_grid": 1.0,
+    "n_energy_used": 1.0,
+    "n_energy_grid": 1.0,
+    "n_energy_total": 1.0,
+    "n_throughput": 1.0
+  },
+  {
+    "arch": "AL (E=16)",
     "rxc": "512x128",
     "S": 128,
     "clb": 2338,
@@ -199,9 +303,9 @@
     "area_grid_mm2": 21.503,
     "fmax_mhz": 48.41,
     "fmax_seeds": [
-      47.79,
+      49.37,
       48.09,
-      49.37
+      47.79
     ],
     "cycles": 99,
     "latency_us": 2.045,
@@ -224,13 +328,15 @@
       "dpe": 0.0,
       "total": 76001.4
     },
-    "n_thr_used": 1.0,
-    "n_thr_grid": 1.0,
-    "n_energy_used": 1.0,
-    "n_energy_grid": 1.0
+    "n_thr_used": 0.763,
+    "n_thr_grid": 0.549,
+    "n_energy_used": 0.391,
+    "n_energy_grid": 0.282,
+    "n_energy_total": 1.0,
+    "n_throughput": 1.95
   },
   {
-    "arch": "Azure-Lily",
+    "arch": "AL (E=16)",
     "rxc": "512x128",
     "S": 256,
     "clb": 2625,
@@ -245,8 +351,8 @@
     "area_grid_mm2": 21.503,
     "fmax_mhz": 43.38,
     "fmax_seeds": [
-      42.9,
       43.43,
+      42.9,
       43.82
     ],
     "cycles": 323,
@@ -270,9 +376,11 @@
       "dpe": 0.0,
       "total": 303419.1
     },
-    "n_thr_used": 1.0,
-    "n_thr_grid": 1.0,
-    "n_energy_used": 1.0,
-    "n_energy_grid": 1.0
+    "n_thr_used": 1.051,
+    "n_thr_grid": 1.065,
+    "n_energy_used": 0.475,
+    "n_energy_grid": 0.481,
+    "n_energy_total": 1.0,
+    "n_throughput": 2.212
   }
 ]

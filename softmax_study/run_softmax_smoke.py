@@ -88,10 +88,11 @@ NL_LOCKED = True    # Task 4 Step 5: anchors 290/290/514/956 = spec fill + 4
 
 
 def predict_cycles(kind: str, S: int, C: int | None = None,
-                   n_exp: int | None = None) -> tuple[int | None, str]:
+                   n_exp: int | None = None, E: int = 16
+                   ) -> tuple[int | None, str]:
     """Return (predicted_total_cycles or None, explanation)."""
     rpl = S // W
-    wpr = S // 16                     # 16-wide words per row
+    wpr = math.ceil(S / E) if kind == "al" else S // 16
     if kind == "al":
         # Row-granular pipeline: stages A/B/D each stream wpr words/row at
         # 1 word/cycle with no inter-row bubble (steady = wpr); the fill
@@ -99,8 +100,11 @@ def predict_cycles(kind: str, S: int, C: int | None = None,
         # 5*wpr + 3 - wpr*1 ... locked closed form over both anchors:
         #   total = (rpl + 4) * wpr + 3
         # (S=128: (8+4)*8+3 = 99;  S=256: (16+4)*16+3 = 323)
-        if not AL_LOCKED:
-            return None, f"AL steady={wpr} (unlocked)"
+        # Locked at E=16 (anchors 99 / 323). The fill overhead is NOT
+        # proportional to wpr, so this closed form only holds at E=16;
+        # other widths are measured, not extrapolated.
+        if not AL_LOCKED or E != 16:
+            return None, f"AL E={E} steady={wpr} (measured, no closed form)"
         return (rpl + 4) * wpr + 3, f"AL locked: (rpl+4)*wpr+3, steady={wpr}"
     else:
         E = S // n_exp
@@ -128,6 +132,7 @@ class Case:
     S: int
     C: int | None = None
     n_exp: int | None = None
+    E: int = 16          # AL datapath width (elements/cycle/lane)
 
     @property
     def rpl(self) -> int:
@@ -137,6 +142,9 @@ class Case:
 CASES = [
     Case("al_s128", "al", 128),
     Case("al_s256", "al", 256),
+    # supply-matched AL: 5 elements/cycle/lane = one 40-bit DPE port
+    Case("al5_s128", "al", 128, E=5),
+    Case("al5_s256", "al", 256, E=5),
     Case("nl_p1_s128", "nl", 128, C=128, n_exp=1),
     Case("nl_p2_s128", "nl", 128, C=256, n_exp=1),   # E=S=128 < C: same elab as p1
     Case("nl_p1_s256", "nl", 256, C=128, n_exp=2),   # free split: 2 exp DPEs/lane
@@ -173,7 +181,7 @@ def run_case(case: Case, keep: bool, cycle_gate: bool) -> dict:
     sim = work / "sim.out"
     if case.kind == "al":
         srcs = [RTL / "softmax_al.v", TB / "sim_models.v", TB / "tb_softmax_al.v"]
-        defines = [f"-DS_TB={case.S}"]
+        defines = [f"-DS_TB={case.S}", f"-DE_TB={case.E}"]
         tb_top = "tb_softmax_al"
     else:
         srcs = [DPE_MODEL, RTL / "softmax_nldpe.v", TB / "tb_softmax_nldpe.v"]
@@ -203,7 +211,8 @@ def run_case(case: Case, keep: bool, cycle_gate: bool) -> dict:
     functional = "TB_PASS" in out
     mism = [ln for ln in out.splitlines() if ln.startswith("MISMATCH")][:10]
 
-    pred, pred_note = predict_cycles(case.kind, case.S, case.C, case.n_exp)
+    pred, pred_note = predict_cycles(case.kind, case.S, case.C, case.n_exp,
+                                     case.E)
     cycle_ok = (pred is None) or (cycles == pred)
 
     status = "PASS" if functional and (cycle_ok or not cycle_gate) else "FAIL"
@@ -235,8 +244,24 @@ def main() -> int:
         for m in r.get("mismatches", []):
             print(f"    {m}")
 
+    # Merge with any existing summary: a filtered run (--case) must not
+    # clobber results for cases it did not run.
     summary = RESULTS / "smoke.json"
-    summary.write_text(json.dumps(results, indent=2, default=str))
+    merged = {}
+    if summary.is_file():
+        try:
+            for r in json.loads(summary.read_text()):
+                merged[r["label"]] = r
+        except Exception:
+            pass
+    for r in results:
+        merged[r["label"]] = r
+    order = [c.label for c in CASES]
+    summary.write_text(json.dumps(
+        sorted(merged.values(),
+               key=lambda r: order.index(r["label"])
+               if r["label"] in order else 99),
+        indent=2, default=str))
     n_pass = sum(1 for r in results if r["status"] == "PASS")
     print(f"\n{n_pass}/{len(results)} PASS  (details: {summary})")
     return 0 if n_pass == len(results) else 1

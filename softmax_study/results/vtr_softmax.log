@@ -1,432 +1,182 @@
 {
   "runs": [
     {
-      "label": "AL_s128",
-      "seed": 3,
-      "status": "OK",
-      "elapsed_s": 386.0996584892273,
-      "fmax_mhz": 47.7875,
-      "wirelength": 816244.0,
-      "resources": {
-        "io": 49,
-        "clb": 2338,
-        "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
-    },
-    {
-      "label": "AL_s128",
-      "seed": 2,
-      "status": "OK",
-      "elapsed_s": 408.63170766830444,
-      "fmax_mhz": 48.0891,
-      "wirelength": 801401.0,
-      "resources": {
-        "io": 49,
-        "clb": 2338,
-        "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
-    },
-    {
-      "label": "AL_s128",
+      "label": "AL5_s128",
       "seed": 1,
       "status": "OK",
-      "elapsed_s": 449.11750960350037,
-      "fmax_mhz": 49.3656,
-      "wirelength": 802159.0,
+      "elapsed_s": 174.10258102416992,
+      "fmax_mhz": 70.7149,
+      "wirelength": 260944.0,
       "resources": {
-        "io": 49,
-        "clb": 2338,
+        "io": 53,
+        "clb": 1027,
         "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
     },
     {
-      "label": "AL_s256",
+      "label": "AL5_s128",
       "seed": 2,
       "status": "OK",
-      "elapsed_s": 500.6705758571625,
-      "fmax_mhz": 42.9026,
-      "wirelength": 891165.0,
+      "elapsed_s": 177.04387044906616,
+      "fmax_mhz": 67.0915,
+      "wirelength": 268901.0,
       "resources": {
         "io": 53,
-        "clb": 2625,
+        "clb": 1027,
         "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
     },
     {
-      "label": "AL_s256",
-      "seed": 1,
+      "label": "AL5_s128",
+      "seed": 3,
       "status": "OK",
-      "elapsed_s": 505.4627194404602,
-      "fmax_mhz": 43.431,
-      "wirelength": 861174.0,
+      "elapsed_s": 177.59270429611206,
+      "fmax_mhz": 72.0672,
+      "wirelength": 265459.0,
       "resources": {
         "io": 53,
-        "clb": 2625,
+        "clb": 1027,
         "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
     },
     {
-      "label": "AL_s256",
-      "seed": 3,
+      "label": "AL5_s256",
+      "seed": 2,
       "status": "OK",
-      "elapsed_s": 525.2042796611786,
-      "fmax_mhz": 43.8157,
-      "wirelength": 872978.0,
+      "elapsed_s": 315.4216103553772,
+      "fmax_mhz": 57.7674,
+      "wirelength": 354248.0,
       "resources": {
-        "io": 53,
-        "clb": 2625,
+        "io": 57,
+        "clb": 1283,
         "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
     },
     {
-      "label": "P1_s128",
-      "seed": 1,
-      "status": "OK",
-      "elapsed_s": 148.38176107406616,
-      "fmax_mhz": 70.9681,
-      "wirelength": 450362.0,
-      "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P1_s128",
-      "seed": 2,
-      "status": "OK",
-      "elapsed_s": 150.1684000492096,
-      "fmax_mhz": 77.7222,
-      "wirelength": 445032.0,
-      "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P1_s128",
+      "label": "AL5_s256",
       "seed": 3,
       "status": "OK",
-      "elapsed_s": 154.95100045204163,
-      "fmax_mhz": 75.7301,
-      "wirelength": 439135.0,
+      "elapsed_s": 323.7972297668457,
+      "fmax_mhz": 56.8438,
+      "wirelength": 356041.0,
       "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
+        "io": 57,
+        "clb": 1283,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
     },
     {
-      "label": "P2_s128",
+      "label": "AL5_s256",
       "seed": 1,
       "status": "OK",
-      "elapsed_s": 177.01488423347473,
-      "fmax_mhz": 80.1533,
-      "wirelength": 456273.0,
+      "elapsed_s": 324.89766120910645,
+      "fmax_mhz": 62.2383,
+      "wirelength": 362589.0,
       "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P2_s128",
-      "seed": 2,
-      "status": "OK",
-      "elapsed_s": 183.74826884269714,
-      "fmax_mhz": 75.8693,
-      "wirelength": 451432.0,
-      "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P2_s128",
-      "seed": 3,
-      "status": "OK",
-      "elapsed_s": 175.78213143348694,
-      "fmax_mhz": 74.6721,
-      "wirelength": 449873.0,
-      "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P1_s256",
-      "seed": 3,
-      "status": "OK",
-      "elapsed_s": 278.16152238845825,
-      "fmax_mhz": 63.331,
-      "wirelength": 572853.0,
-      "resources": {
-        "io": 55,
-        "clb": 1473,
-        "wc": 33,
-        "dsp_top": 1,
-        "memory": 223
-      }
-    },
-    {
-      "label": "P1_s256",
-      "seed": 1,
-      "status": "OK",
-      "elapsed_s": 316.5198173522949,
-      "fmax_mhz": 61.9922,
-      "wirelength": 580392.0,
-      "resources": {
-        "io": 55,
-        "clb": 1473,
-        "wc": 33,
-        "dsp_top": 1,
-        "memory": 223
-      }
-    },
-    {
-      "label": "P1_s256",
-      "seed": 2,
-      "status": "OK",
-      "elapsed_s": 318.2997958660126,
-      "fmax_mhz": 60.3546,
-      "wirelength": 585356.0,
-      "resources": {
-        "io": 55,
-        "clb": 1473,
-        "wc": 33,
-        "dsp_top": 1,
-        "memory": 223
-      }
-    },
-    {
-      "label": "P2_s256",
-      "seed": 1,
-      "status": "OK",
-      "elapsed_s": 264.65808725357056,
-      "fmax_mhz": 60.9238,
-      "wirelength": 507040.0,
-      "resources": {
-        "io": 55,
-        "clb": 1428,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 212
-      }
-    },
-    {
-      "label": "P2_s256",
-      "seed": 2,
-      "status": "OK",
-      "elapsed_s": 262.29199290275574,
-      "fmax_mhz": 64.1924,
-      "wirelength": 504875.0,
-      "resources": {
-        "io": 55,
-        "clb": 1428,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 212
-      }
-    },
-    {
-      "label": "P2_s256",
-      "seed": 3,
-      "status": "OK",
-      "elapsed_s": 254.66416382789612,
-      "fmax_mhz": 65.5082,
-      "wirelength": 509936.0,
-      "resources": {
-        "io": 55,
-        "clb": 1428,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 212
-      }
+        "io": 57,
+        "clb": 1283,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
     }
   ],
   "aggregate": [
     {
-      "label": "AL_s128",
+      "label": "AL5_s128",
       "S": 128,
       "arch": "azure_lily_auto.xml",
       "n_exp": null,
+      "E": 5,
       "status": "OK",
       "seeds": [
-        3,
+        1,
         2,
+        3
+      ],
+      "fmax_seeds": [
+        70.7149,
+        67.0915,
+        72.0672
+      ],
+      "fmax_avg_mhz": 69.95786666666667,
+      "wirelength_avg": 265101.3333333333,
+      "resources": {
+        "io": 53,
+        "clb": 1027,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
+    },
+    {
+      "label": "AL5_s256",
+      "S": 256,
+      "arch": "azure_lily_auto.xml",
+      "n_exp": null,
+      "E": 5,
+      "status": "OK",
+      "seeds": [
+        2,
+        3,
         1
       ],
       "fmax_seeds": [
-        47.7875,
-        48.0891,
-        49.3656
+        57.7674,
+        56.8438,
+        62.2383
       ],
-      "fmax_avg_mhz": 48.41406666666666,
-      "wirelength_avg": 806601.3333333334,
+      "fmax_avg_mhz": 58.94983333333334,
+      "wirelength_avg": 357626.0,
       "resources": {
-        "io": 49,
-        "clb": 2338,
+        "io": 57,
+        "clb": 1283,
         "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
-    },
-    {
-      "label": "AL_s256",
-      "S": 256,
-      "arch": "azure_lily_auto.xml",
-      "n_exp": null,
-      "status": "OK",
-      "seeds": [
-        2,
-        1,
-        3
-      ],
-      "fmax_seeds": [
-        42.9026,
-        43.431,
-        43.8157
-      ],
-      "fmax_avg_mhz": 43.38309999999999,
-      "wirelength_avg": 875105.6666666666,
-      "resources": {
-        "io": 53,
-        "clb": 2625,
-        "wc": 0,
-        "dsp_top": 64,
-        "memory": 284
-      }
-    },
-    {
-      "label": "P1_s128",
-      "S": 128,
-      "arch": "proposed_auto.xml",
-      "n_exp": 1,
-      "status": "OK",
-      "seeds": [
-        1,
-        2,
-        3
-      ],
-      "fmax_seeds": [
-        70.9681,
-        77.7222,
-        75.7301
-      ],
-      "fmax_avg_mhz": 74.8068,
-      "wirelength_avg": 444843.0,
-      "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P1_s256",
-      "S": 256,
-      "arch": "proposed_auto.xml",
-      "n_exp": 2,
-      "status": "OK",
-      "seeds": [
-        3,
-        1,
-        2
-      ],
-      "fmax_seeds": [
-        63.331,
-        61.9922,
-        60.3546
-      ],
-      "fmax_avg_mhz": 61.892599999999995,
-      "wirelength_avg": 579533.6666666666,
-      "resources": {
-        "io": 55,
-        "clb": 1473,
-        "wc": 33,
-        "dsp_top": 1,
-        "memory": 223
-      }
-    },
-    {
-      "label": "P2_s128",
-      "S": 128,
-      "arch": "al_like_auto.xml",
-      "n_exp": 1,
-      "status": "OK",
-      "seeds": [
-        1,
-        2,
-        3
-      ],
-      "fmax_seeds": [
-        80.1533,
-        75.8693,
-        74.6721
-      ],
-      "fmax_avg_mhz": 76.89823333333334,
-      "wirelength_avg": 452526.0,
-      "resources": {
-        "io": 53,
-        "clb": 1049,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 220
-      }
-    },
-    {
-      "label": "P2_s256",
-      "S": 256,
-      "arch": "al_like_auto.xml",
-      "n_exp": 1,
-      "status": "OK",
-      "seeds": [
-        1,
-        2,
-        3
-      ],
-      "fmax_seeds": [
-        60.9238,
-        64.1924,
-        65.5082
-      ],
-      "fmax_avg_mhz": 63.54146666666667,
-      "wirelength_avg": 507283.6666666667,
-      "resources": {
-        "io": 55,
-        "clb": 1428,
-        "wc": 17,
-        "dsp_top": 1,
-        "memory": 212
-      }
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
     }
   ]
 }

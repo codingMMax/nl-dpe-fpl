@@ -9,8 +9,14 @@
 
 module tb_softmax_al;
     localparam S   = `S_TB;
+`ifdef E_TB
+    localparam E   = `E_TB;
+`else
+    localparam E   = 16;
+`endif
     localparam W   = 16;
     localparam RPL = S / W;           // rows per lane
+    localparam WPR = (S + E - 1) / E; // words per row
     localparam NB  = RPL * S;         // bytes per lane
     localparam TOT = W * NB;          // total bytes
 
@@ -18,17 +24,29 @@ module tb_softmax_al;
     wire done;
     reg         in_wen = 0;
     reg  [3:0]  in_lane = 0;
-    reg  [13:0] in_addr = 0;
+    reg  [13:0] in_waddr = 0;
+    reg  [3:0]  in_boff = 0;
     reg  [7:0]  in_data = 0;
     reg  [3:0]  out_lane = 0;
-    reg  [13:0] out_addr = 0;
+    reg  [13:0] out_waddr = 0;
+    reg  [3:0]  out_boff = 0;
     wire [7:0]  out_rdata;
 
-    softmax_al #(.S(S)) dut (
+    // element index -> (word address, byte offset); the driver owns this
+    // arithmetic so the RTL needs no divider for non-power-of-2 E.
+    function [13:0] waddr_of; input integer a;
+        begin waddr_of = (a / S) * WPR + ((a % S) / E); end
+    endfunction
+    function [3:0] boff_of; input integer a;
+        begin boff_of = (a % S) % E; end
+    endfunction
+
+    softmax_al #(.S(S), .E(E)) dut (
         .clk(clk), .reset(reset), .start(start), .done(done),
-        .in_wen(in_wen), .in_lane(in_lane), .in_addr(in_addr),
-        .in_data(in_data),
-        .out_lane(out_lane), .out_addr(out_addr), .out_rdata(out_rdata)
+        .in_wen(in_wen), .in_lane(in_lane), .in_waddr(in_waddr),
+        .in_boff(in_boff), .in_data(in_data),
+        .out_lane(out_lane), .out_waddr(out_waddr), .out_boff(out_boff),
+        .out_rdata(out_rdata)
     );
 
     always #5 clk = ~clk;
@@ -59,10 +77,11 @@ module tb_softmax_al;
         for (k = 0; k < W; k = k + 1) begin
             for (a = 0; a < NB; a = a + 1) begin
                 @(negedge clk);
-                in_wen  = 1;
-                in_lane = k[3:0];
-                in_addr = a[13:0];
-                in_data = scores[k * NB + a];
+                in_wen   = 1;
+                in_lane  = k[3:0];
+                in_waddr = waddr_of(a);
+                in_boff  = boff_of(a);
+                in_data  = scores[k * NB + a];
             end
         end
         @(negedge clk);
@@ -82,8 +101,9 @@ module tb_softmax_al;
         for (k = 0; k < W; k = k + 1) begin
             for (a = 0; a < NB; a = a + 1) begin
                 @(negedge clk);
-                out_lane = k[3:0];
-                out_addr = a[13:0];
+                out_lane  = k[3:0];
+                out_waddr = waddr_of(a);
+                out_boff  = boff_of(a);
                 @(negedge clk);
                 @(negedge clk);
                 if (out_rdata !== expected[k * NB + a]) begin

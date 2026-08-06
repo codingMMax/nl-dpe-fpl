@@ -110,13 +110,19 @@ def energy(kind: str, S: int, C: int | None) -> dict:
 # ── table assembly ──────────────────────────────────────────────────────
 ROWS = [
     # vtr_label, smoke_label, display, RxC, kind, C (energy-charged)
-    ("P1_s128", "nl_p1_s128", "Proposed-1", "1024x128", "nl", 128),
-    ("P1_s256", "nl_p1_s256", "Proposed-1", "1024x128", "nl", 128),
-    ("P2_s128", "nl_p2_s128", "Proposed-2", "1024x256", "nl", 256),
-    ("P2_s256", "nl_p2_s256", "Proposed-2", "1024x256", "nl", 256),
-    ("AL_s128", "al_s128",    "Azure-Lily", "512x128",  "al", None),
-    ("AL_s256", "al_s256",    "Azure-Lily", "512x128",  "al", None),
+    ("P1_s128",  "nl_p1_s128", "Proposed-1",  "1024x128", "nl", 128),
+    ("P1_s256",  "nl_p1_s256", "Proposed-1",  "1024x128", "nl", 128),
+    ("P2_s128",  "nl_p2_s128", "Proposed-2",  "1024x256", "nl", 256),
+    ("P2_s256",  "nl_p2_s256", "Proposed-2",  "1024x256", "nl", 256),
+    ("AL5_s128", "al5_s128",   "AL (E=5)",    "512x128",  "al", None),
+    ("AL5_s256", "al5_s256",   "AL (E=5)",    "512x128",  "al", None),
+    ("AL_s128",  "al_s128",    "AL (E=16)",   "512x128",  "al", None),
+    ("AL_s256",  "al_s256",    "AL (E=16)",   "512x128",  "al", None),
 ]
+# Normalization baseline: the supply-matched AL (E=5, 40 bit/cycle operand
+# feed = one NL-DPE port). AL's *energy* is width-invariant, so the energy
+# baseline is the same whichever AL is chosen; only area/throughput differ.
+BASE_ARCH = "AL (E=5)"
 
 
 def grid_from_log(vtr_label: str) -> list:
@@ -177,14 +183,16 @@ def main() -> int:
         )
         table.append(row)
 
-    # ── normalize to Azure-Lily at the same S ──
+    # ── normalize to the supply-matched AL at the same S ──
     for r in table:
         base = next(b for b in table
-                    if b["arch"] == "Azure-Lily" and b["S"] == r["S"])
+                    if b["arch"] == BASE_ARCH and b["S"] == r["S"])
         for key, norm in (("thr_per_mm2_used", "n_thr_used"),
                           ("thr_per_mm2_grid", "n_thr_grid"),
                           ("energy_per_mm2_used", "n_energy_used"),
-                          ("energy_per_mm2_grid", "n_energy_grid")):
+                          ("energy_per_mm2_grid", "n_energy_grid"),
+                          ("energy_pj", "n_energy_total"),
+                          ("matrices_per_s", "n_throughput")):
             r[norm] = (round(r[key] / base[key], 3)
                        if (r.get(key) and base.get(key)) else None)
 
@@ -212,23 +220,26 @@ def main() -> int:
             f"| {r['area_grid_mm2']} | {r['fmax_mhz']} | {r['cycles']} "
             f"| {r['latency_us']} | {r['matrices_per_s']} | {r['energy_pj']} |")
 
-    # ── table 2: area-normalized, relative to Azure-Lily at the same S ──
+    # ── table 2: normalized to the supply-matched AL at the same S ──
     lines += [
         "",
-        "### Area-normalized (Azure-Lily = 1.00 at each S)",
+        f"### Normalized to {BASE_ARCH} (= 1.00 at each S)",
         "",
-        "Throughput/mm²: higher is better. Energy/mm²: lower is better.",
+        "Throughput and throughput/mm²: higher is better. Energy: lower is",
+        "better. AL's total energy is width-invariant (op counts don't depend",
+        "on datapath width), so the energy baseline is the same for E=5 and",
+        "E=16 — only area and throughput move.",
         "",
-        ("| Arch | S | Tput/mm² used | vs AL | Tput/mm² grid | vs AL | "
-         "Energy/mm² used (pJ) | vs AL | Energy/mm² grid (pJ) | vs AL |"),
-        "|" + "---|" * 10,
+        ("| Arch | S | Throughput | Tput/mm² used | Tput/mm² grid | "
+         "Total energy | Energy/mm² used | Energy/mm² grid |"),
+        "|" + "---|" * 8,
     ]
     for r in table:
         lines.append(
-            f"| {r['arch']} | {r['S']} | {r['thr_per_mm2_used']} "
-            f"| {r['n_thr_used']} | {r['thr_per_mm2_grid']} | {r['n_thr_grid']} "
-            f"| {r['energy_per_mm2_used']} | {r['n_energy_used']} "
-            f"| {r['energy_per_mm2_grid']} | {r['n_energy_grid']} |")
+            f"| {r['arch']} | {r['S']} | {r['n_throughput']} "
+            f"| {r['n_thr_used']} | {r['n_thr_grid']} "
+            f"| {r['n_energy_total']} | {r['n_energy_used']} "
+            f"| {r['n_energy_grid']} |")
 
     md = "\n".join(lines)
     (RESULTS / "softmax_table.md").write_text(md + "\n")

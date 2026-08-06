@@ -20,6 +20,26 @@
     "mismatches": []
   },
   {
+    "label": "al5_s128",
+    "status": "PASS",
+    "functional": true,
+    "cycles": 279,
+    "predicted": null,
+    "pred_note": "AL E=5 steady=26 (measured, no closed form)",
+    "cycle_exact": false,
+    "mismatches": []
+  },
+  {
+    "label": "al5_s256",
+    "status": "PASS",
+    "functional": true,
+    "cycles": 971,
+    "predicted": null,
+    "pred_note": "AL E=5 steady=52 (measured, no closed form)",
+    "cycle_exact": false,
+    "mismatches": []
+  },
+  {
     "label": "nl_p1_s128",
     "status": "PASS",
     "functional": true,
