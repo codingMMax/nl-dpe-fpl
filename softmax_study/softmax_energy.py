@@ -41,6 +41,33 @@ ALPHA = 1.0          # LUT ROM activity factor (upper bound, reported)
 N_CLB_ROM = 4        # 256x8b ROM in CLB LUTs
 W = 16               # lanes
 
+# ── area model ──────────────────────────────────────────────────────────
+# Tile areas in minimum-width-transistor areas (MWTA), read from the arch
+# XMLs (benchmarks/arch/*.xml <tile area=...>). Two area conventions are
+# reported because they can disagree on the S=256 verdict:
+#   used  : sum(count x tile MWTA), scaled to um^2 by the project's CLB-tile
+#           convention (CLB tile = 2239 um^2 incl. routing, CLAUDE.md;
+#           other tiles proportional by area/CLB_TILE_MWTA -- tile sizing v2)
+#   grid  : device grid from VPR auto_layout x 2239 um^2 (the DSE convention,
+#           CLAUDE.md "Area = grid_W x grid_H x 2239 / 1e6 [mm^2]")
+TILE_MWTA = {"clb": 27905, "dsp_top": 253779, "memory": 137668}
+WC_MWTA = {"proposed_auto.xml": 1379212,      # P1 1024x128, tile 3w x 7h
+           "al_like_auto.xml": 2674749,       # P2 1024x256, tile 5w x 8h
+           "azure_lily_auto.xml": 2320000}    # AL 512x128,  tile 6w x 5h
+CLB_TILE_UM2 = 2239.0
+UM2_PER_MWTA = CLB_TILE_UM2 / TILE_MWTA["clb"]
+
+
+def area_mm2(resources: dict, arch_xml: str, grid: list) -> tuple[float, float]:
+    """Return (used-block area, device-grid area) in mm^2."""
+    mwta = (resources.get("clb", 0) * TILE_MWTA["clb"]
+            + resources.get("dsp_top", 0) * TILE_MWTA["dsp_top"]
+            + resources.get("memory", 0) * TILE_MWTA["memory"]
+            + resources.get("wc", 0) * WC_MWTA[arch_xml])
+    used = mwta * UM2_PER_MWTA / 1e6
+    gw, gh = (grid + [0, 0])[:2]
+    return used, gw * gh * CLB_TILE_UM2 / 1e6
+
 # ── constants from configs ──────────────────────────────────────────────
 nl = json.loads((CFG_DIR / "nl_dpe.json").read_text())
 al = json.loads((CFG_DIR / "azure_lily.json").read_text())
@@ -92,6 +119,19 @@ ROWS = [
 ]
 
 
+def grid_from_log(vtr_label: str) -> list:
+    """Fallback: read 'FPGA sized to W x H' from a kept VPR log."""
+    import re
+    for seed in (1, 2, 3):
+        log = RESULTS / f"vtr_{vtr_label}_seed{seed}" / "vpr_stdout.log"
+        if log.is_file():
+            m = re.findall(r"FPGA sized to (\d+) x (\d+)",
+                           log.read_text(errors="replace"))
+            if m:
+                return [int(m[-1][0]), int(m[-1][1])]
+    return [0, 0]
+
+
 def main() -> int:
     smoke = {r["label"]: r for r in
              json.loads((RESULTS / "smoke.json").read_text())}
@@ -108,23 +148,45 @@ def main() -> int:
         fmax = v.get("fmax_avg_mhz")
         e = energy(kind, S, C)
         lat_us = cyc / fmax if (cyc and fmax) else None
+        grid = v.get("grid") or grid_from_log(vlbl)
+        a_used, a_grid = area_mm2(res, v.get("arch", ""), grid) if res else (None, None)
+        thr = (1e6 / lat_us) if lat_us else None
         row = dict(
             arch=disp, rxc=rxc, S=S,
             clb=res.get("clb"), dsp=res.get("dsp_top"),
             wc=res.get("wc"), bram=res.get("memory"),
+            grid=grid,
+            area_used_mm2=round(a_used, 3) if a_used else None,
+            area_grid_mm2=round(a_grid, 3) if a_grid else None,
             fmax_mhz=round(fmax, 2) if fmax else None,
             fmax_seeds=[round(x, 2) for x in v.get("fmax_seeds", [])],
             cycles=cyc,
             latency_us=round(lat_us, 3) if lat_us else None,
-            matrices_per_s=round(1e6 / lat_us) if lat_us else None,
-            rows_per_s=round(S * 1e6 / lat_us) if lat_us else None,
+            matrices_per_s=round(thr) if thr else None,
+            rows_per_s=round(S * thr) if thr else None,
             energy_pj=round(e["total"], 1),
             pj_per_element=round(e["total"] / (S * S), 4),
             dpe_pj=round(e["dpe"], 1),
             dpe_pj_per_element=round(e["dpe"] / (S * S), 4),
+            # area-normalized (per spec: throughput/mm^2 and energy/mm^2)
+            thr_per_mm2_used=round(thr / a_used, 1) if (thr and a_used) else None,
+            thr_per_mm2_grid=round(thr / a_grid, 1) if (thr and a_grid) else None,
+            energy_per_mm2_used=round(e["total"] / a_used, 1) if a_used else None,
+            energy_per_mm2_grid=round(e["total"] / a_grid, 1) if a_grid else None,
             breakdown={k: round(v2, 1) for k, v2 in e.items()},
         )
         table.append(row)
+
+    # ── normalize to Azure-Lily at the same S ──
+    for r in table:
+        base = next(b for b in table
+                    if b["arch"] == "Azure-Lily" and b["S"] == r["S"])
+        for key, norm in (("thr_per_mm2_used", "n_thr_used"),
+                          ("thr_per_mm2_grid", "n_thr_grid"),
+                          ("energy_per_mm2_used", "n_energy_used"),
+                          ("energy_per_mm2_grid", "n_energy_grid")):
+            r[norm] = (round(r[key] / base[key], 3)
+                       if (r.get(key) and base.get(key)) else None)
 
     (RESULTS / "softmax_table.json").write_text(json.dumps(table, indent=2))
     with (RESULTS / "softmax_table.csv").open("w", newline="") as f:
@@ -133,21 +195,48 @@ def main() -> int:
         wcsv.writeheader()
         wcsv.writerows(table)
 
-    hdr = ("| Arch | R×C | S | CLB | DSP | DPE (wc) | BRAM | Fmax (MHz) | "
-           "Cycles | Latency (µs) | Matrices/s | Energy (pJ) | pJ/elem |")
-    sep = "|" + "---|" * 13
-    lines = [hdr, sep]
+    # ── table 1: raw measurements ──
+    lines = [
+        "### Measured",
+        "",
+        ("| Arch | R×C | S | CLB | DSP | DPE (wc) | BRAM | Grid | "
+         "Area used (mm²) | Area grid (mm²) | Fmax (MHz) | Cycles | "
+         "Latency (µs) | Matrices/s | Energy (pJ) |"),
+        "|" + "---|" * 15,
+    ]
     for r in table:
+        g = f"{r['grid'][0]}×{r['grid'][1]}" if r.get("grid") else "-"
         lines.append(
             f"| {r['arch']} | {r['rxc']} | {r['S']} | {r['clb']} | {r['dsp']} "
-            f"| {r['wc']} | {r['bram']} | {r['fmax_mhz']} | {r['cycles']} "
-            f"| {r['latency_us']} | {r['matrices_per_s']} | {r['energy_pj']} "
-            f"| {r['pj_per_element']} |")
+            f"| {r['wc']} | {r['bram']} | {g} | {r['area_used_mm2']} "
+            f"| {r['area_grid_mm2']} | {r['fmax_mhz']} | {r['cycles']} "
+            f"| {r['latency_us']} | {r['matrices_per_s']} | {r['energy_pj']} |")
+
+    # ── table 2: area-normalized, relative to Azure-Lily at the same S ──
+    lines += [
+        "",
+        "### Area-normalized (Azure-Lily = 1.00 at each S)",
+        "",
+        "Throughput/mm²: higher is better. Energy/mm²: lower is better.",
+        "",
+        ("| Arch | S | Tput/mm² used | vs AL | Tput/mm² grid | vs AL | "
+         "Energy/mm² used (pJ) | vs AL | Energy/mm² grid (pJ) | vs AL |"),
+        "|" + "---|" * 10,
+    ]
+    for r in table:
+        lines.append(
+            f"| {r['arch']} | {r['S']} | {r['thr_per_mm2_used']} "
+            f"| {r['n_thr_used']} | {r['thr_per_mm2_grid']} | {r['n_thr_grid']} "
+            f"| {r['energy_per_mm2_used']} | {r['n_energy_used']} "
+            f"| {r['energy_per_mm2_grid']} | {r['n_energy_grid']} |")
+
     md = "\n".join(lines)
     (RESULTS / "softmax_table.md").write_text(md + "\n")
     print(md)
     print(f"\nALPHA (LUT activity) = {ALPHA}; "
           f"E_pass(128) = {e_pass(128):.2f} pJ, E_pass(256) = {e_pass(256):.2f} pJ")
+    print(f"Area: CLB tile = {CLB_TILE_UM2} µm², other tiles ∝ MWTA "
+          f"(tile-sizing v2); grid area = grid_W × grid_H × CLB tile.")
     return 0
 
 

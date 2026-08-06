@@ -47,6 +47,41 @@ Fmax = 3-seed average; resources are seed-invariant. Cycles are measured
 | Azure-Lily | 512×128 | 128 | 2338 | 64 | 0 | 284 | 48.41 | 99 | 2.045 | 489,031 | 76,001 | 4.639 |
 | Azure-Lily | 512×128 | 256 | 2625 | 64 | 0 | 284 | 43.38 | 323 | 7.445 | 134,313 | 303,419 | 4.630 |
 
+### 2.1 Area-normalized (Azure-Lily = 1.00 at each S)
+
+Raw latency is not a fair comparison — AL buys its speed with silicon (64 DSP
+tiles + 2338–2625 CLB). Both metrics below are per unit area; **throughput/mm²
+higher is better, energy/mm² lower is better**.
+
+Two area conventions are reported because they disagree on the S=256 verdict:
+- **used**: Σ (block count × arch-XML tile MWTA), scaled by the project's CLB
+  tile = 2239 µm² incl. routing, other tiles ∝ MWTA (tile-sizing v2)
+- **grid**: VPR `auto_layout` device × 2239 µm² (the DSE's convention,
+  `Area = grid_W × grid_H × 2239 / 1e6`)
+
+| Arch | S | Area used / grid (mm²) | Tput/mm² used | vs AL | Tput/mm² grid | vs AL | Energy/mm² used | vs AL | Energy/mm² grid | vs AL |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Proposed-1 | 128 | 6.68 / 15.80 | 38,613 | 0.76 | 16,328 | 0.72 | 3,197 | **0.41** | 1,352 | **0.38** |
+| Proposed-2 | 128 | 8.45 / 20.64 | 31,390 | 0.62 | 12,851 | 0.57 | 2,882 | **0.37** | 1,180 | **0.33** |
+| Azure-Lily | 128 | 9.68 / 21.50 | 50,546 | 1.00 | 22,742 | 1.00 | 7,855 | 1.00 | 3,534 | 1.00 |
+| Proposed-1 | 256 | 9.43 / 15.80 | 12,764 | **0.98** | 7,622 | **1.22** | 8,976 | **0.31** | 5,360 | **0.38** |
+| Proposed-2 | 256 | 9.21 / 20.64 | 7,218 | 0.56 | 3,221 | 0.52 | 8,369 | **0.29** | 3,734 | **0.27** |
+| Azure-Lily | 256 | 10.32 / 21.50 | 13,018 | 1.00 | 6,246 | 1.00 | 29,408 | 1.00 | 14,110 | 1.00 |
+
+**Headline**: at S=256, Proposed-1 matches Azure-Lily's softmax throughput per
+unit area (0.98× used-block, 1.22× device-grid) at **0.31× the energy per
+mm²**. Azure-Lily's raw 3.2× cycle advantage is bought entirely with silicon,
+not efficiency: it is the largest design at both sequence lengths.
+
+At S=128 AL retains a genuine per-area throughput edge (P1 0.76×), but still
+costs 2.5× the energy density. Proposed-2 trails on throughput/mm² at both S
+(0.62× / 0.56×) and wins only the energy metric — consistent with §3-F4.
+
+Caveat: AL's 64 `dsp_top` tiles exceed `azure_lily.json`'s `total_dsp: 16` by
+4×. The area comparison implicitly grants AL four times its own configured DSP
+budget; under that budget the 16-wide lanes are not buildable and its
+throughput advantage disappears.
+
 Seed Fmax spreads: AL_s128 47.8–49.4, AL_s256 42.9–43.8, P1_s128 71.0–77.7,
 P2_s128 74.7–80.2, P1_s256 60.4–63.3, P2_s256 60.9–65.5 MHz.
 The P1/P2 rows at S=128 are the **same netlist** (n=1, E=128) placed on the

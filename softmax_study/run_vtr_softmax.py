@@ -61,6 +61,7 @@ POINTS = [
 
 # ── parsers (conventions of fc_verification/run_vtr_smoke.py) ───────────
 WIRE_RE = re.compile(r"Total wirelength:\s*([0-9]+(?:\.[0-9]+)?)")
+GRID_RE = re.compile(r"FPGA sized to (\d+) x (\d+)")
 CPD_RE = re.compile(
     r"([A-Za-z0-9_]+)\s+to\s+([A-Za-z0-9_]+)\s+CPD:\s*([\d.]+)\s*ns\s*\(([\d.]+)\s*MHz\)")
 FMAX_RE = re.compile(r"Fmax:\s*([\d.]+)\s*MHz")
@@ -78,7 +79,7 @@ def find_vpr_log(run_dir: Path) -> Path:
     return run_dir / "vpr_stdout.log"
 
 
-def parse_metrics(log: Path) -> tuple[float, float]:
+def parse_metrics(log: Path) -> tuple[float, float, tuple[int, int]]:
     content = log.read_text(errors="replace")
     wire = WIRE_RE.findall(content)
     wirelength = float(wire[-1]) if wire else 0.0
@@ -89,7 +90,9 @@ def parse_metrics(log: Path) -> tuple[float, float]:
     else:
         m = FMAX_RE.findall(content)
         fmax = float(m[-1]) if m else 0.0
-    return wirelength, fmax
+    g = GRID_RE.findall(content)
+    grid = (int(g[-1][0]), int(g[-1][1])) if g else (0, 0)
+    return wirelength, fmax, grid
 
 
 def parse_resources(log: Path) -> dict[str, int]:
@@ -208,10 +211,11 @@ def run_one(label: str, arch_xml: str, S: int, n_exp: int | None,
                     stderr_tail=(proc.stderr or "").splitlines()[-15:])
 
     log = find_vpr_log(run_dir)
-    wirelength, fmax = parse_metrics(log)
+    wirelength, fmax, grid = parse_metrics(log)
     resources = parse_resources(log)
     return dict(label=label, seed=seed, status="OK", elapsed_s=elapsed,
-                fmax_mhz=fmax, wirelength=wirelength, resources=resources)
+                fmax_mhz=fmax, wirelength=wirelength, resources=resources,
+                grid=list(grid))
 
 
 # ── sweep ───────────────────────────────────────────────────────────────
@@ -273,6 +277,7 @@ def main() -> int:
             fmax_avg_mhz=sum(fmaxes) / len(fmaxes),
             wirelength_avg=sum(r["wirelength"] for r in mine) / len(mine),
             resources=mine[0]["resources"],
+            grid=mine[0].get("grid", [0, 0]),
         ))
 
     RESULTS.mkdir(exist_ok=True)

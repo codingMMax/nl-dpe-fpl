@@ -7,6 +7,12 @@
     "dsp": 1,
     "wc": 17,
     "bram": 220,
+    "grid": [
+      84,
+      84
+    ],
+    "area_used_mm2": 6.68,
+    "area_grid_mm2": 15.798,
     "fmax_mhz": 74.81,
     "fmax_seeds": [
       70.97,
@@ -21,6 +27,10 @@
     "pj_per_element": 1.3036,
     "dpe_pj": 7216.8,
     "dpe_pj_per_element": 0.4405,
+    "thr_per_mm2_used": 38613.2,
+    "thr_per_mm2_grid": 16327.9,
+    "energy_per_mm2_used": 3197.1,
+    "energy_per_mm2_grid": 1351.9,
     "breakdown": {
       "clb_compare": 4298.0,
       "clb_add": 4166.2,
@@ -29,7 +39,11 @@
       "lut_rom": 0.0,
       "dsp": 0.0,
       "total": 21358.1
-    }
+    },
+    "n_thr_used": 0.764,
+    "n_thr_grid": 0.718,
+    "n_energy_used": 0.407,
+    "n_energy_grid": 0.382
   },
   {
     "arch": "Proposed-1",
@@ -39,6 +53,12 @@
     "dsp": 1,
     "wc": 33,
     "bram": 223,
+    "grid": [
+      84,
+      84
+    ],
+    "area_used_mm2": 9.434,
+    "area_grid_mm2": 15.798,
     "fmax_mhz": 61.89,
     "fmax_seeds": [
       63.33,
@@ -53,6 +73,10 @@
     "pj_per_element": 1.292,
     "dpe_pj": 28018.3,
     "dpe_pj_per_element": 0.4275,
+    "thr_per_mm2_used": 12764.4,
+    "thr_per_mm2_grid": 7621.9,
+    "energy_per_mm2_used": 8975.7,
+    "energy_per_mm2_grid": 5359.6,
     "breakdown": {
       "clb_compare": 17259.6,
       "clb_add": 16686.7,
@@ -61,7 +85,11 @@
       "lut_rom": 0.0,
       "dsp": 0.0,
       "total": 84672.8
-    }
+    },
+    "n_thr_used": 0.981,
+    "n_thr_grid": 1.22,
+    "n_energy_used": 0.305,
+    "n_energy_grid": 0.38
   },
   {
     "arch": "Proposed-2",
@@ -71,6 +99,12 @@
     "dsp": 1,
     "wc": 17,
     "bram": 220,
+    "grid": [
+      96,
+      96
+    ],
+    "area_used_mm2": 8.448,
+    "area_grid_mm2": 20.635,
     "fmax_mhz": 76.9,
     "fmax_seeds": [
       80.15,
@@ -85,6 +119,10 @@
     "pj_per_element": 1.4858,
     "dpe_pj": 10201.4,
     "dpe_pj_per_element": 0.6226,
+    "thr_per_mm2_used": 31389.5,
+    "thr_per_mm2_grid": 12850.6,
+    "energy_per_mm2_used": 2881.6,
+    "energy_per_mm2_grid": 1179.7,
     "breakdown": {
       "clb_compare": 4298.0,
       "clb_add": 4166.2,
@@ -93,7 +131,11 @@
       "lut_rom": 0.0,
       "dsp": 0.0,
       "total": 24342.6
-    }
+    },
+    "n_thr_used": 0.621,
+    "n_thr_grid": 0.565,
+    "n_energy_used": 0.367,
+    "n_energy_grid": 0.334
   },
   {
     "arch": "Proposed-2",
@@ -103,6 +145,12 @@
     "dsp": 1,
     "wc": 17,
     "bram": 212,
+    "grid": [
+      96,
+      96
+    ],
+    "area_used_mm2": 9.208,
+    "area_grid_mm2": 20.635,
     "fmax_mhz": 63.54,
     "fmax_seeds": [
       60.92,
@@ -117,6 +165,10 @@
     "pj_per_element": 1.1758,
     "dpe_pj": 20402.7,
     "dpe_pj_per_element": 0.3113,
+    "thr_per_mm2_used": 7218.4,
+    "thr_per_mm2_grid": 3221.1,
+    "energy_per_mm2_used": 8368.7,
+    "energy_per_mm2_grid": 3734.4,
     "breakdown": {
       "clb_compare": 17259.6,
       "clb_add": 16686.7,
@@ -125,7 +177,11 @@
       "lut_rom": 0.0,
       "dsp": 0.0,
       "total": 77057.2
-    }
+    },
+    "n_thr_used": 0.555,
+    "n_thr_grid": 0.516,
+    "n_energy_used": 0.285,
+    "n_energy_grid": 0.265
   },
   {
     "arch": "Azure-Lily",
@@ -135,6 +191,12 @@
     "dsp": 64,
     "wc": 0,
     "bram": 284,
+    "grid": [
+      98,
+      98
+    ],
+    "area_used_mm2": 9.675,
+    "area_grid_mm2": 21.503,
     "fmax_mhz": 48.41,
     "fmax_seeds": [
       47.79,
@@ -149,6 +211,10 @@
     "pj_per_element": 4.6388,
     "dpe_pj": 0.0,
     "dpe_pj_per_element": 0.0,
+    "thr_per_mm2_used": 50545.6,
+    "thr_per_mm2_grid": 22742.1,
+    "energy_per_mm2_used": 7855.4,
+    "energy_per_mm2_grid": 3534.4,
     "breakdown": {
       "clb_compare": 4298.0,
       "clb_add": 2773.9,
@@ -157,7 +223,11 @@
       "dsp": 19660.8,
       "dpe": 0.0,
       "total": 76001.4
-    }
+    },
+    "n_thr_used": 1.0,
+    "n_thr_grid": 1.0,
+    "n_energy_used": 1.0,
+    "n_energy_grid": 1.0
   },
   {
     "arch": "Azure-Lily",
@@ -167,6 +237,12 @@
     "dsp": 64,
     "wc": 0,
     "bram": 284,
+    "grid": [
+      98,
+      98
+    ],
+    "area_used_mm2": 10.318,
+    "area_grid_mm2": 21.503,
     "fmax_mhz": 43.38,
     "fmax_seeds": [
       42.9,
@@ -181,6 +257,10 @@
     "pj_per_element": 4.6298,
     "dpe_pj": 0.0,
     "dpe_pj_per_element": 0.0,
+    "thr_per_mm2_used": 13017.8,
+    "thr_per_mm2_grid": 6246.1,
+    "energy_per_mm2_used": 29407.8,
+    "energy_per_mm2_grid": 14110.3,
     "breakdown": {
       "clb_compare": 17259.6,
       "clb_add": 11117.2,
@@ -189,6 +269,10 @@
       "dsp": 78643.2,
       "dpe": 0.0,
       "total": 303419.1
-    }
+    },
+    "n_thr_used": 1.0,
+    "n_thr_grid": 1.0,
+    "n_energy_used": 1.0,
+    "n_energy_grid": 1.0
   }
 ]
