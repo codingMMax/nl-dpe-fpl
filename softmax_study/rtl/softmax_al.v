@@ -202,14 +202,19 @@ module softmax_al #(
             wire signed [7:0] m4_3 = smax2(m2_6, m2_7);
             wire signed [7:0] max16 = smax2(smax2(m4_0, m4_1), smax2(m4_2, m4_3));
 
+            // Per-row history registers. Flat vectors with part-select
+            // indexing, NOT reg arrays: async-indexed reg arrays get
+            // inferred as RAM primitives by Parmys (measured: 10240
+            // single_port_ram subckts / 1495 BRAMs); flat vectors
+            // synthesize to the intended FFs + muxes.
             reg signed [7:0] run_max;
-            reg signed [7:0] max_hist [0:RPL-1];
+            reg [8*RPL-1:0] max_hist;
             wire signed [7:0] max_now = smax2(run_max, max16);
             always @(posedge clk) begin
                 if (go) run_max <= -8'sd128;
                 else if (a_v) begin
                     if (a_last_d) begin
-                        max_hist[a_row_d] <= max_now;
+                        max_hist[a_row_d*8 +: 8] <= max_now;
                         run_max <= -8'sd128;
                     end else
                         run_max <= max_now;
@@ -217,7 +222,7 @@ module softmax_al #(
             end
 
             // ── stage B: subtract, exp ROM, adder tree, accumulate ──
-            wire signed [7:0] bmax = max_hist[b_row_d];
+            wire signed [7:0] bmax = max_hist[b_row_d*8 +: 8];
             wire [127:0] e_word;
             wire [11:0]  tsum;
             for (gj = 0; gj < 16; gj = gj + 1) begin : bsub
@@ -235,12 +240,12 @@ module softmax_al #(
                 ({4'b0, e_word[119:112]} + {4'b0, e_word[127:120]});
 
             reg [15:0] acc;
-            reg [15:0] sum_hist [0:RPL-1];
+            reg [16*RPL-1:0] sum_hist;
             always @(posedge clk) begin
                 if (go) acc <= 0;
                 else if (b_v) begin
                     if (b_last_d) begin
-                        sum_hist[b_row_d] <= acc + {4'b0, tsum};
+                        sum_hist[b_row_d*16 +: 16] <= acc + {4'b0, tsum};
                         acc <= 0;
                     end else
                         acc <= acc + {4'b0, tsum};
@@ -264,17 +269,17 @@ module softmax_al #(
             end
 
             // ── stage Cs: reciprocal ROM ──
-            wire [15:0] csum   = sum_hist[c_row];
+            wire [15:0] csum   = sum_hist[c_row*16 +: 16];
             wire [15:0] cshift = csum >> R_SHIFT;
             wire [7:0]  cidx   = (|cshift[15:8]) ? 8'd255 : cshift[7:0];
-            reg  [7:0]  rec_hist [0:RPL-1];
+            reg  [8*RPL-1:0] rec_hist;
             always @(posedge clk) begin
-                if (c_fire) rec_hist[c_row] <= recip_lut(cidx);
+                if (c_fire) rec_hist[c_row*8 +: 8] <= recip_lut(cidx);
             end
 
             // ── stage D: 16x mac_int_9x9 normalize ──
             wire [127:0] eq   = d_row_d[0] ? eb1_q : eb0_q;
-            wire [7:0]   drec = rec_hist[d_row_d];
+            wire [7:0]   drec = rec_hist[d_row_d*8 +: 8];
             wire [127:0] p_word;
             for (gj = 0; gj < 16; gj = gj + 1) begin : dmac
                 wire [17:0] mo;

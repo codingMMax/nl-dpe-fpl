@@ -281,14 +281,17 @@ module softmax_nldpe #(
             wire signed [7:0] m4_3 = smax2(m2_6, m2_7);
             wire signed [7:0] max16 = smax2(smax2(m4_0, m4_1), smax2(m4_2, m4_3));
 
+            // Per-row history registers: flat vectors, NOT reg arrays --
+            // async-indexed reg arrays get inferred as RAM primitives by
+            // Parmys; flat vectors synthesize to the intended FFs + muxes.
             reg signed [7:0] run_max;
-            reg signed [7:0] max_hist [0:RPL-1];
+            reg [8*RPL-1:0] max_hist;
             wire signed [7:0] max_now = smax2(run_max, max16);
             always @(posedge clk) begin
                 if (go) run_max <= -8'sd128;
                 else if (a_v) begin
                     if (a_last_d) begin
-                        max_hist[a_row_d] <= max_now;
+                        max_hist[a_row_d*8 +: 8] <= max_now;
                         run_max <= -8'sd128;
                     end else
                         run_max <= max_now;
@@ -296,7 +299,7 @@ module softmax_nldpe #(
             end
 
             // ── stage B: subtract-clamp -> N_EXP exp DPEs -> sum tree ──
-            wire signed [7:0] bmax = max_hist[bs_row_d];
+            wire signed [7:0] bmax = max_hist[bs_row_d*8 +: 8];
             wire [40*N_EXP-1:0] exp_din_flat;
             wire [40*N_EXP-1:0] exp_dout_flat;
 
@@ -369,12 +372,12 @@ module softmax_nldpe #(
             end
 
             reg [15:0] acc;
-            reg [15:0] sum_hist [0:RPL-1];
+            reg [16*RPL-1:0] sum_hist;
             always @(posedge clk) begin
                 if (go) acc <= 0;
                 else if (exp_drain_v) begin
                     if (exp_dcnt == OCYC - 1) begin
-                        sum_hist[b_done_c] <= acc + {3'b0, ts};
+                        sum_hist[b_done_c*16 +: 16] <= acc + {3'b0, ts};
                         acc <= 0;
                     end else
                         acc <= acc + {3'b0, ts};
@@ -382,19 +385,19 @@ module softmax_nldpe #(
             end
 
             // ── stage Cs (lane side): quantize sum, capture log_sum ──
-            wire [15:0] csum = sum_hist[c_row];
+            wire [15:0] csum = sum_hist[c_row*16 +: 16];
             wire [15:0] csh  = csum >> LOG_S;
             assign lq_a[gk] = (|csh[15:7]) ? 8'd127 : {1'b0, csh[6:0]};
 
-            reg signed [7:0] ls_hist [0:RPL-1];
+            reg [8*RPL-1:0] ls_hist;
             always @(posedge clk) begin
                 if (log_cap && (log_wsel == gk / 5))
-                    ls_hist[c_row] <= log_dout[(gk % 5)*8 +: 8];
+                    ls_hist[c_row*8 +: 8] <= log_dout[(gk % 5)*8 +: 8];
             end
 
             // ── stage D: out = clamp(x - max - log_sum) ──
-            wire signed [7:0] dmax = max_hist[d_row_d];
-            wire signed [7:0] dls  = ls_hist[d_row_d];
+            wire signed [7:0] dmax = max_hist[d_row_d*8 +: 8];
+            wire signed [7:0] dls  = ls_hist[d_row_d*8 +: 8];
             wire [127:0] p_word;
             for (gj = 0; gj < 16; gj = gj + 1) begin : dsub
                 wire signed [9:0] t =
