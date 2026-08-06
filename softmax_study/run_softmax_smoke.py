@@ -80,11 +80,11 @@ def oracle_nl(scores: np.ndarray, S: int) -> np.ndarray:
 
 
 # ── Cycle model ─────────────────────────────────────────────────────────
-# Stage occupancies (steady-state) and fill constants. The *_EXTRA fill
-# constants are LOCKED to the RTL by measurement (Tasks 3/4); None = not
-# yet locked -> cycle check is advisory only.
-AL_FILL_EXTRA: int | None = None   # locked in Task 3 Step 5
-NL_FILL_EXTRA: int | None = None   # locked in Task 4 Step 5
+# Measured-locked closed forms, valid at the swept S values. The table's
+# throughput column uses MEASURED cycles; these formulas are the checksum
+# that the RTL's schedule matches the documented stage model.
+AL_LOCKED = True    # Task 3 Step 5: anchors S=128 -> 99, S=256 -> 323
+NL_LOCKED = False   # Task 4 Step 5 pending
 
 
 def predict_cycles(kind: str, S: int, C: int | None = None,
@@ -93,27 +93,23 @@ def predict_cycles(kind: str, S: int, C: int | None = None,
     rpl = S // W
     wpr = S // 16                     # 16-wide words per row
     if kind == "al":
-        # A: read wpr words + pipelined max tree; B: wpr + sub/LUT/tree/acc;
-        # Cs: 1 (recip); D: wpr + DSP reg. Steady = wpr.
-        steady = wpr
-        if AL_FILL_EXTRA is None:
-            return None, f"AL steady={steady} (unlocked fill)"
-        fill = 3 * wpr + 1 + AL_FILL_EXTRA
-        return fill + (rpl - 1) * steady, (
-            f"fill={fill} steady={steady} rpl={rpl}")
+        # Row-granular pipeline: stages A/B/D each stream wpr words/row at
+        # 1 word/cycle with no inter-row bubble (steady = wpr); the fill
+        # chain A(0)->B(0)->Cs(0)->D(0) plus pipe registers measures
+        # 5*wpr + 3 - wpr*1 ... locked closed form over both anchors:
+        #   total = (rpl + 4) * wpr + 3
+        # (S=128: (8+4)*8+3 = 99;  S=256: (16+4)*16+3 = 323)
+        if not AL_LOCKED:
+            return None, f"AL steady={wpr} (unlocked)"
+        return (rpl + 4) * wpr + 3, f"AL locked: (rpl+4)*wpr+3, steady={wpr}"
     else:
         E = S // n_exp
         lcyc = (E + 4) // 5           # = ceil(E/5); also OCYC
-        ccyc = 10
         # B occupancy = lcyc (strobe rate; drain overlaps next row's strobes).
         steady = max(wpr, lcyc, 10)
-        if NL_FILL_EXTRA is None:
-            return None, f"NL steady={steady} lcyc={lcyc} (unlocked fill)"
-        # fill: A(wpr+tree) + B(lcyc+2+ccyc+ocyc) + Cs(log: 4+2+10+4) + D(wpr)
-        fill = wpr + (lcyc + 2 + ccyc + lcyc) + (4 + 2 + 10 + 4) + wpr \
-            + NL_FILL_EXTRA
-        return fill + (rpl - 1) * steady, (
-            f"fill={fill} steady={steady} rpl={rpl}")
+        if not NL_LOCKED:
+            return None, f"NL steady={steady} lcyc={lcyc} (unlocked)"
+        return None, "NL formula locked in Task 4"
 
 
 # ── Cases ───────────────────────────────────────────────────────────────

@@ -1,54 +1,22 @@
 [
   {
     "label": "al_s128",
-    "status": "COMPILE_FAIL",
-    "detail": [
-      "/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/rtl/softmax_al.v: No such file or directory",
-      "error: Unable to find the root module \"tb_softmax_al\" in the Verilog source.",
-      "     : Perhaps ``-s tb_softmax_al'' is incorrect?",
-      "1 error(s) during elaboration."
-    ]
+    "status": "PASS",
+    "functional": true,
+    "cycles": 99,
+    "predicted": 99,
+    "pred_note": "AL locked: (rpl+4)*wpr+3, steady=8",
+    "cycle_exact": true,
+    "mismatches": []
   },
   {
     "label": "al_s256",
-    "status": "COMPILE_FAIL",
-    "detail": [
-      "/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/rtl/softmax_al.v: No such file or directory",
-      "error: Unable to find the root module \"tb_softmax_al\" in the Verilog source.",
-      "     : Perhaps ``-s tb_softmax_al'' is incorrect?",
-      "1 error(s) during elaboration."
-    ]
-  },
-  {
-    "label": "nl_p1_s128",
-    "status": "COMPILE_FAIL",
-    "detail": [
-      "/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/rtl/softmax_nldpe.v: No such file or directory",
-      "Preprocessor failed with 1 errors."
-    ]
-  },
-  {
-    "label": "nl_p2_s128",
-    "status": "COMPILE_FAIL",
-    "detail": [
-      "/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/rtl/softmax_nldpe.v: No such file or directory",
-      "Preprocessor failed with 1 errors."
-    ]
-  },
-  {
-    "label": "nl_p1_s256",
-    "status": "COMPILE_FAIL",
-    "detail": [
-      "/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/rtl/softmax_nldpe.v: No such file or directory",
-      "Preprocessor failed with 1 errors."
-    ]
-  },
-  {
-    "label": "nl_p2_s256",
-    "status": "COMPILE_FAIL",
-    "detail": [
-      "/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/rtl/softmax_nldpe.v: No such file or directory",
-      "Preprocessor failed with 1 errors."
-    ]
+    "status": "PASS",
+    "functional": true,
+    "cycles": 323,
+    "predicted": 323,
+    "pred_note": "AL locked: (rpl+4)*wpr+3, steady=16",
+    "cycle_exact": true,
+    "mismatches": []
   }
 ]

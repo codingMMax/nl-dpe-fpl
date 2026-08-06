@@ -1,0 +1,5 @@
+CYCLES=323
+TB_PASS
+/mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/tb/tb_softmax_al.v:100: $finish called at 2624750000 (1ps)
+
+--- stderr ---
