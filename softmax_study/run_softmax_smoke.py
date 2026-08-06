@@ -84,7 +84,7 @@ def oracle_nl(scores: np.ndarray, S: int) -> np.ndarray:
 # throughput column uses MEASURED cycles; these formulas are the checksum
 # that the RTL's schedule matches the documented stage model.
 AL_LOCKED = True    # Task 3 Step 5: anchors S=128 -> 99, S=256 -> 323
-NL_LOCKED = False   # Task 4 Step 5 pending
+NL_LOCKED = True    # Task 4 Step 5: anchors 290/290/514/956 = spec fill + 4
 
 
 def predict_cycles(kind: str, S: int, C: int | None = None,
@@ -105,11 +105,19 @@ def predict_cycles(kind: str, S: int, C: int | None = None,
     else:
         E = S // n_exp
         lcyc = (E + 4) // 5           # = ceil(E/5); also OCYC
-        # B occupancy = lcyc (strobe rate; drain overlaps next row's strobes).
-        steady = max(wpr, lcyc, 10)
+        # Spec §4 fill + 4 RTL pipe registers (a_v, bs_v, d_v, done), locked
+        # against all four smoke anchors:
+        #   A_lat = wpr + 4 (max tree drain)
+        #   B_lat = lcyc + 10 + lcyc + 2 (DPE fill: LOAD + CCYC + OUTPUT + handoffs)
+        #   Cs_lat = 4 + 2 + 10 + 4 = 20 (log DPE: strobes + handoffs + CCYC + drain)
+        #   D_lat = wpr
+        # steady = max(wpr, lcyc); Cs occupancy 20 never binds in the sweep.
+        steady = max(wpr, lcyc)
         if not NL_LOCKED:
             return None, f"NL steady={steady} lcyc={lcyc} (unlocked)"
-        return None, "NL formula locked in Task 4"
+        fill = (wpr + 4) + (lcyc + 10 + lcyc + 2) + 20 + wpr + 4
+        return fill + (rpl - 1) * steady, (
+            f"NL locked: fill={fill} steady={steady} rpl={rpl}")
 
 
 # ── Cases ───────────────────────────────────────────────────────────────

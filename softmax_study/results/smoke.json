@@ -18,5 +18,45 @@
     "pred_note": "AL locked: (rpl+4)*wpr+3, steady=16",
     "cycle_exact": true,
     "mismatches": []
+  },
+  {
+    "label": "nl_p1_s128",
+    "status": "PASS",
+    "functional": true,
+    "cycles": 290,
+    "predicted": 290,
+    "pred_note": "NL locked: fill=108 steady=26 rpl=8",
+    "cycle_exact": true,
+    "mismatches": []
+  },
+  {
+    "label": "nl_p2_s128",
+    "status": "PASS",
+    "functional": true,
+    "cycles": 290,
+    "predicted": 290,
+    "pred_note": "NL locked: fill=108 steady=26 rpl=8",
+    "cycle_exact": true,
+    "mismatches": []
+  },
+  {
+    "label": "nl_p1_s256",
+    "status": "PASS",
+    "functional": true,
+    "cycles": 514,
+    "predicted": 514,
+    "pred_note": "NL locked: fill=124 steady=26 rpl=16",
+    "cycle_exact": true,
+    "mismatches": []
+  },
+  {
+    "label": "nl_p2_s256",
+    "status": "PASS",
+    "functional": true,
+    "cycles": 956,
+    "predicted": 956,
+    "pred_note": "NL locked: fill=176 steady=52 rpl=16",
+    "cycle_exact": true,
+    "mismatches": []
   }
 ]
