@@ -1,0 +1,194 @@
+[
+  {
+    "arch": "Proposed-1",
+    "rxc": "1024x128",
+    "S": 128,
+    "clb": 1049,
+    "dsp": 1,
+    "wc": 17,
+    "bram": 220,
+    "fmax_mhz": 74.81,
+    "fmax_seeds": [
+      70.97,
+      77.72,
+      75.73
+    ],
+    "cycles": 290,
+    "latency_us": 3.877,
+    "matrices_per_s": 257954,
+    "rows_per_s": 33018174,
+    "energy_pj": 21358.1,
+    "pj_per_element": 1.3036,
+    "dpe_pj": 7216.8,
+    "dpe_pj_per_element": 0.4405,
+    "breakdown": {
+      "clb_compare": 4298.0,
+      "clb_add": 4166.2,
+      "bram": 5677.1,
+      "dpe": 7216.8,
+      "lut_rom": 0.0,
+      "dsp": 0.0,
+      "total": 21358.1
+    }
+  },
+  {
+    "arch": "Proposed-1",
+    "rxc": "1024x128",
+    "S": 256,
+    "clb": 1473,
+    "dsp": 1,
+    "wc": 33,
+    "bram": 223,
+    "fmax_mhz": 61.89,
+    "fmax_seeds": [
+      63.33,
+      61.99,
+      60.35
+    ],
+    "cycles": 514,
+    "latency_us": 8.305,
+    "matrices_per_s": 120414,
+    "rows_per_s": 30825886,
+    "energy_pj": 84672.8,
+    "pj_per_element": 1.292,
+    "dpe_pj": 28018.3,
+    "dpe_pj_per_element": 0.4275,
+    "breakdown": {
+      "clb_compare": 17259.6,
+      "clb_add": 16686.7,
+      "bram": 22708.2,
+      "dpe": 28018.3,
+      "lut_rom": 0.0,
+      "dsp": 0.0,
+      "total": 84672.8
+    }
+  },
+  {
+    "arch": "Proposed-2",
+    "rxc": "1024x256",
+    "S": 128,
+    "clb": 1049,
+    "dsp": 1,
+    "wc": 17,
+    "bram": 220,
+    "fmax_mhz": 76.9,
+    "fmax_seeds": [
+      80.15,
+      75.87,
+      74.67
+    ],
+    "cycles": 290,
+    "latency_us": 3.771,
+    "matrices_per_s": 265166,
+    "rows_per_s": 33941289,
+    "energy_pj": 24342.6,
+    "pj_per_element": 1.4858,
+    "dpe_pj": 10201.4,
+    "dpe_pj_per_element": 0.6226,
+    "breakdown": {
+      "clb_compare": 4298.0,
+      "clb_add": 4166.2,
+      "bram": 5677.1,
+      "dpe": 10201.4,
+      "lut_rom": 0.0,
+      "dsp": 0.0,
+      "total": 24342.6
+    }
+  },
+  {
+    "arch": "Proposed-2",
+    "rxc": "1024x256",
+    "S": 256,
+    "clb": 1428,
+    "dsp": 1,
+    "wc": 17,
+    "bram": 212,
+    "fmax_mhz": 63.54,
+    "fmax_seeds": [
+      60.92,
+      64.19,
+      65.51
+    ],
+    "cycles": 956,
+    "latency_us": 15.045,
+    "matrices_per_s": 66466,
+    "rows_per_s": 17015288,
+    "energy_pj": 77057.2,
+    "pj_per_element": 1.1758,
+    "dpe_pj": 20402.7,
+    "dpe_pj_per_element": 0.3113,
+    "breakdown": {
+      "clb_compare": 17259.6,
+      "clb_add": 16686.7,
+      "bram": 22708.2,
+      "dpe": 20402.7,
+      "lut_rom": 0.0,
+      "dsp": 0.0,
+      "total": 77057.2
+    }
+  },
+  {
+    "arch": "Azure-Lily",
+    "rxc": "512x128",
+    "S": 128,
+    "clb": 2338,
+    "dsp": 64,
+    "wc": 0,
+    "bram": 284,
+    "fmax_mhz": 48.41,
+    "fmax_seeds": [
+      47.79,
+      48.09,
+      49.37
+    ],
+    "cycles": 99,
+    "latency_us": 2.045,
+    "matrices_per_s": 489031,
+    "rows_per_s": 62595965,
+    "energy_pj": 76001.4,
+    "pj_per_element": 4.6388,
+    "dpe_pj": 0.0,
+    "dpe_pj_per_element": 0.0,
+    "breakdown": {
+      "clb_compare": 4298.0,
+      "clb_add": 2773.9,
+      "bram": 5677.1,
+      "lut_rom": 43591.7,
+      "dsp": 19660.8,
+      "dpe": 0.0,
+      "total": 76001.4
+    }
+  },
+  {
+    "arch": "Azure-Lily",
+    "rxc": "512x128",
+    "S": 256,
+    "clb": 2625,
+    "dsp": 64,
+    "wc": 0,
+    "bram": 284,
+    "fmax_mhz": 43.38,
+    "fmax_seeds": [
+      42.9,
+      43.43,
+      43.82
+    ],
+    "cycles": 323,
+    "latency_us": 7.445,
+    "matrices_per_s": 134313,
+    "rows_per_s": 34384129,
+    "energy_pj": 303419.1,
+    "pj_per_element": 4.6298,
+    "dpe_pj": 0.0,
+    "dpe_pj_per_element": 0.0,
+    "breakdown": {
+      "clb_compare": 17259.6,
+      "clb_add": 11117.2,
+      "bram": 22708.2,
+      "lut_rom": 173690.9,
+      "dsp": 78643.2,
+      "dpe": 0.0,
+      "total": 303419.1
+    }
+  }
+]

@@ -1,7 +1,8 @@
 # Safe-Softmax RTL + VTR Study — Design
 
 **Date**: 2026-08-05
-**Status**: design approved, pending implementation plan
+**Status**: **as-built** (implemented in `softmax_study/`; see As-built deltas at
+the end of this doc)
 **Scope**: standalone study. Independent of `azurelily/IMC/*`. No simulator
 changes, no fidelity gate against `scheduler.py`. Cycles, throughput, and
 energy are counted explicitly here.
@@ -535,6 +536,45 @@ must state that NL outputs are log-domain and AL outputs are linear.
   `16/(5n)`, set by `dpe_buf_width = 40`. Note in the discussion that a wider
   DPE port — not a wider crossbar — is what would close it; not measured here,
   since no DSE area model covers that block.
+
+---
+
+## 12. As-built deltas (implementation, 2026-08-05)
+
+Everything below was discovered or locked during implementation; the sections
+above are otherwise accurate.
+
+1. **NL has no exp storage.** In log domain, pass 3 computes
+   `out = x − max − log(Σ)` directly from the score, so exp values exist only
+   transiently on the DPE output port feeding the sum tree. `softmax_nldpe.v`
+   keeps 3 score copies (A-reader 128b words, B-reader in DPE-feed geometry
+   `N_EXP` × 40b segments, D-reader 128b) + an output memory. §4's datapath
+   showed an exp bram; the as-built block replaces it with the D-stage
+   recompute. AL keeps its exp banks (2, row-parity double-buffered).
+2. **B-stage CLB plumbing runs at the port rate** (5·n elements/cycle), per
+   the port-honest rule: subtract-clamp feeds the DPE at exactly the 40-bit
+   port width; only stages A and D are 16-wide.
+3. **Per-row history state (max/sum/rec/log_sum) is flat register vectors**,
+   not reg arrays: Parmys infers async-indexed reg arrays as RAM primitives
+   (measured: 10,240 `single_port_ram` subckts → 1,495 BRAMs before the fix).
+4. **Cycle formulas locked, exact at all 6 smoke points**
+   (`softmax_study/run_softmax_smoke.py`):
+   - AL: `total = (RPL + 4)·WPR + 3` → 99 (S=128), 323 (S=256).
+   - NL: `fill = (WPR+4) + (LCYC+10+LCYC+2) + 20 + WPR + 4`,
+     `steady = max(WPR, LCYC)`, `total = fill + (RPL−1)·steady`
+     → 290/290/514/956. The +4 vs §4's prediction is four FSM pipe
+     registers (a_v, bs_v, d_v, done). P1 = P2 cycle-identity at S=128
+     confirmed in RTL.
+5. **Files live in `softmax_study/`** (not `fc_verification/`): `rtl/`, `tb/`,
+   `gen_luts.py`, `run_softmax_smoke.py`, `run_vtr_softmax.py`,
+   `softmax_energy.py`, `results/`, `SOFTMAX_STUDY.md`. Read-only deps:
+   `fc_verification/rtl/dpe_nldpe.v` (sim model), `dpe_blackbox.v` (VTR),
+   `benchmarks/arch/*_auto.xml`, `azurelily/IMC/configs/*.json` (constants).
+6. **AL exp/recip ROMs are 8-bit-out** (4 CLBs each by the LUT-count formula),
+   not the sim's 16-bit/8-CLB version — `mac_int_9x9` takes 9-bit inputs, so
+   the reciprocal must fit 8 bits. `p = min(255, (E8·R8) >> log2(S))`.
+7. **Fixed-point conventions** (bit-exact, oracle = RTL): see the conventions
+   table in `docs/superpowers/plans/2026-08-05-softmax-study-implementation.md`.
 - **VTR runtime**: these designs are far larger than the Task #89 smoke points
   (~3 s). Run S=128 end-to-end before launching the full sweep.
 - **`α` activity factor** for LUT energy is an assumption, not a measurement.
