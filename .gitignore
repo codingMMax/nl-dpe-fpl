@@ -87,7 +87,9 @@ archive/block_comp_apr_11/results/*.log
 archive/block_comp_apr_11/__pycache__/
 archive/azurelily_simulator/IMC/logs/
 
-# fc_verification local build / smoke run artifacts (regenerable)
-fc_verification/build/
-fc_verification/results/*.log
-fc_verification/results/vtr_smoke_*/
+# rtl_flow local build / smoke run artifacts (regenerable)
+rtl_flow/build/
+rtl_flow/results/*.log
+rtl_flow/results/vtr_smoke_*/
+# legacy fc_verification smoke logs (regenerable history)
+rtl_flow/results/legacy/

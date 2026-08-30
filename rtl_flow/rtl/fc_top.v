@@ -55,7 +55,7 @@
 //
 // Spec anchors:
 //   - fc_verification/FC_RTL_PLAN.md §3-§5 (Stages 1A-1C)
-//   - fc_verification/FIDELITY_METHODOLOGY.md §4 + §4.1 + §5 + §7
+//   - rtl_flow/docs/FIDELITY_METHODOLOGY.md §4 + §4.1 + §5 + §7
 //   - fc_verification/FC_GEMM_WALKTHROUGH.md
 //   - azurelily/IMC/imc_core/imc_core.py:run_gemm (simulator's cycle model)
 

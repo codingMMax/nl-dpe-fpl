@@ -6,9 +6,9 @@ NL-DPE FPGA hard block research: **crossbar-size DSE** (complete) + **RTL/sim fi
 
 | Path | Role |
 |------|------|
-| `fc_verification/` | RTL behavior models, testbenches, smoke harnesses, methodology docs (**live work**) |
+| `rtl_flow/` | **All RTL work lives here**: primitives, `fc_top`, generators, specs, TBs, smoke harnesses, methodology docs (**live work**) |
 | `softmax_study/` | Safe-softmax RTL + VTR + energy study, AL vs NL-DPE (**complete**) |
-| `nl_dpe/` | DPE physical specs (`area_power.py`), VTR arch XML / stub generators, VTR runner |
+| `nl_dpe/` | DSE-era VTR arch XML / workload-wrapper generators, VTR runner, `area_power.py` |
 | `dse/` | DSE results (CSVs, JSONs, plots) + Round-1 VTR outputs |
 | `benchmarks/` | BERT-Tiny / CNN benchmark infrastructure (DSE-era) |
 | `paper/` | Paper methodology, figures, scripts, writing materials |
@@ -17,21 +17,23 @@ NL-DPE FPGA hard block research: **crossbar-size DSE** (complete) + **RTL/sim fi
 
 ## Current State
 
-- **RTL/sim alignment** (canonical anchor: `fc_verification/FIDELITY_METHODOLOGY.md`):
-  - DPE primitives: NL-DPE (`dpe_nldpe.v`), Azure-Lily (`dpe_azurelily.v`), DSP-MAC (`dsp_mac.v`), faithful variants (`*_faithful.v`)
+- **RTL flow** (single entry point: `rtl_flow/`; canonical anchor: `rtl_flow/docs/FIDELITY_METHODOLOGY.md`):
+  - DPE primitives: NL-DPE (`dpe_nldpe.v`), Azure-Lily (`dpe_azurelily.v`), DSP-MAC (`dsp_mac.v`), faithful variants (`*_faithful.v`) — in `rtl_flow/rtl/`
   - FC/GEMM top `fc_top.v` — Path A weight-stationary V×H array; unified cycle formula `T(M) = T_fill + (M−1)·T_steady`
-  - Stages 1A (V=1,H=1), 1B (V>1), 1C (H>1) validated; **Stage 1D (general V×H) in flight**
-  - Regression guards: `run_dpe_smoke.py` (52 cases), `run_fc_smoke.py` (13 cases), `run_vtr_smoke.py` (3 cases, needs VTR_ROOT)
+  - Stages 1A (V=1,H=1), 1B (V>1), 1C (H>1) validated; **Stage 1D (general V×H) pending**
+  - Regression guards: `rtl_flow/smoke/run_dpe_smoke.py` (52 cases), `rtl_flow/smoke/run_fc_smoke.py` (13 cases), `rtl_flow/vtr/run_vtr_smoke.py` (3 cases, needs VTR_ROOT)
+  - **Primitive re-verification in flight**: behavioral charter (`rtl_flow/SPEC.md`), independent NumPy oracles, re-derived expectations — see `rtl_flow/README.md`
 - **Safe-softmax study**: complete; NL wins energy 3.1–3.9×/element vs AL at supply-matched port width. See `softmax_study/SOFTMAX_STUDY.md`.
 - **DSE**: complete (Round 1: 12 crossbar configs, 512×128 optimal; Round 2: fixed-area density sweeps, DSP/BRAM constraints shift optimum to 512×128). Results: `dse/results/`.
 
 ## Quick Commands
 
 ```bash
-# RTL/sim smoke suites (from fc_verification/)
-python3 run_dpe_smoke.py      # 52 primitive cases
-python3 run_fc_smoke.py       # 13 FC cases (--stage 1A/1B/1C/1D)
-python3 run_vtr_smoke.py      # 3 VTR cases (requires VTR_ROOT)
+# RTL flow (everything under rtl_flow/)
+make -C rtl_flow regen          # regenerate dpe_*.v + dsp_mac.v from rtl_flow/specs/*.json
+python3 rtl_flow/smoke/run_dpe_smoke.py   # 52 primitive cases
+python3 rtl_flow/smoke/run_fc_smoke.py    # 13 FC cases (--stage 1A/1B/1C/1D)
+python3 rtl_flow/vtr/run_vtr_smoke.py     # 3 VTR cases (requires VTR_ROOT)
 
 # Softmax study (complete; rerun from softmax_study/)
 python3 run_softmax_smoke.py

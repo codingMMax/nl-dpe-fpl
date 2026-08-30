@@ -60,18 +60,18 @@ Per-case workflow:
   7. PASS criteria: FUNCTIONAL ONLY (per Task #97/#98: cycle delta is
      reported but does not gate PASS/FAIL).
 
-Output: stdout summary AND fc_verification/results/fc_smoke.log.
+Output: stdout summary AND rtl_flow/results/fc_smoke.log.
 Exits nonzero if any case fails functional check.
 
 Usage:
-    python3 fc_verification/run_fc_smoke.py                       # all stages
-    python3 fc_verification/run_fc_smoke.py --stage 1A             # V=1 H=1 only
-    python3 fc_verification/run_fc_smoke.py --stage 1B             # V>1 H=1 only
-    python3 fc_verification/run_fc_smoke.py --stage 1C             # V=1 H>1 only
-    python3 fc_verification/run_fc_smoke.py --workload bert_qkv_proj_NL
-    python3 fc_verification/run_fc_smoke.py --shape 4,256,256 --activation none --arch nldpe
-    python3 fc_verification/run_fc_smoke.py --arch al
-    python3 fc_verification/run_fc_smoke.py --quick
+    python3 rtl_flow/smoke/run_fc_smoke.py                       # all stages
+    python3 rtl_flow/smoke/run_fc_smoke.py --stage 1A             # V=1 H=1 only
+    python3 rtl_flow/smoke/run_fc_smoke.py --stage 1B             # V>1 H=1 only
+    python3 rtl_flow/smoke/run_fc_smoke.py --stage 1C             # V=1 H>1 only
+    python3 rtl_flow/smoke/run_fc_smoke.py --workload bert_qkv_proj_NL
+    python3 rtl_flow/smoke/run_fc_smoke.py --shape 4,256,256 --activation none --arch nldpe
+    python3 rtl_flow/smoke/run_fc_smoke.py --arch al
+    python3 rtl_flow/smoke/run_fc_smoke.py --quick
 """
 from __future__ import annotations
 import argparse
@@ -84,10 +84,10 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-RTL = REPO / "fc_verification" / "rtl"
-TB_DIR = REPO / "fc_verification"
-RESULTS = REPO / "fc_verification" / "results"
+REPO = Path(__file__).resolve().parent.parent.parent
+RTL = REPO / "rtl_flow" / "rtl"
+TB_DIR = REPO / "rtl_flow" / "tb"
+RESULTS = REPO / "rtl_flow" / "results"
 
 DEFAULT_PRECISION = 8
 DEFAULT_PIPELINE_DEPTH = 3

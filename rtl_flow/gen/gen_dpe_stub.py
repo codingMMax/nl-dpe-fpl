@@ -3,7 +3,7 @@
 DPE behavior model generator (FIDELITY_METHODOLOGY.md §3 + §4).
 
 Reads a per-arch config JSON and emits one Verilog file per architecture
-into fc_verification/rtl/dpe_<arch>.v.
+into rtl_flow/rtl/dpe_<arch>.v.
 
 The emitted module is named `dpe` (not `dpe_<arch>`) so that it matches
 the VTR arch XML's <model name="dpe"> blackbox port contract for both
@@ -130,12 +130,12 @@ import sys
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
+REPO = os.path.dirname(os.path.dirname(HERE))
 DEFAULT_CFG_PATHS = [
-    os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/nl_dpe.json"),
-    os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/azure_lily.json"),
+    os.path.join(REPO, "rtl_flow/specs/nl_dpe.json"),
+    os.path.join(REPO, "rtl_flow/specs/azure_lily.json"),
 ]
-OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
+OUT_DIR = os.path.join(REPO, "rtl_flow/rtl")
 
 # core_name -> filename suffix.
 ARCH_SUFFIX = {
@@ -269,8 +269,8 @@ def emit_dpe_verilog(params):
     a("// structural symmetry, not coincidence: (D_NL - 1) + ACAM_NL =")
     a("// (D_AL - 1) + ACAM_AL = 2. If either side's PIPELINE_DEPTH or")
     a("// ACAM_CYCLES changes the symmetry breaks. See")
-    a("// fc_verification/FIDELITY_METHODOLOGY.md §3 and")
-    a("// fc_verification/DPE_PRIMITIVE_WALKTHROUGH.md §10a for the")
+    a("// rtl_flow/docs/FIDELITY_METHODOLOGY.md §3 and")
+    a("// rtl_flow/docs/DPE_PRIMITIVE_WALKTHROUGH.md §10a for the")
     a("// per-arch pipeline diagrams.")
     a("//")
     a("// Pipeline model (FIDELITY_METHODOLOGY.md §4): single-buffered drain-load")

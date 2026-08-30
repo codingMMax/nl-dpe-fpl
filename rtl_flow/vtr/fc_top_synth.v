@@ -23,14 +23,14 @@
 // `dpe dpe_inst (...)` form binding to the arch-XML hard block via
 // `dpe_blackbox.v`.
 //
-// Used by `fc_verification/run_vtr_smoke.py` for the Task #89 VTR
+// Used by `rtl_flow/vtr/run_vtr_smoke.py` for the Task #89 VTR
 // resource-and-Fmax smoke test. NOT used for iverilog functional
 // simulation (which continues to drive the behavioral `fc_top.v` from
 // `tb_fc.v` and `run_fc_smoke.py`).
 //
 // Spec anchors:
-//   - fc_verification/rtl/fc_top.v (sim-verified Phase 2 master)
-//   - fc_verification/rtl/dpe_blackbox.v (black-box DPE port contract)
+//   - rtl_flow/rtl/fc_top.v (sim-verified Phase 2 master)
+//   - rtl_flow/rtl/dpe_blackbox.v (black-box DPE port contract)
 //   - nl_dpe/nl_dpe_22nm_auto.xml (arch XML, `<model name="dpe">`)
 
 `timescale 1ns / 1ps

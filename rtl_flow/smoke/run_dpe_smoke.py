@@ -40,13 +40,13 @@ on nl_dpe_control = 2'b11; the DPE's S_COMPUTE waits for ctrl deassert.
 This is arch-agnostic — both NL-DPE and AL DPE share the same
 fire -> VMM -> accumulate compute structure.
 
-Writes a clean summary to stdout AND fc_verification/results/dpe_smoke.log.
+Writes a clean summary to stdout AND rtl_flow/results/dpe_smoke.log.
 
 Usage:
-    python3 fc_verification/run_dpe_smoke.py                     # default: PREC=8 + sweep {4,8,16}
-    python3 fc_verification/run_dpe_smoke.py --precision 4       # sweep PREC=4 only
-    python3 fc_verification/run_dpe_smoke.py --quick             # smaller matrix
-    python3 fc_verification/run_dpe_smoke.py --keep              # keep tmp binaries
+    python3 rtl_flow/smoke/run_dpe_smoke.py                     # default: PREC=8 + sweep {4,8,16}
+    python3 rtl_flow/smoke/run_dpe_smoke.py --precision 4       # sweep PREC=4 only
+    python3 rtl_flow/smoke/run_dpe_smoke.py --quick             # smaller matrix
+    python3 rtl_flow/smoke/run_dpe_smoke.py --keep              # keep tmp binaries
 """
 from __future__ import annotations
 import argparse
@@ -59,10 +59,10 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-RTL = REPO / "fc_verification" / "rtl"
-TB_DIR = REPO / "fc_verification"
-RESULTS = REPO / "fc_verification" / "results"
+REPO = Path(__file__).resolve().parent.parent.parent
+RTL = REPO / "rtl_flow" / "rtl"
+TB_DIR = REPO / "rtl_flow" / "tb"
+RESULTS = REPO / "rtl_flow" / "results"
 
 # Precision-driven compute pipeline: see FIDELITY_METHODOLOGY.md §3.
 DEFAULT_PRECISION = 8

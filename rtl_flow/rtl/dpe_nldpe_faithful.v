@@ -1,145 +1,21 @@
-#!/usr/bin/env python3
-"""
-Generator for the FAITHFUL NL-DPE behavior model (Task #91 + silicon-faithful refactor).
-
-Reads `archive/azurelily_simulator/IMC/configs/nl_dpe.json` for arch parameters
-(KERNEL_WIDTH, NUM_COLS, DPE_BUF_WIDTH, PRECISION_BITS, capabilities.
-pipeline_depth, capabilities.acam_cycles) and emits
-
-    fc_verification/rtl/dpe_nldpe_faithful.v
-
-Module name `dpe` matches the VTR arch XML `<model name="dpe">`
-blackbox port contract (same as the lazy primitive).
-
-DIFFERENCE FROM `gen_dpe_stub.py`:
-
-* Lazy primitive  (gen_dpe_stub.py)   - COMPUTE_CYCLES is a Verilog
-                                         parameter that BURNS that many
-                                         cycles after a single-posedge
-                                         VMM fire. Cycle count is set.
-* Faithful prim.  (this generator)    - NO `COMPUTE_CYCLES` parameter.
-                                         PRECISION, PIPELINE_DEPTH and
-                                         ACAM_CYCLES are baked in;
-                                         compute cycle count EMERGES
-                                         from advancing bit_idx 0..P-1
-                                         (1 cycle each), then one
-                                         cycle of pipeline drain (last-
-                                         bit Acc commit), then 1 cycle
-                                         of ACAM read-out.
-
-SILICON-FAITHFUL REFACTOR (Task #93 + Task #99 double-buffer):
-
-* Double-buffered input substrate (Task #99):
-    - input_buf_slice_a / input_buf_slice_b [PRECISION][R] ping-pong pair,
-      each bit-stratified slice-major. load_phase selects the LOAD-side;
-      compute_phase (captured at COMPUTE wake-time as ~load_phase) selects
-      the COMPUTE-side. LOAD-pass-(k+1) starts back-to-back after
-      pass-k's last strobe (no LOAD-gate, no inter-pass stall).
-* Single-buffered downstream substrates:
-    - mac_acc         [NUM_COLS]     single-buffered.
-    - acam_out        [NUM_COLS]     single-buffered.
-* LOAD uses corner-turn: each strobe writes EPS rows of ALL PRECISION
-  bit positions in parallel into the load_phase-selected substrate.
-* COMPUTE bit-serial sweep reads `slice[compute_phase][bit_idx_s0][r]`
-  directly via a 1-bit conditional.
-* Sub-FSM coordination via `buf_loaded` and `compute_done` flags
-  (replacing legacy q_load_tail / q_compute_head / q_output_head
-  pointers). Cycle-by-cycle handoffs (one NBA cycle each) preserved.
-
-The generator is intended as a single-source-of-truth-from-JSON
-companion to `gen_dpe_stub.py`. Running it emits an RTL file that is
-functionally and structurally equivalent to the hand-written
-`dpe_nldpe_faithful.v`. The hand-written file remains the canonical
-reference; this generator can be used to re-emit it from JSON when the
-arch parameters change.
-
-Usage:
-    python nl_dpe/gen_dpe_nldpe_faithful.py
-    python nl_dpe/gen_dpe_nldpe_faithful.py --config archive/azurelily_simulator/IMC/configs/nl_dpe.json
-    python nl_dpe/gen_dpe_nldpe_faithful.py --out-dir /path/to/some/dir
-"""
-
-import argparse
-import json
-import math
-import os
-import sys
-
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
-DEFAULT_CFG_PATH = os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/nl_dpe.json")
-DEFAULT_OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
-
-
-def derive_arch_params(cfg_path):
-    """Load NL-DPE config JSON and return RTL parameters."""
-    with open(cfg_path, "r") as fh:
-        cfg = json.load(fh)
-    if cfg.get("core_name") != "NL-DPE":
-        raise ValueError(
-            f"{cfg_path}: core_name='{cfg.get('core_name')}' "
-            "is not 'NL-DPE'; this generator emits the NL-DPE faithful primitive only."
-        )
-
-    geometry = cfg.get("geometry", {})
-    capabilities = cfg.get("capabilities", {})
-    fpga_specs = cfg.get("fpga_specs", {})
-
-    R = int(geometry["array_rows"])
-    C = int(geometry["array_cols"])
-    BUF = int(fpga_specs["dpe_buf_width"])
-    precision_bits = int(cfg.get("precision_bits", 8))
-    pipeline_depth = int(capabilities.get("pipeline_depth", 2))
-    acam_cycles = int(capabilities.get("acam_cycles", 1))
-    has_acam = bool(capabilities.get("analog_nonlinear", True))
-    if not has_acam:
-        raise ValueError(
-            f"{cfg_path}: capabilities.analog_nonlinear=False "
-            "but this generator emits the NL-DPE primitive with ACAM."
-        )
-
-    eps = BUF // 8
-    assert eps >= 1, f"BUF={BUF} < 8 not supported"
-    load_cycles = math.ceil(R * 8 / BUF)
-    output_cycles = math.ceil(C * 8 / BUF)
-    # Declared CCYC (not used by RTL -- emergent in the RTL, but written
-    # into the header comment for documentation).
-    ccyc_declared = precision_bits + (pipeline_depth - 1) + acam_cycles
-
-    return {
-        "R": R,
-        "C": C,
-        "BUF": BUF,
-        "precision_bits": precision_bits,
-        "pipeline_depth": pipeline_depth,
-        "acam_cycles": acam_cycles,
-        "load_cycles": load_cycles,
-        "output_cycles": output_cycles,
-        "ccyc_declared": ccyc_declared,
-        "core_name": "NL-DPE",
-    }
-
-
-HEADER_TEMPLATE = """\
 // dpe_nldpe_faithful.v  --  FAITHFUL behavioral model of the NL-DPE primitive.
-// Generated by nl_dpe/gen_dpe_nldpe_faithful.py from {cfg_path}.
+// Generated by nl_dpe/gen_dpe_nldpe_faithful.py from /mnt/vault0/jiajunh5/nl-dpe-fpl/rtl_flow/specs/nl_dpe.json.
 // Module name : dpe   (matches VTR arch XML <model name="dpe"> contract).
 // File arch   : NL-DPE (faithful track -- Task #91, silicon-faithful refactor)
 //
 // Architecture parameters (single source of truth: the JSON config):
-//   R (KERNEL_WIDTH)       = {R}
-//   C (NUM_COLS)           = {C}
-//   BUF (DPE_BUF_WIDTH)    = {BUF}    (elems_per_strobe = {eps})
-//   PRECISION              = {P}      (INT{P})
-//   PIPELINE_DEPTH         = {PD}     (Crossbar -> Acc; 2-stage)
-//   ACAM_CYCLES            = {AC}     (1-cycle read-out)
+//   R (KERNEL_WIDTH)       = 256
+//   C (NUM_COLS)           = 256
+//   BUF (DPE_BUF_WIDTH)    = 40    (elems_per_strobe = 5)
+//   PRECISION              = 8      (INT8)
+//   PIPELINE_DEPTH         = 2     (Crossbar -> Acc; 2-stage)
+//   ACAM_CYCLES            = 1     (1-cycle read-out)
 //
 // Derived per-pass cycle counters:
-//   LOAD_CYCLES   = ceil(R * 8 / BUF) = {LCYC}
-//   OUTPUT_CYCLES = ceil(C * 8 / BUF) = {OCYC}
+//   LOAD_CYCLES   = ceil(R * 8 / BUF) = 52
+//   OUTPUT_CYCLES = ceil(C * 8 / BUF) = 52
 //   CCYC          = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES
-//                 = {P} + {PDm1} + {AC} = {CCYC}    [emergent in RTL]
+//                 = 8 + 1 + 1 = 10    [emergent in RTL]
 //
 // ┌────────────────────────────────────────────────────────────────────┐
 // │ DESIGN CHARTER -- silicon-faithful DOUBLE-BUFFERED input substrate │
@@ -163,7 +39,7 @@ HEADER_TEMPLATE = """\
 // │                                                                    │
 // │  EMERGENT CYCLE COUNT (NOT a parameter):                           │
 // │     CCYC      = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES     │
-// │               = {CCYC} cycles (INT{P}, NL-DPE).                    │
+// │               = 10 cycles (INT8, NL-DPE).                    │
 // │     T_steady  = max(LCYC, CCYC, OCYC)                              │
 // │               = LCYC for typical configs (LCYC >> CCYC).           │
 // │     LOAD-pass-(k+1) launches RIGHT AFTER pass-k's last LOAD strobe.│
@@ -174,41 +50,14 @@ HEADER_TEMPLATE = """\
 // │  COMPUTE waits (via the buf_loaded handshake) for pass-k's COMPUTE │
 // │  to drain.                                                          │
 // └────────────────────────────────────────────────────────────────────┘
-"""
-
-
-def emit_faithful_rtl(params, cfg_path):
-    """Emit the faithful primitive RTL source as a string."""
-    header = HEADER_TEMPLATE.format(
-        cfg_path=cfg_path,
-        R=params["R"],
-        C=params["C"],
-        BUF=params["BUF"],
-        eps=params["BUF"] // 8,
-        P=params["precision_bits"],
-        PD=params["pipeline_depth"],
-        AC=params["acam_cycles"],
-        LCYC=params["load_cycles"],
-        OCYC=params["output_cycles"],
-        CCYC=params["ccyc_declared"],
-        PDm1=params["pipeline_depth"] - 1,
-    )
-
-    R = params["R"]
-    C = params["C"]
-    BUF = params["BUF"]
-    P = params["precision_bits"]
-    PD = params["pipeline_depth"]
-    AC = params["acam_cycles"]
-
-    body = f"""//
+//
 // Physical pipeline model (declared at the architecture level --
 // the RTL realises it; the TB measures it):
 //
 //   LOAD (corner-turn)
 //        |
 //        v
-//   input_buf_slice_{{a,b}}[bit][row]  <-- ping-pong substrate pair
+//   input_buf_slice_{a,b}[bit][row]  <-- ping-pong substrate pair
 //   (LOAD writes whichever load_phase selects; COMPUTE reads the OTHER)
 //        |
 //        v
@@ -219,7 +68,7 @@ def emit_faithful_rtl(params, cfg_path):
 //        |
 //        v
 //   Stage 1 (registered, signed accumulator on bit_idx_s1)
-//     if (bit_idx_s1 == {P-1}):  // MSB subtract
+//     if (bit_idx_s1 == 7):  // MSB subtract
 //          mac_acc[c] <= mac_acc[c] - (crossbar_sum_reg[c] <<< bit_idx_s1)
 //     else
 //          mac_acc[c] <= mac_acc[c] + (crossbar_sum_reg[c] <<< bit_idx_s1)
@@ -238,12 +87,12 @@ def emit_faithful_rtl(params, cfg_path):
 // blackbox port contract.
 
 module dpe #(
-    parameter KERNEL_WIDTH   = {R},
-    parameter NUM_COLS       = {C},
-    parameter DPE_BUF_WIDTH  = {BUF},
-    parameter PRECISION      = {P},
-    parameter PIPELINE_DEPTH = {PD},
-    parameter ACAM_CYCLES    = {AC},
+    parameter KERNEL_WIDTH   = 256,
+    parameter NUM_COLS       = 256,
+    parameter DPE_BUF_WIDTH  = 40,
+    parameter PRECISION      = 8,
+    parameter PIPELINE_DEPTH = 2,
+    parameter ACAM_CYCLES    = 1,
     parameter ACAM_MODE      = 0
 )(
     input  wire                       clk,
@@ -332,7 +181,7 @@ module dpe #(
                 if (slice_bit) begin
                     for (c_idx = 0; c_idx < NUM_COLS; c_idx = c_idx + 1) begin
                         crossbar_sum_comb[c_idx] = crossbar_sum_comb[c_idx]
-                            + {{{{24{{weights[r_idx][c_idx][7]}}}}, weights[r_idx][c_idx]}};
+                            + {{24{weights[r_idx][c_idx][7]}}, weights[r_idx][c_idx]};
                     end
                 end
             end
@@ -538,41 +387,3 @@ module dpe #(
     end
 
 endmodule
-"""
-    return header + body
-
-
-def main(argv=None):
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--config", default=DEFAULT_CFG_PATH,
-                   help=f"NL-DPE JSON config path (default: {DEFAULT_CFG_PATH})")
-    p.add_argument("--out-dir", default=DEFAULT_OUT_DIR,
-                   help=f"Output directory (default: {DEFAULT_OUT_DIR})")
-    p.add_argument("--check", action="store_true",
-                   help="Print the emitted RTL to stdout but don't write the file")
-    args = p.parse_args(argv)
-
-    params = derive_arch_params(args.config)
-    src = emit_faithful_rtl(params, args.config)
-
-    if args.check:
-        sys.stdout.write(src)
-        return 0
-
-    os.makedirs(args.out_dir, exist_ok=True)
-    out_path = os.path.join(args.out_dir, "dpe_nldpe_faithful.v")
-    with open(out_path, "w") as fh:
-        fh.write(src)
-    print(f"[gen_dpe_nldpe_faithful] wrote {out_path}")
-    print(f"               R={params['R']} C={params['C']} BUF={params['BUF']} "
-          f"PRECISION={params['precision_bits']} PIPELINE_DEPTH={params['pipeline_depth']} "
-          f"ACAM_CYCLES={params['acam_cycles']}")
-    print(f"               LCYC={params['load_cycles']} "
-          f"OCYC={params['output_cycles']} "
-          f"CCYC(declared, emergent in RTL)={params['ccyc_declared']}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

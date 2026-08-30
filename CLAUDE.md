@@ -3,23 +3,29 @@
 ## Project in One Line
 NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity alignment (live) + safe-softmax study (complete), for a paper comparing NL-DPE vs Azure-Lily.
 
-## Direction (2026-08-27 repo reorg)
+## Direction (2026-08-29, pinned)
+- **All RTL work lives in `rtl_flow/`** — primitives, fc_top, generators (`rtl_flow/gen/`), per-arch specs (`rtl_flow/specs/`), TBs, smoke harnesses, methodology docs, VTR synth path. Entry point: `rtl_flow/README.md`. When working on RTL, stay inside `rtl_flow/`.
+- **Bottom-up primitive-first re-verification is the active plan** (user directive 2026-08-29): current verification is self-consistent but not user-validated (FC functional check is a one-byte pattern; cycle formula from unremembered sessions). Ladder: **primitives → fc_top → softmax → projections+DIMM → (then) mapping+simulator**. Each rung = behavioral charter (user-approved) + independent NumPy oracle + RTL matching both. Ground truth = charter + oracles; faithful RTL enforces them.
+- Charter home: `rtl_flow/SPEC.md` (Stage 1.1 in progress; five open decisions D1–D5 listed there for the user to close).
+- The old azurelily simulator stays archived — the new minimal simulator (Stage 5, deferred) will consume the Stage 1–4 charters verbatim.
+
+## Prior direction (2026-08-27 repo reorg)
 - The Azure-Lily simulator was **de-submoduled** to `archive/azurelily_simulator/` — reference only. We will build our **own simulator and RTL flow** in this repo; exact direction is TBD and this file is the place it gets pinned down as it takes shape.
 - DSE rounds are **complete** (Round 1, Round 2 FC/attention/FC+softmax/flexscore). Results live as CSVs/plots under `dse/results/`; raw VTR run dirs were deleted to save space — do not expect them to exist.
 - Legacy tracks (worktree-era AH/P4, `transformer/`, TACO experiments, `block_comp_apr_11/`) are archived under `archive/` — **reference only, not active**. Do not treat anything under `archive/` as live work.
 
 ## Session Start Protocol
 1. Read "Active TODO Track" below → current in-flight work
-2. If working on RTL/sim alignment: read `fc_verification/FIDELITY_METHODOLOGY.md` (canonical methodology anchor)
+2. If working on RTL/sim alignment: read `rtl_flow/docs/FIDELITY_METHODOLOGY.md` (canonical methodology anchor)
 3. Run `git status`
 4. (If touching DSE-era scripts) results are in `dse/results/`; simulator code is `archive/azurelily_simulator/`
 
 ## Repo Map
 | Path | Role |
 |------|------|
-| `fc_verification/` | **LIVE** — RTL behavior models, TBs, smoke harnesses, methodology docs |
+| `rtl_flow/` | **LIVE — all RTL work**: primitives, fc_top, generators, specs, TBs, smoke, docs, VTR path. Entry: `rtl_flow/README.md` |
 | `softmax_study/` | **COMPLETE** — safe-softmax RTL + VTR + energy study (AL vs NL-DPE) |
-| `nl_dpe/` | DPE physical specs (`area_power.py`), VTR arch XML + stub generators, VTR runner |
+| `nl_dpe/` | DSE-era VTR arch XML / workload-wrapper generators, VTR runner, `area_power.py` (RTL model generators moved to `rtl_flow/gen/`) |
 | `dse/` | DSE results (CSVs, JSONs, plots) + Round-1 VTR outputs (`dse/round1/`) |
 | `benchmarks/` | BERT-Tiny / CNN benchmark infra (DSE-era, still runs) |
 | `paper/` | Paper methodology, figures, scripts, writing materials |
@@ -30,24 +36,27 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 ## Key Paths (live RTL/sim alignment)
 | Path | Role |
 |------|------|
-| `fc_verification/FIDELITY_METHODOLOGY.md` | **Canonical** RTL/sim alignment methodology (§3 DPE arch, §4 single-buffered drain-load overlap pipeline, §5 workload classes VMM/DIMM, §7 tiling) |
-| `fc_verification/FC_RTL_PLAN.md` | FC/GEMM RTL build-out plan (Stage 1A→1D) |
-| `fc_verification/CYCLE_ACCOUNTING.md` | Unified cycle formula: `T(M) = T_fill + (M−1)·T_steady`, `T_fill = L+C+O` |
-| `fc_verification/rtl/dpe_nldpe.v` | NL-DPE behavior model (Model Y FSM, precision-agnostic, ACAM modes) |
-| `fc_verification/rtl/dpe_azurelily.v` | Azure-Lily DPE behavior model (Model Y FSM, no ACAM) |
-| `fc_verification/rtl/dpe_nldpe_faithful.v` | Faithful NL-DPE primitive (double-buffered slice-major substrate; CCYC emerges structurally) |
-| `fc_verification/rtl/dpe_azurelily_faithful.v` | Faithful AL primitive (MAC→ADC→ShiftAdd) |
-| `fc_verification/rtl/dsp_mac.v` | Azure-Lily DSP-MAC behavior model (int_sop_4 hard block, DSP_WIDTH=4) |
-| `fc_verification/rtl/fc_top.v` | Parameterized FC/GEMM top (V×H DPE array, Path A weight-stationary) |
-| `fc_verification/rtl/fc_top_synth.v` | VTR-targeted `fc_top` clone (uncommitted WIP; binds `dpe_blackbox.v`) |
-| `fc_verification/rtl/dpe_blackbox.v` | VTR blackbox port contract (`<model name="dpe">`) |
-| `fc_verification/tb_*.v` | Primitive + FC smoke TBs |
-| `fc_verification/Makefile` | CLI build harness (R/C/BUF/PRECISION/PIPELINE_DEPTH/K/DSP_WIDTH knobs) |
-| `fc_verification/run_dpe_smoke.py` | Primitive smoke sweep (52 cases) |
-| `fc_verification/run_fc_smoke.py` | FC smoke sweep (13 cases, `--stage 1A/1B/1C/1D`) |
-| `fc_verification/run_vtr_smoke.py` | VTR smoke (3 cases, NL only; uncommitted WIP) |
-| `nl_dpe/gen_dpe_stub.py` | DPE behavior model generator (per-arch JSON → `fc_verification/rtl/dpe_*.v`) |
-| `nl_dpe/gen_dsp_mac.py` | DSP-MAC behavior model generator |
+| `rtl_flow/FIDELITY_METHODOLOGY.md` | **Canonical** RTL/sim alignment methodology (§3 DPE arch, §4 single-buffered drain-load overlap pipeline, §5 workload classes VMM/DIMM, §7 tiling) — in `rtl_flow/docs/` |
+| `rtl_flow/SPEC.md` | **Behavioral charter** (Stage 1.1 in progress; open decisions D1–D5) |
+| `rtl_flow/docs/FC_RTL_PLAN.md` | FC/GEMM RTL build-out plan (Stage 1A→1D) |
+| `rtl_flow/docs/CYCLE_ACCOUNTING.md` | Unified cycle formula: `T(M) = T_fill + (M−1)·T_steady`, `T_fill = L+C+O` |
+| `rtl_flow/rtl/dpe_nldpe.v` | NL-DPE behavior model (Model Y FSM, precision-agnostic, ACAM modes) |
+| `rtl_flow/rtl/dpe_azurelily.v` | Azure-Lily DPE behavior model (Model Y FSM, no ACAM) |
+| `rtl_flow/rtl/dpe_nldpe_faithful.v` | Faithful NL-DPE primitive (double-buffered slice-major substrate; CCYC emerges structurally) |
+| `rtl_flow/rtl/dpe_azurelily_faithful.v` | Faithful AL primitive (MAC→ADC→ShiftAdd) |
+| `rtl_flow/rtl/dsp_mac.v` | Azure-Lily DSP-MAC behavior model (int_sop_4 hard block, DSP_WIDTH=4) |
+| `rtl_flow/rtl/fc_top.v` | Parameterized FC/GEMM top (V×H DPE array, Path A weight-stationary) |
+| `rtl_flow/vtr/fc_top_synth.v` | VTR-targeted `fc_top` clone (Task #89 WIP; binds `dpe_blackbox.v`) |
+| `rtl_flow/vtr/dpe_blackbox.v` | VTR blackbox port contract (`<model name="dpe">`) |
+| `rtl_flow/tb/*.v` | Primitive + FC smoke TBs |
+| `rtl_flow/Makefile` | CLI build harness (R/C/BUF/PRECISION/PIPELINE_DEPTH/K/DSP_WIDTH knobs) |
+| `rtl_flow/smoke/run_dpe_smoke.py` | Primitive smoke sweep (52 cases) |
+| `rtl_flow/smoke/run_fc_smoke.py` | FC smoke sweep (13 cases, `--stage 1A/1B/1C/1D`) |
+| `rtl_flow/vtr/run_vtr_smoke.py` | VTR smoke (3 cases, NL only) |
+| `rtl_flow/smoke/oracles/` | Independent mac oracles + test vectors (re-verification Stage 1.3 extends these) |
+| `rtl_flow/specs/{nl_dpe,azure_lily}.json` | Per-arch hard-block specs (generator inputs) |
+| `rtl_flow/gen/gen_dpe_stub.py` | DPE behavior model generator (specs JSON → `rtl_flow/rtl/dpe_*.v`) |
+| `rtl_flow/gen/gen_dsp_mac.py` | DSP-MAC behavior model generator |
 | `softmax_study/rtl/softmax_{al,nldpe}.v` | Safe-softmax RTL (AL CLB/DSP; NL 16·N_EXP+1 DPEs, log-domain) |
 
 ## Architecture Constants (do not hardcode elsewhere)
@@ -79,10 +88,10 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 ## Workflow Pattern
 **Plan → Implement → Sanity-check → Run → Verify results → Proceed**
 
-- RTL/sim verification commands (run from `fc_verification/`):
-  - `python3 run_dpe_smoke.py` — primitive smoke (52 cases)
-  - `python3 run_fc_smoke.py` — FC smoke (13 cases)
-  - `python3 run_vtr_smoke.py` — VTR smoke (needs VTR_ROOT)
+- RTL/sim verification commands (run from `rtl_flow/`):
+  - `python3 smoke/run_dpe_smoke.py` — primitive smoke (52 cases)
+  - `python3 smoke/run_fc_smoke.py` — FC smoke (13 cases; ~13 min, iverilog ~50 s/case)
+  - `python3 vtr/run_vtr_smoke.py` — VTR smoke (needs VTR_ROOT)
 - For any DSE-era run: 1–3 point dry run first, verify CSV output, then full sweep; resume with `--skip-existing`; `--jobs 12` to limit CPU
 
 ## Context Economy Rules
@@ -90,52 +99,52 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 - Do NOT re-run VTR on already-completed configs (check `dse/round1/`)
 - Current work is tracked in:
   1. The "Active TODO Track" section below
-  2. `fc_verification/FIDELITY_METHODOLOGY.md` for canonical methodology
+  2. `rtl_flow/docs/FIDELITY_METHODOLOGY.md` for canonical methodology
 - Everything under `archive/` is reference material: read on demand, never edit as live work
 
 ## Active TODO Track
 
 **RTL/sim alignment on main, FIDELITY_METHODOLOGY-aligned** (opened 2026-05-01)
 
-### Status (as of 2026-08-27)
+### Status (as of 2026-08-29)
 
 **Done — committed**:
-- DPE behavior model primitives — `dpe_nldpe.v`, `dpe_azurelily.v`, `dsp_mac.v`; Model Y FSM; module name `dpe` matches VTR arch XML `<model name="dpe">` contract.
-- Generators — `nl_dpe/gen_dpe_stub.py`, `gen_dsp_mac.py`, faithful generators.
-- Build harness — `Makefile` with CLI knobs.
-- Methodology anchor — `FIDELITY_METHODOLOGY.md`.
-- Simulator alignment fixes (F1.5, F2/F3/F4, F5 W=16 DIMM lanes; `Config.patch`) — code now in `archive/azurelily_simulator/`.
-- Tasks #82 (primitive overlap refactor), #83 (Path A sim fix), #84 (Path A RTL fix), #98/#99 (cycle-formula unification + double-buffered LOAD) — sim side in archived simulator, RTL side in `fc_top.v`/TB expectations.
+- Reorg `bd229f1` (Aug 27 work): azurelily de-submoduled, legacy archived, stale docs purged, CLAUDE.md/README rewritten.
+- rtl_flow migration (Aug 29): all RTL assets consolidated under `rtl_flow/` (specs/ gen/ rtl/ tb/ smoke/ docs/ vtr/); paths fixed; generators read `rtl_flow/specs/*.json`.
+- DPE behavior model primitives, Model Y FSM, module name `dpe` matching VTR arch XML contract.
 - Stages 1A (V=1 H=1), 1B (V>1 H=1), 1C (V=1 H>1) validated.
-- `softmax_study/` — COMPLETE: AL vs NL safe-softmax, 8/8 smoke bit-exact, 24 VTR runs, energy model. (committed Aug 2026)
+- `softmax_study/` — COMPLETE (committed Aug 2026).
 
-**Validation state (regression guards)**:
-- `run_dpe_smoke.py` — 52/52 PASS
-- `run_fc_smoke.py` — 13/13 PASS, fidelity reported not gated (Stages 1A+1B+1C)
-- `run_vtr_smoke.py` — 3/3 OK (NL only): bert_qkv_proj, lenet_fc1, bert_ffn1
+**Validation state (regression guards, re-run green after migration)**:
+- `rtl_flow/smoke/run_dpe_smoke.py` — 52/52 PASS
+- `rtl_flow/smoke/run_fc_smoke.py` — 13/13 PASS, fidelity reported not gated (Stages 1A+1B+1C)
+- `rtl_flow/vtr/run_vtr_smoke.py` — 3/3 OK (NL only): bert_qkv_proj, lenet_fc1, bert_ffn1
 
-**Uncommitted WIP in working tree**:
-- `fc_verification/rtl/fc_top_synth.v` + `fc_verification/run_vtr_smoke.py` (Task #89, VTR smoke)
-- 2026-08-27 reorg: `archive/` created, azurelily de-submoduled, stale docs deleted, path fixes
+**Verification caveat (drives the active plan)**: functional truth for FC is a
+one-byte pattern (`tb_fc.v` `expected_byte_fn`); cycle truth is the Task #98
+formula authored in unremembered sessions. Bottom-up re-verification is in
+progress — see "Direction (2026-08-29)" above.
 
-### In flight: Stage 1D — general V·H
+### In flight: Stage 1.1 — primitive behavioral charter
 
-Combined K-tile reduction (V>1) and N-tile concatenation (H>1). Same `fc_top.v` module, parameter elaboration only. Workloads: vgg_fc3 (V=16 H=4), resnet_fc (V=2 H=4), bert_qkv_batched (M=128 V=1 H=1). Stage 1D may need `vgg_fc2` (V=16 H=16) abbreviated due to iverilog elaboration cost on 256 DPE instances.
+`rtl_flow/SPEC.md` placeholder written; five open decisions D1–D5 await user
+closure. Next: audit `dpe_nldpe_faithful.v` against the charter (Stage 1.2),
+then NumPy oracles (1.3) and re-derived primitive smoke (1.4).
 
 ### Forward plan
 
-| Task | Scope | Notes |
+| Rung | Scope | Gate |
 |---|---|---|
-| Stage 1D | Validates general V×H | Workloads: vgg_fc2/3, resnet_fc, bert_qkv (M=128 batched-attention input) |
-| DIMM RTL (Task #73) | Behavioral DIMM module against overlap-aware primitives | Uses `paper/methodology/attention_dimm_mapping.md` |
-| Attention head RTL (Task #74) | Composed attention head, end-to-end RTL/sim alignment at N=128 d=64 C=128 W=16 | Replaces worktree-only AH-track work |
-| BERT-Tiny end-to-end | Multi-head + LayerNorm + residual + embedding, full inference | Per archived `bert_tiny.py` model |
-| **New in-repo simulator** | Replaces archived azurelily simulator; spec TBD | Pin direction here when decided |
+| Stage 1 — primitives | Charter + oracle + re-derived smoke for faithful primitives (NL then AL) | Your sign-off (D1–D5 closed) |
+| Stage 2 — fc_top (VMM/projection) | VMM charter; replace one-byte check with full GEMM oracle; re-verify 13 cases | Your sign-off |
+| Stage 3 — softmax | Port oracles + RTL into rtl_flow; pin log-domain output contract | Your sign-off |
+| Stage 4 — projections + DIMM | Q/K/V composition on trusted fc_top; DIMM charter from `paper/methodology/attention_dimm_mapping.md`, oracle → RTL → smoke | Your sign-off |
+| Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
 
 ### Authoritative docs
-- Methodology: `fc_verification/FIDELITY_METHODOLOGY.md` (§3 DPE arch, §4 pipeline, §5 workload classes, §7 tiling)
-- Cycle accounting: `fc_verification/CYCLE_ACCOUNTING.md`
-- Plan: `fc_verification/FC_RTL_PLAN.md` (Stage 1A→1D)
+- Methodology: `rtl_flow/docs/FIDELITY_METHODOLOGY.md` (§3 DPE arch, §4 pipeline, §5 workload classes, §7 tiling)
+- Cycle accounting: `rtl_flow/docs/CYCLE_ACCOUNTING.md`
+- Plan: `rtl_flow/docs/FC_RTL_PLAN.md` (Stage 1A→1D)
 - Pipeline model context: `paper/methodology/dpe_pipeline_model.md` (design-space reference; some sections describe retired Layout B / transpose block / Regime C — reference only, not implemented)
 - Attention mapping: `paper/methodology/attention_dimm_mapping.md`
 - Softmax study: `softmax_study/SOFTMAX_STUDY.md`

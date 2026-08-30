@@ -1,157 +1,21 @@
-#!/usr/bin/env python3
-"""
-Generator for the FAITHFUL Azure-Lily DPE behavior model (Task #92 + silicon-faithful refactor).
-
-Reads `archive/azurelily_simulator/IMC/configs/azure_lily.json` for arch parameters
-(KERNEL_WIDTH, NUM_COLS, DPE_BUF_WIDTH, PRECISION_BITS, capabilities.
-pipeline_depth, capabilities.acam_cycles) and emits
-
-    fc_verification/rtl/dpe_azurelily_faithful.v
-
-Module name `dpe` matches the VTR arch XML `<model name="dpe">`
-blackbox port contract (same as the lazy primitive).
-
-DIFFERENCE FROM `gen_dpe_stub.py`:
-
-* Lazy primitive  (gen_dpe_stub.py)   - COMPUTE_CYCLES is a Verilog
-                                         parameter that BURNS that many
-                                         cycles after a single-posedge
-                                         VMM fire. Cycle count is set.
-* Faithful prim.  (this generator)    - NO `COMPUTE_CYCLES` parameter.
-                                         PRECISION, PIPELINE_DEPTH and
-                                         ACAM_CYCLES are baked in;
-                                         compute cycle count EMERGES
-                                         from advancing bit_idx 0..P-1
-                                         (1 cycle each) through 3
-                                         internal stages (Crossbar +
-                                         ADC + ShiftAdd), then 0
-                                         cycles of ACAM read-out (AL
-                                         has no ACAM).
-
-DIFFERENCE FROM `gen_dpe_nldpe_faithful.py`:
-
-* NL faithful   : 2-stage pipeline (Crossbar + Acc) + 1-cycle ACAM
-                  read-out stage (3 modes: ADC identity, exp, log).
-* AL faithful   : 3-stage pipeline (Crossbar + ADC + ShiftAdd) + NO
-                  ACAM stage. AL is purely VMM; nonlinearity must be
-                  done by CLB activation downstream.
-
-Both yield CCYC = PRECISION + 2 for INT8 by structural symmetry, but
-the physical decomposition is different.
-
-SILICON-FAITHFUL REFACTOR (Task #93 + Task #99 double-buffer):
-
-* Double-buffered input substrate (Task #99):
-    - input_buf_slice_a / input_buf_slice_b [PRECISION][R] ping-pong pair,
-      each bit-stratified slice-major. load_phase selects the LOAD-side;
-      compute_phase (captured at COMPUTE wake-time as ~load_phase) selects
-      the COMPUTE-side. LOAD-pass-(k+1) starts back-to-back after
-      pass-k's last strobe (no LOAD-gate, no inter-pass stall).
-* Single-buffered downstream substrate:
-    - mac_acc         [NUM_COLS]     single-buffered (AL drains mac_acc
-                                     directly; no separate acam_out).
-* LOAD uses corner-turn: each strobe writes EPS rows of ALL PRECISION
-  bit positions in parallel into the load_phase-selected substrate.
-* COMPUTE bit-serial sweep reads `slice[compute_phase][bit_idx_s0][r]`
-  directly via a 1-bit conditional.
-* Sub-FSM coordination via `buf_loaded` and `compute_done` flags
-  (replacing legacy q_load_tail / q_compute_head / q_output_head
-  pointers).
-
-The generator is intended as a single-source-of-truth-from-JSON
-companion to `gen_dpe_stub.py`. Running it emits an RTL file that is
-functionally and structurally equivalent to the hand-written
-`dpe_azurelily_faithful.v`. The hand-written file remains the
-canonical reference; this generator can be used to re-emit it from
-JSON when the arch parameters change.
-
-Usage:
-    python nl_dpe/gen_dpe_azurelily_faithful.py
-    python nl_dpe/gen_dpe_azurelily_faithful.py --config archive/azurelily_simulator/IMC/configs/azure_lily.json
-    python nl_dpe/gen_dpe_azurelily_faithful.py --out-dir /path/to/some/dir
-"""
-
-import argparse
-import json
-import math
-import os
-import sys
-
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
-DEFAULT_CFG_PATH = os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/azure_lily.json")
-DEFAULT_OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
-
-
-def derive_arch_params(cfg_path):
-    """Load Azure-Lily config JSON and return RTL parameters."""
-    with open(cfg_path, "r") as fh:
-        cfg = json.load(fh)
-    if cfg.get("core_name") != "Azure-Lily":
-        raise ValueError(
-            f"{cfg_path}: core_name='{cfg.get('core_name')}' "
-            "is not 'Azure-Lily'; this generator emits the Azure-Lily faithful primitive only."
-        )
-
-    geometry = cfg.get("geometry", {})
-    capabilities = cfg.get("capabilities", {})
-    fpga_specs = cfg.get("fpga_specs", {})
-
-    R = int(geometry["array_rows"])
-    C = int(geometry["array_cols"])
-    BUF = int(fpga_specs["dpe_buf_width"])
-    precision_bits = int(cfg.get("precision_bits", 8))
-    pipeline_depth = int(capabilities.get("pipeline_depth", 3))
-    acam_cycles = int(capabilities.get("acam_cycles", 0))
-    has_acam = bool(capabilities.get("analog_nonlinear", False))
-    if has_acam:
-        raise ValueError(
-            f"{cfg_path}: capabilities.analog_nonlinear=True "
-            "but this generator emits the Azure-Lily primitive WITHOUT ACAM."
-        )
-
-    eps = BUF // 8
-    assert eps >= 1, f"BUF={BUF} < 8 not supported"
-    load_cycles = math.ceil(R * 8 / BUF)
-    output_cycles = math.ceil(C * 8 / BUF)
-    # Declared CCYC (not used by RTL -- emergent in the RTL, but written
-    # into the header comment for documentation).
-    ccyc_declared = precision_bits + (pipeline_depth - 1) + acam_cycles
-
-    return {
-        "R": R,
-        "C": C,
-        "BUF": BUF,
-        "precision_bits": precision_bits,
-        "pipeline_depth": pipeline_depth,
-        "acam_cycles": acam_cycles,
-        "load_cycles": load_cycles,
-        "output_cycles": output_cycles,
-        "ccyc_declared": ccyc_declared,
-        "core_name": "Azure-Lily",
-    }
-
-
-HEADER_TEMPLATE = """\
 // dpe_azurelily_faithful.v -- FAITHFUL behavioral model of the Azure-Lily DPE primitive.
-// Generated by nl_dpe/gen_dpe_azurelily_faithful.py from {cfg_path}.
+// Generated by nl_dpe/gen_dpe_azurelily_faithful.py from /mnt/vault0/jiajunh5/nl-dpe-fpl/rtl_flow/specs/azure_lily.json.
 // Module name : dpe   (matches VTR arch XML <model name="dpe"> contract).
 // File arch   : Azure-Lily (faithful track -- Task #92, silicon-faithful refactor)
 //
 // Architecture parameters (single source of truth: the JSON config):
-//   R (KERNEL_WIDTH)       = {R}
-//   C (NUM_COLS)           = {C}
-//   BUF (DPE_BUF_WIDTH)    = {BUF}    (elems_per_strobe = {eps})
-//   PRECISION              = {P}      (INT{P})
-//   PIPELINE_DEPTH         = {PD}     (Crossbar -> ADC -> ShiftAdd; 3-stage)
-//   ACAM_CYCLES            = {AC}     (Azure-Lily has NO ACAM)
+//   R (KERNEL_WIDTH)       = 512
+//   C (NUM_COLS)           = 128
+//   BUF (DPE_BUF_WIDTH)    = 16    (elems_per_strobe = 2)
+//   PRECISION              = 8      (INT8)
+//   PIPELINE_DEPTH         = 3     (Crossbar -> ADC -> ShiftAdd; 3-stage)
+//   ACAM_CYCLES            = 0     (Azure-Lily has NO ACAM)
 //
 // Derived per-pass cycle counters:
-//   LOAD_CYCLES   = ceil(R * 8 / BUF) = {LCYC}
-//   OUTPUT_CYCLES = ceil(C * 8 / BUF) = {OCYC}
+//   LOAD_CYCLES   = ceil(R * 8 / BUF) = 256
+//   OUTPUT_CYCLES = ceil(C * 8 / BUF) = 64
 //   CCYC          = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES
-//                 = {P} + {PDm1} + {AC} = {CCYC}    [emergent in RTL]
+//                 = 8 + 2 + 0 = 10    [emergent in RTL]
 //
 // +--------------------------------------------------------------------+
 // | DESIGN CHARTER -- silicon-faithful DOUBLE-BUFFERED input substrate |
@@ -176,7 +40,7 @@ HEADER_TEMPLATE = """\
 // |                                                                    |
 // |  EMERGENT CYCLE COUNT (NOT a parameter):                           |
 // |     CCYC      = PRECISION + (PIPELINE_DEPTH - 1) + ACAM_CYCLES     |
-// |               = {CCYC} cycles (INT{P}, Azure-Lily).                |
+// |               = 10 cycles (INT8, Azure-Lily).                |
 // |     T_steady  = max(LCYC, CCYC, OCYC)                              |
 // |               = LCYC for typical AL configs (LCYC=256 >> CCYC=10). |
 // |     LOAD-pass-(k+1) launches RIGHT AFTER pass-k's last LOAD strobe.|
@@ -190,41 +54,14 @@ HEADER_TEMPLATE = """\
 // |  Same total CCYC as NL faithful (8 + 1 + 1 = 10), different        |
 // |  physical decomposition: AL trades ACAM for an extra ADC stage.    |
 // +--------------------------------------------------------------------+
-"""
-
-
-def emit_faithful_rtl(params, cfg_path):
-    """Emit the faithful primitive RTL source as a string."""
-    header = HEADER_TEMPLATE.format(
-        cfg_path=cfg_path,
-        R=params["R"],
-        C=params["C"],
-        BUF=params["BUF"],
-        eps=params["BUF"] // 8,
-        P=params["precision_bits"],
-        PD=params["pipeline_depth"],
-        AC=params["acam_cycles"],
-        LCYC=params["load_cycles"],
-        OCYC=params["output_cycles"],
-        CCYC=params["ccyc_declared"],
-        PDm1=params["pipeline_depth"] - 1,
-    )
-
-    R = params["R"]
-    C = params["C"]
-    BUF = params["BUF"]
-    P = params["precision_bits"]
-    PD = params["pipeline_depth"]
-    AC = params["acam_cycles"]
-
-    body = f"""//
+//
 // Physical pipeline model (declared at the architecture level --
 // the RTL realises it; the TB measures it):
 //
 //   LOAD (corner-turn)
 //        |
 //        v
-//   input_buf_slice_{{a,b}}[bit][row]  <-- ping-pong substrate pair
+//   input_buf_slice_{a,b}[bit][row]  <-- ping-pong substrate pair
 //   (LOAD writes whichever load_phase selects; COMPUTE reads the OTHER)
 //        |
 //        v
@@ -239,7 +76,7 @@ def emit_faithful_rtl(params, cfg_path):
 //        |
 //        v
 //   Stage 2 (registered, shift-add accumulator on bit_idx_s2)
-//     if (bit_idx_s2 == {P-1}):  // MSB subtract
+//     if (bit_idx_s2 == 7):  // MSB subtract
 //          mac_acc[c] <= mac_acc[c] - (adc_reg[c] <<< bit_idx_s2)
 //     else
 //          mac_acc[c] <= mac_acc[c] + (adc_reg[c] <<< bit_idx_s2)
@@ -254,12 +91,12 @@ def emit_faithful_rtl(params, cfg_path):
 // blackbox port contract.
 
 module dpe #(
-    parameter KERNEL_WIDTH   = {R},
-    parameter NUM_COLS       = {C},
-    parameter DPE_BUF_WIDTH  = {BUF},
-    parameter PRECISION      = {P},
-    parameter PIPELINE_DEPTH = {PD},
-    parameter ACAM_CYCLES    = {AC}
+    parameter KERNEL_WIDTH   = 512,
+    parameter NUM_COLS       = 128,
+    parameter DPE_BUF_WIDTH  = 16,
+    parameter PRECISION      = 8,
+    parameter PIPELINE_DEPTH = 3,
+    parameter ACAM_CYCLES    = 0
     // NO ACAM_MODE -- Azure-Lily has no ACAM nonlinear stage.
 )(
     input  wire                       clk,
@@ -339,7 +176,7 @@ module dpe #(
                 if (slice_bit) begin
                     for (c_idx = 0; c_idx < NUM_COLS; c_idx = c_idx + 1) begin
                         crossbar_sum_comb[c_idx] = crossbar_sum_comb[c_idx]
-                            + {{{{24{{weights[r_idx][c_idx][7]}}}}, weights[r_idx][c_idx]}};
+                            + {{24{weights[r_idx][c_idx][7]}}, weights[r_idx][c_idx]};
                     end
                 end
             end
@@ -533,41 +370,3 @@ module dpe #(
     end
 
 endmodule
-"""
-    return header + body
-
-
-def main(argv=None):
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--config", default=DEFAULT_CFG_PATH,
-                   help=f"Azure-Lily JSON config path (default: {DEFAULT_CFG_PATH})")
-    p.add_argument("--out-dir", default=DEFAULT_OUT_DIR,
-                   help=f"Output directory (default: {DEFAULT_OUT_DIR})")
-    p.add_argument("--check", action="store_true",
-                   help="Print the emitted RTL to stdout but don't write the file")
-    args = p.parse_args(argv)
-
-    params = derive_arch_params(args.config)
-    src = emit_faithful_rtl(params, args.config)
-
-    if args.check:
-        sys.stdout.write(src)
-        return 0
-
-    os.makedirs(args.out_dir, exist_ok=True)
-    out_path = os.path.join(args.out_dir, "dpe_azurelily_faithful.v")
-    with open(out_path, "w") as fh:
-        fh.write(src)
-    print(f"[gen_dpe_azurelily_faithful] wrote {out_path}")
-    print(f"               R={params['R']} C={params['C']} BUF={params['BUF']} "
-          f"PRECISION={params['precision_bits']} PIPELINE_DEPTH={params['pipeline_depth']} "
-          f"ACAM_CYCLES={params['acam_cycles']}")
-    print(f"               LCYC={params['load_cycles']} "
-          f"OCYC={params['output_cycles']} "
-          f"CCYC(declared, emergent in RTL)={params['ccyc_declared']}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

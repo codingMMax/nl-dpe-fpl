@@ -65,10 +65,10 @@ WAVE ?= 0
 
 # ── paths ─────────────────────────────────────────────────────────────────
 REPO   := $(shell git rev-parse --show-toplevel 2>/dev/null || echo $(CURDIR)/..)
-RTL    := $(REPO)/fc_verification/rtl
-TB_DIR := $(REPO)/fc_verification
-BIN    := $(REPO)/fc_verification/build
-GEN    := $(REPO)/nl_dpe
+RTL    := $(REPO)/rtl_flow/rtl
+TB_DIR := $(REPO)/rtl_flow/tb
+BIN    := $(REPO)/rtl_flow/build
+GEN    := $(REPO)/rtl_flow/gen
 
 # Resolve effective param values (per-arch fallback when R/C/BUF not given)
 NLDPE_R_EFF   := $(if $(R),$(R),$(NLDPE_R))
@@ -289,14 +289,14 @@ regen:
 
 # ── full smoke sweep (delegates to run_dpe_smoke.py) ──────────────────────
 smoke:
-	python3 $(REPO)/fc_verification/run_dpe_smoke.py
+	python3 $(REPO)/rtl_flow/smoke/run_dpe_smoke.py
 
 # ── Faithful NL-DPE primitive (Task #91) ─────────────────────────────────
 # TEST_MODE selects the test case (1..7). The numpy oracle pre-generates
 # .mem files under fc_verification/oracles/test_vectors/ -- call
 # `make faithful-vectors` first if you've edited the oracle.
 TEST_MODE ?= 1
-VECT_DIR  := $(REPO)/fc_verification/oracles/test_vectors/
+VECT_DIR  := $(REPO)/rtl_flow/smoke/oracles/test_vectors/
 
 tb-faithful-nldpe: | $(BIN)
 	@echo "[make] tb-faithful-nldpe TEST_MODE=$(TEST_MODE)"
@@ -322,7 +322,7 @@ faithful-smoke: | $(BIN)
 # TEST_MODE selects the test case (1..5). The numpy oracle pre-generates
 # .mem files under fc_verification/oracles/test_vectors_al/ -- call
 # `make faithful-vectors-al` first if you've edited the oracle.
-VECT_DIR_AL := $(REPO)/fc_verification/oracles/test_vectors_al/
+VECT_DIR_AL := $(REPO)/rtl_flow/smoke/oracles/test_vectors_al/
 
 tb-faithful-al: | $(BIN)
 	@echo "[make] tb-faithful-al TEST_MODE=$(TEST_MODE)"

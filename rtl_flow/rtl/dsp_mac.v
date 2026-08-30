@@ -3,7 +3,7 @@
 //
 // AL DIMM lane: one int_sop_4 hard block (DSP_WIDTH int8 MACs/cycle),
 // matching FIDELITY_METHODOLOGY.md §3 + §5 + the simulator's gemm_dsp
-// formula in azurelily/IMC/peripherals/fpga_fabric.py.
+// formula in archive/azurelily_simulator/IMC/peripherals/fpga_fabric.py.
 //
 // Per pass:
 //   LOAD    L = ceil(K_INPUT * PRECISION_BITS / DPE_BUF_WIDTH)

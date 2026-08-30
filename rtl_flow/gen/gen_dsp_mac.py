@@ -3,7 +3,7 @@
 DSP-MAC behavior model generator (FIDELITY_METHODOLOGY.md §3, §4, §5).
 
 Reads `archive/azurelily_simulator/IMC/configs/azure_lily.json` and emits a Verilog file
-into `fc_verification/rtl/dsp_mac.v`.
+into `rtl_flow/rtl/dsp_mac.v`.
 
 The DSP-MAC primitive is the AL DIMM lane: one ``int_sop_4`` hard block
 running at DSP_WIDTH int8 MACs/cycle. The simulator side is in
@@ -28,7 +28,7 @@ with a queue of pending MAC results between LOAD->COMPUTE and
 COMPUTE->OUTPUT stages.  Wake-up signals between stages are queue
 indices NBA-advanced by the producer; the consumer reads the updated
 n_pending_* combinational count one cycle later (the +1 per handoff).
-See fc_verification/rtl/dpe_*.v for full design narrative — dsp_mac
+See rtl_flow/rtl/dpe_*.v for full design narrative — dsp_mac
 mirrors that structure with a 1-element accumulator per pass instead
 of an N-column VMM result.
 
@@ -48,9 +48,9 @@ import sys
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(HERE)
-DEFAULT_CFG = os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/azure_lily.json")
-OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
+REPO = os.path.dirname(os.path.dirname(HERE))
+DEFAULT_CFG = os.path.join(REPO, "rtl_flow/specs/azure_lily.json")
+OUT_DIR = os.path.join(REPO, "rtl_flow/rtl")
 
 # DSP_WIDTH is a hard-block constant (int_sop_4 = 4 int8 MAC/cycle).
 # Mirrors `DSP_WDITH` in archive/azurelily_simulator/IMC/peripherals/fpga_fabric.py.

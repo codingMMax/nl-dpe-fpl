@@ -9,8 +9,8 @@
 //
 // Spec anchors:
 //   - nl_dpe_22nm_auto.xml `<model name="dpe">` port contract (line 219)
-//   - fc_verification/rtl/dpe_nldpe.v  (behavioral primitive — sim-only)
-//   - fc_verification/rtl/dpe_azurelily.v  (behavioral primitive — sim-only)
+//   - rtl_flow/rtl/dpe_nldpe.v  (behavioral primitive — sim-only)
+//   - rtl_flow/rtl/dpe_azurelily.v  (behavioral primitive — sim-only)
 //
 // Port widths assume DPE_BUF_WIDTH = 40 (NL-DPE default). For the Azure-Lily
 // variant (BUF=16) build a parallel `dpe_blackbox_al.v` if/when AL VTR smoke
