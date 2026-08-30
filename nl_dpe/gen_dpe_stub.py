@@ -115,9 +115,9 @@ pass 0).
 Usage:
     # one arch:
     python nl_dpe/gen_dpe_stub.py \
-        --config azurelily/IMC/configs/nl_dpe.json
+        --config archive/azurelily_simulator/IMC/configs/nl_dpe.json
     python nl_dpe/gen_dpe_stub.py \
-        --config azurelily/IMC/configs/azure_lily.json
+        --config archive/azurelily_simulator/IMC/configs/azure_lily.json
 
     # both archs at once (default config paths):
     python nl_dpe/gen_dpe_stub.py
@@ -132,8 +132,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 DEFAULT_CFG_PATHS = [
-    os.path.join(REPO, "azurelily/IMC/configs/nl_dpe.json"),
-    os.path.join(REPO, "azurelily/IMC/configs/azure_lily.json"),
+    os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/nl_dpe.json"),
+    os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/azure_lily.json"),
 ]
 OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
 
@@ -146,7 +146,7 @@ ARCH_SUFFIX = {
 
 def _load_arch_cfg(cfg_path):
     """Load arch geometry / capabilities via simulator's Config class."""
-    imc_root = os.path.join(REPO, "azurelily", "IMC")
+    imc_root = os.path.join(REPO, "archive/azurelily_simulator", "IMC")
     if imc_root not in sys.path:
         sys.path.insert(0, imc_root)
     from imc_core.config import Config  # noqa: WPS433

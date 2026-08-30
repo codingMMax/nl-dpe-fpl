@@ -60,22 +60,32 @@ dse/results/plots/**/*.pdf
 */to_delete/
 
 # AH-track additions (2026-04-24)
-fc_verification/vtr_runs/
-block_comp_apr_11/vtr_runs/
-block_comp_apr_11/results/*.log
 dse/gemm_phase2_1/vtr_runs/
 dse/gemm_phase2_1/configs/
 dse/gemm_phase2_1/rtl/
 benchmarks/vtr_runs_seqlen/
-azurelily/IMC/logs/
 
 # Compiled iverilog testbench executables — regenerable via run_alignment.sh
-block_comp_apr_11/tb/tb_*
-!block_comp_apr_11/tb/tb_*.v
-!block_comp_apr_11/tb/tb_*.sh
+archive/block_comp_apr_11/tb/tb_*
+!archive/block_comp_apr_11/tb/tb_*.v
+!archive/block_comp_apr_11/tb/tb_*.sh
 
 # VCD waveform dumps — regenerable from testbench runs
 *.vcd
+
+# Stray VTR log at repo root
+vpr_stdout.log
+
+# archive/ — legacy material (2026-08-27 reorg).
+# VTR run outputs and build artifacts stay untracked; only source/docs are committed.
+archive/nl_dpe_legacy_vtr/
+archive/azurelily_TACO_experiments/lenet_1_channel/
+archive/azurelily_TACO_experiments/resnet_1_channel/
+archive/azurelily_TACO_experiments/vgg11_1_channel/
+archive/block_comp_apr_11/vtr_runs/
+archive/block_comp_apr_11/results/*.log
+archive/block_comp_apr_11/__pycache__/
+archive/azurelily_simulator/IMC/logs/
 
 # fc_verification local build / smoke run artifacts (regenerable)
 fc_verification/build/

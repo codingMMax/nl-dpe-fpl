@@ -16,7 +16,7 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activa
 
 **The core tension:** The crossbar row dimension R determines ACAM eligibility (V = ceil(K/R) = 1 iff K ≤ R). Larger R means more workloads qualify for ACAM — but larger crossbars cost more area (ACAM is 77% of DPE area, scaling with columns C). The column dimension C determines horizontal tiling (H = ceil(N/C)) and per-tile area cost. There is a non-trivial Pareto front across (R, C).
 
-**The paper's methodology:** We perform a systematic crossbar-size DSE across 9 configurations (R ∈ {128, 256, 512} × C ∈ {64, 128, 256}) using 6 representative FC workloads and a separate attention head experiment. VTR synthesis provides real Fmax and grid dimensions; an analytical energy/latency simulator completes each DSE point.
+**The paper's methodology:** We perform a systematic crossbar-size DSE across 12 configurations (R ∈ {128, 256, 512, 1024} × C ∈ {64, 128, 256}) using 6 representative FC workloads and a separate attention head experiment. VTR synthesis provides real Fmax and grid dimensions; an analytical energy/latency simulator completes each DSE point.
 
 **The paper's finding:** 512×128 is the FPGA-optimal NL-DPE configuration. The 512-row dimension is critical — it enables ACAM eligibility (V=1) on 5/6 FC workloads, yielding 2-4× energy savings over V>1 configs. The 128-column dimension balances tile area against horizontal tiling cost. The ACAM benefit is a step function of tiling geometry: it helps exactly when V=1, and the row dimension is the single knob that controls this boundary.
 
@@ -26,7 +26,7 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activa
 
 * **Problem:** FPGA-based ML acceleration relies on heterogeneous hard blocks. NL-DPE offers an ACAM peripheral that can perform in-DPE nonlinear functions (activation, log), potentially saving fabric resources and energy. But the optimal crossbar configuration for FPGA integration is unknown.
 * **Gap:** Prior NL-DPE work optimizes a fixed ASIC architecture. Prior FPGA-integrated IMC work (Azure-Lily) uses a fixed 512×128 crossbar with ADC-only peripheral. Neither answers: what crossbar size maximizes FPGA-level efficiency, and when does ACAM actually help under realistic tiled GEMM mappings?
-* **Method:** We perform a crossbar-size DSE across 9 NL-DPE configurations (R ∈ {128, 256, 512} × C ∈ {64, 128, 256}) using VTR-based synthesis and an analytical energy/latency simulator. We evaluate 6 representative FC workloads spanning small (64×64) to large (2048×256), plus a separate attention head experiment (N=128, d=128). We compare against Azure-Lily as an architectural baseline.
+* **Method:** We perform a crossbar-size DSE across 12 NL-DPE configurations (R ∈ {128, 256, 512, 1024} × C ∈ {64, 128, 256}) using VTR-based synthesis and an analytical energy/latency simulator. We evaluate 6 representative FC workloads spanning small (64×64) to large (2048×256), plus a separate attention head experiment (N=128, d=128). We compare against Azure-Lily as an architectural baseline.
 * **Findings:**
   * 512×128 is the FPGA-optimal NL-DPE configuration (SPEC-style geomean score 0.852 vs runner-up 0.635), achieving ACAM eligibility on 5/6 FC workloads.
   * ACAM eligibility is a step function of tiling geometry: V=1 configs see 2-4× lower energy than V>1 configs on the same workload. The row dimension R is the single knob that controls this boundary.
@@ -78,7 +78,7 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activa
 
 ### 1.6 Contributions
 
-1. First crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block: 9 configs × 6 FC workloads, evaluated with VTR synthesis and analytical energy/latency simulation.
+1. First crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block: 12 configs × 6 FC workloads, evaluated with VTR synthesis and analytical energy/latency simulation.
 2. Parameterized analytical model for NL-DPE area, power, and energy (`area_power.py`), with routing-aware VTR tile sizing.
 3. Identification of 512×128 as the FPGA-optimal configuration — the row dimension (ACAM eligibility) is the dominant design knob.
 4. Separate attention head experiment showing ACAM-as-log mode and CLB DIMM/softmax overhead, motivating future hard-block reduction integration.
@@ -159,7 +159,7 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activa
 ### 4.1 System Overview Figure
 
 * **Figure 2:** End-to-end DSE flow.
-  * Box 1: NL-DPE block characterization (`area_power.py`) → area/power/energy model for 9 (R,C) configs.
+  * Box 1: NL-DPE block characterization (`area_power.py`) → area/power/energy model for 12 (R,C) configs.
   * Box 2: Parameterized RTL generation (`gen_gemv_wrappers.py`) → VTR synthesis → Fmax, grid dimensions.
   * Box 3: IMC energy/latency simulator (patched with VTR Fmax) → per-inference energy/latency breakdown.
   * Box 4: SPEC-style normalized geomean ranking → optimal config selection → Round 2 inputs.
@@ -169,7 +169,7 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activa
 * One NL-DPE hard block = one R×C crossbar + ACAM peripheral + digital I/O interface (16-bit).
 * Parameterized by: crossbar size (R rows × C columns). I/O width fixed at 16-bit.
 * `area_power.py` computes area (µm²), power (mW), energy (pJ), and VTR tile dimensions (W×H grid cells) as a function of (R, C).
-* 9 configurations: R ∈ {128, 256, 512} × C ∈ {64, 128, 256}. DPE area ranges from 12,198 µm² (128×64) to 66,093 µm² (512×256).
+* 12 configurations: R ∈ {128, 256, 512, 1024} × C ∈ {64, 128, 256}. DPE area ranges from 12,198 µm² (128×64) to 90,577 µm² (1024×256).
 * Output of Q1: a single selected configuration (512×128) used in Q2/Q3 and the attention experiment.
 
 ### 4.3 Mapping Policy
@@ -198,7 +198,7 @@ NL-DPE has a unique ACAM peripheral that can perform nonlinear functions (activa
 | fc_512_512 | 512 | 512 | Large; only R=512 achieves V=1 |
 | fc_2048_256 | 2048 | 256 | Very deep; no config achieves V=1 |
 
-These are chosen to span the ACAM eligibility boundary across the 9 configs.
+These are chosen to span the ACAM eligibility boundary across the 12 configs.
 
 **Attention workload (separate experiment):** Single attention head (N=128 seq_length, d=128 head_dim). 3 DPE projections (Q/K/V) + CLB-based DIMM score matrix, softmax, weighted sum.
 
@@ -221,11 +221,11 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 ### 5.2 Baselines
 
 * **Primary baseline:** Azure-Lily (512×128 crossbar, ADC-only, same VTR flow) — used for architectural context. Full-network comparison data available for LeNet and ResNet from prior work.
-* **Internal baselines:** Within the 9-config sweep, configs with V>1 on a given workload serve as the "no ACAM" baseline for that workload, while V=1 configs capture the ACAM benefit. This eliminates the need for a separate P1 (ADC-only) run.
+* **Internal baselines:** Within the 12-config sweep, configs with V>1 on a given workload serve as the "no ACAM" baseline for that workload, while V=1 configs capture the ACAM benefit. This eliminates the need for a separate P1 (ADC-only) run.
 
 ### 5.3 Metrics
 
-* **Per-point (54 DSE points):** Fmax (MHz), grid_W × grid_H, FPGA area (mm²), energy (pJ), latency (ns), ACAM eligibility (V=1?), DPE count (V×H).
+* **Per-point (72 DSE points):** Fmax (MHz), grid_W × grid_H, FPGA area (mm²), energy (pJ), latency (ns), ACAM eligibility (V=1?), DPE count (V×H).
 * **Derived:** throughput/mm² (inf/s/mm²), throughput/J (inf/J).
 * **Ranking:** SPEC-style normalized geomean — per-workload best = 1.0, geomean across 6 workloads, combined score = geomean(GM_tput/mm², GM_tput/J).
 
@@ -234,7 +234,7 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 * Azure-Lily simulator calibrated: e_conv = 2.33 pJ/op is ground truth from prior work.
 * NL-DPE energy model validated against 0.548× LeNet energy ratio (NL-DPE vs Azure-Lily).
 * VTR Fmax outputs used directly — no frequency scaling applied.
-* Round 1: all 54 VTR runs completed successfully; no routing failures.
+* Round 1: all 72 VTR runs completed successfully; no routing failures.
 
 ---
 
@@ -242,13 +242,13 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 
 ### 6.1 Q1: Crossbar-Size Design-Space Exploration (Round 1)
 
-* **Goal:** Select the FPGA-optimal NL-DPE crossbar configuration from 9 candidates.
+* **Goal:** Select the FPGA-optimal NL-DPE crossbar configuration from 12 candidates.
 * **Key claim:** The row dimension R is the dominant design knob. R=512 enables ACAM on 5/6 workloads; R=256 on 3/6; R=128 on 2/6. The column dimension C trades tile area against horizontal tiling. 512×128 is the Pareto-optimal point.
-* **Data:** 54 VTR+IMC runs complete. Results in `dse/results/round1_results.csv`.
+* **Data:** 72 VTR+IMC runs complete. Results in `dse/results/round1_results.csv`.
 
 * **Figure 3a:** Config ranking bar chart (`round1_ranking.pdf`) — geomean tput/mm² and tput/J per config, sorted by combined score. Shows clear R=512 tier separation.
-* **Figure 3b:** Config × Workload heatmap (`round1_heatmap.pdf`) — 9×6 grid, normalized tput/mm², annotated with V and ACAM eligibility. Visual proof that V=1 cells cluster in R=512 rows.
-* **Table 2:** All 9 configs — columns: config, DPE area (µm²), tile W×H, power (mW), ACAM-eligible workloads (out of 6), GM tput/mm², GM tput/J, GM combined. 512×128 highlighted.
+* **Figure 3b:** Config × Workload heatmap (`round1_heatmap.pdf`) — 12×6 grid, normalized tput/mm², annotated with V and ACAM eligibility. Visual proof that V=1 cells cluster in R=512 rows.
+* **Table 2:** All 12 configs — columns: config, DPE area (µm²), tile W×H, power (mW), ACAM-eligible workloads (out of 6), GM tput/mm², GM tput/J, GM combined. 512×128 highlighted.
 
 * **Subsections:**
   * Q1.1: Row dimension determines ACAM eligibility — V=1 threshold analysis across (R, workload) pairs.
@@ -287,7 +287,7 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 
 * **Figure 5a:** Energy vs config for a workload that crosses the V=1 boundary (e.g., fc_512_128). Show step-function discontinuity at R=512.
 * **Figure 5b:** Attention head energy breakdown — DPE projections vs CLB DIMM/softmax stages.
-* **Table 4:** Per-workload ACAM eligibility count across 9 configs + energy gap at the V=1 boundary.
+* **Table 4:** Per-workload ACAM eligibility count across 12 configs + energy gap at the V=1 boundary.
 
 ### 6.4 NL-DPE vs Azure-Lily: Architectural Context
 
@@ -303,7 +303,7 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 ### 6.5 Attention Head Case Study
 
 * **Goal:** Show how ACAM-as-log mode and CLB DIMM/softmax overhead differ from FC workloads.
-* **Data:** 9 configs × 1 attention workload (N=128, d=128) — pending T3a/T3b/T3c.
+* **Data:** 12 configs × 1 attention workload (N=128, d=128) — pending T3a/T3b/T3c.
 * **Expected finding:** DPE projections are a small fraction of total energy; CLB DIMM/softmax dominate. All configs achieve V=1 for d=128, so differentiation is purely from tile area.
 * **Figure 7:** Attention energy breakdown: DPE (Q/K/V projections) vs CLB (DIMM + softmax + weighted sum).
 
@@ -347,7 +347,7 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 
 ### 8.1 Summary
 
-* We perform a systematic crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block, evaluating 9 configurations across 6 FC workloads and a separate attention head experiment.
+* We perform a systematic crossbar-size DSE for NL-DPE as a heterogeneous FPGA hard block, evaluating 12 configurations across 6 FC workloads and a separate attention head experiment.
 * Q1 is answered: 512×128 is the FPGA-optimal configuration. Q3 is answered: ACAM benefit is a step function of V=1 eligibility. Q2 (optimal density) is addressed in Round 2.
 
 ### 8.2 Key Insights
@@ -362,7 +362,7 @@ These are chosen to span the ACAM eligibility boundary across the 9 configs.
 
 ## Appendix Notes
 
-* **Appendix A:** Full Round 1 results table (54 data points) with per-workload metrics.
-* **Appendix B:** Per-workload tiling analysis — V and H for all 9 configs × 6 workloads.
-* **Appendix C:** DPE physical specs table (area, power, tile dimensions for all 9 configs).
+* **Appendix A:** Full Round 1 results table (72 data points) with per-workload metrics.
+* **Appendix B:** Per-workload tiling analysis — V and H for all 12 configs × 6 workloads.
+* **Appendix C:** DPE physical specs table (area, power, tile dimensions for all 12 configs).
 * **Appendix D:** Sensitivity to ACAM energy cost (what if ACAM activation is cheaper/more expensive?).

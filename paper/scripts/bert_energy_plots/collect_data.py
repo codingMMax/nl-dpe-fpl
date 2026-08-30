@@ -14,8 +14,8 @@ from collections import defaultdict
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(ROOT / "nl_dpe"))
-sys.path.insert(0, str(ROOT / "azurelily"))
-sys.path.insert(0, str(ROOT / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator" / "IMC"))
 
 from imc_core.config import Config
 from imc_core.imc_core import IMCCore
@@ -54,7 +54,7 @@ SEQ_LENS = [1024, 2048, 4096, 6144, 8192]
 
 
 def run_breakdown(cfg_file, R, C, fmax, N, avail_key):
-    cfg = Config(str(ROOT / "azurelily" / "IMC" / "configs" / f"{cfg_file}"))
+    cfg = Config(str(ROOT / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{cfg_file}"))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     avail = VTR_USED.get(avail_key, {})
     if avail.get("DSPs") is not None: cfg.total_dsp = avail["DSPs"]

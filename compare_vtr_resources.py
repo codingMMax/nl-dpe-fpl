@@ -87,7 +87,7 @@ def main():
     )
     parser.add_argument(
         "--azurelily-dir",
-        default="/mnt/vault0/jiajunh5/nl-dpe-fpl/azurelily_TACO_experiments",
+        default="/mnt/vault0/jiajunh5/nl-dpe-fpl/archive/azurelily_TACO_experiments",
         help="Azure-Lily RTL directory",
     )
     parser.add_argument(

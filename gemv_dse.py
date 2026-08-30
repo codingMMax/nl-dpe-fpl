@@ -46,7 +46,7 @@ if not VTR_PYTHON.is_file():
     VTR_PYTHON = None
 
 # ── IMC paths ─────────────────────────────────────────────────────────────
-AZURELILY_ROOT = PROJECT_ROOT / "azurelily"
+AZURELILY_ROOT = PROJECT_ROOT / "archive" / "azurelily_simulator"
 IMC_TEST = AZURELILY_ROOT / "IMC" / "test.py"
 BASE_IMC_CONFIG = AZURELILY_ROOT / "IMC" / "configs" / "nl_dpe.json"
 

@@ -13,8 +13,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "nl_dpe"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC"))
 
 from style_constants import (apply_style, ARCH_COLORS, BASELINE_COLOR,
                               BASELINE_LS, BASELINE_ALPHA,
@@ -72,7 +72,7 @@ def _functional_dpes(rows, cols):
 
 def run_attention_head(arch, N, d_head):
     cfg_file, R, C, fmax, dpes, dsps, clbs, brams = ARCHS[arch]
-    cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / cfg_file))
+    cfg = Config(str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     cfg.total_dsp = dsps; cfg.total_clb = clbs; cfg.total_mem = brams
     cfg.total_dimm_dpes = max(0, dpes - _functional_dpes(R, C))

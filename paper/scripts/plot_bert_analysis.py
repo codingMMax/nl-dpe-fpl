@@ -12,8 +12,8 @@ from collections import defaultdict
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "nl_dpe"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC"))
 
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -46,7 +46,7 @@ def _functional_dpes(rows, cols):
 
 def _make_sim(cfile, R, C, fmax, total_dsp=None, total_clb=None, total_mem=None,
               total_dimm_dpes=None):
-    cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / f"{cfile}.json"))
+    cfg = Config(str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{cfile}.json"))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     if total_dsp is not None: cfg.total_dsp = total_dsp
     if total_clb is not None: cfg.total_clb = total_clb
@@ -60,7 +60,7 @@ def _make_sim(cfile, R, C, fmax, total_dsp=None, total_clb=None, total_mem=None,
 
 def run_attention(cfile, R, C, N, d_head=64):
     """Run single attention head, return (total_energy, dpe_energy)."""
-    cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / f"{cfile}.json"))
+    cfg = Config(str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{cfile}.json"))
     cfg.rows = R; cfg.cols = C; cfg.freq = 150
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats)

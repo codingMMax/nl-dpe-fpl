@@ -24,8 +24,8 @@ import os
 from pathlib import Path
 
 # Add paths
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "azurelily"))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "azurelily" / "IMC"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "archive" / "azurelily_simulator" / "IMC"))
 
 from simulator import IMC
 
@@ -47,7 +47,7 @@ def extract_fmax_from_run_log(run_log_path):
 
 def run_imc(model_name, imc_config_name, rows, cols, fmax_mhz, seq_length=128, head_dim=128):
     """Run IMC simulator with specified config, return results dict."""
-    cfg_path = str(Path(__file__).resolve().parent.parent / "azurelily" / "IMC" / "configs" / f"{imc_config_name}.json")
+    cfg_path = str(Path(__file__).resolve().parent.parent / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{imc_config_name}.json")
 
     # Create IMC simulator with config
     imc = IMC(cfg_path)

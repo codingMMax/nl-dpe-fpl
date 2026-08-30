@@ -1,0 +1,49 @@
+{
+    "core_name": "SRAM-CHA",
+    "tech_node_nm": 65,
+    "precision_bits": 8,
+    "geometry": {
+        "array_rows": 256,
+        "array_cols": 128,
+        "acam_rows": 0,
+        "weight_bits_per_cell": 1.5
+    },
+    "capabilities": {
+        "analog_nonlinear": false,
+        "input_bit_slicing": true,
+        "analog_accum": true,
+        "digital_accum": false
+    },
+    "area_params": {
+        "bitcell_area_um2": 6.48,
+        "adc_area_per_col_um2": 0.0,
+        "overhead_factor": 0.03
+    },
+    "params": {
+        "freq_MHz":200,
+        "t_analoge": 1,
+        "t_conv": 1,
+        "t_digital": 0,
+        "e_analoge_pj": 0.5,
+        "e_conv_pj": 5.0,
+        "e_digital_pj": 0.1
+    },
+   "fpga_specs": {
+        "freq": 300,
+        "bram_width": 40,
+        "mem_bw_utilization": 1.0,
+        "bram_mode":0, 
+        "bram_pj_per_access":9,
+        "dsp_pj_per_mac":8,
+        "clb_pj_per_mac":3,
+        "act_units": 16,
+        "act_cycles_per_op": 1,
+        "act_energy_pj_per_op": 0.6,
+        "total_io": 2630,
+        "total_clb": 6688,
+        "total_dsp": 132,
+        "total_mem":264,
+        "total_imc": 896
+
+    }
+}

@@ -10,8 +10,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "nl_dpe"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC"))
 
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -32,7 +32,7 @@ CSV_PATH = SCRIPT_DIR / "imc_benchmark_results.csv"
 OUT_PATH = SCRIPT_DIR.parent / "figures" / "benchmarks" / "cnn_analysis.pdf"
 
 def run_cnn(model_name, cfile, R, C, fmax):
-    cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / f"{cfile}.json"))
+    cfg = Config(str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{cfile}.json"))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats); fpga = FPGAFabric(cfg, mem, stats, imc_core=imc)

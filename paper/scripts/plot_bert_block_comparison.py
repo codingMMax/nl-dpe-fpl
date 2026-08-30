@@ -24,8 +24,8 @@ from matplotlib.patches import Patch
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(ROOT / "nl_dpe"))
-sys.path.insert(0, str(ROOT / "azurelily"))
-sys.path.insert(0, str(ROOT / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator" / "IMC"))
 sys.path.insert(0, str(ROOT / "paper" / "scripts"))
 from style_constants import apply_style, ARCH_COLORS, ANNOT_FONTSIZE, ANNOT_FONTWEIGHT
 from area_power import dpe_specs
@@ -50,7 +50,7 @@ ARCHS = [
 
 fc_results = {}
 for name, cfg_file, R, C in ARCHS:
-    cfg = Config(str(ROOT / "azurelily/IMC/configs" / cfg_file))
+    cfg = Config(str(ROOT / "archive/azurelily_simulator/IMC/configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = 135
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats)

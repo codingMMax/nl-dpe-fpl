@@ -17,7 +17,7 @@ from pathlib import Path
 
 # ── paths ──────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent
-AZURELILY_ROOT = PROJECT_ROOT / "azurelily"
+AZURELILY_ROOT = PROJECT_ROOT / "archive" / "azurelily_simulator"
 IMC_TEST = AZURELILY_ROOT / "IMC" / "test.py"
 
 DEFAULT_CONFIGS = {
@@ -27,7 +27,7 @@ DEFAULT_CONFIGS = {
 
 DEFAULT_VTR_DIRS = {
     "nl_dpe":    PROJECT_ROOT / "nl_dpe",
-    "azurelily": PROJECT_ROOT / "azurelily_TACO_experiments",
+    "azurelily": PROJECT_ROOT / "archive" / "azurelily_TACO_experiments",
 }
 
 # model name in IMC test.py  →  VTR design folder name

@@ -7,8 +7,8 @@ Shows NL-DPE keeps DPE contribution at ~50% while Azure-Lily drops to ~1%.
 Output: benchmarks/results/attention_dpe_ratio_vs_seqlen.pdf
 """
 import sys, math
-sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "azurelily"))
-sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "azurelily" / "IMC"))
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "archive" / "azurelily_simulator" / "IMC"))
 
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -41,7 +41,7 @@ STYLES = {"NL-DPE (dual-identity)": "-", "Azure-Lily": "--"}
 
 
 def run_attention(cfile, R, C, N):
-    cfg = Config(f"azurelily/IMC/configs/{cfile}.json")
+    cfg = Config(f"archive/azurelily_simulator/IMC/configs/{cfile}.json")
     cfg.rows = R; cfg.cols = C; cfg.freq = 150
     stats = Stats(); mem = MemoryModel(cfg, stats)
     imc = IMCCore(cfg, mem, stats)

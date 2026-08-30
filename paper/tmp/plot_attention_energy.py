@@ -13,8 +13,8 @@ import sys, os, math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "azurelily"))
-sys.path.insert(0, str(ROOT / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator" / "IMC"))
 sys.path.insert(0, str(ROOT / "nl_dpe"))
 
 import matplotlib
@@ -96,7 +96,7 @@ def run_attention_breakdown(cfg_name, N, d, use_dpe=True, use_log=False):
     from peripherals.memory import MemoryModel
     from scheduler_stats.stats import Stats
 
-    cfg = Config(str(ROOT / "azurelily" / "IMC" / "configs" / f"{cfg_name}.json"))
+    cfg = Config(str(ROOT / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{cfg_name}.json"))
     cfg.rows = R; cfg.cols = C
     stats = Stats()
     mem = MemoryModel(cfg, stats)

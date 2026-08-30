@@ -12,7 +12,7 @@ Cycle formulae (Task #98 — unified analytical formula, single source
 of truth, NO compensation constants):
 
   SIM cycles (architectural minimum; matches
-  azurelily/IMC/imc_core/imc_core.py:run_gemm):
+  archive/azurelily_simulator/IMC/imc_core/imc_core.py:run_gemm):
 
     T_fill_sim   = LCYC + CCYC + OCYC
     T_steady_sim = max(LCYC, CCYC, OCYC)

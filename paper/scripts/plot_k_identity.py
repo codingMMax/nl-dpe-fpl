@@ -25,8 +25,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent.parent
 OUT_PATH = SCRIPT_DIR.parent / "figures" / "benchmarks" / "k_identity.pdf"
 
-sys.path.insert(0, str(ROOT / "azurelily"))
-sys.path.insert(0, str(ROOT / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator" / "IMC"))
 
 from imc_core.config import Config
 from imc_core.imc_core import IMCCore
@@ -61,7 +61,7 @@ def _functional_dpes(rows, cols):
 
 def run_bert_breakdown(cfg_file, R, C, fmax, N, avail_key):
     """Run BERT-Tiny, return {DIMM: energy, non_DIMM: energy}."""
-    cfg = Config(str(ROOT / "azurelily" / "IMC" / "configs" / cfg_file))
+    cfg = Config(str(ROOT / "archive" / "azurelily_simulator" / "IMC" / "configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     avail = VTR_AVAILABLE.get(avail_key, {})
     if avail.get("DSPs") is not None: cfg.total_dsp = avail["DSPs"]
@@ -101,7 +101,7 @@ def run_bert_breakdown(cfg_file, R, C, fmax, N, avail_key):
 
 def run_dimm_total(cfg_file, R, C, N, avail_key):
     """Run attention head, return total DIMM energy."""
-    cfg = Config(str(ROOT / "azurelily" / "IMC" / "configs" / cfg_file))
+    cfg = Config(str(ROOT / "archive" / "azurelily_simulator" / "IMC" / "configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = 200
     avail = VTR_AVAILABLE.get(avail_key, {})
     if avail.get("DSPs") is not None: cfg.total_dsp = avail["DSPs"]

@@ -12,7 +12,7 @@ Energy model (spec §6, docs/superpowers/specs/2026-08-05-...-design.md):
       E_pass(C) = 8*e_analoge + 8*e_conv + 1*e_digital*C          [pJ]
   CLB ops: compare 0.26439 pJ, add 0.08498 pJ
       (ref_compare_pj = (793.1801e-6/3)*1e3, ref_sum_pj = 84.98358e-6*1e3,
-       azurelily/IMC/imc_core/config.py:130-131)
+       archive/azurelily_simulator/IMC/imc_core/config.py:130-131)
   LUT ROM access: n_clb_rom * clb_pj_per_mac * ALPHA per lookup
       (256 x 8b ROM = 2048 bit / 64 bit-per-LUT6 = 32 LUT / 8 per CLB = 4 CLB)
   DSP MAC: dsp_pj_per_mac. BRAM: bram_pj_per_access per element access.
@@ -35,7 +35,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 RESULTS = HERE / "results"
-CFG_DIR = REPO / "azurelily" / "IMC" / "configs"
+CFG_DIR = REPO / "archive" / "azurelily_simulator" / "IMC" / "configs"
 
 ALPHA = 1.0          # LUT ROM activity factor (upper bound, reported)
 N_CLB_ROM = 4        # 256x8b ROM in CLB LUTs

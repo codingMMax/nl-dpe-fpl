@@ -7,8 +7,8 @@ Plots normalized energy efficiency (vs Azure-Lily) as line chart.
 Output: benchmarks/results/transformer_efficiency_scaling.pdf
 """
 import sys, math
-sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "azurelily"))
-sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "azurelily" / "IMC"))
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent.parent / "archive" / "azurelily_simulator" / "IMC"))
 
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -40,7 +40,7 @@ STYLES = {"NL-DPE Proposed": "-", "NL-DPE AL-Matched": "--", "Azure-Lily": ":"}
 
 
 def run_bert_tiny(cfile, R, C, fmax, N):
-    cfg = Config(f"azurelily/IMC/configs/{cfile}.json")
+    cfg = Config(f"archive/azurelily_simulator/IMC/configs/{cfile}.json")
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     stats = Stats(); mem = MemoryModel(cfg, stats)
     ic = IMCCore(cfg, mem, stats); fpga = FPGAFabric(cfg, mem, stats, imc_core=ic)

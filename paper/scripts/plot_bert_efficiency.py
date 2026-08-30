@@ -15,8 +15,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
 DATA_DIR = SCRIPT_DIR.parent / "data"
 sys.path.insert(0, str(ROOT_DIR / "nl_dpe"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC"))
 
 import matplotlib.pyplot as plt
 from style_constants import (apply_style_sc, ARCH_COLORS, ARCH_MARKERS, ARCH_LINESTYLES,
@@ -86,7 +86,7 @@ def run_bert(arch_name, vtr, N):
     cfg_file, R, C, tw, th = ARCH_MAP[arch_name]
     v = vtr[arch_name]
 
-    cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / cfg_file))
+    cfg = Config(str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = v["fmax"]
     cfg.total_dsp = v["dsp_used"]
     cfg.total_clb = v["clb_used"]

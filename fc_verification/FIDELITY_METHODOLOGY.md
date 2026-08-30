@@ -1,6 +1,6 @@
 # Simulator Fidelity Methodology
 
-**Status:** Principle-locked, pre-implementation
+**Status:** Principle-locked; implemented in sim + RTL (Path A, single-buffered drain-load overlap, §5 workload classes — Tasks #82–#84, #99). Stage 1A–1C validated, Stage 1D in flight.
 **Authored:** 2026-04-30
 **Anchor for:** simulator + RTL re-org under "analytical sim, RTL ground truth, measured fidelity" framing
 

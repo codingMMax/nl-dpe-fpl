@@ -17,8 +17,8 @@ import sys
 from pathlib import Path
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_DIR / "azurelily"))
-sys.path.insert(0, str(PROJECT_DIR / "azurelily" / "IMC"))
+sys.path.insert(0, str(PROJECT_DIR / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(PROJECT_DIR / "archive" / "azurelily_simulator" / "IMC"))
 sys.path.insert(0, str(PROJECT_DIR / "nl_dpe"))
 
 from imc_core.config import Config
@@ -108,7 +108,7 @@ def parse_vtr_results(vtr_dir, arch_name):
 def run_bert_sim(arch_name, fmax, resources_used):
     """Run IMC simulator for BERT-Tiny and return energy/latency."""
     cfg_file, R, C, tw, th = ARCH_CONFIGS[arch_name]
-    cfg_path = str(PROJECT_DIR / "azurelily" / "IMC" / "configs" / cfg_file)
+    cfg_path = str(PROJECT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / cfg_file)
 
     cfg = Config(cfg_path)
     cfg.rows = R

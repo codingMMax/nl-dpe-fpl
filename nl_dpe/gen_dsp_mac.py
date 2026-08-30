@@ -2,12 +2,12 @@
 """
 DSP-MAC behavior model generator (FIDELITY_METHODOLOGY.md §3, §4, §5).
 
-Reads `azurelily/IMC/configs/azure_lily.json` and emits a Verilog file
+Reads `archive/azurelily_simulator/IMC/configs/azure_lily.json` and emits a Verilog file
 into `fc_verification/rtl/dsp_mac.v`.
 
 The DSP-MAC primitive is the AL DIMM lane: one ``int_sop_4`` hard block
 running at DSP_WIDTH int8 MACs/cycle. The simulator side is in
-`azurelily/IMC/peripherals/fpga_fabric.py:gemm_dsp` (per-pass
+`archive/azurelily_simulator/IMC/peripherals/fpga_fabric.py:gemm_dsp` (per-pass
 DPE-axiom):
 
     L = ceil(K_INPUT * 8 / dpe_buf_width)
@@ -38,7 +38,7 @@ compiles standalone; TBs override via Verilog parameter passing
 
 Usage:
     python nl_dpe/gen_dsp_mac.py
-    python nl_dpe/gen_dsp_mac.py --config azurelily/IMC/configs/azure_lily.json
+    python nl_dpe/gen_dsp_mac.py --config archive/azurelily_simulator/IMC/configs/azure_lily.json
 """
 import argparse
 import json
@@ -49,16 +49,16 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-DEFAULT_CFG = os.path.join(REPO, "azurelily/IMC/configs/azure_lily.json")
+DEFAULT_CFG = os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/azure_lily.json")
 OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
 
 # DSP_WIDTH is a hard-block constant (int_sop_4 = 4 int8 MAC/cycle).
-# Mirrors `DSP_WDITH` in azurelily/IMC/peripherals/fpga_fabric.py.
+# Mirrors `DSP_WDITH` in archive/azurelily_simulator/IMC/peripherals/fpga_fabric.py.
 DSP_WIDTH_CONST = 4
 
 
 def _import_imc_core():
-    imc_root = os.path.join(REPO, "azurelily", "IMC")
+    imc_root = os.path.join(REPO, "archive/azurelily_simulator", "IMC")
     if imc_root not in sys.path:
         sys.path.insert(0, imc_root)
     from imc_core.config import Config  # noqa: WPS433
@@ -110,7 +110,7 @@ def emit_dsp_mac_verilog(params):
     a("//")
     a("// AL DIMM lane: one int_sop_4 hard block (DSP_WIDTH int8 MACs/cycle),")
     a("// matching FIDELITY_METHODOLOGY.md §3 + §5 + the simulator's gemm_dsp")
-    a("// formula in azurelily/IMC/peripherals/fpga_fabric.py.")
+    a("// formula in archive/azurelily_simulator/IMC/peripherals/fpga_fabric.py.")
     a("//")
     a("// Per pass:")
     a("//   LOAD    L = ceil(K_INPUT * PRECISION_BITS / DPE_BUF_WIDTH)")
@@ -348,7 +348,7 @@ def emit_dsp_mac_verilog(params):
 def main(argv=None):
     p = argparse.ArgumentParser(description="DSP-MAC behavior model generator")
     p.add_argument("--config", default=DEFAULT_CFG,
-                   help="Azure-Lily config path (default: azurelily/IMC/configs/azure_lily.json)")
+                   help="Azure-Lily config path (default: archive/azurelily_simulator/IMC/configs/azure_lily.json)")
     p.add_argument("--k-default", type=int, default=64,
                    help="Default K_INPUT (TBs override per-instance). 64 matches "
                         "attention head N=128 d=64 K=64.")

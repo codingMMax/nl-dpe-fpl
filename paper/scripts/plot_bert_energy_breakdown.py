@@ -14,8 +14,8 @@ from copy import deepcopy
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT_DIR = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "nl_dpe"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily"))
-sys.path.insert(0, str(ROOT_DIR / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC"))
 
 import matplotlib
 matplotlib.use("Agg")
@@ -82,7 +82,7 @@ def run_breakdown(cfg_file, R, C, fmax, N, avail_key):
       - dimm_dpe: total DPE energy within DIMM operations
       - dimm_fabric: total FPGA-fabric energy within DIMM operations
     """
-    cfg = Config(str(ROOT_DIR / "azurelily" / "IMC" / "configs" / cfg_file))
+    cfg = Config(str(ROOT_DIR / "archive" / "azurelily_simulator" / "IMC" / "configs" / cfg_file))
     cfg.rows = R; cfg.cols = C; cfg.freq = fmax
     avail = VTR_AVAILABLE.get(avail_key, {})
     if avail.get("DSPs") is not None: cfg.total_dsp = avail["DSPs"]

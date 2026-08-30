@@ -17,8 +17,8 @@ from pathlib import Path
 from collections import defaultdict
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "azurelily"))
-sys.path.insert(0, str(ROOT / "azurelily" / "IMC"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator"))
+sys.path.insert(0, str(ROOT / "archive" / "azurelily_simulator" / "IMC"))
 sys.path.insert(0, str(ROOT / "nl_dpe"))
 
 # Suppress IMC verbose logging
@@ -53,7 +53,7 @@ def run_attention_energy(config_name, seq_len, head_dim, crossbar_rows=512, cros
     from scheduler_stats.stats import Stats
     from scheduler_stats.scheduler import Scheduler
 
-    config_path = ROOT / "azurelily" / "IMC" / "configs" / f"{config_name}.json"
+    config_path = ROOT / "archive" / "azurelily_simulator" / "IMC" / "configs" / f"{config_name}.json"
     cfg = Config(str(config_path))
 
     # Override crossbar size at runtime for fair comparison
@@ -162,7 +162,7 @@ def run_baseline_fpga_energy(seq_len, head_dim):
     from peripherals.memory import MemoryModel
     from scheduler_stats.stats import Stats
 
-    cfg = Config(str(ROOT / "azurelily" / "IMC" / "configs" / "azure_lily.json"))
+    cfg = Config(str(ROOT / "archive" / "azurelily_simulator" / "IMC" / "configs" / "azure_lily.json"))
     cfg.rows = 512; cfg.cols = 128
     stats = Stats()
     memory = MemoryModel(cfg, stats)

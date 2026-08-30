@@ -2,7 +2,7 @@
 """
 Generator for the FAITHFUL NL-DPE behavior model (Task #91 + silicon-faithful refactor).
 
-Reads `azurelily/IMC/configs/nl_dpe.json` for arch parameters
+Reads `archive/azurelily_simulator/IMC/configs/nl_dpe.json` for arch parameters
 (KERNEL_WIDTH, NUM_COLS, DPE_BUF_WIDTH, PRECISION_BITS, capabilities.
 pipeline_depth, capabilities.acam_cycles) and emits
 
@@ -55,7 +55,7 @@ arch parameters change.
 
 Usage:
     python nl_dpe/gen_dpe_nldpe_faithful.py
-    python nl_dpe/gen_dpe_nldpe_faithful.py --config azurelily/IMC/configs/nl_dpe.json
+    python nl_dpe/gen_dpe_nldpe_faithful.py --config archive/azurelily_simulator/IMC/configs/nl_dpe.json
     python nl_dpe/gen_dpe_nldpe_faithful.py --out-dir /path/to/some/dir
 """
 
@@ -68,7 +68,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
-DEFAULT_CFG_PATH = os.path.join(REPO, "azurelily/IMC/configs/nl_dpe.json")
+DEFAULT_CFG_PATH = os.path.join(REPO, "archive/azurelily_simulator/IMC/configs/nl_dpe.json")
 DEFAULT_OUT_DIR = os.path.join(REPO, "fc_verification/rtl")
 
 
