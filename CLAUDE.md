@@ -6,7 +6,8 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 ## Direction (2026-08-29, pinned)
 - **All RTL work lives in `rtl_flow/`** — primitives, fc_top, generators (`rtl_flow/gen/`), per-arch specs (`rtl_flow/specs/`), TBs, smoke harnesses, methodology docs, VTR synth path. Entry point: `rtl_flow/README.md`. When working on RTL, stay inside `rtl_flow/`.
 - **Bottom-up primitive-first re-verification is the active plan** (user directive 2026-08-29): current verification is self-consistent but not user-validated (FC functional check is a one-byte pattern; cycle formula from unremembered sessions). Ladder: **primitives → fc_top → softmax → projections+DIMM → (then) mapping+simulator**. Each rung = behavioral charter (user-approved) + independent NumPy oracle + RTL matching both. Ground truth = charter + oracles; faithful RTL enforces them.
-- Charter home: `rtl_flow/SPEC.md` (Stage 1.1 in progress; five open decisions D1–D5 listed there for the user to close).
+- **Clean-room v2 flow (user directive 2026-08-29)**: legacy generated RTL is FROZEN as reference (still green: 52/52, 13/13 — do not edit). New hand-written flow lives in `rtl_flow/v2/` (spec/ rtl/ tb/ oracle/ smoke/). Process per primitive: charter → NumPy oracle (before RTL) → starter skeleton → **user hand-writes RTL** (LLM reviews, never edits) → cross-check v2 vs legacy vs oracle on identical stimulus. Legacy is read-only reference; copying from it mid-flight is forbidden (independent-witness property).
+- Charter home: `rtl_flow/SPEC.md` — first live spec `v2/spec/dpe_nldpe.md` **v1.0 FROZEN 2026-08-29** (P1–P13 closed). Ladder position: Stage 1.2 (v2 NumPy oracle) → skeleton → user hand-write → cross-check.
 - The old azurelily simulator stays archived — the new minimal simulator (Stage 5, deferred) will consume the Stage 1–4 charters verbatim.
 
 ## Prior direction (2026-08-27 repo reorg)
