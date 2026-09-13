@@ -1,0 +1,617 @@
+Round 2 Full Sweep — All Workloads
+  DSE dir: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse
+
+Round 2 Full Sweep — DSP+CLB Replacement, All Workloads
+  Config: 512x128
+  Workloads: ['fc_64_64', 'fc_128_128', 'fc_512_128', 'fc_2048_256', 'fc_256_512', 'fc_512_512']
+  Fixed grid: 106x106
+  DSP ratios: [0.2, 0.4, 0.6, 0.8, 1.0]
+  CLB ratios: [0.0, 0.2, 0.4, 0.6]
+  Points per workload: 20
+
+======================================================================
+Phase 1: Analytical Feasibility Check
+======================================================================
+
+  --- fc_64_64 (K=64, N=64) ---
+    d= 20% c=  0%  P= 13  DPEs=  13  CLBs   420/ 8528 (4.9%)  [OK]
+    d= 20% c= 20%  P= 52  DPEs=  52  CLBs  1590/ 6822 (23.3%)  [OK]
+    d= 20% c= 40%  P=117  DPEs= 117  CLBs  3540/ 5116 (69.2%)  [OK]
+    d= 20% c= 60%  P=169  DPEs= 169  CLBs  5100/ 3411 (149.5%)  [SKIP]
+    d= 40% c=  0%  P= 39  DPEs=  39  CLBs  1200/ 8528 (14.1%)  [OK]
+    d= 40% c= 20%  P= 78  DPEs=  78  CLBs  2370/ 6822 (34.7%)  [OK]
+    d= 40% c= 40%  P=143  DPEs= 143  CLBs  4320/ 5116 (84.4%)  [OK]
+    d= 40% c= 60%  P=195  DPEs= 195  CLBs  5880/ 3411 (172.4%)  [SKIP]
+    d= 60% c=  0%  P= 52  DPEs=  52  CLBs  1590/ 8528 (18.6%)  [OK]
+    d= 60% c= 20%  P= 91  DPEs=  91  CLBs  2760/ 6822 (40.5%)  [OK]
+    d= 60% c= 40%  P=143  DPEs= 143  CLBs  4320/ 5116 (84.4%)  [OK]
+    d= 60% c= 60%  P=208  DPEs= 208  CLBs  6270/ 3411 (183.8%)  [SKIP]
+    d= 80% c=  0%  P= 78  DPEs=  78  CLBs  2370/ 8528 (27.8%)  [OK]
+    d= 80% c= 20%  P=117  DPEs= 117  CLBs  3540/ 6822 (51.9%)  [OK]
+    d= 80% c= 40%  P=169  DPEs= 169  CLBs  5100/ 5116 (99.7%)  [OK]
+    d= 80% c= 60%  P=234  DPEs= 234  CLBs  7050/ 3411 (206.7%)  [SKIP]
+    d=100% c=  0%  P= 91  DPEs=  91  CLBs  2760/ 8528 (32.4%)  [OK]
+    d=100% c= 20%  P=130  DPEs= 130  CLBs  3930/ 6822 (57.6%)  [OK]
+    d=100% c= 40%  P=182  DPEs= 182  CLBs  5490/ 5116 (107.3%)  [SKIP]
+    d=100% c= 60%  P=247  DPEs= 247  CLBs  7440/ 3411 (218.1%)  [SKIP]
+    Feasible: 14/20
+
+  --- fc_128_128 (K=128, N=128) ---
+    d= 20% c=  0%  P= 13  DPEs=  13  CLBs   420/ 8528 (4.9%)  [OK]
+    d= 20% c= 20%  P= 52  DPEs=  52  CLBs  1590/ 6822 (23.3%)  [OK]
+    d= 20% c= 40%  P=117  DPEs= 117  CLBs  3540/ 5116 (69.2%)  [OK]
+    d= 20% c= 60%  P=169  DPEs= 169  CLBs  5100/ 3411 (149.5%)  [SKIP]
+    d= 40% c=  0%  P= 39  DPEs=  39  CLBs  1200/ 8528 (14.1%)  [OK]
+    d= 40% c= 20%  P= 78  DPEs=  78  CLBs  2370/ 6822 (34.7%)  [OK]
+    d= 40% c= 40%  P=143  DPEs= 143  CLBs  4320/ 5116 (84.4%)  [OK]
+    d= 40% c= 60%  P=195  DPEs= 195  CLBs  5880/ 3411 (172.4%)  [SKIP]
+    d= 60% c=  0%  P= 52  DPEs=  52  CLBs  1590/ 8528 (18.6%)  [OK]
+    d= 60% c= 20%  P= 91  DPEs=  91  CLBs  2760/ 6822 (40.5%)  [OK]
+    d= 60% c= 40%  P=143  DPEs= 143  CLBs  4320/ 5116 (84.4%)  [OK]
+    d= 60% c= 60%  P=208  DPEs= 208  CLBs  6270/ 3411 (183.8%)  [SKIP]
+    d= 80% c=  0%  P= 78  DPEs=  78  CLBs  2370/ 8528 (27.8%)  [OK]
+    d= 80% c= 20%  P=117  DPEs= 117  CLBs  3540/ 6822 (51.9%)  [OK]
+    d= 80% c= 40%  P=169  DPEs= 169  CLBs  5100/ 5116 (99.7%)  [OK]
+    d= 80% c= 60%  P=234  DPEs= 234  CLBs  7050/ 3411 (206.7%)  [SKIP]
+    d=100% c=  0%  P= 91  DPEs=  91  CLBs  2760/ 8528 (32.4%)  [OK]
+    d=100% c= 20%  P=130  DPEs= 130  CLBs  3930/ 6822 (57.6%)  [OK]
+    d=100% c= 40%  P=182  DPEs= 182  CLBs  5490/ 5116 (107.3%)  [SKIP]
+    d=100% c= 60%  P=247  DPEs= 247  CLBs  7440/ 3411 (218.1%)  [SKIP]
+    Feasible: 14/20
+
+  --- fc_512_128 (K=512, N=128) ---
+    d= 20% c=  0%  P= 13  DPEs=  13  CLBs   420/ 8528 (4.9%)  [OK]
+    d= 20% c= 20%  P= 52  DPEs=  52  CLBs  1590/ 6822 (23.3%)  [OK]
+    d= 20% c= 40%  P=117  DPEs= 117  CLBs  3540/ 5116 (69.2%)  [OK]
+    d= 20% c= 60%  P=169  DPEs= 169  CLBs  5100/ 3411 (149.5%)  [SKIP]
+    d= 40% c=  0%  P= 39  DPEs=  39  CLBs  1200/ 8528 (14.1%)  [OK]
+    d= 40% c= 20%  P= 78  DPEs=  78  CLBs  2370/ 6822 (34.7%)  [OK]
+    d= 40% c= 40%  P=143  DPEs= 143  CLBs  4320/ 5116 (84.4%)  [OK]
+    d= 40% c= 60%  P=195  DPEs= 195  CLBs  5880/ 3411 (172.4%)  [SKIP]
+    d= 60% c=  0%  P= 52  DPEs=  52  CLBs  1590/ 8528 (18.6%)  [OK]
+    d= 60% c= 20%  P= 91  DPEs=  91  CLBs  2760/ 6822 (40.5%)  [OK]
+    d= 60% c= 40%  P=143  DPEs= 143  CLBs  4320/ 5116 (84.4%)  [OK]
+    d= 60% c= 60%  P=208  DPEs= 208  CLBs  6270/ 3411 (183.8%)  [SKIP]
+    d= 80% c=  0%  P= 78  DPEs=  78  CLBs  2370/ 8528 (27.8%)  [OK]
+    d= 80% c= 20%  P=117  DPEs= 117  CLBs  3540/ 6822 (51.9%)  [OK]
+    d= 80% c= 40%  P=169  DPEs= 169  CLBs  5100/ 5116 (99.7%)  [OK]
+    d= 80% c= 60%  P=234  DPEs= 234  CLBs  7050/ 3411 (206.7%)  [SKIP]
+    d=100% c=  0%  P= 91  DPEs=  91  CLBs  2760/ 8528 (32.4%)  [OK]
+    d=100% c= 20%  P=130  DPEs= 130  CLBs  3930/ 6822 (57.6%)  [OK]
+    d=100% c= 40%  P=182  DPEs= 182  CLBs  5490/ 5116 (107.3%)  [SKIP]
+    d=100% c= 60%  P=247  DPEs= 247  CLBs  7440/ 3411 (218.1%)  [SKIP]
+    Feasible: 14/20
+
+  --- fc_2048_256 (K=2048, N=256) ---
+    d= 20% c=  0%  P=  1  DPEs=  13  CLBs    60/ 8528 (0.7%)  [OK]
+    d= 20% c= 20%  P=  6  DPEs=  52  CLBs   210/ 6822 (3.1%)  [OK]
+    d= 20% c= 40%  P= 14  DPEs= 117  CLBs   450/ 5116 (8.8%)  [OK]
+    d= 20% c= 60%  P= 21  DPEs= 169  CLBs   660/ 3411 (19.3%)  [OK]
+    d= 40% c=  0%  P=  4  DPEs=  39  CLBs   150/ 8528 (1.8%)  [OK]
+    d= 40% c= 20%  P=  9  DPEs=  78  CLBs   300/ 6822 (4.4%)  [OK]
+    d= 40% c= 40%  P= 17  DPEs= 143  CLBs   540/ 5116 (10.6%)  [OK]
+    d= 40% c= 60%  P= 24  DPEs= 195  CLBs   750/ 3411 (22.0%)  [OK]
+    d= 60% c=  0%  P=  6  DPEs=  52  CLBs   210/ 8528 (2.5%)  [OK]
+    d= 60% c= 20%  P= 11  DPEs=  91  CLBs   360/ 6822 (5.3%)  [OK]
+    d= 60% c= 40%  P= 17  DPEs= 143  CLBs   540/ 5116 (10.6%)  [OK]
+    d= 60% c= 60%  P= 26  DPEs= 208  CLBs   810/ 3411 (23.7%)  [OK]
+    d= 80% c=  0%  P=  9  DPEs=  78  CLBs   300/ 8528 (3.5%)  [OK]
+    d= 80% c= 20%  P= 14  DPEs= 117  CLBs   450/ 6822 (6.6%)  [OK]
+    d= 80% c= 40%  P= 21  DPEs= 169  CLBs   660/ 5116 (12.9%)  [OK]
+    d= 80% c= 60%  P= 29  DPEs= 234  CLBs   900/ 3411 (26.4%)  [OK]
+    d=100% c=  0%  P= 11  DPEs=  91  CLBs   360/ 8528 (4.2%)  [OK]
+    d=100% c= 20%  P= 16  DPEs= 130  CLBs   510/ 6822 (7.5%)  [OK]
+    d=100% c= 40%  P= 22  DPEs= 182  CLBs   690/ 5116 (13.5%)  [OK]
+    d=100% c= 60%  P= 30  DPEs= 247  CLBs   930/ 3411 (27.3%)  [OK]
+    Feasible: 20/20
+
+  --- fc_256_512 (K=256, N=512) ---
+    d= 20% c=  0%  P=  3  DPEs=  13  CLBs   120/ 8528 (1.4%)  [OK]
+    d= 20% c= 20%  P= 13  DPEs=  52  CLBs   420/ 6822 (6.2%)  [OK]
+    d= 20% c= 40%  P= 29  DPEs= 117  CLBs   900/ 5116 (17.6%)  [OK]
+    d= 20% c= 60%  P= 42  DPEs= 169  CLBs  1290/ 3411 (37.8%)  [OK]
+    d= 40% c=  0%  P=  9  DPEs=  39  CLBs   300/ 8528 (3.5%)  [OK]
+    d= 40% c= 20%  P= 19  DPEs=  78  CLBs   600/ 6822 (8.8%)  [OK]
+    d= 40% c= 40%  P= 35  DPEs= 143  CLBs  1080/ 5116 (21.1%)  [OK]
+    d= 40% c= 60%  P= 48  DPEs= 195  CLBs  1470/ 3411 (43.1%)  [OK]
+    d= 60% c=  0%  P= 13  DPEs=  52  CLBs   420/ 8528 (4.9%)  [OK]
+    d= 60% c= 20%  P= 22  DPEs=  91  CLBs   690/ 6822 (10.1%)  [OK]
+    d= 60% c= 40%  P= 35  DPEs= 143  CLBs  1080/ 5116 (21.1%)  [OK]
+    d= 60% c= 60%  P= 52  DPEs= 208  CLBs  1590/ 3411 (46.6%)  [OK]
+    d= 80% c=  0%  P= 19  DPEs=  78  CLBs   600/ 8528 (7.0%)  [OK]
+    d= 80% c= 20%  P= 29  DPEs= 117  CLBs   900/ 6822 (13.2%)  [OK]
+    d= 80% c= 40%  P= 42  DPEs= 169  CLBs  1290/ 5116 (25.2%)  [OK]
+    d= 80% c= 60%  P= 58  DPEs= 234  CLBs  1770/ 3411 (51.9%)  [OK]
+    d=100% c=  0%  P= 22  DPEs=  91  CLBs   690/ 8528 (8.1%)  [OK]
+    d=100% c= 20%  P= 32  DPEs= 130  CLBs   990/ 6822 (14.5%)  [OK]
+    d=100% c= 40%  P= 45  DPEs= 182  CLBs  1380/ 5116 (27.0%)  [OK]
+    d=100% c= 60%  P= 61  DPEs= 247  CLBs  1860/ 3411 (54.5%)  [OK]
+    Feasible: 20/20
+
+  --- fc_512_512 (K=512, N=512) ---
+    d= 20% c=  0%  P=  3  DPEs=  13  CLBs   120/ 8528 (1.4%)  [OK]
+    d= 20% c= 20%  P= 13  DPEs=  52  CLBs   420/ 6822 (6.2%)  [OK]
+    d= 20% c= 40%  P= 29  DPEs= 117  CLBs   900/ 5116 (17.6%)  [OK]
+    d= 20% c= 60%  P= 42  DPEs= 169  CLBs  1290/ 3411 (37.8%)  [OK]
+    d= 40% c=  0%  P=  9  DPEs=  39  CLBs   300/ 8528 (3.5%)  [OK]
+    d= 40% c= 20%  P= 19  DPEs=  78  CLBs   600/ 6822 (8.8%)  [OK]
+    d= 40% c= 40%  P= 35  DPEs= 143  CLBs  1080/ 5116 (21.1%)  [OK]
+    d= 40% c= 60%  P= 48  DPEs= 195  CLBs  1470/ 3411 (43.1%)  [OK]
+    d= 60% c=  0%  P= 13  DPEs=  52  CLBs   420/ 8528 (4.9%)  [OK]
+    d= 60% c= 20%  P= 22  DPEs=  91  CLBs   690/ 6822 (10.1%)  [OK]
+    d= 60% c= 40%  P= 35  DPEs= 143  CLBs  1080/ 5116 (21.1%)  [OK]
+    d= 60% c= 60%  P= 52  DPEs= 208  CLBs  1590/ 3411 (46.6%)  [OK]
+    d= 80% c=  0%  P= 19  DPEs=  78  CLBs   600/ 8528 (7.0%)  [OK]
+    d= 80% c= 20%  P= 29  DPEs= 117  CLBs   900/ 6822 (13.2%)  [OK]
+    d= 80% c= 40%  P= 42  DPEs= 169  CLBs  1290/ 5116 (25.2%)  [OK]
+    d= 80% c= 60%  P= 58  DPEs= 234  CLBs  1770/ 3411 (51.9%)  [OK]
+    d=100% c=  0%  P= 22  DPEs=  91  CLBs   690/ 8528 (8.1%)  [OK]
+    d=100% c= 20%  P= 32  DPEs= 130  CLBs   990/ 6822 (14.5%)  [OK]
+    d=100% c= 40%  P= 45  DPEs= 182  CLBs  1380/ 5116 (27.0%)  [OK]
+    d=100% c= 60%  P= 61  DPEs= 247  CLBs  1860/ 3411 (54.5%)  [OK]
+    Feasible: 20/20
+
+  Total feasible: 102/120
+
+======================================================================
+Phase 2: Generating architecture XMLs and RTL
+======================================================================
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c0_fixed.xml
+  Generated gemm_64_64_512x128_P13.v (K=64, N=64, P=13, V=1, H=1, total_DPEs=13)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c20_fixed.xml
+  Generated gemm_64_64_512x128_P52.v (K=64, N=64, P=52, V=1, H=1, total_DPEs=52)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c40_fixed.xml
+  Generated gemm_64_64_512x128_P117.v (K=64, N=64, P=117, V=1, H=1, total_DPEs=117)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c0_fixed.xml
+  Generated gemm_64_64_512x128_P39.v (K=64, N=64, P=39, V=1, H=1, total_DPEs=39)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c20_fixed.xml
+  Generated gemm_64_64_512x128_P78.v (K=64, N=64, P=78, V=1, H=1, total_DPEs=78)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c40_fixed.xml
+  Generated gemm_64_64_512x128_P143.v (K=64, N=64, P=143, V=1, H=1, total_DPEs=143)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c0_fixed.xml
+  Generated gemm_64_64_512x128_P52.v (K=64, N=64, P=52, V=1, H=1, total_DPEs=52)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c20_fixed.xml
+  Generated gemm_64_64_512x128_P91.v (K=64, N=64, P=91, V=1, H=1, total_DPEs=91)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c40_fixed.xml
+  Generated gemm_64_64_512x128_P143.v (K=64, N=64, P=143, V=1, H=1, total_DPEs=143)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c0_fixed.xml
+  Generated gemm_64_64_512x128_P78.v (K=64, N=64, P=78, V=1, H=1, total_DPEs=78)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c20_fixed.xml
+  Generated gemm_64_64_512x128_P117.v (K=64, N=64, P=117, V=1, H=1, total_DPEs=117)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c40_fixed.xml
+  Generated gemm_64_64_512x128_P169.v (K=64, N=64, P=169, V=1, H=1, total_DPEs=169)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d100_c0_fixed.xml
+  Generated gemm_64_64_512x128_P91.v (K=64, N=64, P=91, V=1, H=1, total_DPEs=91)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d100_c20_fixed.xml
+  Generated gemm_64_64_512x128_P130.v (K=64, N=64, P=130, V=1, H=1, total_DPEs=130)
+  Generated gemm_128_128_512x128_P13.v (K=128, N=128, P=13, V=1, H=1, total_DPEs=13)
+  Generated gemm_128_128_512x128_P52.v (K=128, N=128, P=52, V=1, H=1, total_DPEs=52)
+  Generated gemm_128_128_512x128_P117.v (K=128, N=128, P=117, V=1, H=1, total_DPEs=117)
+  Generated gemm_128_128_512x128_P39.v (K=128, N=128, P=39, V=1, H=1, total_DPEs=39)
+  Generated gemm_128_128_512x128_P78.v (K=128, N=128, P=78, V=1, H=1, total_DPEs=78)
+  Generated gemm_128_128_512x128_P143.v (K=128, N=128, P=143, V=1, H=1, total_DPEs=143)
+  Generated gemm_128_128_512x128_P52.v (K=128, N=128, P=52, V=1, H=1, total_DPEs=52)
+  Generated gemm_128_128_512x128_P91.v (K=128, N=128, P=91, V=1, H=1, total_DPEs=91)
+  Generated gemm_128_128_512x128_P143.v (K=128, N=128, P=143, V=1, H=1, total_DPEs=143)
+  Generated gemm_128_128_512x128_P78.v (K=128, N=128, P=78, V=1, H=1, total_DPEs=78)
+  Generated gemm_128_128_512x128_P117.v (K=128, N=128, P=117, V=1, H=1, total_DPEs=117)
+  Generated gemm_128_128_512x128_P169.v (K=128, N=128, P=169, V=1, H=1, total_DPEs=169)
+  Generated gemm_128_128_512x128_P91.v (K=128, N=128, P=91, V=1, H=1, total_DPEs=91)
+  Generated gemm_128_128_512x128_P130.v (K=128, N=128, P=130, V=1, H=1, total_DPEs=130)
+  Generated gemm_512_128_512x128_P13.v (K=512, N=128, P=13, V=1, H=1, total_DPEs=13)
+  Generated gemm_512_128_512x128_P52.v (K=512, N=128, P=52, V=1, H=1, total_DPEs=52)
+  Generated gemm_512_128_512x128_P117.v (K=512, N=128, P=117, V=1, H=1, total_DPEs=117)
+  Generated gemm_512_128_512x128_P39.v (K=512, N=128, P=39, V=1, H=1, total_DPEs=39)
+  Generated gemm_512_128_512x128_P78.v (K=512, N=128, P=78, V=1, H=1, total_DPEs=78)
+  Generated gemm_512_128_512x128_P143.v (K=512, N=128, P=143, V=1, H=1, total_DPEs=143)
+  Generated gemm_512_128_512x128_P52.v (K=512, N=128, P=52, V=1, H=1, total_DPEs=52)
+  Generated gemm_512_128_512x128_P91.v (K=512, N=128, P=91, V=1, H=1, total_DPEs=91)
+  Generated gemm_512_128_512x128_P143.v (K=512, N=128, P=143, V=1, H=1, total_DPEs=143)
+  Generated gemm_512_128_512x128_P78.v (K=512, N=128, P=78, V=1, H=1, total_DPEs=78)
+  Generated gemm_512_128_512x128_P117.v (K=512, N=128, P=117, V=1, H=1, total_DPEs=117)
+  Generated gemm_512_128_512x128_P169.v (K=512, N=128, P=169, V=1, H=1, total_DPEs=169)
+  Generated gemm_512_128_512x128_P91.v (K=512, N=128, P=91, V=1, H=1, total_DPEs=91)
+  Generated gemm_512_128_512x128_P130.v (K=512, N=128, P=130, V=1, H=1, total_DPEs=130)
+  Generated gemm_2048_256_512x128_P1.v (K=2048, N=256, P=1, V=4, H=2, total_DPEs=8)
+  Generated gemm_2048_256_512x128_P6.v (K=2048, N=256, P=6, V=4, H=2, total_DPEs=48)
+  Generated gemm_2048_256_512x128_P14.v (K=2048, N=256, P=14, V=4, H=2, total_DPEs=112)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d20_c60_fixed.xml
+  Generated gemm_2048_256_512x128_P21.v (K=2048, N=256, P=21, V=4, H=2, total_DPEs=168)
+  Generated gemm_2048_256_512x128_P4.v (K=2048, N=256, P=4, V=4, H=2, total_DPEs=32)
+  Generated gemm_2048_256_512x128_P9.v (K=2048, N=256, P=9, V=4, H=2, total_DPEs=72)
+  Generated gemm_2048_256_512x128_P17.v (K=2048, N=256, P=17, V=4, H=2, total_DPEs=136)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d40_c60_fixed.xml
+  Generated gemm_2048_256_512x128_P24.v (K=2048, N=256, P=24, V=4, H=2, total_DPEs=192)
+  Generated gemm_2048_256_512x128_P6.v (K=2048, N=256, P=6, V=4, H=2, total_DPEs=48)
+  Generated gemm_2048_256_512x128_P11.v (K=2048, N=256, P=11, V=4, H=2, total_DPEs=88)
+  Generated gemm_2048_256_512x128_P17.v (K=2048, N=256, P=17, V=4, H=2, total_DPEs=136)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d60_c60_fixed.xml
+  Generated gemm_2048_256_512x128_P26.v (K=2048, N=256, P=26, V=4, H=2, total_DPEs=208)
+  Generated gemm_2048_256_512x128_P9.v (K=2048, N=256, P=9, V=4, H=2, total_DPEs=72)
+  Generated gemm_2048_256_512x128_P14.v (K=2048, N=256, P=14, V=4, H=2, total_DPEs=112)
+  Generated gemm_2048_256_512x128_P21.v (K=2048, N=256, P=21, V=4, H=2, total_DPEs=168)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d80_c60_fixed.xml
+  Generated gemm_2048_256_512x128_P29.v (K=2048, N=256, P=29, V=4, H=2, total_DPEs=232)
+  Generated gemm_2048_256_512x128_P11.v (K=2048, N=256, P=11, V=4, H=2, total_DPEs=88)
+  Generated gemm_2048_256_512x128_P16.v (K=2048, N=256, P=16, V=4, H=2, total_DPEs=128)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d100_c40_fixed.xml
+  Generated gemm_2048_256_512x128_P22.v (K=2048, N=256, P=22, V=4, H=2, total_DPEs=176)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_d100_c60_fixed.xml
+  Generated gemm_2048_256_512x128_P30.v (K=2048, N=256, P=30, V=4, H=2, total_DPEs=240)  FAILED fc_64_64 d80_c20: VTR failed for gemm_64_64_512x128_P117 seed=42 (exit 1):
+
+  FAILED fc_64_64 d20_c40: VTR failed for gemm_64_64_512x128_P117 seed=42 (exit 1):
+
+  FAILED fc_64_64 d40_c40: VTR failed for gemm_64_64_512x128_P143 seed=42 (exit 1):
+
+  FAILED fc_64_64 d60_c40: VTR failed for gemm_64_64_512x128_P143 seed=42 (exit 1):
+
+  FAILED fc_64_64 d80_c40: VTR failed for gemm_64_64_512x128_P169 seed=42 (exit 1):
+
+  FAILED fc_64_64 d100_c20: VTR failed for gemm_64_64_512x128_P130 seed=42 (exit 1):
+
+  FAILED fc_128_128 d20_c40: VTR failed for gemm_128_128_512x128_P117 seed=42 (exit 1):
+
+  FAILED fc_128_128 d40_c40: VTR failed for gemm_128_128_512x128_P143 seed=42 (exit 1):
+
+  FAILED fc_128_128 d60_c40: VTR failed for gemm_128_128_512x128_P143 seed=42 (exit 1):
+
+  FAILED fc_128_128 d80_c20: VTR failed for gemm_128_128_512x128_P117 seed=42 (exit 1):
+
+  FAILED fc_128_128 d100_c20: VTR failed for gemm_128_128_512x128_P130 seed=42 (exit 1):
+
+  FAILED fc_128_128 d80_c40: VTR failed for gemm_128_128_512x128_P169 seed=42 (exit 1):
+
+  FAILED fc_512_128 d20_c40: VTR failed for gemm_512_128_512x128_P117 seed=42 (exit 1):
+
+  FAILED fc_512_128 d40_c40: VTR failed for gemm_512_128_512x128_P143 seed=42 (exit 1):
+
+
+  Generated gemm_256_512_512x128_P3.v (K=256, N=512, P=3, V=1, H=4, total_DPEs=12)
+  Generated gemm_256_512_512x128_P13.v (K=256, N=512, P=13, V=1, H=4, total_DPEs=52)
+  Generated gemm_256_512_512x128_P29.v (K=256, N=512, P=29, V=1, H=4, total_DPEs=116)
+  Generated gemm_256_512_512x128_P42.v (K=256, N=512, P=42, V=1, H=4, total_DPEs=168)
+  Generated gemm_256_512_512x128_P9.v (K=256, N=512, P=9, V=1, H=4, total_DPEs=36)
+  Generated gemm_256_512_512x128_P19.v (K=256, N=512, P=19, V=1, H=4, total_DPEs=76)
+  Generated gemm_256_512_512x128_P35.v (K=256, N=512, P=35, V=1, H=4, total_DPEs=140)
+  Generated gemm_256_512_512x128_P48.v (K=256, N=512, P=48, V=1, H=4, total_DPEs=192)
+  Generated gemm_256_512_512x128_P13.v (K=256, N=512, P=13, V=1, H=4, total_DPEs=52)
+  Generated gemm_256_512_512x128_P22.v (K=256, N=512, P=22, V=1, H=4, total_DPEs=88)
+  Generated gemm_256_512_512x128_P35.v (K=256, N=512, P=35, V=1, H=4, total_DPEs=140)
+  Generated gemm_256_512_512x128_P52.v (K=256, N=512, P=52, V=1, H=4, total_DPEs=208)
+  Generated gemm_256_512_512x128_P19.v (K=256, N=512, P=19, V=1, H=4, total_DPEs=76)
+  Generated gemm_256_512_512x128_P29.v (K=256, N=512, P=29, V=1, H=4, total_DPEs=116)
+  Generated gemm_256_512_512x128_P42.v (K=256, N=512, P=42, V=1, H=4, total_DPEs=168)
+  Generated gemm_256_512_512x128_P58.v (K=256, N=512, P=58, V=1, H=4, total_DPEs=232)
+  Generated gemm_256_512_512x128_P22.v (K=256, N=512, P=22, V=1, H=4, total_DPEs=88)
+  Generated gemm_256_512_512x128_P32.v (K=256, N=512, P=32, V=1, H=4, total_DPEs=128)
+  Generated gemm_256_512_512x128_P45.v (K=256, N=512, P=45, V=1, H=4, total_DPEs=180)
+  Generated gemm_256_512_512x128_P61.v (K=256, N=512, P=61, V=1, H=4, total_DPEs=244)
+  Generated gemm_512_512_512x128_P3.v (K=512, N=512, P=3, V=1, H=4, total_DPEs=12)
+  Generated gemm_512_512_512x128_P13.v (K=512, N=512, P=13, V=1, H=4, total_DPEs=52)
+  Generated gemm_512_512_512x128_P29.v (K=512, N=512, P=29, V=1, H=4, total_DPEs=116)
+  Generated gemm_512_512_512x128_P42.v (K=512, N=512, P=42, V=1, H=4, total_DPEs=168)
+  Generated gemm_512_512_512x128_P9.v (K=512, N=512, P=9, V=1, H=4, total_DPEs=36)
+  Generated gemm_512_512_512x128_P19.v (K=512, N=512, P=19, V=1, H=4, total_DPEs=76)
+  Generated gemm_512_512_512x128_P35.v (K=512, N=512, P=35, V=1, H=4, total_DPEs=140)
+  Generated gemm_512_512_512x128_P48.v (K=512, N=512, P=48, V=1, H=4, total_DPEs=192)
+  Generated gemm_512_512_512x128_P13.v (K=512, N=512, P=13, V=1, H=4, total_DPEs=52)
+  Generated gemm_512_512_512x128_P22.v (K=512, N=512, P=22, V=1, H=4, total_DPEs=88)
+  Generated gemm_512_512_512x128_P35.v (K=512, N=512, P=35, V=1, H=4, total_DPEs=140)
+  Generated gemm_512_512_512x128_P52.v (K=512, N=512, P=52, V=1, H=4, total_DPEs=208)
+  Generated gemm_512_512_512x128_P19.v (K=512, N=512, P=19, V=1, H=4, total_DPEs=76)
+  Generated gemm_512_512_512x128_P29.v (K=512, N=512, P=29, V=1, H=4, total_DPEs=116)
+  Generated gemm_512_512_512x128_P42.v (K=512, N=512, P=42, V=1, H=4, total_DPEs=168)
+  Generated gemm_512_512_512x128_P58.v (K=512, N=512, P=58, V=1, H=4, total_DPEs=232)
+  Generated gemm_512_512_512x128_P22.v (K=512, N=512, P=22, V=1, H=4, total_DPEs=88)
+  Generated gemm_512_512_512x128_P32.v (K=512, N=512, P=32, V=1, H=4, total_DPEs=128)
+  Generated gemm_512_512_512x128_P45.v (K=512, N=512, P=45, V=1, H=4, total_DPEs=180)
+  Generated gemm_512_512_512x128_P61.v (K=512, N=512, P=61, V=1, H=4, total_DPEs=244)
+
+  Active VTR jobs: 102, skipped: 0
+
+======================================================================
+Phase 3: Running VTR (102 jobs)
+======================================================================
+  Workers: 12
+  [gemm_64_64_512x128_P13] run 1/1  seed=42
+  [gemm_64_64_512x128_P52] run 1/1  seed=42
+  [gemm_64_64_512x128_P117] run 1/1  seed=42
+  [gemm_64_64_512x128_P39] run 1/1  seed=42
+  [gemm_64_64_512x128_P78] run 1/1  seed=42
+  [gemm_64_64_512x128_P143] run 1/1  seed=42
+  [gemm_64_64_512x128_P52] run 1/1  seed=42
+  [gemm_64_64_512x128_P91] run 1/1  seed=42
+  [gemm_64_64_512x128_P143] run 1/1  seed=42
+  [gemm_64_64_512x128_P78] run 1/1  seed=42
+  [gemm_64_64_512x128_P169] run 1/1  seed=42
+  [gemm_64_64_512x128_P117] run 1/1  seed=42
+  [gemm_64_64_512x128_P91] run 1/1  seed=42
+  [gemm_64_64_512x128_P130] run 1/1  seed=42
+    wirelength=66192  fmax=198.930 MHz  elapsed=52.4s  wc=13
+  [gemm_128_128_512x128_P13] run 1/1  seed=42
+  [1/102] fc_64_64 d20_c0:  P=13  fmax=198.9 MHz  wc=13  clb=110
+  [gemm_128_128_512x128_P52] run 1/1  seed=42
+    wirelength=215265  fmax=172.231 MHz  elapsed=55.0s  wc=39
+  [gemm_128_128_512x128_P117] run 1/1  seed=42
+  [2/102] fc_64_64 d40_c0:  P=39  fmax=172.2 MHz  wc=39  clb=329
+  [gemm_128_128_512x128_P39] run 1/1  seed=42
+    wirelength=309554  fmax=137.737 MHz  elapsed=59.5s  wc=52
+  [gemm_128_128_512x128_P78] run 1/1  seed=42
+  [3/102] fc_64_64 d20_c20:  P=52  fmax=137.7 MHz  wc=52  clb=436
+    wirelength=297091  fmax=153.005 MHz  elapsed=60.4s  wc=52
+  [gemm_128_128_512x128_P143] run 1/1  seed=42
+  [4/102] fc_64_64 d60_c0:  P=52  fmax=153.0 MHz  wc=52  clb=436
+  [gemm_128_128_512x128_P52] run 1/1  seed=42
+    wirelength=464345  fmax=99.284 MHz  elapsed=74.4s  wc=78
+  [gemm_128_128_512x128_P91] run 1/1  seed=42
+  [5/102] fc_64_64 d80_c0:  P=78  fmax=99.3 MHz  wc=78  clb=703
+    wirelength=564499  fmax=100.330 MHz  elapsed=75.3s  wc=78
+  [gemm_128_128_512x128_P143] run 1/1  seed=42
+  [6/102] fc_64_64 d40_c20:  P=78  fmax=100.3 MHz  wc=78  clb=703
+    wirelength=68174  fmax=177.038 MHz  elapsed=41.9s  wc=13
+  [gemm_128_128_512x128_P78] run 1/1  seed=42
+  [7/102] fc_128_128 d20_c0:  P=13  fmax=177.0 MHz  wc=13  clb=117
+    wirelength=688367  fmax=106.933 MHz  elapsed=94.5s  wc=91
+  [gemm_128_128_512x128_P117] run 1/1  seed=42
+  [8/102] fc_64_64 d60_c20:  P=91  fmax=106.9 MHz  wc=91  clb=834
+  [gemm_128_128_512x128_P169] run 1/1  seed=42
+  [gemm_128_128_512x128_P91] run 1/1  seed=42
+    wirelength=219219  fmax=171.454 MHz  elapsed=57.0s  wc=39
+  [gemm_128_128_512x128_P130] run 1/1  seed=42
+  [9/102] fc_128_128 d40_c0:  P=39  fmax=171.5 MHz  wc=39  clb=345
+    wirelength=311489  fmax=158.032 MHz  elapsed=68.7s  wc=52
+  [gemm_512_128_512x128_P13] run 1/1  seed=42
+  [10/102] fc_128_128 d20_c20:  P=52  fmax=158.0 MHz  wc=52  clb=465
+    wirelength=550422  fmax=130.312 MHz  elapsed=84.9s  wc=91
+  [gemm_512_128_512x128_P52] run 1/1  seed=42
+  [11/102] fc_64_64 d100_c0:  P=91  fmax=130.3 MHz  wc=91  clb=834
+  [gemm_512_128_512x128_P117] run 1/1  seed=42
+    wirelength=575275  fmax=104.698 MHz  elapsed=81.9s  wc=78
+  [gemm_512_128_512x128_P39] run 1/1  seed=42
+  [12/102] fc_128_128 d40_c20:  P=78  fmax=104.7 MHz  wc=78  clb=721
+    wirelength=303737  fmax=135.773 MHz  elapsed=69.9s  wc=52
+  [gemm_512_128_512x128_P78] run 1/1  seed=42
+  [13/102] fc_128_128 d60_c0:  P=52  fmax=135.8 MHz  wc=52  clb=465
+  [gemm_512_128_512x128_P143] run 1/1  seed=42
+  [gemm_512_128_512x128_P52] run 1/1  seed=42
+    wirelength=702225  fmax=94.403 MHz  elapsed=88.6s  wc=91
+  [gemm_512_128_512x128_P91] run 1/1  seed=42
+  [14/102] fc_128_128 d60_c20:  P=91  fmax=94.4 MHz  wc=91  clb=861
+    wirelength=68590  fmax=192.921 MHz  elapsed=42.1s  wc=13
+  [gemm_512_128_512x128_P143] run 1/1  seed=42
+  [15/102] fc_512_128 d20_c0:  P=13  fmax=192.9 MHz  wc=13  clb=119
+  [gemm_512_128_512x128_P78] run 1/1  seed=42
+  [gemm_512_128_512x128_P117] run 1/1  seed=42
+  [gemm_512_128_512x128_P169] run 1/1  seed=42
+    wirelength=472968  fmax=121.905 MHz  elapsed=89.3s  wc=78
+  [gemm_512_128_512x128_P91] run 1/1  seed=42
+  [16/102] fc_128_128 d80_c0:  P=78  fmax=121.9 MHz  wc=78  clb=721
+    wirelength=317939  fmax=155.504 MHz  elapsed=66.6s  wc=52
+  [gemm_512_128_512x128_P130] run 1/1  seed=42
+  [17/102] fc_512_128 d20_c20:  P=52  fmax=155.5 MHz  wc=52  clb=476
+    wirelength=553955  fmax=110.710 MHz  elapsed=91.9s  wc=91
+  [gemm_2048_256_512x128_P1] run 1/1  seed=42
+  [18/102] fc_128_128 d100_c0:  P=91  fmax=110.7 MHz  wc=91  clb=861
+    wirelength=216839  fmax=171.454 MHz  elapsed=67.1s  wc=39
+  [gemm_2048_256_512x128_P6] run 1/1  seed=42
+  [19/102] fc_512_128 d40_c0:  P=39  fmax=171.5 MHz  wc=39  clb=357
+  [gemm_2048_256_512x128_P14] run 1/1  seed=42
+    wirelength=299910  fmax=166.040 MHz  elapsed=71.7s  wc=52  FAILED fc_512_128 d80_c20: VTR failed for gemm_512_128_512x128_P117 seed=42 (exit 1):
+
+  FAILED fc_512_128 d60_c40: VTR failed for gemm_512_128_512x128_P143 seed=42 (exit 1):
+
+  FAILED fc_512_128 d100_c20: VTR failed for gemm_512_128_512x128_P130 seed=42 (exit 1):
+
+  FAILED fc_512_128 d80_c40: VTR failed for gemm_512_128_512x128_P169 seed=42 (exit 1):
+
+
+  [gemm_2048_256_512x128_P21] run 1/1  seed=42
+  [20/102] fc_512_128 d60_c0:  P=52  fmax=166.0 MHz  wc=52  clb=476
+    wirelength=580831  fmax=98.280 MHz  elapsed=91.1s  wc=78
+  [gemm_2048_256_512x128_P4] run 1/1  seed=42
+  [21/102] fc_512_128 d40_c20:  P=78  fmax=98.3 MHz  wc=78  clb=770
+  [gemm_2048_256_512x128_P9] run 1/1  seed=42
+  [gemm_2048_256_512x128_P17] run 1/1  seed=42
+    wirelength=14375  fmax=179.738 MHz  elapsed=44.2s  wc=8
+  [gemm_2048_256_512x128_P24] run 1/1  seed=42
+  [22/102] fc_2048_256 d20_c0:  P=1  fmax=179.7 MHz  wc=8  clb=19
+    wirelength=92645  fmax=155.411 MHz  elapsed=42.3s  wc=48
+  [gemm_2048_256_512x128_P6] run 1/1  seed=42
+  [23/102] fc_2048_256 d20_c20:  P=6  fmax=155.4 MHz  wc=48  clb=121
+    wirelength=473425  fmax=104.721 MHz  elapsed=83.2s  wc=78
+  [gemm_2048_256_512x128_P11] run 1/1  seed=42
+  [24/102] fc_512_128 d80_c0:  P=78  fmax=104.7 MHz  wc=78  clb=770
+  [gemm_2048_256_512x128_P17] run 1/1  seed=42
+    wirelength=708912  fmax=105.814 MHz  elapsed=100.3s  wc=91
+  [gemm_2048_256_512x128_P26] run 1/1  seed=42
+  [25/102] fc_512_128 d60_c20:  P=91  fmax=105.8 MHz  wc=91  clb=944
+    wirelength=216261  fmax=171.842 MHz  elapsed=53.0s  wc=112
+  [gemm_2048_256_512x128_P9] run 1/1  seed=42
+  [26/102] fc_2048_256 d20_c40:  P=14  fmax=171.8 MHz  wc=112  clb=270
+  [gemm_2048_256_512x128_P14] run 1/1  seed=42
+    wirelength=64756  fmax=183.125 MHz  elapsed=41.3s  wc=32
+  [gemm_2048_256_512x128_P21] run 1/1  seed=42
+  [27/102] fc_2048_256 d40_c0:  P=4  fmax=183.1 MHz  wc=32  clb=84
+    wirelength=129029  fmax=151.573 MHz  elapsed=44.1s  wc=72
+  [gemm_2048_256_512x128_P29] run 1/1  seed=42
+  [28/102] fc_2048_256 d40_c20:  P=9  fmax=151.6 MHz  wc=72  clb=184
+    wirelength=312385  fmax=160.699 MHz  elapsed=64.9s  wc=168
+  [gemm_2048_256_512x128_P11] run 1/1  seed=42
+  [29/102] fc_2048_256 d20_c60:  P=21  fmax=160.7 MHz  wc=168  clb=407
+    wirelength=562470  fmax=123.550 MHz  elapsed=101.8s  wc=91
+  [gemm_2048_256_512x128_P16] run 1/1  seed=42
+  [30/102] fc_512_128 d100_c0:  P=91  fmax=123.5 MHz  wc=91  clb=944
+    wirelength=257582  fmax=156.214 MHz  elapsed=51.1s  wc=136
+  [31/102] fc_2048_256 d40_c40:  P=17  fmax=156.2 MHz  wc=136  clb=340
+  [gemm_2048_256_512x128_P22] run 1/1  seed=42
+    wirelength=95846  fmax=171.512 MHz  elapsed=43.7s  wc=48
+  [gemm_2048_256_512x128_P30] run 1/1  seed=42
+  [32/102] fc_2048_256 d60_c0:  P=6  fmax=171.5 MHz  wc=48  clb=121
+    wirelength=159167  fmax=163.841 MHz  elapsed=46.5s  wc=88
+  [gemm_256_512_512x128_P3] run 1/1  seed=42
+  [33/102] fc_2048_256 d60_c20:  P=11  fmax=163.8 MHz  wc=88  clb=217
+    wirelength=351541  fmax=150.634 MHz  elapsed=58.0s  wc=192
+  [gemm_256_512_512x128_P13] run 1/1  seed=42
+  [34/102] fc_2048_256 d40_c60:  P=24  fmax=150.6 MHz  wc=192  clb=463
+    wirelength=259178  fmax=168.274 MHz  elapsed=57.1s  wc=136
+  [gemm_256_512_512x128_P29] run 1/1  seed=42
+  [35/102] fc_2048_256 d60_c40:  P=17  fmax=168.3 MHz  wc=136  clb=340
+    wirelength=145135  fmax=144.190 MHz  elapsed=44.5s  wc=72
+  [gemm_256_512_512x128_P42] run 1/1  seed=42
+  [36/102] fc_2048_256 d80_c0:  P=9  fmax=144.2 MHz  wc=72  clb=184
+    wirelength=384996  fmax=160.753 MHz  elapsed=61.8s  wc=208
+  [gemm_256_512_512x128_P9] run 1/1  seed=42
+  [37/102] fc_2048_256 d60_c60:  P=26  fmax=160.8 MHz  wc=208  clb=514
+    wirelength=212531  fmax=172.353 MHz  elapsed=55.9s  wc=112
+  [gemm_256_512_512x128_P19] run 1/1  seed=42
+  [38/102] fc_2048_256 d80_c20:  P=14  fmax=172.4 MHz  wc=112  clb=270
+    wirelength=307990  fmax=146.060 MHz  elapsed=54.9s  wc=168
+  [gemm_256_512_512x128_P35] run 1/1  seed=42
+  [39/102] fc_2048_256 d80_c40:  P=21  fmax=146.1 MHz  wc=168  clb=407
+    wirelength=185158  fmax=162.407 MHz  elapsed=47.3s  wc=88
+  [gemm_256_512_512x128_P48] run 1/1  seed=42
+  [40/102] fc_2048_256 d100_c0:  P=11  fmax=162.4 MHz  wc=88  clb=217
+    wirelength=259814  fmax=167.359 MHz  elapsed=51.2s  wc=128
+  [gemm_256_512_512x128_P13] run 1/1  seed=42
+  [41/102] fc_2048_256 d100_c20:  P=16  fmax=167.4 MHz  wc=128  clb=316
+    wirelength=28242  fmax=283.941 MHz  elapsed=39.6s  wc=12
+  [gemm_256_512_512x128_P22] run 1/1  seed=42
+  [42/102] fc_256_512 d20_c0:  P=3  fmax=283.9 MHz  wc=12  clb=33
+    wirelength=425304  fmax=136.561 MHz  elapsed=63.4s  wc=232
+  [gemm_256_512_512x128_P35] run 1/1  seed=42
+  [43/102] fc_2048_256 d80_c60:  P=29  fmax=136.6 MHz  wc=232  clb=596
+    wirelength=336487  fmax=125.436 MHz  elapsed=56.6s  wc=176
+  [gemm_256_512_512x128_P52] run 1/1  seed=42
+  [44/102] fc_2048_256 d100_c40:  P=22  fmax=125.4 MHz  wc=176  clb=439
+    wirelength=103729  fmax=198.754 MHz  elapsed=50.0s  wc=52
+  [gemm_256_512_512x128_P19] run 1/1  seed=42
+  [45/102] fc_256_512 d20_c20:  P=13  fmax=198.8 MHz  wc=52  clb=120
+    wirelength=245053  fmax=167.008 MHz  elapsed=49.2s  wc=116
+  [gemm_256_512_512x128_P29] run 1/1  seed=42
+  [46/102] fc_256_512 d20_c40:  P=29  fmax=167.0 MHz  wc=116  clb=293
+    wirelength=440909  fmax=120.659 MHz  elapsed=70.8s  wc=240
+  [gemm_256_512_512x128_P42] run 1/1  seed=42
+  [47/102] fc_2048_256 d100_c60:  P=30  fmax=120.7 MHz  wc=240  clb=585
+    wirelength=73591  fmax=216.027 MHz  elapsed=41.5s  wc=36
+  [gemm_256_512_512x128_P58] run 1/1  seed=42
+  [48/102] fc_256_512 d40_c0:  P=9  fmax=216.0 MHz  wc=36  clb=88
+    wirelength=146778  fmax=176.973 MHz  elapsed=45.1s  wc=76
+  [gemm_256_512_512x128_P22] run 1/1  seed=42
+  [49/102] fc_256_512 d40_c20:  P=19  fmax=177.0 MHz  wc=76  clb=177
+    wirelength=348502  fmax=148.335 MHz  elapsed=62.2s  wc=168
+  [gemm_256_512_512x128_P32] run 1/1  seed=42
+  [50/102] fc_256_512 d20_c60:  P=42  fmax=148.3 MHz  wc=168  clb=383
+    wirelength=105175  fmax=216.659 MHz  elapsed=43.7s  wc=52
+  [gemm_256_512_512x128_P45] run 1/1  seed=42
+  [51/102] fc_256_512 d60_c0:  P=13  fmax=216.7 MHz  wc=52  clb=120
+    wirelength=293473  fmax=150.586 MHz  elapsed=52.3s  wc=140
+  [gemm_256_512_512x128_P61] run 1/1  seed=42
+  [52/102] fc_256_512 d40_c40:  P=35  fmax=150.6 MHz  wc=140  clb=323
+    wirelength=173134  fmax=185.559 MHz  elapsed=46.6s  wc=88
+  [gemm_512_512_512x128_P3] run 1/1  seed=42
+  [53/102] fc_256_512 d60_c20:  P=22  fmax=185.6 MHz  wc=88  clb=199
+    wirelength=387688  fmax=150.538 MHz  elapsed=58.7s  wc=192
+  [gemm_512_512_512x128_P13] run 1/1  seed=42
+  [54/102] fc_256_512 d40_c60:  P=48  fmax=150.5 MHz  wc=192  clb=444
+    wirelength=288584  fmax=148.288 MHz  elapsed=51.3s  wc=140
+  [gemm_512_512_512x128_P29] run 1/1  seed=42
+  [55/102] fc_256_512 d60_c40:  P=35  fmax=148.3 MHz  wc=140  clb=323
+    wirelength=162917  fmax=163.457 MHz  elapsed=47.4s  wc=76
+  [gemm_512_512_512x128_P42] run 1/1  seed=42
+  [56/102] fc_256_512 d80_c0:  P=19  fmax=163.5 MHz  wc=76  clb=177
+    wirelength=239925  fmax=161.181 MHz  elapsed=51.7s  wc=116
+  [gemm_512_512_512x128_P9] run 1/1  seed=42
+  [57/102] fc_256_512 d80_c20:  P=29  fmax=161.2 MHz  wc=116  clb=293
+    wirelength=424549  fmax=151.253 MHz  elapsed=71.0s  wc=208
+  [gemm_512_512_512x128_P19] run 1/1  seed=42
+  [58/102] fc_256_512 d60_c60:  P=52  fmax=151.3 MHz  wc=208  clb=480
+    wirelength=340532  fmax=145.970 MHz  elapsed=55.6s  wc=168
+  [gemm_512_512_512x128_P35] run 1/1  seed=42
+  [59/102] fc_256_512 d80_c40:  P=42  fmax=146.0 MHz  wc=168  clb=383
+    wirelength=26640  fmax=308.032 MHz  elapsed=39.8s  wc=12
+  [gemm_512_512_512x128_P48] run 1/1  seed=42
+  [60/102] fc_512_512 d20_c0:  P=3  fmax=308.0 MHz  wc=12  clb=36
+    wirelength=198603  fmax=178.600 MHz  elapsed=55.1s  wc=88
+  [gemm_512_512_512x128_P13] run 1/1  seed=42
+  [61/102] fc_256_512 d100_c0:  P=22  fmax=178.6 MHz  wc=88  clb=199
+    wirelength=277482  fmax=150.586 MHz  elapsed=52.9s  wc=128
+  [gemm_512_512_512x128_P22] run 1/1  seed=42
+  [62/102] fc_256_512 d100_c20:  P=32  fmax=150.6 MHz  wc=128  clb=314
+    wirelength=101635  fmax=208.459 MHz  elapsed=43.0s  wc=52
+  [gemm_512_512_512x128_P35] run 1/1  seed=42
+  [63/102] fc_512_512 d20_c20:  P=13  fmax=208.5 MHz  wc=52  clb=126
+    wirelength=472232  fmax=145.474 MHz  elapsed=67.2s  wc=232
+  [gemm_512_512_512x128_P52] run 1/1  seed=42
+  [64/102] fc_256_512 d80_c60:  P=58  fmax=145.5 MHz  wc=232  clb=531
+    wirelength=374579  fmax=131.973 MHz  elapsed=58.9s  wc=180
+  [gemm_512_512_512x128_P19] run 1/1  seed=42
+  [65/102] fc_256_512 d100_c40:  P=45  fmax=132.0 MHz  wc=180  clb=416
+    wirelength=242311  fmax=150.634 MHz  elapsed=48.2s  wc=116
+  [gemm_512_512_512x128_P29] run 1/1  seed=42
+  [66/102] fc_512_512 d20_c40:  P=29  fmax=150.6 MHz  wc=116  clb=306
+    wirelength=71179  fmax=220.064 MHz  elapsed=41.3s  wc=36
+  [67/102] fc_512_512 d40_c0:  P=9  fmax=220.1 MHz  wc=36  clb=95
+  [gemm_512_512_512x128_P42] run 1/1  seed=42
+    wirelength=516136  fmax=130.240 MHz  elapsed=74.6s  wc=244
+  [gemm_512_512_512x128_P58] run 1/1  seed=42
+  [68/102] fc_256_512 d100_c60:  P=61  fmax=130.2 MHz  wc=244  clb=603
+    wirelength=348609  fmax=141.755 MHz  elapsed=63.0s  wc=168
+  [gemm_512_512_512x128_P22] run 1/1  seed=42
+  [69/102] fc_512_512 d20_c60:  P=42  fmax=141.8 MHz  wc=168  clb=410
+    wirelength=146070  fmax=194.259 MHz  elapsed=50.7s  wc=76
+  [gemm_512_512_512x128_P32] run 1/1  seed=42
+  [70/102] fc_512_512 d40_c20:  P=19  fmax=194.3 MHz  wc=76  clb=182
+    wirelength=108982  fmax=208.368 MHz  elapsed=43.2s  wc=52
+  [gemm_512_512_512x128_P45] run 1/1  seed=42
+  [71/102] fc_512_512 d60_c0:  P=13  fmax=208.4 MHz  wc=52  clb=126
+    wirelength=293720  fmax=166.195 MHz  elapsed=57.3s  wc=140
+  [gemm_512_512_512x128_P61] run 1/1  seed=42
+  [72/102] fc_512_512 d40_c40:  P=35  fmax=166.2 MHz  wc=140  clb=341
+    wirelength=171980  fmax=190.074 MHz  elapsed=53.1s  wc=88
+  [73/102] fc_512_512 d60_c20:  P=22  fmax=190.1 MHz  wc=88  clb=214
+    wirelength=163054  fmax=192.927 MHz  elapsed=44.4s  wc=76
+  [74/102] fc_512_512 d80_c0:  P=19  fmax=192.9 MHz  wc=76  clb=182
+    wirelength=393414  fmax=155.504 MHz  elapsed=58.9s  wc=192
+  [75/102] fc_512_512 d40_c60:  P=48  fmax=155.5 MHz  wc=192  clb=464
+    wirelength=287332  fmax=143.897 MHz  elapsed=52.8s  wc=140
+  [76/102] fc_512_512 d60_c40:  P=35  fmax=143.9 MHz  wc=140  clb=341
+    wirelength=238816  fmax=160.699 MHz  elapsed=48.7s  wc=116
+  [77/102] fc_512_512 d80_c20:  P=29  fmax=160.7 MHz  wc=116  clb=306
+    wirelength=428554  fmax=146.015 MHz  elapsed=61.0s  wc=208
+  [78/102] fc_512_512 d60_c60:  P=52  fmax=146.0 MHz  wc=208  clb=505
+    wirelength=197283  fmax=160.645 MHz  elapsed=44.4s  wc=88
+  [79/102] fc_512_512 d100_c0:  P=22  fmax=160.6 MHz  wc=88  clb=214
+    wirelength=343197  fmax=126.807 MHz  elapsed=55.5s  wc=168
+  [80/102] fc_512_512 d80_c40:  P=42  fmax=126.8 MHz  wc=168  clb=410
+    wirelength=475843  fmax=150.606 MHz  elapsed=60.7s  wc=232
+  [81/102] fc_512_512 d80_c60:  P=58  fmax=150.6 MHz  wc=232  clb=552
+    wirelength=275782  fmax=132.009 MHz  elapsed=52.4s  wc=128
+  [82/102] fc_512_512 d100_c20:  P=32  fmax=132.0 MHz  wc=128  clb=331
+    wirelength=379023  fmax=135.735 MHz  elapsed=53.3s  wc=180
+  [83/102] fc_512_512 d100_c40:  P=45  fmax=135.7 MHz  wc=180  clb=440
+    wirelength=511306  fmax=114.683 MHz  elapsed=63.3s  wc=244
+  [84/102] fc_512_512 d100_c60:  P=61  fmax=114.7 MHz  wc=244  clb=623
+
+  Completed: 84/102
+
+======================================================================
+Phase 4: Computing throughput scalability
+======================================================================
+  Baseline fc_64_64: f0 = 198.9 MHz
+  Baseline fc_128_128: f0 = 177.0 MHz
+  Baseline fc_512_128: f0 = 192.9 MHz
+  Baseline fc_2048_256: f0 = 179.7 MHz
+  Baseline fc_256_512: f0 = 283.9 MHz
+  Baseline fc_512_512: f0 = 308.0 MHz
+
+  Written: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/results/round2_full_results.csv  (84 rows)
+
+  Per-workload summary:
+    fc_64_64: 8 points, best gain=59.6x (P=91), worst util=49.9%
+    fc_128_128: 8 points, best gain=56.9x (P=91), worst util=53.3%
+    fc_512_128: 8 points, best gain=58.3x (P=91), worst util=50.9%
+    fc_2048_256: 20 points, best gain=23.3x (P=26), worst util=67.1%
+    fc_256_512: 20 points, best gain=29.7x (P=58), worst util=45.9%
+    fc_512_512: 20 points, best gain=28.4x (P=58), worst util=37.2%
+
+Done. Results in round2_full_results.csv.

@@ -1,0 +1,9 @@
+# NL-DPE faithful primitive, Option A1 (Task #98 unified), R=256 C=256 BUF=40 INT8
+LCYC=52 OCYC=52 CCYC=10
+T_fill=114  (= LCYC + CCYC + OCYC; no compensation constants)
+T_steady=60  (= max(LCYC+PRECISION, CCYC, OCYC))
+# NOTE: RTL pays +2 NBA-handoff cost in T_fill (once); rtl_obs = T(M) + 2.
+M=1: T(M) = T_fill + (1-1)*T_steady = 114  (rtl_obs=116, delta=+2)
+M=2: T(M) = T_fill + (2-1)*T_steady = 174  (rtl_obs=176, delta=+2)
+M=4: T(M) = T_fill + (4-1)*T_steady = 294  (rtl_obs=296, delta=+2)
+M=8: T(M) = T_fill + (8-1)*T_steady = 534  (rtl_obs=536, delta=+2)

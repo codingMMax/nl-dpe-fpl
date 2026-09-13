@@ -1,0 +1,182 @@
+{
+  "runs": [
+    {
+      "label": "AL5_s128",
+      "seed": 1,
+      "status": "OK",
+      "elapsed_s": 174.10258102416992,
+      "fmax_mhz": 70.7149,
+      "wirelength": 260944.0,
+      "resources": {
+        "io": 53,
+        "clb": 1027,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
+    },
+    {
+      "label": "AL5_s128",
+      "seed": 2,
+      "status": "OK",
+      "elapsed_s": 177.04387044906616,
+      "fmax_mhz": 67.0915,
+      "wirelength": 268901.0,
+      "resources": {
+        "io": 53,
+        "clb": 1027,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
+    },
+    {
+      "label": "AL5_s128",
+      "seed": 3,
+      "status": "OK",
+      "elapsed_s": 177.59270429611206,
+      "fmax_mhz": 72.0672,
+      "wirelength": 265459.0,
+      "resources": {
+        "io": 53,
+        "clb": 1027,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
+    },
+    {
+      "label": "AL5_s256",
+      "seed": 2,
+      "status": "OK",
+      "elapsed_s": 315.4216103553772,
+      "fmax_mhz": 57.7674,
+      "wirelength": 354248.0,
+      "resources": {
+        "io": 57,
+        "clb": 1283,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
+    },
+    {
+      "label": "AL5_s256",
+      "seed": 3,
+      "status": "OK",
+      "elapsed_s": 323.7972297668457,
+      "fmax_mhz": 56.8438,
+      "wirelength": 356041.0,
+      "resources": {
+        "io": 57,
+        "clb": 1283,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
+    },
+    {
+      "label": "AL5_s256",
+      "seed": 1,
+      "status": "OK",
+      "elapsed_s": 324.89766120910645,
+      "fmax_mhz": 62.2383,
+      "wirelength": 362589.0,
+      "resources": {
+        "io": 57,
+        "clb": 1283,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
+    }
+  ],
+  "aggregate": [
+    {
+      "label": "AL5_s128",
+      "S": 128,
+      "arch": "azure_lily_auto.xml",
+      "n_exp": null,
+      "E": 5,
+      "status": "OK",
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "fmax_seeds": [
+        70.7149,
+        67.0915,
+        72.0672
+      ],
+      "fmax_avg_mhz": 69.95786666666667,
+      "wirelength_avg": 265101.3333333333,
+      "resources": {
+        "io": 53,
+        "clb": 1027,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 94
+      },
+      "grid": [
+        52,
+        52
+      ]
+    },
+    {
+      "label": "AL5_s256",
+      "S": 256,
+      "arch": "azure_lily_auto.xml",
+      "n_exp": null,
+      "E": 5,
+      "status": "OK",
+      "seeds": [
+        2,
+        3,
+        1
+      ],
+      "fmax_seeds": [
+        57.7674,
+        56.8438,
+        62.2383
+      ],
+      "fmax_avg_mhz": 58.94983333333334,
+      "wirelength_avg": 357626.0,
+      "resources": {
+        "io": 57,
+        "clb": 1283,
+        "wc": 0,
+        "dsp_top": 22,
+        "memory": 143
+      },
+      "grid": [
+        68,
+        68
+      ]
+    }
+  ]
+}

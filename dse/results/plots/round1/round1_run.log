@@ -1,0 +1,112 @@
+GEMV/FC DSE — Round 1
+  DSE dir: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse
+
+======================================================================
+Phase 1: Generating architecture XMLs and RTL
+======================================================================
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_128x64_auto.xml
+  Generated fc_64_64_128x64.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_128x64.v (K=512, N=128, V=4, H=2, DPEs=8, ACAM=no)
+  Generated fc_2048_256_128x64.v (K=2048, N=256, V=16, H=4, DPEs=64, ACAM=no)
+  Generated fc_256_512_128x64.v (K=256, N=512, V=2, H=8, DPEs=16, ACAM=no)
+  Generated fc_512_512_128x64.v (K=512, N=512, V=4, H=8, DPEs=32, ACAM=no)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_128x128_auto.xml
+  Generated fc_64_64_128x128.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_128x128.v (K=512, N=128, V=4, H=1, DPEs=4, ACAM=no)
+  Generated fc_2048_256_128x128.v (K=2048, N=256, V=16, H=2, DPEs=32, ACAM=no)
+  Generated fc_256_512_128x128.v (K=256, N=512, V=2, H=4, DPEs=8, ACAM=no)
+  Generated fc_512_512_128x128.v (K=512, N=512, V=4, H=4, DPEs=16, ACAM=no)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_128x256_auto.xml
+  Generated fc_64_64_128x256.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_128x256.v (K=512, N=128, V=4, H=1, DPEs=4, ACAM=no)
+  Generated fc_2048_256_128x256.v (K=2048, N=256, V=16, H=1, DPEs=16, ACAM=no)
+  Generated fc_256_512_128x256.v (K=256, N=512, V=2, H=2, DPEs=4, ACAM=no)
+  Generated fc_512_512_128x256.v (K=512, N=512, V=4, H=2, DPEs=8, ACAM=no)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_256x64_auto.xml
+  Generated fc_64_64_256x64.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_256x64.v (K=512, N=128, V=2, H=2, DPEs=4, ACAM=no)
+  Generated fc_2048_256_256x64.v (K=2048, N=256, V=8, H=4, DPEs=32, ACAM=no)
+  Generated fc_256_512_256x64.v (K=256, N=512, V=1, H=8, DPEs=8, ACAM=yes)
+  Generated fc_512_512_256x64.v (K=512, N=512, V=2, H=8, DPEs=16, ACAM=no)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_256x128_auto.xml
+  Generated fc_64_64_256x128.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_256x128.v (K=512, N=128, V=2, H=1, DPEs=2, ACAM=no)
+  Generated fc_2048_256_256x128.v (K=2048, N=256, V=8, H=2, DPEs=16, ACAM=no)
+  Generated fc_256_512_256x128.v (K=256, N=512, V=1, H=4, DPEs=4, ACAM=yes)
+  Generated fc_512_512_256x128.v (K=512, N=512, V=2, H=4, DPEs=8, ACAM=no)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_256x256_auto.xml
+  Generated fc_64_64_256x256.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_256x256.v (K=512, N=128, V=2, H=1, DPEs=2, ACAM=no)
+  Generated fc_2048_256_256x256.v (K=2048, N=256, V=8, H=1, DPEs=8, ACAM=no)
+  Generated fc_256_512_256x256.v (K=256, N=512, V=1, H=2, DPEs=2, ACAM=yes)
+  Generated fc_512_512_256x256.v (K=512, N=512, V=2, H=2, DPEs=4, ACAM=no)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x64_auto.xml
+  Generated fc_64_64_512x64.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_512x64.v (K=512, N=128, V=1, H=2, DPEs=2, ACAM=yes)
+  Generated fc_2048_256_512x64.v (K=2048, N=256, V=4, H=4, DPEs=16, ACAM=no)
+  Generated fc_256_512_512x64.v (K=256, N=512, V=1, H=8, DPEs=8, ACAM=yes)
+  Generated fc_512_512_512x64.v (K=512, N=512, V=1, H=8, DPEs=8, ACAM=yes)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x128_auto.xml
+  Generated fc_64_64_512x128.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_512x128.v (K=512, N=128, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_2048_256_512x128.v (K=2048, N=256, V=4, H=2, DPEs=8, ACAM=no)
+  Generated fc_256_512_512x128.v (K=256, N=512, V=1, H=4, DPEs=4, ACAM=yes)
+  Generated fc_512_512_512x128.v (K=512, N=512, V=1, H=4, DPEs=4, ACAM=yes)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_512x256_auto.xml
+  Generated fc_64_64_512x256.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_512x256.v (K=512, N=128, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_2048_256_512x256.v (K=2048, N=256, V=4, H=1, DPEs=4, ACAM=no)
+  Generated fc_256_512_512x256.v (K=256, N=512, V=1, H=2, DPEs=2, ACAM=yes)
+  Generated fc_512_512_512x256.v (K=512, N=512, V=1, H=2, DPEs=2, ACAM=yes)
+
+======================================================================
+Phase 2: Building job list
+======================================================================
+  SKIP (existing): 128x64 / fc_64_64
+  SKIP (existing): 128x64 / fc_512_128
+  SKIP (existing): 128x64 / fc_2048_256
+  SKIP (existing): 128x64 / fc_256_512
+  SKIP (existing): 128x64 / fc_512_512
+  SKIP (existing): 128x128 / fc_64_64
+  SKIP (existing): 128x128 / fc_512_128
+  SKIP (existing): 128x128 / fc_2048_256
+  SKIP (existing): 128x128 / fc_256_512
+  SKIP (existing): 128x128 / fc_512_512
+  SKIP (existing): 128x256 / fc_64_64
+  SKIP (existing): 128x256 / fc_512_128
+  SKIP (existing): 128x256 / fc_2048_256
+  SKIP (existing): 128x256 / fc_256_512
+  SKIP (existing): 128x256 / fc_512_512
+  SKIP (existing): 256x64 / fc_64_64
+  SKIP (existing): 256x64 / fc_512_128
+  SKIP (existing): 256x64 / fc_2048_256
+  SKIP (existing): 256x64 / fc_256_512
+  SKIP (existing): 256x64 / fc_512_512
+  SKIP (existing): 256x128 / fc_64_64
+  SKIP (existing): 256x128 / fc_512_128
+  SKIP (existing): 256x128 / fc_2048_256
+  SKIP (existing): 256x128 / fc_256_512
+  SKIP (existing): 256x128 / fc_512_512
+  SKIP (existing): 256x256 / fc_64_64
+  SKIP (existing): 256x256 / fc_512_128
+  SKIP (existing): 256x256 / fc_2048_256
+  SKIP (existing): 256x256 / fc_256_512
+  SKIP (existing): 256x256 / fc_512_512
+  SKIP (existing): 512x64 / fc_64_64
+  SKIP (existing): 512x64 / fc_512_128
+  SKIP (existing): 512x64 / fc_2048_256
+  SKIP (existing): 512x64 / fc_256_512
+  SKIP (existing): 512x64 / fc_512_512
+  SKIP (existing): 512x128 / fc_64_64
+  SKIP (existing): 512x128 / fc_512_128
+  SKIP (existing): 512x128 / fc_2048_256
+  SKIP (existing): 512x128 / fc_256_512
+  SKIP (existing): 512x128 / fc_512_512
+  SKIP (existing): 512x256 / fc_64_64
+  SKIP (existing): 512x256 / fc_512_128
+  SKIP (existing): 512x256 / fc_2048_256
+  SKIP (existing): 512x256 / fc_256_512
+  SKIP (existing): 512x256 / fc_512_512
+
+  Total jobs: 0
+  No jobs to run (all skipped or no valid configs).

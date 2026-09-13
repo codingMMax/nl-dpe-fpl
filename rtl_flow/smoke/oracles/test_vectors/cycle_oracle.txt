@@ -1,0 +1,10 @@
+# NL-DPE faithful primitive cycle oracle (Option A1)
+# Task #98: T_fill = LCYC + CCYC + OCYC (no compensation constants).
+# T_steady = max(LCYC + PRECISION, CCYC, OCYC)
+# (LCYC + PRECISION dominates for typical configs;
+#  LOAD must wait PRECISION cycles for COMPUTE
+#  bit-fire to release the single-substrate slices.)
+M=1: LCYC=52 CCYC=10 OCYC=52 T_fill=114 T_steady=60 T(M)=114
+M=2: LCYC=52 CCYC=10 OCYC=52 T_fill=114 T_steady=60 T(M)=174
+M=4: LCYC=52 CCYC=10 OCYC=52 T_fill=114 T_steady=60 T(M)=294
+M=8: LCYC=52 CCYC=10 OCYC=52 T_fill=114 T_steady=60 T(M)=534

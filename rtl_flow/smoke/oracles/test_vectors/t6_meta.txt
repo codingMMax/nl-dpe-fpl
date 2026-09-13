@@ -1,0 +1,6 @@
+R=256 C=256 precision=8 acam_mode=2
+weights.shape=(256, 256)
+inputs.shape=(256,)
+mac[0:8]=[4, 4, 4, 4, 4, 4, 4, 4]
+acam[0:8]=[3, 3, 3, 3, 3, 3, 3, 3]
+byte[0:8]=[3, 3, 3, 3, 3, 3, 3, 3]

@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+
+# Editor / tool artifacts
+.vscode/
+.codex_runs/
+
+# VTR output directories (workload builds)
+*/lenet_1_channel/
+*/resnet_1_channel/
+*/vgg11_1_channel/
+*/attention_head_1_channel/
+
+# DSE VTR outputs and intermediate configs (large, regenerable)
+dse/round1/
+dse/round2/
+dse/round2_proto/
+dse/round2_full/
+dse/round2_fc_softmax/
+dse/round2_attention/
+dse/attention/
+dse/sanity_*/
+dse/configs/
+dse/rtl/
+dse/flexscore_60/
+
+# DSE reproducible outputs (regenerate via plot scripts)
+dse/results/*.log
+dse/results/*.pdf
+dse/results/*.png
+
+# Claude local config
+.claude/
+
+# Benchmark VTR run outputs (large, regenerable)
+benchmarks/test_runs/
+benchmarks/vtr_runs/
+benchmarks/rtl/**/vpr_stdout.log
+benchmarks/rtl/**/*.net.post_routing
+benchmarks/rtl/**/abc*.out
+benchmarks/rtl/**/parmys.out
+benchmarks/rtl/**/vpr.out
+benchmarks/rtl/**/run.log
+benchmarks/rtl/**/*.rpt
+benchmarks/rtl/**/arch.info
+benchmarks/rtl/**/*_occupancy.txt
+benchmarks/rtl/**/synthesis.tcl
+benchmarks/rtl/**/odin_config.xml
+benchmarks/rtl/**/slang_filelist.tcl
+benchmarks/rtl/**/abc.history
+benchmarks/rtl/**/abc.rc
+benchmarks/rtl/**/output.txt
+benchmarks/rtl/**/report_clk*.out
+
+# Generated PDFs (regenerate via plot scripts)
+paper/scripts/*.pdf
+dse/results/plots/**/*.pdf
+
+# Staging for cleanup
+*/to_delete/
+
+# AH-track additions (2026-04-24)
+dse/gemm_phase2_1/vtr_runs/
+dse/gemm_phase2_1/configs/
+dse/gemm_phase2_1/rtl/
+benchmarks/vtr_runs_seqlen/
+
+# Compiled iverilog testbench executables — regenerable via run_alignment.sh
+archive/block_comp_apr_11/tb/tb_*
+!archive/block_comp_apr_11/tb/tb_*.v
+!archive/block_comp_apr_11/tb/tb_*.sh
+
+# VCD waveform dumps — regenerable from testbench runs
+*.vcd
+
+# Stray VTR log at repo root
+vpr_stdout.log
+
+# archive/ — legacy material (2026-08-27 reorg).
+# VTR run outputs and build artifacts stay untracked; only source/docs are committed.
+archive/nl_dpe_legacy_vtr/
+archive/azurelily_TACO_experiments/lenet_1_channel/
+archive/azurelily_TACO_experiments/resnet_1_channel/
+archive/azurelily_TACO_experiments/vgg11_1_channel/
+archive/block_comp_apr_11/vtr_runs/
+archive/block_comp_apr_11/results/*.log
+archive/block_comp_apr_11/__pycache__/
+archive/azurelily_simulator/IMC/logs/
+
+# rtl_flow local build / smoke run artifacts (regenerable)
+rtl_flow/build/
+rtl_flow/results/*.log
+rtl_flow/results/vtr_smoke_*/
+# legacy fc_verification smoke logs (regenerable history)
+rtl_flow/results/legacy/

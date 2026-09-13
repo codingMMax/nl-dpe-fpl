@@ -1,0 +1,12 @@
+# Azure-Lily faithful primitive cycle oracle (Option A1)
+# Task #98: T_fill = LCYC + CCYC + OCYC (no compensation constants).
+# CCYC      = PRECISION + (PIPELINE_DEPTH-1) + ACAM_CYCLES
+#           = 8 + 2 + 0 = 10
+# T_steady  = max(LCYC + PRECISION, CCYC, OCYC)
+# (LOAD must wait PRECISION cycles for COMPUTE
+#  bit-fire to release the single-substrate slices.)
+# (NL faithful: 8 + 1 + 1 = 10. Same total CCYC, different decomposition.)
+M=1: LCYC=256 CCYC=10 OCYC=64 T_fill=330 T_steady=264 T(M)=330
+M=2: LCYC=256 CCYC=10 OCYC=64 T_fill=330 T_steady=264 T(M)=594
+M=4: LCYC=256 CCYC=10 OCYC=64 T_fill=330 T_steady=264 T(M)=1122
+M=8: LCYC=256 CCYC=10 OCYC=64 T_fill=330 T_steady=264 T(M)=2178

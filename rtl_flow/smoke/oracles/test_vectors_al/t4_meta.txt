@@ -1,0 +1,5 @@
+R=512 C=128 precision=8 arch=Azure-Lily
+weights.shape=(512, 128)
+inputs.shape=(512,)
+mac[0:8]=[1, 1, 1, 1, 1, 1, 1, 1]
+byte[0:8]=[1, 1, 1, 1, 1, 1, 1, 1]

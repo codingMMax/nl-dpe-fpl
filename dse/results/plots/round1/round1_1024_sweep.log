@@ -1,0 +1,161 @@
+GEMV/FC DSE — Round 1
+  DSE dir: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse
+
+======================================================================
+Phase 1: Generating architecture XMLs and RTL
+======================================================================
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x64_auto.xml
+  Generated fc_64_64_1024x64.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_128_128_1024x64.v (K=128, N=128, V=1, H=2, DPEs=2, ACAM=yes)
+  Generated fc_512_128_1024x64.v (K=512, N=128, V=1, H=2, DPEs=2, ACAM=yes)
+  Generated fc_2048_256_1024x64.v (K=2048, N=256, V=2, H=4, DPEs=8, ACAM=no)
+  Generated fc_256_512_1024x64.v (K=256, N=512, V=1, H=8, DPEs=8, ACAM=yes)
+  Generated fc_512_512_1024x64.v (K=512, N=512, V=1, H=8, DPEs=8, ACAM=yes)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x128_auto.xml
+  Generated fc_64_64_1024x128.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_128_128_1024x128.v (K=128, N=128, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_1024x128.v (K=512, N=128, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_2048_256_1024x128.v (K=2048, N=256, V=2, H=2, DPEs=4, ACAM=no)
+  Generated fc_256_512_1024x128.v (K=256, N=512, V=1, H=4, DPEs=4, ACAM=yes)
+  Generated fc_512_512_1024x128.v (K=512, N=512, V=1, H=4, DPEs=4, ACAM=yes)
+Generated: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/configs/arch/nl_dpe_1024x256_auto.xml
+  Generated fc_64_64_1024x256.v (K=64, N=64, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_128_128_1024x256.v (K=128, N=128, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_512_128_1024x256.v (K=512, N=128, V=1, H=1, DPEs=1, ACAM=yes)
+  Generated fc_2048_256_1024x256.v (K=2048, N=256, V=2, H=1, DPEs=2, ACAM=no)
+  Generated fc_256_512_1024x256.v (K=256, N=512, V=1, H=2, DPEs=2, ACAM=yes)
+  Generated fc_512_512_1024x256.v (K=512, N=512, V=1, H=2, DPEs=2, ACAM=yes)
+
+======================================================================
+Phase 2: Building job list
+======================================================================
+
+  Total jobs: 18
+
+======================================================================
+Phase 3: Running VTR synthesis & P&R
+======================================================================
+  Workers: 12
+  [fc_64_64_1024x64] run 1/1  seed=42
+  [fc_128_128_1024x64] run 1/1  seed=42
+  [fc_2048_256_1024x64] run 1/1  seed=42
+  [fc_256_512_1024x64] run 1/1  seed=42
+  [fc_512_128_1024x64] run 1/1  seed=42
+  [fc_512_512_1024x64] run 1/1  seed=42
+  [fc_128_128_1024x128] run 1/1  seed=42
+  [fc_64_64_1024x128] run 1/1  seed=42
+  [fc_512_128_1024x128] run 1/1  seed=42
+  [fc_2048_256_1024x128] run 1/1  seed=42
+  [fc_256_512_1024x128] run 1/1  seed=42
+  [fc_512_512_1024x128] run 1/1  seed=42
+    wirelength=2341  fmax=346.512 MHz  elapsed=0.8s  wc=1
+  OK: 1024x64 / fc_64_64  fmax=346.5 MHz  grid=10x10
+  [fc_64_64_1024x256] run 1/1  seed=42
+    wirelength=2708  fmax=389.801 MHz  elapsed=1.0s  wc=1
+  OK: 1024x128 / fc_64_64  fmax=389.8 MHz  grid=13x13
+  [fc_128_128_1024x256] run 1/1  seed=42
+    wirelength=2746  fmax=346.512 MHz  elapsed=1.0s  wc=1
+  OK: 1024x128 / fc_512_128  fmax=346.5 MHz  grid=13x13
+  [fc_512_128_1024x256] run 1/1  seed=42
+    wirelength=2729  fmax=349.703 MHz  elapsed=1.0s  wc=1
+  OK: 1024x128 / fc_128_128  fmax=349.7 MHz  grid=13x13
+  [fc_2048_256_1024x256] run 1/1  seed=42
+    wirelength=3412  fmax=312.747 MHz  elapsed=1.1s  wc=2
+  OK: 1024x64 / fc_512_128  fmax=312.7 MHz  grid=14x14
+  [fc_256_512_1024x256] run 1/1  seed=42
+    wirelength=3489  fmax=291.401 MHz  elapsed=1.1s  wc=2
+  OK: 1024x64 / fc_128_128  fmax=291.4 MHz  grid=14x14
+  [fc_512_512_1024x256] run 1/1  seed=42
+    wirelength=2885  fmax=346.512 MHz  elapsed=1.0s  wc=1
+  OK: 1024x256 / fc_64_64  fmax=346.5 MHz  grid=14x14
+    wirelength=2816  fmax=328.261 MHz  elapsed=1.0s  wc=1
+  OK: 1024x256 / fc_128_128  fmax=328.3 MHz  grid=14x14
+    wirelength=2948  fmax=346.512 MHz  elapsed=1.0s  wc=1
+  OK: 1024x256 / fc_512_128  fmax=346.5 MHz  grid=14x14
+    wirelength=6848  fmax=293.654 MHz  elapsed=2.2s  wc=4
+  OK: 1024x128 / fc_256_512  fmax=293.7 MHz  grid=26x26
+    wirelength=9510  fmax=315.857 MHz  elapsed=2.3s  wc=8
+  OK: 1024x64 / fc_256_512  fmax=315.9 MHz  grid=26x26
+    wirelength=6839  fmax=312.747 MHz  elapsed=2.3s  wc=4
+  OK: 1024x128 / fc_512_512  fmax=312.7 MHz  grid=26x26
+    wirelength=8246  fmax=250.638 MHz  elapsed=2.4s  wc=4
+  OK: 1024x128 / fc_2048_256  fmax=250.6 MHz  grid=26x26
+    wirelength=9765  fmax=305.914 MHz  elapsed=2.4s  wc=8
+  OK: 1024x64 / fc_512_512  fmax=305.9 MHz  grid=26x26
+    wirelength=3964  fmax=291.401 MHz  elapsed=1.4s  wc=2
+  OK: 1024x256 / fc_256_512  fmax=291.4 MHz  grid=20x20
+    wirelength=4079  fmax=312.747 MHz  elapsed=1.4s  wc=2
+  OK: 1024x256 / fc_512_512  fmax=312.7 MHz  grid=20x20
+    wirelength=11049  fmax=268.039 MHz  elapsed=2.6s  wc=8
+  OK: 1024x64 / fc_2048_256  fmax=268.0 MHz  grid=26x26
+    wirelength=5699  fmax=233.758 MHz  elapsed=1.7s  wc=2
+  OK: 1024x256 / fc_2048_256  fmax=233.8 MHz  grid=20x20
+
+  Completed: 18/18
+
+======================================================================
+Phase 4: Running IMC energy/latency simulation
+======================================================================
+  IMC: 1024x64 / fc_64_64 @ 346.5 MHz ... energy=91.79 pJ  latency=85.03 ns
+  IMC: 1024x64 / fc_128_128 @ 291.4 MHz ... energy=217.81 pJ  latency=188.45 ns
+  IMC: 1024x64 / fc_512_128 @ 312.7 MHz ... energy=206.93 pJ  latency=422.47 ns
+  IMC: 1024x64 / fc_2048_256 @ 268.0 MHz ... energy=1095.82 pJ  latency=1797.05 ns
+  IMC: 1024x64 / fc_256_512 @ 315.9 MHz ... energy=801.96 pJ  latency=500.73 ns
+  IMC: 1024x64 / fc_512_512 @ 305.9 MHz ... energy=830.31 pJ  latency=683.39 ns
+  IMC: 1024x128 / fc_64_64 @ 389.8 MHz ... energy=149.21 pJ  latency=76.70 ns
+  IMC: 1024x128 / fc_128_128 @ 349.7 MHz ... energy=167.45 pJ  latency=158.70 ns
+  IMC: 1024x128 / fc_512_128 @ 346.5 MHz ... energy=172.78 pJ  latency=382.28 ns
+  IMC: 1024x128 / fc_2048_256 @ 250.6 MHz ... energy=1080.02 pJ  latency=1921.12 ns
+  IMC: 1024x128 / fc_256_512 @ 293.7 MHz ... energy=793.07 pJ  latency=537.83 ns
+  IMC: 1024x128 / fc_512_512 @ 312.7 MHz ... energy=747.65 pJ  latency=668.68 ns
+  IMC: 1024x256 / fc_64_64 @ 346.5 MHz ... energy=319.48 pJ  latency=85.03 ns
+  IMC: 1024x256 / fc_128_128 @ 328.3 MHz ... energy=338.45 pJ  latency=168.41 ns
+  IMC: 1024x256 / fc_512_128 @ 346.5 MHz ... energy=324.58 pJ  latency=382.28 ns
+  IMC: 1024x256 / fc_2048_256 @ 233.8 MHz ... energy=1103.16 pJ  latency=2059.13 ns
+  IMC: 1024x256 / fc_256_512 @ 291.4 MHz ... energy=764.41 pJ  latency=541.91 ns
+  IMC: 1024x256 / fc_512_512 @ 312.7 MHz ... energy=715.28 pJ  latency=668.68 ns
+
+======================================================================
+Phase 5: Writing results CSV
+======================================================================
+  Written: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/results/round1_results.csv  (18 rows)
+
+======================================================================
+Phase 6: Selecting top-3 configs
+======================================================================
+  Top-3 configs: ['1024x128', '1024x64', '1024x256']
+  Written: /mnt/vault0/jiajunh5/nl-dpe-fpl/dse/results/top3_configs.json
+
+======================================================================
+Config ranking (normalized geomean across workloads)
+  Each metric normalized to best config per workload, then geomean'd
+======================================================================
+Rank Config      GM_Tput/mm2   GM_Tput/J  GM_combined
+-----------------------------------------------------
+   1 1024x128         0.7263      0.9098       0.8129 ◀ top
+   2 1024x64          0.7226      0.8966       0.8049 ◀ top
+   3 1024x256         0.8424      0.6481       0.7389 ◀ top
+
+======================================================================
+Per-workload raw results
+======================================================================
+Config     Workload        V  H  acam    Fmax    Lat ns      E pJ    Tput/mm2      Tput/J
+-----------------------------------------------------------------------------------------
+1024x128   fc_128_128      1  1   yes   349.7    158.70    167.45    16652609  5971931920
+1024x256   fc_128_128      1  1   yes   328.3    168.41    338.45    13530753  2954646181
+1024x64    fc_128_128      1  2   yes   291.4    188.45    217.81    12091876  4591157431
+1024x256   fc_2048_256     2  1    no   233.8   2059.13   1103.16      542253   906486820
+1024x64    fc_2048_256     2  4    no   268.0   1797.05   1095.82      367654   912558632
+1024x128   fc_2048_256     2  2    no   250.6   1921.12   1080.02      343910   925908779
+1024x256   fc_256_512      1  2   yes   291.4    541.91    764.41     2060434  1308198480
+1024x64    fc_256_512      1  8   yes   315.9    500.73    801.96     1319458  1246944985
+1024x128   fc_256_512      1  4   yes   293.7    537.83    793.07     1228441  1260922743
+1024x128   fc_512_128      1  1   yes   346.5    382.28    172.78     6913176  5787706911
+1024x256   fc_512_128      1  1   yes   346.5    382.28    324.58     5960851  3080904554
+1024x64    fc_512_128      1  2   yes   312.7    422.47    206.93     5393789  4832552071
+1024x256   fc_512_512      1  2   yes   312.7    668.68    715.28     1669812  1398053909
+1024x128   fc_512_512      1  4   yes   312.7    668.68    747.65      988054  1337524243
+1024x64    fc_512_512      1  8   yes   305.9    683.39    830.31      966787  1204369452
+1024x64    fc_64_64        1  1   yes   346.5     85.03     91.79    52525927 10894432945
+1024x128   fc_64_64        1  1   yes   389.8     76.70    149.21    34455919  6701963675
+1024x256   fc_64_64        1  1   yes   346.5     85.03    319.48    26798942  3130086390

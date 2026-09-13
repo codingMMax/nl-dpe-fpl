@@ -1,0 +1,250 @@
+[
+  {
+    "label": "AL_s128",
+    "S": 128,
+    "arch": "azure_lily_auto.xml",
+    "n_exp": null,
+    "E": 16,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      49.3656,
+      48.0891,
+      47.7875
+    ],
+    "fmax_avg_mhz": 48.41406666666666,
+    "wirelength_avg": 806601.3333333334,
+    "resources": {
+      "io": 49,
+      "clb": 2338,
+      "wc": 0,
+      "dsp_top": 64,
+      "memory": 284
+    },
+    "grid": [
+      98,
+      98
+    ]
+  },
+  {
+    "label": "AL_s256",
+    "S": 256,
+    "arch": "azure_lily_auto.xml",
+    "n_exp": null,
+    "E": 16,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      43.431,
+      42.9026,
+      43.8157
+    ],
+    "fmax_avg_mhz": 43.38309999999999,
+    "wirelength_avg": 875105.6666666666,
+    "resources": {
+      "io": 53,
+      "clb": 2625,
+      "wc": 0,
+      "dsp_top": 64,
+      "memory": 284
+    },
+    "grid": [
+      98,
+      98
+    ]
+  },
+  {
+    "label": "AL5_s128",
+    "S": 128,
+    "arch": "azure_lily_auto.xml",
+    "n_exp": null,
+    "E": 5,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      70.7149,
+      67.0915,
+      72.0672
+    ],
+    "fmax_avg_mhz": 69.95786666666667,
+    "wirelength_avg": 265101.3333333333,
+    "resources": {
+      "io": 53,
+      "clb": 1027,
+      "wc": 0,
+      "dsp_top": 22,
+      "memory": 94
+    },
+    "grid": [
+      52,
+      52
+    ]
+  },
+  {
+    "label": "AL5_s256",
+    "S": 256,
+    "arch": "azure_lily_auto.xml",
+    "n_exp": null,
+    "E": 5,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      62.2383,
+      57.7674,
+      56.8438
+    ],
+    "fmax_avg_mhz": 58.94983333333334,
+    "wirelength_avg": 357626.0,
+    "resources": {
+      "io": 57,
+      "clb": 1283,
+      "wc": 0,
+      "dsp_top": 22,
+      "memory": 143
+    },
+    "grid": [
+      68,
+      68
+    ]
+  },
+  {
+    "label": "P1_s128",
+    "S": 128,
+    "arch": "proposed_auto.xml",
+    "n_exp": 1,
+    "E": null,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      70.9681,
+      77.7222,
+      75.7301
+    ],
+    "fmax_avg_mhz": 74.8068,
+    "wirelength_avg": 444843.0,
+    "resources": {
+      "io": 53,
+      "clb": 1049,
+      "wc": 17,
+      "dsp_top": 1,
+      "memory": 220
+    },
+    "grid": [
+      84,
+      84
+    ]
+  },
+  {
+    "label": "P1_s256",
+    "S": 256,
+    "arch": "proposed_auto.xml",
+    "n_exp": 2,
+    "E": null,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      61.9922,
+      60.3546,
+      63.331
+    ],
+    "fmax_avg_mhz": 61.892599999999995,
+    "wirelength_avg": 579533.6666666666,
+    "resources": {
+      "io": 55,
+      "clb": 1473,
+      "wc": 33,
+      "dsp_top": 1,
+      "memory": 223
+    },
+    "grid": [
+      84,
+      84
+    ]
+  },
+  {
+    "label": "P2_s128",
+    "S": 128,
+    "arch": "al_like_auto.xml",
+    "n_exp": 1,
+    "E": null,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      80.1533,
+      75.8693,
+      74.6721
+    ],
+    "fmax_avg_mhz": 76.89823333333334,
+    "wirelength_avg": 452526.0,
+    "resources": {
+      "io": 53,
+      "clb": 1049,
+      "wc": 17,
+      "dsp_top": 1,
+      "memory": 220
+    },
+    "grid": [
+      96,
+      96
+    ]
+  },
+  {
+    "label": "P2_s256",
+    "S": 256,
+    "arch": "al_like_auto.xml",
+    "n_exp": 1,
+    "E": null,
+    "status": "OK",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "fmax_seeds": [
+      60.9238,
+      64.1924,
+      65.5082
+    ],
+    "fmax_avg_mhz": 63.54146666666667,
+    "wirelength_avg": 507283.6666666667,
+    "resources": {
+      "io": 55,
+      "clb": 1428,
+      "wc": 17,
+      "dsp_top": 1,
+      "memory": 212
+    },
+    "grid": [
+      96,
+      96
+    ]
+  }
+]
