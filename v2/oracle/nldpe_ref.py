@@ -4,36 +4,36 @@
 Role
 ----
 Independent numerical reference, transcribed from the spec
-`v2/spec/dpe_nldpe.md` (**v1.1 amended 2026-09-12**). Plain math, no state,
-no time. The OOP behavior simulator (`v2/sim/nldpe_sim.py`) must agree with
-this file bit-exactly on values; the legacy oracle (`rtl_flow/smoke/oracles/
-nldpe_mac_oracle.py`) is a structural reference only — it encodes the
-superseded int8-weight semantics and is NOT a numerical witness under v1.1.
+`v2/spec/dpe_nldpe.md` (**v2.0 integer dataflow, 2026-09-14**). Plain math, no
+state, no time. The OOP behavior simulator (`v2/sim/nldpe_sim.py`) must agree
+with this file bit-exactly on values; the legacy oracle (`rtl_flow/smoke/
+oracles/nldpe_mac_oracle.py`) is a structural reference only.
 
-This file is deliberately dumb: if the simulator and this reference ever
-disagree, the spec (§ references below) decides who is wrong.
+Integer arithmetic is EXACT: there is no rounding and no summation-order
+contract (P22). The simulator must still mirror the hardware's per-slice
+structure, but any correct integer evaluation is bit-identical.
 
 Conventions
 -----------
-* W : np.float32 [R, C] — weight matrix (spec §2 T4), stationary.
+* W : np.int8 [R, C] — weight matrix (spec §2 T4), stationary.
 * X : np.int8 [M, R] — M activation vectors, one per pass (§2 T1).
-* y : np.float32 [M, C] — crossbar output, §6 F2 structural sequence.
+* y : np.int32 [M, C] — exact crossbar output, §6 F2.
 * Modes are integers 0..3 matching nl_dpe_control[1:0] (§4.1):
-  0=REGULAR, 1=ACTIVATION, 2=EXP, 3=LOG (all defined, P18).
+  0=REGULAR, 1=ACTIVATION, 2=EXP, 3=LOG (integer forms, P24).
 * ACAM output: np.int8 in column order (§2 T2). The 40-bit stream exposes the
   same 8 bits as bytes; unsigned representation appears only at serialization
   (packers, .mem files, TB byte compares) — flattening a pass's row (c-order)
   IS the §4.5 stream order.
-* fp32 discipline (A17): every operation is IEEE-754 binary32, RNE, no FMA,
-  gradual underflow; accumulate with np.float32, never Python floats.
+* Overflow policy (A17/P25): |y| <= R * 2^14, so int32 is exact for
+  R <= 131072; EXP uses a wider intermediate.
 
-Weights are NOT streamed (P17): programming is a one-time WEIGHT-strobe load
-handled at TB/system level; this reference takes W directly as an array.
+Weights are NOT streamed as data (P23): programming is a one-time WEIGHT-strobe
+load handled at TB/system level; this reference takes W directly as an array.
 
 Spec sections implemented here (transcribe, don't improvise):
-  §6 F1/F2 — compute_y
-  §6 F3   — trunc8, acam_transform
-  §4.2    — pack_weight_stream (stimulus side; WEIGHT strobe, P17)
+  §6 F1/F2 — compute_y (exact integer MAC)
+  §6 F3   — trunc8, acam_transform (integer mode forms)
+  §4.2    — pack_weight_stream (stimulus side; WEIGHT strobe, P23)
   §4.3    — pack_act_stream
 """
 
@@ -44,115 +44,70 @@ import numpy as np
 # Mode codes (§4.1 / §6 F3) — keep in one place.
 MODE_REGULAR = 0     # nl_dpe_control = 2'b00
 MODE_ACTIVATION = 1  # nl_dpe_control = 2'b01
-MODE_EXP = 2         # nl_dpe_control = 2'b10  (EXP_FN, §6 F3 / P18)
-MODE_LOG = 3         # nl_dpe_control = 2'b11  (LOG_FN, §6 F3 / P18)
+MODE_EXP = 2         # nl_dpe_control = 2'b10  (integer EXP, P24)
+MODE_LOG = 3         # nl_dpe_control = 2'b11  (integer LOG, P24)
 
 
 def compute_y(W: np.ndarray, X: np.ndarray) -> np.ndarray:
-    """§6 F1/F2 — structural fp32 MAC (normative sequence).
+    """§6 F1/F2 — exact integer MAC.
 
-    For each pass m and column c, F2 fixes the exact operation order:
+    W : int8 [R, C]; X : int8 [M, R]. Returns y : int32 [M, C] with
 
-        s := +0.0
-        for r = 0 .. R-1:  s := fl32( s + ( bit_b(X[m,r]) ? W[r,c] : +0.0 ) )
-        p_b[c] := s                                   (b = 0..P-1, P = 8)
+        y[m, c] = Σ_r W[r, c] · x[m, r]        (exact, int64 intermediate)
 
-        y := +0.0
-        for b = 0 .. P-2:  y := fl32( y + 2**b * p_b[c] )
-        y := fl32( y - 2**(P-1) * p_{P-1}[c] )        (2's-complement MSB, P2)
-
-    The slice partial enters at its own significance (exact power-of-two
-    scale); the accumulator does not shift (P20).
-
-    Returns y : np.float32 [M, C]. Rounding: IEEE-754 binary32 RNE, no FMA
-    (A17/P19). Bit b of an int8 activation is taken from its two's-complement
-    representation (b = 7 is the sign bit).
-
-    TODO(you): implement. Explicit loops with np.float32 accumulators are
-    fine (small shapes in the self-test). Do NOT use `@`, np.sum, np.dot, or
-    Python floats — their summation order is not F2 and will differ by >=1 ulp.
+    F2's bit-serial partial-shift structure
+        y = Σ_{b=0..P-2} 2^b·s_b  −  2^(P-1)·s_{P-1}
+    is mathematically identical to this direct sum because integer arithmetic
+    is exact (P22): no rounding, no order dependence.
     """
-    # return X.astype(np.int8) @ W.astype(np.float32) 
-    rows, cols = W.shape
-    out = np.zeros((X.shape[0], cols), dtype=np.float32)
-    zero = np.float32(0.0)
-    WIDTH = 8
-    for m in range(X.shape[0]):
-        for c in range(cols):
-            parts = []
-            # compute output at each column
-            for bit in range(WIDTH):
-                s = zero
-                for r in range(rows):
-                    slice = X[m,r] >> bit & 1
-                    tmp = W[r, c] if slice else zero
-                    s = np.float32(s + tmp)
-                parts.append(s) # bit-sliced partial sum at current column
-        # reduce across bit-sliced partial sums
-            acc = zero
-            for bit in range(WIDTH - 1):
-                scale = np.float32(2.0 ** bit)
-                acc = np.float32(parts[bit] * scale + acc)
-            y = np.float32(acc - parts[7] * np.float32(2.0 ** 7)) # signed int8
-            out[m,c] = y
-    
-    return out              
+    W64 = np.asarray(W, dtype=np.int64)
+    X64 = np.asarray(X, dtype=np.int64)
+    assert W64.ndim == 2, "W must be [R, C]"
+    assert X64.ndim == 2 and X64.shape[1] == W64.shape[0], "X must be [M, R]"
+    return (X64 @ W64).astype(np.int32)
 
-                
 
 def trunc8(z: np.ndarray) -> np.ndarray:
-    """§6 F3 — the ACAM output rule (P16).
+    """§6 F3 — ACAM output rule (P16): clamp to int32, keep the low byte.
 
-        t    := truncate_toward_zero(z), clamped to [-2^31, 2^31-1]
-        out8 := t[7:0]        (two's-complement low byte, wrap — no saturation)
-
-    z : array of fp32. Returns int8 array, same shape (§2 T2: the ACAM output
-    IS int8; the low byte is reinterpreted as signed). This is NOT a
-    clamp/requantizer: only the low byte of the (int32-clamped) truncated
-    value survives.
-
-    TODO(you): implement. Hints: np.trunc for toward-zero; the clamp only
-    matters for |z| >= 2^31 — do it in float64, because the fp32 literal
-    2^31-1 rounds up to 2^31; finish with (& 0xFF) then a *bit
-    reinterpretation* to int8 (.astype(np.uint8).view(np.int8)), not a value
-    cast.
+    z : integer array. Truncation toward zero is the identity for integers;
+    the value is clamped to [-2^31, 2^31-1] and the low byte is reinterpreted
+    as signed int8 (two's-complement wrap — no saturation at 8 bits).
     """
-    t = np.trunc(z)
-    t = t.astype(np.float64)
-    t = np.clip(t, -(2**31), 2**31-1)
-    t = t.astype(np.int32)
-    return (t & 0xff).astype(np.uint8).view(np.int8)
-
+    t = np.asarray(z, dtype=np.int64)
+    t = np.clip(t, -(2**31), 2**31 - 1)
+    return (t & 0xFF).astype(np.uint8).view(np.int8)
 
 
 def acam_transform(y: np.ndarray, mode: int) -> np.ndarray:
-    """§6 F3 — ACAM stage: fp32 in, int8 out (spec §2 T2), 1 cycle, parallel.
+    """§6 F3 — ACAM stage: int32 in, int8 out (T2), 1 cycle, parallel.
 
-    All modes: evaluate the functional form in fp32 (normative order), then
-    apply trunc8 (functional form FIRST, truncation LAST — P16).
+    All modes: integer functional form first, then `trunc8` (P16/P24).
 
         mode 0 REGULAR    : f(v) = v
-        mode 1 ACTIVATION : f(v) = relu(v) = v if v > 0 else +0.0
-        mode 2 EXP        : f(v) = fl32(1 + fl32(v + fl32(0.5*fl32(v*v))))
-        mode 3 LOG        : f(v) = fl32(v - 1)
+        mode 1 ACTIVATION : f(v) = relu(v) = v if v > 0 else 0
+        mode 2 EXP        : f(v) = 1 + v + floor(v²/2)   (exact wide intermediate)
+        mode 3 LOG        : f(v) = v - 1
 
-    y : fp32 array [.., C]. Returns int8 array, same shape (§2 T2). Raises
-    ValueError for mode not in {0, 1, 2, 3}.
+    y : int32 array [.., C]. Returns int8 array, same shape. Raises ValueError
+    for mode not in {0, 1, 2, 3}.
 
-    TODO(you): implement all four modes with explicit np.float32 operation
-    order (the EXP evaluation order is normative). Then trunc8.
+    EXP note: v² >= 0, so floor(v²/2) = truncation; only `v mod 512` affects
+    the output byte after trunc8.
     """
-
+    y = np.asarray(y)
     if mode == MODE_REGULAR:
         return trunc8(y)
     if mode == MODE_ACTIVATION:
-        return trunc8(np.maximum(0.0, y))
+        return trunc8(np.maximum(y, 0))
     if mode == MODE_EXP:
-        return trunc8(np.float32(1.0) + (y + np.float32(0.5) * (y * y)))
+        y64 = y.astype(np.int64)
+        return trunc8(1 + y64 + (y64 * y64) // 2)
     if mode == MODE_LOG:
         return trunc8(y - 1)
     if mode not in (MODE_REGULAR, MODE_ACTIVATION, MODE_EXP, MODE_LOG):
         raise ValueError(f"invalid ACAM mode: {mode}")
+
 
 def pack_act_stream(x_m: np.ndarray) -> list[int]:
     """§4.3 — one pass's activation byte stream packed into 40-bit words.
@@ -166,7 +121,7 @@ def pack_act_stream(x_m: np.ndarray) -> list[int]:
     Returns a list of Python ints (0 .. 2**40-1), one per word, in stream
     order. The .mem hex file (Stage 1.5) is one 10-hex-digit line per word.
 
-    Weights are programmed by strobe — see `pack_weight_stream` (P17).
+    Weights are programmed by strobe — see `pack_weight_stream` (P23).
     """
     b = np.ascontiguousarray(x_m).view(np.uint8)      # (R,)
     n = -(-b.size // 5)                               # number of words
@@ -177,20 +132,18 @@ def pack_act_stream(x_m: np.ndarray) -> list[int]:
 
 
 def pack_weight_stream(W: np.ndarray) -> list[int]:
-    """§4.2 (P17) — fp32 weights packed into 40-bit WEIGHT-strobe words.
+    """§4.2 (P23) — int8 weights packed into 40-bit WEIGHT-strobe words.
 
-    One fp32 weight word per strobe cycle, row-major row-outer: word #k
-    (k = 0 .. R*C-1) carries W[k // C, k % C] in data_in[31:0] (the IEEE-754
-    binary32 bit pattern); data_in[39:32] are zero. WR_CYC = R*C, one-time,
-    excluded from the per-pass formulas (§5.3).
+    One int8 weight per strobe cycle on `data_in[7:0]` (upper bits zero),
+    row-major row-outer: word #k (k = 0 .. R*C-1) carries W[k // C, k % C] as
+    an unsigned byte. WR_CYC = R*C, one-time, excluded from per-pass formulas.
 
-    Returns a list of Python ints (0 .. 2**32-1), one per cycle. The .mem hex
-    file (Stage 1.5) is one 10-hex-digit line per word.
+    Returns a list of Python ints (0 .. 255). The .mem hex file (Stage 1.5) is
+    one 10-hex-digit line per word.
     """
-    Wf = np.ascontiguousarray(W, dtype=np.float32)
-    assert Wf.ndim == 2, "W must be [R, C]"
-    bits = Wf.reshape(-1).view(np.uint32)     # row-major row-outer (P17)
-    return [int(b) for b in bits]
+    Wb = np.asarray(W, dtype=np.int8)
+    assert Wb.ndim == 2, "W must be [R, C]"
+    return [int(b) for b in np.ascontiguousarray(Wb).reshape(-1).view(np.uint8)]
 
 
 # ---------------------------------------------------------------------------
@@ -201,70 +154,69 @@ def _self_test() -> None:
     rng = np.random.default_rng(0)
     R, C, M = 8, 16, 3  # small shapes; math is size-independent
 
-    # ── Independent F2 reference (explicit order, deliberately not vectorized) ──
+    # ── Independent structural F2 reference (per-slice partial-shift, P22) ──
     def f2_ref(W: np.ndarray, X: np.ndarray) -> np.ndarray:
-        RW, CW = W.shape
-        out = np.empty((X.shape[0], CW), dtype=np.float32)
-        zero = np.float32(0.0)
-        scales = [np.float32(2.0 ** b) for b in range(8)]   # exact powers of two
+        rw, cw = W.shape
+        out = np.zeros((X.shape[0], cw), dtype=np.int64)
         for m in range(X.shape[0]):
-            for c in range(CW):
-                parts = []
+            for c in range(cw):
+                y = 0
                 for b in range(8):
-                    s = zero
-                    for r in range(RW):
-                        inc = W[r, c] if ((int(X[m, r]) >> b) & 1) else zero
-                        s = np.float32(s + inc)
-                    parts.append(s)
-                acc = zero
-                for b in range(7):
-                    acc = np.float32(acc + parts[b] * scales[b])
-                out[m, c] = np.float32(acc - parts[7] * scales[7])
-        return out
+                    s = 0
+                    for r in range(rw):
+                        if (int(X[m, r]) >> b) & 1:
+                            s += int(W[r, c])
+                    y += s << b if b < 7 else -(s << b)   # MSB subtract (P2)
+                out[m, c] = y
+        return out.astype(np.int32)
 
-    # ── fp32 weights: mixed exponents, both signs, a zero row, no NaN/Inf ──
-    W = (rng.standard_normal((R, C)) * (2.0 ** rng.integers(-8, 9, size=(R, C)))).astype(np.float32)
-    W[0, :] = np.float32(0.0)
+    # ── int8 weights: both signs, a zero row, signed extremes ──
+    W = rng.integers(-128, 128, size=(R, C), dtype=np.int8)
+    W[0, :] = 0
+    W[1, 0] = -128
+    W[1, 1] = 127
     X = rng.integers(-128, 128, size=(M, R), dtype=np.int8)
-    words_x = pack_act_stream(X[0])
 
-    # F1/F2 identity check: y = x exactly (§8 I7).
-    I = np.eye(R, dtype=np.float32)
+    # I7 identity check: y = x exactly.
+    I = np.eye(R, dtype=np.int8)
     y_id = compute_y(I, X)
-    assert y_id.shape == (M, R) and y_id.dtype == np.float32, f"shape:{y_id.shape}, type:{y_id.dtype}"
-    assert (y_id == X.astype(np.float32)).all(), "identity-weight MAC failed"
+    assert y_id.shape == (M, R) and y_id.dtype == np.int32, f"shape:{y_id.shape}, type:{y_id.dtype}"
+    assert (y_id == X.astype(np.int32)).all(), "identity-weight MAC failed"
 
-    # F2 bit-exact vs the explicit reference above.
+    # F2 bit-exact vs the explicit structural reference.
     y = compute_y(W, X)
-    assert y.dtype == np.float32
-    assert np.array_equal(y, f2_ref(W, X)), "F2 sequence mismatch vs reference"
+    assert y.dtype == np.int32
+    assert np.array_equal(y, f2_ref(W, X)), "F2 structural mismatch"
 
-    # ── F3 trunc8: toward zero, then low byte (wrap), reinterpreted as int8 ──
-    z = np.array([1.9, -1.9, 130.1, -130.1, 3.0, -3.0], dtype=np.float32)
+    # ── F3 trunc8: low byte, no 8-bit saturation; int32 clamp boundary ──
+    z = np.array([130, -130, 3, -3], dtype=np.int64)
     assert trunc8(z).dtype == np.int8
-    assert (trunc8(z) == np.array([1, -1, -126, 126, 3, -3], dtype=np.int8)).all()
-    # int32 clamp boundary: 2^31 -> clamp to 2^31-1 -> 0xFF -> -1 ; -2^31 -> 0x00 -> 0
-    assert trunc8(np.array([2**31], dtype=np.float32))[0] == -1
-    assert trunc8(np.array([-(2**31)], dtype=np.float32))[0] == 0
+    assert (trunc8(z) == np.array([-126, 126, 3, -3], dtype=np.int8)).all()
+    # clamp: 2^31 -> 2^31-1 -> 0xFF -> -1 ; -2^31 -> 0x00 -> 0
+    assert trunc8(np.array([2**31], dtype=np.int64))[0] == -1
+    assert trunc8(np.array([-(2**31)], dtype=np.int64))[0] == 0
 
-    # ── F3 modes (functional form first, trunc8 last; int8 out) ──
-    t = np.array([[1.9, -1.9, 130.1, -130.1]], dtype=np.float32)
+    # ── F3 modes (integer form first, trunc8 last; int8 out) ──
+    t = np.array([[130, -130, 3, -3]], dtype=np.int64)
     assert (acam_transform(t, MODE_REGULAR)
-            == np.array([[1, -1, -126, 126]], dtype=np.int8)).all()
+            == np.array([[-126, 126, 3, -3]], dtype=np.int8)).all()
 
-    t2 = np.array([[-3.2, 0.0, 2.7, -0.0]], dtype=np.float32)
+    t2 = np.array([[-3, 0, 2, 0]], dtype=np.int64)
     assert (acam_transform(t2, MODE_ACTIVATION)
             == np.array([[0, 0, 2, 0]], dtype=np.int8)).all()
 
-    # EXP: 1 + v + v^2/2 ; v=2048 -> 2099201 -> low byte 1
-    te = np.array([[0.0, 1.0, -1.0, 2048.0]], dtype=np.float32)
+    # EXP: 1 + v + v^2/2 ; v=2048 -> 2099201 -> low byte 1 ; v=0,-1 -> 1,0
+    te = np.array([[0, 1, -1, 2048]], dtype=np.int64)
     assert (acam_transform(te, MODE_EXP)
             == np.array([[1, 2, 0, 1]], dtype=np.int8)).all()
+    # EXP clamp path: huge v -> clamp to int32 max -> low byte 0xFF -> -1
+    big = np.array([1 << 24], dtype=np.int64)
+    assert acam_transform(big, MODE_EXP)[0] == -1
 
-    # LOG: v - 1 ; -1.5 truncates toward zero to -1
-    tl = np.array([[1.0, 3.75, -0.5, 1.5]], dtype=np.float32)
+    # LOG: v - 1
+    tl = np.array([[1, 3, -1, 2]], dtype=np.int64)
     assert (acam_transform(tl, MODE_LOG)
-            == np.array([[0, 2, -1, 0]], dtype=np.int8)).all()
+            == np.array([[0, 2, -2, 1]], dtype=np.int8)).all()
 
     # Invalid mode codes are a programming error.
     for bad in (-1, 4):
@@ -280,18 +232,14 @@ def _self_test() -> None:
     x_bytes = [(words_x[t] >> (8 * i)) & 0xFF for t in range(len(words_x)) for i in range(5)]
     assert bytes(x_bytes[:R]) == X[0].tobytes(), "act byte order wrong"
 
-    # ── §4.2 weight packer: count, row-major order, bit round-trip ──
-    Rw, Cw = 5, 7
-    Wt = (rng.standard_normal((Rw, Cw))
-          * (2.0 ** rng.integers(-6, 7, size=(Rw, Cw)))).astype(np.float32)
-    words_w = pack_weight_stream(Wt)
-    assert len(words_w) == Rw * Cw, "WR_CYC mismatch"
-    assert all(w < (1 << 32) for w in words_w), "data_in[39:32] must be zero"
-    assert words_w[0] == int(Wt[0, 0].view(np.uint32)), "first word order wrong"
-    assert words_w[-1] == int(Wt[Rw - 1, Cw - 1].view(np.uint32)), "last word order wrong"
-    wt_rt = (np.array(words_w, dtype=np.uint64).astype(np.uint32)
-             .view(np.float32).reshape(Rw, Cw))
-    assert np.array_equal(wt_rt, Wt), "weight bit round-trip failed"
+    # ── §4.2 weight packer: count, row-major order, byte round-trip ──
+    words_w = pack_weight_stream(W)
+    assert len(words_w) == R * C, "WR_CYC mismatch"
+    assert all(0 <= w <= 255 for w in words_w), "weight word must be a byte"
+    assert words_w[0] == int(W[0, 0].view(np.uint8)), "first word order wrong"
+    assert words_w[-1] == int(W[R - 1, C - 1].view(np.uint8)), "last word order wrong"
+    wt_rt = np.array(words_w, dtype=np.uint8).view(np.int8).reshape(R, C)
+    assert np.array_equal(wt_rt, W), "weight byte round-trip failed"
 
     print("nldpe_ref self-test: ALL PASS")
 

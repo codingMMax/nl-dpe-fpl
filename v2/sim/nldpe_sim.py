@@ -23,8 +23,8 @@ class CycleModel:
 
     load_cyc: int       # LOAD_CYC   = ceil(R*8/BUF)
     compute_cyc: int    # COMPUTE_CYC = P + 2
-    output_cyc: int     # OUTPUT_CYC = ceil(C*8/BUF)
-    # WR_CYC     = R*C   (one fp32 word/cycle, P17; one-time)
+    output_cyc: int     # OUTPUT_CYC  = ceil(C*8/BUF)
+    # WR_CYC     = R*C   (one int8 word/cycle, P23; one-time)
     wr_cyc: int
     t_fill: int         # LOAD_CYC + COMPUTE_CYC + OUTPUT_CYC
     t_steady: int       # max(LOAD_CYC + P, COMPUTE_CYC, OUTPUT_CYC + 1)
@@ -41,7 +41,7 @@ class PassTimeline:
     compute_start: int     # first crossbar fire
     msb_fire: int          # last crossbar fire (slice P-1)
     shift_acc_done: int    # MSB slice accumulated into y
-    acam_done: int        # ACAM fires: out8 committed to output buffer
+    acam_done: int         # ACAM fires: out8 committed to output buffer
     drain_start: int       # first output byte on the port
     drain_end: int         # inclusive
 
@@ -52,7 +52,7 @@ class SimResult:
 
     # uint8 [M, C]  — drained output stream payload, one byte per column
     out_stream: np.ndarray
-    # fp32 [M, C]   — pre-ACAM crossbar output (T3)
+    # int32 [M, C]  — pre-ACAM crossbar output (T3, hierarchical compare P26)
     y: np.ndarray
     used_cycles: int               # measured Total(M): last drain_end + 1
     weight_cycles: int             # WR_CYC, reported separately (§5.3)
@@ -64,28 +64,25 @@ class NldpeDpe:
     def __init__(self, R: int = 256, C: int = 512, BUF: int = 40, P: int = 8) -> None:
         # §1 parameter table. Cross-check config is 256x256; reference 256x512.
         self.R, self.C, self.BUF, self.P = R, C, BUF, P
-        # output buffer (C × 8), pass bookkeeping. Weights undefined until
-        # program_weights (A10/A12).
-        # raise NotImplementedError
+        # §3 storage: bit-sliced input banks, int8 output buffer, int32
+        # accumulators. Weights undefined until program_weights (A10/A12).
         self.banks = np.zeros((P, R), dtype=np.uint8)
         self.out_buf = np.zeros(C, dtype=np.int8)
-        self.acc = np.zeros(C, dtype=np.float32)
+        self.acc = np.zeros(C, dtype=np.int32)
         self.W = None
         self._programmed = False
 
     # -- weight programming (§4.2) -----------------------------------------
     def program_weights(self, W: np.ndarray) -> int:
-        """Store fp32 [R, C] weights; return WR_CYC = R*C (P17).
+        """Store int8 [R, C] weights; return WR_CYC = R*C (P23).
 
-        Programming order is row-major, row-outer (P17): word #k carries
+        Programming order is row-major, row-outer (P23): word #k carries
         W[k/C][k mod C]; the sim keeps the array form.
-        TODO(you): validate shape/dtype, store a copy. Stimulus-side packing
-        of the weight words (one fp32 word/cycle) is deferred to Stage 1.5.
         """
-        # raise NotImplementedError
-        self.W = W.astype(np.float32)
+        W = np.asarray(W)
+        assert W.shape == (self.R, self.C), f"W must be [{self.R}, {self.C}]"
+        self.W = W.astype(np.int8, copy=True)
         self._programmed = True
-
         return self.R * self.C
 
     # -- datapath (values) --------------------------------------------------
@@ -93,73 +90,59 @@ class NldpeDpe:
         """§4.3 — park one activation vector into the input buffer.
 
         bank[b][j] = bit b of x_m[j], b = 0..P-1 (the fixed corner-turn).
-
-        Implement with (x.view(np.uint8) >> b) & 1 per bank.
         """
-        # raise NotImplementedError
-        for bit in range(self.P):
-            for j in range(self.R):
-                self.banks[bit][j] = (x_m[j].view(np.uint8) >> bit) & 1
+        ub = np.ascontiguousarray(x_m).view(np.uint8)          # (R,) bytes
+        bits = np.arange(self.P, dtype=np.uint8)[:, None]      # (P, 1)
+        self.banks[:] = (ub[None, :] >> bits) & 1
 
     def _trunc8(self, z: np.ndarray) -> np.ndarray:
-        t = np.trunc(z)
-        t = t.astype(np.float64)
-        t = np.clip(t, -(2**31), 2**31-1)
-        t = t.astype(np.int32)
-        return (t & 0xff).astype(np.uint8).view(np.int8)
+        """§6 F3 (P16) — clamp to int32, keep the low byte as signed int8."""
+        t = np.asarray(z, dtype=np.int64)
+        t = np.clip(t, -(2**31), 2**31 - 1)
+        return (t & 0xFF).astype(np.uint8).view(np.int8)
 
     def acam_fire(self, y: np.ndarray, mode: int) -> np.ndarray:
-        """§6 F3 — ACAM stage: fp32 [C] in, int8 [C] out (T2), 1 cycle, parallel.
+        """§6 F3 — ACAM stage: int32 [C] in, int8 [C] out (T2), 1 cycle, parallel.
+
             mode 0 REGULAR    : f(v) = v
-            mode 1 ACTIVATION : f(v) = relu(v) = v if v > 0 else +0.0
-            mode 2 EXP        : f(v) = fl32(1 + fl32(v + fl32(0.5*fl32(v*v))))
-            mode 3 LOG        : f(v) = fl32(v - 1)
+            mode 1 ACTIVATION : f(v) = relu(v) = v if v > 0 else 0
+            mode 2 EXP        : f(v) = 1 + v + floor(v²/2)   (wide intermediate)
+            mode 3 LOG        : f(v) = v - 1
+
+        Integer functional form first, then `_trunc8` (P16/P24).
         """
         if mode == MODE_REGULAR:
             return self._trunc8(y)
         if mode == MODE_ACTIVATION:
-            return self._trunc8(np.maximum(0.0, y))
+            return self._trunc8(np.maximum(y, 0))
         if mode == MODE_EXP:
-            return self._trunc8(np.float32(1.0) + (y + np.float32(0.5) * (y * y)))
+            y64 = y.astype(np.int64)
+            return self._trunc8(1 + y64 + (y64 * y64) // 2)
         if mode == MODE_LOG:
             return self._trunc8(y - 1)
         if mode not in (MODE_REGULAR, MODE_ACTIVATION, MODE_EXP, MODE_LOG):
             raise ValueError(f"invalid ACAM mode: {mode}")
 
     def _fire_pass(self, mode: int) -> tuple[np.ndarray, np.ndarray]:
-        """bit-serial compute + ACAM for the parked vector.
+        """§6 F2/F3 — bit-serial integer compute + ACAM for the parked vector.
 
-        p_b[c] = fp32 running sum over r ascending of W[r,c] for rows where
-                 bank_b[r] is set              (one fire per cycle, LSB->MSB)
-        y      = 0 (fp32 [C])
-        for b in 0..P-2:  y = fl32(y + 2^b * p_b)       (partial-shift, P20)
-        y = fl32(y - 2^(P-1) * p_{P-1})                 (MSB subtract, P2)
-        out8 = self.acam_fire(y, mode)  # §6 F3: functional form first, then trunc8
+        s_b[c] = Σ_r bank_b[r] · W[r,c]        (one fire per cycle, LSB->MSB)
+        y      = Σ_{b=0..P-2} 2^b·s_b  −  2^(P-1)·s_{P-1}
+                                               (partial-shift; MSB subtract P2)
+        out8   = self.acam_fire(y, mode)       (§6 F3 integer form -> trunc8)
 
+        Returns (y int32 [C], out8 int8 [C]). Arithmetic is exact (P22); the
+        loop mirrors the per-slice datapath, not one matmul.
         """
-        # raise NotImplementedError
-        crossbar_out = np.zeros(self.C, dtype=np.float32)
-        acam_out = np.zeros(self.C, dtype=np.int8)
-        for c in range(self.C):
-            parts = []
-            for b in range(self.P):  # fire bit-slice
-                mask = self.banks[b]  # bit slice for every column
-                # reduce across rows for every column
-                acc = np.float32(0.0)
-                for r in range(self.R):
-                    s = self.W[r][c] if mask[r] else np.float32(0.0)
-                    acc = np.float32(s + acc)
-                parts.append(acc)
-            acc = np.float32(0.0)
-            # signed accumulation
-            for i in range(self.P-1):
-                scale = np.float32(2.0 ** i)
-                acc = np.float32(parts[i] * scale + acc)
-            y = np.float32(acc - parts[-1] * np.float32(2.0 ** (self.P - 1)))
-            crossbar_out[c] = y
-        # fed to ACAM
-            acam_out[c] = self.acam_fire(y, mode)
-        return crossbar_out, acam_out
+        Wi = self.W.astype(np.int32)
+        y = np.zeros(self.C, dtype=np.int32)
+        for b in range(self.P):
+            s_b = self.banks[b].astype(np.int32) @ Wi      # exact [C]
+            if b < self.P - 1:
+                y += s_b << b
+            else:
+                y -= s_b << b                              # P2
+        return y, self.acam_fire(y, mode)
 
     # -- timing engine (cycles) ---------------------------------------------
 
@@ -178,7 +161,7 @@ class NldpeDpe:
         load_cycles = -(-self.R * 8 // self.BUF)      # §4.3: ceil(R*8/BUF)
         output_cycles = -(-self.C * 8 // self.BUF)    # §4.5: ceil(C*8/BUF)
 
-        Y = np.empty((M, self.C), dtype=np.float32)
+        Y = np.empty((M, self.C), dtype=np.int32)
         OUT = np.empty((M, self.C), dtype=np.uint8)
         timeline: list[PassTimeline] = []
 
@@ -226,10 +209,10 @@ class NldpeDpe:
         """Write stimulus + expected files for the RTL cross-check.
 
         Runs `run_workload(X, mode)` and writes (format contract):
-          weights.mem    — one fp32 weight word per cycle on data_in[31:0],
-                           row-major row-outer (P17); 10-hex-digit word/line
+          weights.mem    — one int8 weight word per cycle on data_in[7:0],
+                           row-major row-outer (P23); 10-hex-digit word/line
           act.mem        — all M bursts concatenated (10-hex-digit word/line)
-          expected_y.npz — fp32 [M, C]  (T3 crossbar output)
+          expected_y.npz — int32 [M, C]  (T3 crossbar output, hierarchical P26)
           expected_out.mem  — one line per pass: C column-order bytes,
                            2 hex digits/byte (§4.5)
           case.json      — {R, C, BUF, P, M, mode, used_cycles, weight_cycles}
@@ -277,8 +260,6 @@ class NldpeDpe:
 def cycle_model(M: int, R: int, C: int, P: int = 8, BUF: int = 40) -> CycleModel:
     """§5.3 closed-form cycle contract.
 
-    TODO(you): implement the four derived quantities exactly as the spec
-    table (no other constants allowed):
       LOAD_CYC    = ceil(R*8/BUF)
       COMPUTE_CYC = P + 2
       OUTPUT_CYC  = ceil(C*8/BUF)
@@ -287,7 +268,6 @@ def cycle_model(M: int, R: int, C: int, P: int = 8, BUF: int = 40) -> CycleModel
       T_steady    = max(LOAD_CYC + P, COMPUTE_CYC, OUTPUT_CYC + 1)
       total       = T_fill + (M-1) * T_steady
     """
-    # raise NotImplementedError
     LOAD_CYCLE = np.ceil(R * P / BUF)
     COMPUTE_CYCLE = P + 2
     OUTPUT_CYCLE = np.ceil(C * P / BUF)
@@ -321,8 +301,7 @@ def _self_test() -> None:
     assert (cm512.t_fill, cm512.t_steady) == (165, 104)
 
     dpe = NldpeDpe(R=256, C=256)
-    W = (rng.standard_normal((256, 256))
-         * (2.0 ** rng.integers(-8, 9, size=(256, 256)))).astype(np.float32)
+    W = rng.integers(-128, 128, size=(256, 256), dtype=np.int8)
     wc = dpe.program_weights(W)
     assert wc == 65536, "WR_CYC mismatch"
 
@@ -330,9 +309,9 @@ def _self_test() -> None:
         X = rng.integers(-128, 128, size=(M, 256), dtype=np.int8)
         res = dpe.run_workload(X, MODE_REGULAR)
 
-        # Values ≡ reference (§9).
-        assert (res.y == ref.compute_y(W, X)).all(
-        ), f"F2 mismatch M={M}"
+        # Values ≡ reference (§9): full int32 y and the byte stream (P26).
+        assert res.y.dtype == np.int32
+        assert (res.y == ref.compute_y(W, X)).all(), f"F2 mismatch M={M}"
         assert (res.out_stream == ref.acam_transform(res.y, MODE_REGULAR).view(np.uint8)).all()
 
         # Cycles ≡ closed form (§5.3): the measured schedule IS the theorem.
@@ -345,10 +324,11 @@ def _self_test() -> None:
 
     # Identity weights (§8 I7): out[c] == x[c] in REGULAR mode.
     dpe_i = NldpeDpe(R=256, C=256)
-    dpe_i.program_weights(np.eye(256, dtype=np.float32))
+    dpe_i.program_weights(np.eye(256, dtype=np.int8))
     X = rng.integers(-128, 128, size=(4, 256), dtype=np.int8)
     res = dpe_i.run_workload(X, MODE_REGULAR)
-    assert (res.out_stream == X.view(np.uint8)).all(), "identity failed"
+    assert (res.y == X.astype(np.int32)).all(), "identity y failed"
+    assert (res.out_stream == X.view(np.uint8)).all(), "identity stream failed"
 
     print("nldpe_sim self-test: ALL PASS")
 

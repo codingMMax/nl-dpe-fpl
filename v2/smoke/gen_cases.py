@@ -5,7 +5,7 @@ Enumerates the spec's stimulus classes (`v2/spec/dpe_nldpe.md` §9) and writes
 them via `NldpeDpe.dump_case`:
 
   identity  : W = eye(R, C)                      (I7 when R == C)
-  random    : W mixed exponents, both signs; X uniform int8
+  random    : W random int8 (both signs); X uniform int8
   extremes  : as random, plus the signed extremes -128 / +127 and a zero row
 
 Every case directory (weights.mem, act.mem, expected_y.npz, expected_out.mem,
@@ -48,9 +48,8 @@ def rel(path: Path) -> str:
 
 def make_weights(kind: str, R: int, C: int, rng: np.random.Generator) -> np.ndarray:
     if kind == "identity":
-        return np.eye(R, C, dtype=np.float32)
-    return (rng.standard_normal((R, C))
-            * (2.0 ** rng.integers(-8, 9, size=(R, C)))).astype(np.float32)
+        return np.eye(R, C, dtype=np.int8)
+    return rng.integers(-128, 128, size=(R, C), dtype=np.int8)
 
 
 def make_activations(kind: str, M: int, R: int, rng: np.random.Generator) -> np.ndarray:

@@ -7,7 +7,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 - **Legacy RTL work lives in `rtl_flow/`** — primitives, fc_top, generators (`rtl_flow/gen/`), per-arch specs (`rtl_flow/specs/`), TBs, smoke harnesses, methodology docs, VTR synth path. Entry point: `rtl_flow/README.md`. The active clean-room `v2/` tree lives at the **repo root** `v2/` (moved 2026-09-13) — work there for v2, in `rtl_flow/` for legacy.
 - **Bottom-up primitive-first re-verification is the active plan** (user directive 2026-08-29): current verification is self-consistent but not user-validated (FC functional check is a one-byte pattern; cycle formula from unremembered sessions). Ladder: **primitives → fc_top → softmax → projections+DIMM → (then) mapping+simulator**. Each rung = behavioral charter (user-approved) + independent NumPy oracle + RTL matching both. Ground truth = charter + oracles; faithful RTL enforces them.
 - **Clean-room v2 flow (user directive 2026-08-29)**: legacy generated RTL is FROZEN as reference (still green: 52/52, 13/13 — do not edit). New hand-written flow lives in `v2/` at the repo root (spec/ rtl/ tb/ oracle/ sim/ smoke/). Process per primitive: charter → NumPy oracle (before RTL) → starter skeleton → **user hand-writes RTL** (LLM reviews, never edits) → cross-check v2 vs legacy vs oracle on identical stimulus. Legacy is read-only reference; copying from it mid-flight is forbidden (independent-witness property).
-- Charter home: `rtl_flow/SPEC.md` — first live spec `v2/spec/dpe_nldpe.md` **v1.1 amended 2026-09-12** (fp32 weights/crossbar + structural fp32 MAC + trunc8 ACAM; P1–P20 closed; supersedes v1.0 FROZEN 2026-08-29). Ladder position: Stage 1.2 (v2 NumPy oracle, v1.1 re-transcription) → skeleton → user hand-write → cross-check.
+- Charter home: `rtl_flow/SPEC.md` — first live spec `v2/spec/dpe_nldpe.md` **v2.0 clean integer rewrite 2026-09-14** (int8 weights/activations, exact integer MAC, integer ACAM forms + trunc8 low byte; P1–P13 + P16 + P21–P26 live; supersedes the v1.1 fp32 amendment per advisor consultation). Ladder position: Stage 1.2 (v2 oracle + sim, integer) done → user hand-write → cross-check.
 - The old azurelily simulator stays archived — the new minimal simulator (Stage 5, deferred) will consume the Stage 1–4 charters verbatim.
 
 ## Prior direction (2026-08-27 repo reorg)
@@ -107,7 +107,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 
 **RTL/sim alignment on main, FIDELITY_METHODOLOGY-aligned** (opened 2026-05-01)
 
-### Status (as of 2026-09-13)
+### Status (as of 2026-09-14)
 
 **Done — committed**:
 - Reorg `bd229f1` (Aug 27 work): azurelily de-submoduled, legacy archived, stale docs purged, CLAUDE.md/README rewritten.
@@ -115,7 +115,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 - DPE behavior model primitives, Model Y FSM, module name `dpe` matching VTR arch XML contract.
 - Stages 1A (V=1 H=1), 1B (V>1 H=1), 1C (V=1 H>1) validated.
 - `softmax_study/` — COMPLETE (committed Aug 2026).
-- **v2 clean-room Stage 1.2 — DONE** (2026-09-13): spec v1.1; `v2/oracle/nldpe_ref.py` + `v2/sim/nldpe_sim.py` self-tests green; independent review passed (values bit-exact vs oracle across all 4 modes/geometries, measured cycles ≡ §5.3 closed form, P1/P10/P11 timeline invariants); `pack_weight_stream` (P17) and `dump_case` file contract added and round-trip verified. v2 tree moved to repo root `v2/`.
+- **v2 clean-room Stage 1.2 — DONE** (2026-09-13, re-transcribed 2026-09-14): spec **v2.0 clean integer rewrite** (int8 weights/activations, exact integer MAC, integer ACAM forms + trunc8 low byte; fp32 amendment retired per advisor consultation); `v2/oracle/nldpe_ref.py` + `v2/sim/nldpe_sim.py` self-tests green; independent review passed (dual compare: full int32 `y` + byte stream, all 4 modes/geometries, measured cycles ≡ §5.3, P1/P10/P11 timeline invariants); `pack_weight_stream` (P23) and `dump_case` file contract round-trip verified. v2 tree at repo root `v2/`.
 
 **Validation state (regression guards, re-run green after migration)**:
 - `rtl_flow/smoke/run_dpe_smoke.py` — 52/52 PASS
@@ -133,9 +133,11 @@ progress — see "Direction (2026-08-29)" above.
 - Stage 1.3a DONE: `v2/smoke/gen_cases.py` emits §9 stimulus classes for both
   geometries (256×256, 256×512); `dump_case` round-trip verified on both.
 - Stage 1.4a DONE: `v2/rtl/dpe_nldpe.v` port-only skeleton — exact I8 surface,
-  parameterized R/C/P/BUF, TODO blocks 1–8; elaborates under iverilog.
-- Next (user): fp32 add/mul cores (bit-exact vs NumPy, §9 option A), then the
-  datapath from spec v1.1 only. Then Stage 1.5 TB/harness + legacy witness.
+  parameterized R/C/P/BUF, TODO blocks 1–7 (integer path; fp32 block removed);
+  elaborates under iverilog.
+- Next (user): hand-written integer datapath from spec v2.0 only (int8 storage,
+  integer MAC, integer ACAM; no fp32 cores). Then Stage 1.5 TB/harness
+  (dual compare: hierarchical int32 `y` + byte stream) + legacy witness.
 
 ### Forward plan
 

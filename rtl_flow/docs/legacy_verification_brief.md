@@ -27,7 +27,7 @@ concrete errors found — historical and current. Legacy = generated RTL under
 2. **Cycle truth is an analytical formula** (Task #98/#99,
    `T(M) = T_fill + (M−1)·T_steady`) authored in prior sessions —
    self-consistent across all 65 cases, but never independently grounded.
-   Superseded by the frozen v2 spec (`v2/spec/dpe_nldpe.md` v1.0).
+   Superseded by the v2 spec (`v2/spec/dpe_nldpe.md`, v2.0 integer 2026-09-14).
 3. **Weights enter the faithful primitive via TB backdoor** — the module has
    no weight-programming port (zero-initialized in `initial`).
 4. **Only two geometries ever exercised**: NL 256×256, AL 512×128.
@@ -71,8 +71,19 @@ The v2 spec assumes a single buffer, refill gated on MSB fire
 (`T_steady = max(LOAD+P, COMPUTE, OUTPUT+1)` = 60 @256×256, 104 @256×512).
 
 **Resolution (2026-09-12): collaborators confirm single buffer** — it is *not*
-double-buffered. v2 spec v1.0 stands as frozen: no P1 flip, no oracle
-re-transcription, no ~13% headline bump. Legacy's 52/103 is a confirmed
-differing witness (reported, not gated, spec §9). Item 4.1's output-buffer
-hazard is covered by spec P11 (strict output ordering) — no double output
-buffer required.
+double-buffered. v2 spec stands: no P1 flip, no oracle re-transcription, no
+~13% headline bump. Legacy's 52/103 is a confirmed differing witness (reported,
+not gated, spec §9). Item 4.1's output-buffer hazard is covered by spec P11
+(strict output ordering) — no double output buffer required.
+
+## 6. Addendum 2026-09-14 — v2 numeric contract is integer (spec v2.0)
+
+Advisor consultation retired the v1.1 fp32 amendment. The v2 primitive now
+models an exact **int8 / int32 integer MAC** (no rounding, no fp32 cores) with
+integer ACAM forms and the `trunc8` low-byte output. Consequences for this
+brief: legacy integer arithmetic is **numerically comparable** to v2 again
+(values expected to match; the differing-witness notes above reduce to the
+schedule/buffer, weight-interface and ACAM-mode differences). The dual-compare
+contract (full int32 `y` + 8-bit stream, P26) replaces the fp32 hierarchical
+read.
+
