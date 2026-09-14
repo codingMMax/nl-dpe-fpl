@@ -1,7 +1,7 @@
 # SPEC — Behavioral ground truth (v2 clean-room flow)
 
 > **Status: v2 clean-room flow active.** First live spec:
-> [`v2/spec/dpe_nldpe.md`](v2/spec/dpe_nldpe.md) — **v1.1 amended 2026-09-12**
+> [`v2/spec/dpe_nldpe.md`](../v2/spec/dpe_nldpe.md) — **v1.1 amended 2026-09-12**
 > (fp32 dataflow: fp32 weights/crossbar, structural fp32 MAC, trunc8 ACAM,
 > WEIGHT strobe; decisions P1–P19 closed; supersedes v1.0 FROZEN 2026-08-29).
 > Amendments require a new revision + decision-log entry + oracle

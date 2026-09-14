@@ -93,3 +93,6 @@ rtl_flow/results/*.log
 rtl_flow/results/vtr_smoke_*/
 # legacy fc_verification smoke logs (regenerable history)
 rtl_flow/results/legacy/
+
+# v2 stimulus cases (regenerable via v2/smoke/gen_cases.py)
+v2/smoke/stimuli/

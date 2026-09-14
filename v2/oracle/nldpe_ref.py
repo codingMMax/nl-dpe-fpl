@@ -33,6 +33,7 @@ handled at TB/system level; this reference takes W directly as an array.
 Spec sections implemented here (transcribe, don't improvise):
   §6 F1/F2 — compute_y
   §6 F3   — trunc8, acam_transform
+  §4.2    — pack_weight_stream (stimulus side; WEIGHT strobe, P17)
   §4.3    — pack_act_stream
 """
 
@@ -73,7 +74,7 @@ def compute_y(W: np.ndarray, X: np.ndarray) -> np.ndarray:
     """
     # return X.astype(np.int8) @ W.astype(np.float32) 
     rows, cols = W.shape
-    out = np.zeros((X.shape[0], cols))
+    out = np.zeros((X.shape[0], cols), dtype=np.float32)
     zero = np.float32(0.0)
     WIDTH = 8
     for m in range(X.shape[0]):
@@ -81,18 +82,19 @@ def compute_y(W: np.ndarray, X: np.ndarray) -> np.ndarray:
             parts = []
             # compute output at each column
             for bit in range(WIDTH):
-                slice = X[m,c] >> bit & 1
                 s = zero
                 for r in range(rows):
+                    slice = X[m,r] >> bit & 1
                     tmp = W[r, c] if slice else zero
                     s = np.float32(s + tmp)
                 parts.append(s) # bit-sliced partial sum at current column
         # reduce across bit-sliced partial sums
-        acc = zero
-        for bit in range(WIDTH):
-            scale = 2 ** bit
-            acc = np.float32(parts[bit] * scale + acc)
-        out[m,c] = acc
+            acc = zero
+            for bit in range(WIDTH - 1):
+                scale = np.float32(2.0 ** bit)
+                acc = np.float32(parts[bit] * scale + acc)
+            y = np.float32(acc - parts[7] * np.float32(2.0 ** 7)) # signed int8
+            out[m,c] = y
     
     return out              
 
@@ -140,15 +142,17 @@ def acam_transform(y: np.ndarray, mode: int) -> np.ndarray:
     TODO(you): implement all four modes with explicit np.float32 operation
     order (the EXP evaluation order is normative). Then trunc8.
     """
+
     if mode == MODE_REGULAR:
-        return y.astype(np.int8)
+        return trunc8(y)
     if mode == MODE_ACTIVATION:
-        return np.maximum(0.0, y.astype(np.int8))
+        return trunc8(np.maximum(0.0, y))
     if mode == MODE_EXP:
-        return trunc8(np.exp(y))
+        return trunc8(np.float32(1.0) + (y + np.float32(0.5) * (y * y)))
     if mode == MODE_LOG:
-        return trunc8(np.log(y))
-        
+        return trunc8(y - 1)
+    if mode not in (MODE_REGULAR, MODE_ACTIVATION, MODE_EXP, MODE_LOG):
+        raise ValueError(f"invalid ACAM mode: {mode}")
 
 def pack_act_stream(x_m: np.ndarray) -> list[int]:
     """§4.3 — one pass's activation byte stream packed into 40-bit words.
@@ -162,8 +166,7 @@ def pack_act_stream(x_m: np.ndarray) -> list[int]:
     Returns a list of Python ints (0 .. 2**40-1), one per word, in stream
     order. The .mem hex file (Stage 1.5) is one 10-hex-digit line per word.
 
-    TODO(you): implement (unchanged from v1.0; the weight packer is gone —
-    weights are programmed by strobe, P17).
+    Weights are programmed by strobe — see `pack_weight_stream` (P17).
     """
     b = np.ascontiguousarray(x_m).view(np.uint8)      # (R,)
     n = -(-b.size // 5)                               # number of words
@@ -171,9 +174,25 @@ def pack_act_stream(x_m: np.ndarray) -> list[int]:
     shifts = np.array([0, 8, 16, 24, 32], dtype=np.uint64)     # (5,)
     words = (buf.astype(np.uint64) << shifts).sum(axis=1)      # (n,)
     return [int(w) for w in words]
-                
-              
-    
+
+
+def pack_weight_stream(W: np.ndarray) -> list[int]:
+    """§4.2 (P17) — fp32 weights packed into 40-bit WEIGHT-strobe words.
+
+    One fp32 weight word per strobe cycle, row-major row-outer: word #k
+    (k = 0 .. R*C-1) carries W[k // C, k % C] in data_in[31:0] (the IEEE-754
+    binary32 bit pattern); data_in[39:32] are zero. WR_CYC = R*C, one-time,
+    excluded from the per-pass formulas (§5.3).
+
+    Returns a list of Python ints (0 .. 2**32-1), one per cycle. The .mem hex
+    file (Stage 1.5) is one 10-hex-digit line per word.
+    """
+    Wf = np.ascontiguousarray(W, dtype=np.float32)
+    assert Wf.ndim == 2, "W must be [R, C]"
+    bits = Wf.reshape(-1).view(np.uint32)     # row-major row-outer (P17)
+    return [int(b) for b in bits]
+
+
 # ---------------------------------------------------------------------------
 # Self-test — run:  python3 nldpe_ref.py
 # All asserts must pass before the simulator work starts.
@@ -212,7 +231,7 @@ def _self_test() -> None:
     # F1/F2 identity check: y = x exactly (§8 I7).
     I = np.eye(R, dtype=np.float32)
     y_id = compute_y(I, X)
-    assert y_id.shape == (M, R) and y_id.dtype == np.float32
+    assert y_id.shape == (M, R) and y_id.dtype == np.float32, f"shape:{y_id.shape}, type:{y_id.dtype}"
     assert (y_id == X.astype(np.float32)).all(), "identity-weight MAC failed"
 
     # F2 bit-exact vs the explicit reference above.
@@ -260,6 +279,19 @@ def _self_test() -> None:
     assert len(words_x) == -(-R * 8 // 40), "LOAD_CYC mismatch"
     x_bytes = [(words_x[t] >> (8 * i)) & 0xFF for t in range(len(words_x)) for i in range(5)]
     assert bytes(x_bytes[:R]) == X[0].tobytes(), "act byte order wrong"
+
+    # ── §4.2 weight packer: count, row-major order, bit round-trip ──
+    Rw, Cw = 5, 7
+    Wt = (rng.standard_normal((Rw, Cw))
+          * (2.0 ** rng.integers(-6, 7, size=(Rw, Cw)))).astype(np.float32)
+    words_w = pack_weight_stream(Wt)
+    assert len(words_w) == Rw * Cw, "WR_CYC mismatch"
+    assert all(w < (1 << 32) for w in words_w), "data_in[39:32] must be zero"
+    assert words_w[0] == int(Wt[0, 0].view(np.uint32)), "first word order wrong"
+    assert words_w[-1] == int(Wt[Rw - 1, Cw - 1].view(np.uint32)), "last word order wrong"
+    wt_rt = (np.array(words_w, dtype=np.uint64).astype(np.uint32)
+             .view(np.float32).reshape(Rw, Cw))
+    assert np.array_equal(wt_rt, Wt), "weight bit round-trip failed"
 
     print("nldpe_ref self-test: ALL PASS")
 
