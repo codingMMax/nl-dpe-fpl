@@ -96,3 +96,6 @@ rtl_flow/results/legacy/
 
 # v2 stimulus cases (regenerable via v2/smoke/gen_cases.py)
 v2/smoke/stimuli/
+
+# v2 RTL smoke logs (regenerable via v2/smoke/run_dpe_rtl.py)
+v2/smoke/results/

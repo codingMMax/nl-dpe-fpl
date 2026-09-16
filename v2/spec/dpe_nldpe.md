@@ -1,17 +1,27 @@
 # Spec v2.0 (CLEAN REWRITE) — NL-DPE primitive (`dpe_nldpe`, v2 clean-room)
 
-**Status**: **v2.0 integer dataflow, 2026-09-14** — clean rewrite superseding the
-v1.1 fp32 amendment (2026-09-12). Numeric contract: **int8 stationary weights,
-int8 activations, exact integer MAC (int32 accumulator), integer ACAM mode
-forms with the `trunc8` low-byte output rule.** Advisor consultation
-2026-09-14: network accuracy/quantization is handled by the mapping layer, so
-the primitive models an *idealized integer MAC*; fp32 weight/crossbar modeling
-(v1.1) is retired.
+**Status**: **v2.0.1 integer dataflow + interface freeze, 2026-09-15** — v2.0
+clean rewrite (2026-09-14) plus the §5.2 accumulator-gate, §6 F3 EXP-clamp, and
+P27 workload-configuration clarifications; port surface frozen identical to
+legacy `rtl_flow/` (machine-checked by `v2/smoke/check_interface.py`). Numeric
+contract: **int8
+stationary weights, int8 activations, exact integer MAC (int32 accumulator),
+integer ACAM mode forms with the `trunc8` low-byte output rule.** Advisor
+consultation 2026-09-14: network accuracy/quantization is handled by the
+mapping layer, so the primitive models an *idealized integer MAC*; fp32
+weight/crossbar modeling (v1.1) is retired.
 **Precedence**: this spec > v2 RTL ≡ Python oracle > legacy RTL (witness).
 **Normative rule**: every choice the oracle makes must exist here first; if
 oracle and spec disagree, the spec is wrong until fixed.
 
 Revision history:
+- **v2.0.1 (2026-09-15)**: interface freeze (ports identical to legacy
+  `rtl_flow/`; parameter superset) + hardware-realizability amendment: §5.2
+  accumulator is freed by the **ACAM write** (single-accumulator gate — a
+  delayed ACAM holds the crossbar back; §5.3 values/totals unchanged); §6 F3
+  EXP clamp caveat (no mod-512 shortcut); **P27** ACAM mode is workload
+  configuration latched by the WEIGHT strobes (supersedes A11 compute-start
+  sampling). No numeric contract changes.
 - **v2.0 (2026-09-14)**: clean integer rewrite. T3/T4/T5 and F2/F3 become exact
   integer; WEIGHT strobe payload is int8 on `data_in[7:0]` (P23); EXP/LOG are
   integer forms (P24); accumulator width guaranteed (P25); dual compare
@@ -97,7 +107,7 @@ exist in v2. v2 assigns semantics as follows:
 | `data_in[39:0]` | in | ACT payload (5 bytes/cycle, byte i in bits `8i+7:8i`) **or** one int8 weight word (WEIGHT strobes: `[7:0]` = weight, `[39:8]` ignored) |
 | `w_buf_en` | in | **ACT burst strobe**: present + accept one ACT word |
 | `load_input_reg` | in | **WEIGHT strobe**: present + accept one int8 weight word (`data_in[7:0]`) |
-| `nl_dpe_control[1:0]` | in | **ACAM mode**: 00=REGULAR, 01=ACTIVATION, 10=EXP, 11=LOG (§6) |
+| `nl_dpe_control[1:0]` | in | **ACAM mode, workload configuration**: 00=REGULAR, 01=ACTIVATION, 10=EXP, 11=LOG (§6); latched by the WEIGHT strobes (§4.2) and held for the whole workload |
 | `shift_add_control` | in | reserved, tied 0, documented |
 | `shift_add_bypass` | in | reserved, tied 0, documented |
 | `load_output_reg` | in | reserved, tied 0, documented |
@@ -119,6 +129,11 @@ compares **both** the full int32 `y` and the drained 8-bit stream (P26).
   256×256 → 65 536.
 - **Order (closed, P23): row-major, row-outer** — word #k carries
   `W[k/C][k mod C]` (all C columns of row 0 first, then row 1, …).
+- **ACAM mode is programmed with the weights (closed, P27)**: `nl_dpe_control`
+  is sampled on the WEIGHT strobes (each strobe latches it; the last value
+  wins) into the block's mode register (`mode_q`), and is held for every pass
+  of the workload. It is not resampled per pass; changing the mode means
+  re-programming the workload.
 - Weights persist across arbitrarily many passes (I6); re-programming only
   between workloads. Programming is **not** part of the ACT/output streaming
   contract: it completes before the first pass.
@@ -163,11 +178,18 @@ never silently corrupted. The block accepts a burst only in full (R bytes).
 | Transition | May begin when |
 |---|---|
 | ACT burst pass k+1 | cycle after pass k's **MSB fire** — `MSB_SA_Ready` rises (§4.4) |
-| CROSSBAR pass k+1 | input buffer holds a complete new vector **and** accumulator free (freed by pass k's MSB shift&acc) |
+| CROSSBAR pass k+1 | input buffer holds a complete new vector **and** accumulator free (freed by pass k's **ACAM write** — P11 may delay that write while pass k's drain completes) |
 | ACAM pass k+1 | pass k+1's MSB shift&acc done **and** pass k's output drain fully complete (strictly after last `out_valid` cycle — P11) |
 | OUTPUT drain pass k | cycle after pass k's ACAM write |
 
 LOAD and OUTPUT run concurrently by default (P12: separate ports).
+
+The accumulator is **single** (§3) and its value is consumed by the ACAM write,
+so a delayed pass-`k` ACAM (output-bound configs, `OUTPUT_CYC + 1 > LOAD_CYC +
+P`) holds the crossbar back until that write; the closed-form §5.3 totals are
+unchanged by this gate. Note the behavior simulator's *per-pass event times* for
+output-bound configs are optimistic (it lets compute run ahead of the ACAM
+gate); only the §5.3 totals are normative for timing.
 
 ### 5.3 Cycle formulas (normative)
 
@@ -234,8 +256,9 @@ toward zero for the non-negative squares used in EXP).
   summation order yields the same result — the sequence above is the hardware
   structure, not a rounding contract. COMPUTE_CYC must emerge structurally
   (§5.1), not from a hold-counter.
-- **F3 ACAM modes** (`nl_dpe_control`, sampled at compute start, stable until
-  `dpe_done`; all modes: 1 cycle, C units parallel, int8 out). The output rule
+- **F3 ACAM modes** (workload configuration `mode_q`, latched by the WEIGHT
+  strobes per P27/§4.2 and held for the workload; all modes: 1 cycle, C units
+  parallel, int8 out). The output rule
   is the same for all modes — **integer functional form first, then `trunc8`**
   (P16: truncate toward zero, saturate to int32, keep the low byte):
 
@@ -248,7 +271,7 @@ toward zero for the non-negative squares used in EXP).
   |---|---|---|
   | 00 | REGULAR | `out8 = trunc8(y)` |
   | 01 | ACTIVATION | `out8 = trunc8(relu(y))`, relu(y) = y if y > 0 else 0 |
-  | 10 | EXP | `out8 = trunc8(1 + y + ⌊y²/2⌋)`, evaluated exactly (64-bit or wider); only `y mod 512` affects the output byte |
+  | 10 | EXP | `out8 = trunc8(1 + y + ⌊y²/2⌋)`, evaluated exactly (signed 64-bit is sufficient for `R ≤ 131072`). The `trunc8` clamp is **live**: when the intermediate exceeds int32, `out8` is the clamped value's low byte (`0xFF` for positive overflow) — so "only `y mod 512` matters" holds **only inside the un-clamped range**; no mod-512 shortcut is permitted |
   | 11 | LOG | `out8 = trunc8(y − 1)` |
 
 ## §7 Assumption register (v2.0)
@@ -265,7 +288,7 @@ toward zero for the non-negative squares used in EXP).
 | A8 | Compute auto-starts when a complete burst has landed; wrapper paces via `MSB_SA_Ready` |
 | A9 | Input buffer single-instance; refill permitted from the cycle after MSB fire (P1) |
 | A10 | Reset: synchronous, active-high `reset`; clears readiness, FSM, counters; weights/substrates undefined until programmed |
-| A11 | ACAM mode sampled at compute start, stable until `dpe_done` |
+| A11 | ACAM mode is workload configuration: latched by the WEIGHT strobes into `mode_q` (§4.2/P27) and held across all passes; changing it requires re-programming |
 | A12 | Weights are int8 values programmed via the WEIGHT strobe (§4.2) and stationary for the workload |
 | A13 | Dequant / scale folding / requantize-to-int8 belong to the mapping layer (Stage 5) |
 | A14 | Noise / device nonlinearity excluded — exact-integer idealization (T5) |
@@ -283,7 +306,9 @@ toward zero for the non-negative squares used in EXP).
   reported separately.
 - **I3 Readiness honesty**: `MSB_SA_Ready` per §4.4; no ACT byte accepted while
   low; bursts accepted only in full.
-- **I4 Mode isolation**: mode change affects the next pass only.
+- **I4 Mode configuration**: one mode register per workload (latched with the
+  weights, P27); all passes of a workload use it. Re-programming swaps the mode
+  atomically with the weights for subsequent passes.
 - **I5 Stream integrity**: pass-k outputs unaffected by pass-(k+1) ACT arrival
   timing within the readiness contract.
 - **I6 Stationarity**: weights persist across arbitrarily many passes.
@@ -305,7 +330,8 @@ toward zero for the non-negative squares used in EXP).
   a multiple of 256; the full-width compare closes that blind spot.
 - **Stimulus classes**: identity W (I7); random int8 W (both signs, zeros,
   signed extremes); x ~ uniform int8 plus signed extremes (−128/+127, all-zero
-  rows); M ∈ {1,2,4,8}; modes {00, 01, 10, 11}.
+  rows); M ∈ {1,2,4,8}; modes {00, 01, 10, 11} as a **per-workload** axis (P27:
+  one constant mode per case, programmed with the weights).
 - **Three-way agreement**: v2 RTL ≡ oracle (bit-exact: hierarchical int32 `y`
   and output bytes; cycles vs §5.3 + Δ_impl) on identical stimulus files;
   legacy RTL runs the same files as a third witness. Legacy shares the integer
@@ -335,9 +361,10 @@ toward zero for the non-negative squares used in EXP).
 | P21 | Numeric domain | **int8** weights and activations; **int32** accumulator; exact integer MAC (T3/T4/T5) — replaces P14/P15 |
 | P22 | MAC semantics | Exact integer partial-shift: `y = Σ 2^b·s_b − 2^(P-1)·s_{P-1}`; no rounding or ordering contract — replaces P15/P20 |
 | P23 | Weight interface | WEIGHT strobe (`load_input_reg`), one int8 word/cycle on `data_in[7:0]`, row-major row-outer; one-time `WR_CYC = R·C` — replaces P17 |
-| P24 | EXP/LOG forms | Integer forms (closes P6): `exp(y) = 1 + y + ⌊y²/2⌋` (exact, wide intermediate), `log(y) = y − 1`, then `trunc8` — replaces P18 |
+| P24 | EXP/LOG forms | Integer forms (closes P6): `exp(y) = 1 + y + ⌊y²/2⌋` (exact, signed-64-bit intermediate; clamp caveat §6 F3), `log(y) = y − 1`, then `trunc8` — replaces P18 |
 | P25 | Accumulator width | int32 suffices exactly for `R ≤ 131072` (`|y| ≤ R·2^14`); EXP may use a wider intermediate — replaces P19 |
 | P26 | Comparison contract | TB compares full hierarchical int32 `y` **and** the 8-bit stream (dual compare) |
+| P27 | ACAM mode configuration | Mode is **workload configuration**, latched by the WEIGHT strobes into `mode_q` and held across all passes (no per-pass sampling); re-programming changes it. **Supersedes A11's compute-start sampling** (behaviorally identical when the wrapper holds it stable) |
 | D1 | Ground truth | This spec + oracle; legacy and v2 both implementers |
 | D8 | Wide output view | Hierarchical TB read of the int32 `y` (F2); **no port** |
 

@@ -8,12 +8,17 @@ them via `NldpeDpe.dump_case`:
   random    : W random int8 (both signs); X uniform int8
   extremes  : as random, plus the signed extremes -128 / +127 and a zero row
 
+The ACAM mode is workload configuration (P27): one mode per case, programmed
+with the weights and held across all M passes. `--modes` sweeps it at the case
+level; multi-pass runs (pipeline calibration) use one mode per run.
+
 Every case directory (weights.mem, act.mem, expected_y.npz, expected_out.mem,
 case.json) is consumed by the Stage 1.5 RTL harness. No NaN/Inf (A17).
 
 Usage:
   python3 v2/smoke/gen_cases.py                  # both geoms, M in {1,2}, all modes
   python3 v2/smoke/gen_cases.py --ms 1,2,4,8     # full M sweep (slow)
+  python3 v2/smoke/gen_cases.py --classes identity,random --ms 1,2,4,8 --modes 0
   python3 v2/smoke/gen_cases.py --geoms 256x256 --modes 0
 """
 
@@ -78,6 +83,7 @@ def main() -> None:
     args = ap.parse_args()
 
     out_root = Path(args.out)
+    mode_tokens = [int(t) for t in args.modes.split(",")]
     n = 0
     for (R, C) in parse_geoms(args.geoms):
         for kind in args.classes.split(","):
@@ -86,7 +92,7 @@ def main() -> None:
                 d = S.NldpeDpe(R=R, C=C)
                 d.program_weights(make_weights(kind, R, C, rng))
                 X = make_activations(kind, M, R, rng)
-                for mode in [int(t) for t in args.modes.split(",")]:
+                for mode in mode_tokens:
                     case_dir = out_root / f"{kind}_{R}x{C}_M{M}_m{mode}"
                     d.dump_case(case_dir, X, mode)
                     n += 1

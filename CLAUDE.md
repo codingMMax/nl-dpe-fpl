@@ -107,7 +107,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 
 **RTL/sim alignment on main, FIDELITY_METHODOLOGY-aligned** (opened 2026-05-01)
 
-### Status (as of 2026-09-14)
+### Status (as of 2026-09-15)
 
 **Done — committed**:
 - Reorg `bd229f1` (Aug 27 work): azurelily de-submoduled, legacy archived, stale docs purged, CLAUDE.md/README rewritten.
@@ -128,22 +128,38 @@ one-byte pattern (`tb_fc.v` `expected_byte_fn`); cycle truth is the Task #98
 formula authored in unremembered sessions. Bottom-up re-verification is in
 progress — see "Direction (2026-08-29)" above.
 
-### In flight: Stage 1.3/1.4 — stimulus contract + hand-written v2 RTL
+### In flight: Stage 1.4/1.5 — hand-written v2 RTL + cross-check harness
 
 - Stage 1.3a DONE: `v2/smoke/gen_cases.py` emits §9 stimulus classes for both
-  geometries (256×256, 256×512); `dump_case` round-trip verified on both.
-- Stage 1.4a DONE: `v2/rtl/dpe_nldpe.v` port-only skeleton — exact I8 surface,
-  parameterized R/C/P/BUF, TODO blocks 1–7 (integer path; fp32 block removed);
-  elaborates under iverilog.
-- Next (user): hand-written integer datapath from spec v2.0 only (int8 storage,
-  integer MAC, integer ACAM; no fp32 cores). Then Stage 1.5 TB/harness
-  (dual compare: hierarchical int32 `y` + byte stream) + legacy witness.
+  geometries (256×256, 256×512); modes are a per-workload case axis (P27);
+  `dump_case` round-trip verified on both.
+- Stage 1.4a DONE: `v2/rtl/dpe_nldpe.v` skeleton; **interface freeze 2026-09-15**:
+  ports identical to legacy (`rtl_flow/vtr/dpe_blackbox.v`, arch XML), outputs
+  `reg`, widths `[DPE_BUF_WIDTH-1:0]`; parameter superset
+  (`KERNEL_WIDTH, NUM_COLS, DPE_BUF_WIDTH, PRECISION, PIPELINE_DEPTH,
+  ACAM_CYCLES, COMPUTE_CYCLES, ACAM_MODE`); machine-gated by
+  `v2/smoke/check_interface.py`.
+- Stage 1.5 harness READY (2026-09-15, validated against a /tmp stub):
+  `v2/tb/tb_dpe_nldpe.v` + `v2/smoke/run_dpe_rtl.py` — dual compare (hierarchical
+  int32 `y` + drained stream, P26), readiness I3, structural spans (P+1 / P+2),
+  cycle formula + Δ_impl constancy + **T_steady calibration gate** per geometry
+  (measured(M2)−measured(M1) == (M2−M1)·T_steady). Mode via `+MODE=` plusarg,
+  held from the weight strobes (P27). TB probe contract (pinned in the RTL
+  header): `state`, `acc`, `acam_fire`, `drain_valid`.
+- Spec **v2.0.1** (2026-09-15): §5.2 accumulator freed by ACAM write (single-acc
+  gate; §5.3 totals unchanged, sim updated); §6 F3 EXP clamp caveat (no mod-512
+  shortcut); **P27** ACAM mode is workload configuration latched by the WEIGHT
+  strobes (`mode_q`), never changed per pass. Sim + oracle self-tests green.
+- Next (user): hand-written integer datapath from spec v2.0.1 only, TODO 1–7
+  (int8 storage, integer MAC, integer ACAM; no fp32 cores; `mode_q` latch in
+  TODO 1). Then: `python3 v2/smoke/run_dpe_rtl.py` (quick first) → full M sweep
+  → legacy witness.
 
 ### Forward plan
 
 | Rung | Scope | Gate |
 |---|---|---|
-| Stage 1 — primitives | v2 clean-room: spec v1.1 + NumPy oracle + sim (done); hand-written RTL + three-way cross-check | Cross-check green (v2 ≡ oracle; legacy as witness) |
+| Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim (done); hand-written RTL + cross-check harness (ready); legacy witness | Cross-check green (v2 ≡ oracle; legacy as witness) |
 | Stage 2 — fc_top (VMM/projection) | VMM charter; replace one-byte check with full GEMM oracle; re-verify 13 cases | Your sign-off |
 | Stage 3 — softmax | Port oracles + RTL into rtl_flow; pin log-domain output contract | Your sign-off |
 | Stage 4 — projections + DIMM | Q/K/V composition on trusted fc_top; DIMM charter from `paper/methodology/attention_dimm_mapping.md`, oracle → RTL → smoke | Your sign-off |
