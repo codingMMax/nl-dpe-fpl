@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """run_dpe_rtl.py — Stage 1.5 RTL cross-check harness for the v2 NL-DPE.
 
+Verification chain: GATE 1 runs inside `NldpeDpe.dump_case` (step 2) — each
+case is certified `sim ≡ NumPy oracle` (int32 y, output bytes, §5.3 cycles)
+before any expected file is written. This harness is GATE 2 — the RTL is
+compared bit-exactly against the certified expected bits, with cycles
+anchored to §5.3 + one invariant Δ_impl. The RTL is integer-only; all
+numerical modeling lives in the oracle/sim.
+
 Flow:
   1. `v2/smoke/check_interface.py` — interface freeze gate (hard fail)
   2. `v2/smoke/gen_cases.py` — spec §9 stimulus classes into `stimuli/`
+     (oracle-certified per case by `dump_case`, GATE 1)
   3. expand each case into `$readmemh` vectors (`<case>/vectors/*.hex`)
   4. compile `v2/tb/tb_dpe_nldpe.v` + `v2/rtl/dpe_nldpe.v` once per geometry
   5. run vvp per case; dual-compare (hierarchical int32 y + drained stream),

@@ -2,8 +2,11 @@
 """gen_cases.py — generate §9 stimulus cases for the v2 RTL cross-check.
 
 Enumerates the spec's stimulus classes (`v2/spec/dpe_nldpe.md` §9) and writes
-them via `NldpeDpe.dump_case`:
+them via `NldpeDpe.dump_case`. Every dumped case is certified by GATE 1 first:
+`dump_case` refuses to write a case whose sim values disagree with the NumPy
+oracle on int32 `y`, output bytes, or §5.3 cycles.
 
+Stimulus classes:
   identity  : W = eye(R, C)                      (I7 when R == C)
   random    : W random int8 (both signs); X uniform int8
   extremes  : as random, plus the signed extremes -128 / +127 and a zero row

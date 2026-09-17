@@ -1,4 +1,29 @@
 #!/usr/bin/env python3
+"""nldpe_sim.py — OOP golden model for the NL-DPE primitive (v2 clean-room).
+
+Verification chain (two gates, trust flows downward only; the spec decides
+all disagreements — `v2/spec/dpe_nldpe.md`: spec > oracle > legacy):
+
+    spec v2.0.1                 human charter; the only arbiter
+       │  transcription
+       ▼
+    v2/oracle/nldpe_ref.py      exact integer reference; no quantization policy
+       │  GATE 1 (per case): bit-exact int32 y + output bytes + §5.3 cycles,
+       │  enforced inside `dump_case` BEFORE any expected file is written —
+       │  a case that disagrees with the oracle is never dumped
+       ▼
+    this file                   golden model; owns the quantize/trunc8
+       │                        boundary; dumps expected bits for the TB
+       │  GATE 2: bit-exact values (RTL vs dumped expected_y/expected_out,
+       │  dual compare P26) + cycles vs §5.3 with one implementation
+       │  constant Δ_impl (RTL is never required to match sim cycles exactly)
+       ▼
+    v2/rtl/dpe_nldpe.v          DUT; integer-only datapath (no fp in RTL)
+
+Later stages (softmax, DIMM) keep this policy: transcendentals/high precision
+stay in the oracle, the sim carries the quantization boundary, and the RTL
+implements only the exact integer/fixed-point forms.
+"""
 
 from __future__ import annotations
 
@@ -209,9 +234,34 @@ class NldpeDpe:
                            2 hex digits/byte (§4.5)
           case.json      — {R, C, BUF, P, M, mode, used_cycles, weight_cycles}
 
-        The harness falls back to in-memory compare if files are absent.
+        GATE 1 (verification chain): a case is dumped only after the sim
+        agrees with the NumPy oracle bit-exactly on this exact stimulus —
+        int32 `y`, the ACAM output bytes, and the §5.3 cycle total. A
+        mismatch raises before any file is written (spec §9: the oracle is
+        the numerical ground truth; the spec arbitrates disagreements).
         """
         res = self.run_workload(X, mode)
+
+        # -- GATE 1: per-case oracle certification -------------------------
+        y_ref = ref.compute_y(self.W, X)
+        if res.y.shape != y_ref.shape or res.y.dtype != y_ref.dtype:
+            raise RuntimeError(
+                f"GATE 1: sim/oracle shape or dtype mismatch (sim "
+                f"{res.y.shape}/{res.y.dtype}, oracle "
+                f"{y_ref.shape}/{y_ref.dtype}) — case not dumped")
+        if not (res.y == y_ref).all():
+            raise RuntimeError(
+                "GATE 1: sim/oracle F2 (int32 y) mismatch — case not dumped")
+        out_ref = ref.acam_transform(y_ref, mode).view(np.uint8)
+        if not (res.out_stream == out_ref).all():
+            raise RuntimeError(
+                "GATE 1: sim/oracle ACAM byte-stream mismatch — case not dumped")
+        cm = cycle_model(X.shape[0], self.R, self.C, self.P, self.BUF)
+        if res.used_cycles != cm.total:
+            raise RuntimeError(
+                f"GATE 1: sim schedule {res.used_cycles} != §5.3 total "
+                f"{int(cm.total)} — case not dumped")
+
         case_dir = Path(case_dir)
         case_dir.mkdir(parents=True, exist_ok=True)
 

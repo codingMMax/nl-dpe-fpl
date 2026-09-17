@@ -17,7 +17,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 
 ## Session Start Protocol
 1. Read "Active TODO Track" below → current in-flight work
-2. If working on RTL/sim alignment: read `rtl_flow/docs/FIDELITY_METHODOLOGY.md` (canonical methodology anchor)
+2. If working on RTL/sim alignment: read the v2 charter `v2/spec/dpe_nldpe.md` (v2.0.1, integer) for v2 work; `rtl_flow/docs/FIDELITY_METHODOLOGY.md` is legacy cadence reference (double-buffered T_steady=52, superseded for v2 by P1/A9)
 3. Run `git status`
 4. (If touching DSE-era scripts) results are in `dse/results/`; simulator code is `archive/azurelily_simulator/`
 
@@ -37,8 +37,13 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 ## Key Paths (live RTL/sim alignment)
 | Path | Role |
 |------|------|
-| `rtl_flow/FIDELITY_METHODOLOGY.md` | **Canonical** RTL/sim alignment methodology (§3 DPE arch, §4 single-buffered drain-load overlap pipeline, §5 workload classes VMM/DIMM, §7 tiling) — in `rtl_flow/docs/` |
-| `rtl_flow/SPEC.md` | **Behavioral charter** (Stage 1.1 in progress; open decisions D1–D5) |
+| `rtl_flow/FIDELITY_METHODOLOGY.md` | Legacy RTL/sim methodology (§3 DPE arch, §5 workload classes, §7 tiling) — its §3.2/§4 double-buffered cadence (T_steady=52) is **superseded for v2 by `v2/spec/dpe_nldpe.md` P1/A9** (single buffer: 60/104) |
+| `rtl_flow/SPEC.md` | **Charter home pointer** → first live spec `v2/spec/dpe_nldpe.md` **v2.0.1** (integer rewrite 2026-09-14/15; P1–P27, D1/D8) |
+| `v2/spec/dpe_nldpe.md` | **First live v2 charter** (v2.0.1): int8 weights/activations, exact integer MAC, integer ACAM + trunc8; P1–P27; dual-compare contract P26 |
+| `v2/oracle/nldpe_ref.py` | v2 NumPy oracle — numerical ground truth (GATE 1 reference; exact integer, no quantization policy) |
+| `v2/sim/nldpe_sim.py` | v2 golden model — owns quantize/trunc8; `dump_case` certifies each case vs oracle (GATE 1) before writing expected bits |
+| `v2/smoke/run_dpe_rtl.py` + `v2/tb/tb_dpe_nldpe.v` | v2 RTL cross-check harness (GATE 2: dual compare + Δ_impl/T_steady gates) |
+| `v2/rtl/dpe_nldpe.v` | Hand-written v2 integer RTL (interface frozen 2026-09-15; TODO 1–7 in progress) |
 | `rtl_flow/docs/FC_RTL_PLAN.md` | FC/GEMM RTL build-out plan (Stage 1A→1D) |
 | `rtl_flow/docs/CYCLE_ACCOUNTING.md` | Unified cycle formula: `T(M) = T_fill + (M−1)·T_steady`, `T_fill = L+C+O` |
 | `rtl_flow/rtl/dpe_nldpe.v` | NL-DPE behavior model (Model Y FSM, precision-agnostic, ACAM modes) |
@@ -105,9 +110,9 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 
 ## Active TODO Track
 
-**RTL/sim alignment on main, FIDELITY_METHODOLOGY-aligned** (opened 2026-05-01)
+**RTL/sim alignment on main — v2 clean-room flow** (opened 2026-05-01)
 
-### Status (as of 2026-09-15)
+### Status (as of 2026-09-16)
 
 **Done — committed**:
 - Reorg `bd229f1` (Aug 27 work): azurelily de-submoduled, legacy archived, stale docs purged, CLAUDE.md/README rewritten.
@@ -122,6 +127,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 - `rtl_flow/smoke/run_fc_smoke.py` — 13/13 PASS, fidelity reported not gated (Stages 1A+1B+1C)
 - `rtl_flow/vtr/run_vtr_smoke.py` — 3/3 OK (NL only): bert_qkv_proj, lenet_fc1, bert_ffn1
 - `python3 v2/oracle/nldpe_ref.py` — ALL PASS; `python3 v2/sim/nldpe_sim.py` — ALL PASS
+- `python3 v2/smoke/gen_cases.py` — 48/48 default cases pass GATE 1 (sim ≡ oracle, run 2026-09-16)
 
 **Verification caveat (drives the active plan)**: functional truth for FC is a
 one-byte pattern (`tb_fc.v` `expected_byte_fn`); cycle truth is the Task #98
@@ -150,6 +156,13 @@ progress — see "Direction (2026-08-29)" above.
   gate; §5.3 totals unchanged, sim updated); §6 F3 EXP clamp caveat (no mod-512
   shortcut); **P27** ACAM mode is workload configuration latched by the WEIGHT
   strobes (`mode_q`), never changed per pass. Sim + oracle self-tests green.
+- **Verification chain pinned + GATE 1 wired (2026-09-16)**: trust flows
+  downward only, spec arbitrates: `spec → oracle →(GATE 1: per case, inside
+  dump_case — sim ≡ oracle bit-exact on int32 y, output bytes, §5.3 cycles;
+  uncertified cases are never written) → sim →(GATE 2: RTL ≡ dumped expected
+  bits, dual compare P26; cycles = §5.3 + invariant Δ_impl) → RTL`. The RTL is
+  integer-only (no fp); all numerical modeling stays in oracle/sim — the same
+  policy extends to later stages (softmax, DIMM).
 - Next (user): hand-written integer datapath from spec v2.0.1 only, TODO 1–7
   (int8 storage, integer MAC, integer ACAM; no fp32 cores; `mode_q` latch in
   TODO 1). Then: `python3 v2/smoke/run_dpe_rtl.py` (quick first) → full M sweep
@@ -159,7 +172,7 @@ progress — see "Direction (2026-08-29)" above.
 
 | Rung | Scope | Gate |
 |---|---|---|
-| Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim (done); hand-written RTL + cross-check harness (ready); legacy witness | Cross-check green (v2 ≡ oracle; legacy as witness) |
+| Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim (done); hand-written RTL + cross-check harness (ready); legacy witness | Cross-check green (v2 RTL ≡ sim ≡ oracle per case, GATE 1+2; legacy as witness) |
 | Stage 2 — fc_top (VMM/projection) | VMM charter; replace one-byte check with full GEMM oracle; re-verify 13 cases | Your sign-off |
 | Stage 3 — softmax | Port oracles + RTL into rtl_flow; pin log-domain output contract | Your sign-off |
 | Stage 4 — projections + DIMM | Q/K/V composition on trusted fc_top; DIMM charter from `paper/methodology/attention_dimm_mapping.md`, oracle → RTL → smoke | Your sign-off |
