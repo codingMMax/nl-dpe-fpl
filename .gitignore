@@ -99,3 +99,6 @@ v2/smoke/stimuli/
 
 # v2 RTL smoke logs (regenerable via v2/smoke/run_dpe_rtl.py)
 v2/smoke/results/
+
+# v2 harness lock file (transient)
+v2/smoke/.dpe_rtl.lock

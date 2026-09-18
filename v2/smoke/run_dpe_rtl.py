@@ -269,7 +269,7 @@ def _execute(args: argparse.Namespace, geoms: str, ms: str,
         })
 
     rtl = Path(args.rtl).resolve()
-    tmp = Path(tempfile.mkdtemp(prefix="v2dpe_", dir="/tmp/opencode"))
+    tmp = Path(tempfile.mkdtemp(prefix="v2dpe_"))
     bins: dict[tuple[int, int, int, int], Path] = {}
     for case in cases:
         if case.geom in bins:

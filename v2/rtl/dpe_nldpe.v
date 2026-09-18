@@ -32,23 +32,27 @@
 // forms, then `trunc8` (clamp to int32, keep the low byte, P16). No rounding,
 // no fp32 cores.
 //
-// TODO(you) blocks (spec anchors):
+// Implemented blocks (spec anchors):
 //   1 weight storage + WEIGHT strobe path            §3 / §4.2 / P23
-//   2 input buffer: P banks x R bits + corner-turn   §3 / §4.3 / P1
+//   2 input buffer (single, P1) + corner-turn        §3 / §4.3 / P1
 //   3 crossbar integer slice partials s_b            §6 F2
 //   4 partial-shift accumulate + MSB subtract        §6 F2 / P2 / P22
 //   5 ACAM integer modes -> trunc8 (low byte)        §6 F3 / P16 / P24
 //   6 output buffer + drain (5 bytes/cyc) + done     §4.5 / P11
-//   7 timing FSM + readiness                         §5.1-5.3 / P1 / P10
+//   7 control channels: load/compute/ACAM/drain      §5.1-5.3 / P1 / P10
 //
-// COMPUTE_CYC = P+2 must emerge from the structure (P10); Δ_impl is a single
-// implementation-declared constant, invariant across M and modes (§5.3).
-// The TB compares both the hierarchical int32 `y` and the 8-bit stream (P26).
+// COMPUTE_CYC = P+2 emerges structurally (P10), not from a hold-counter.
+// GATE 2 result (v2/smoke/run_dpe_rtl.py): int32 `y` + byte stream bit-exact
+// vs the GATE-1-certified sim, and measured = T_fill + (M-1)*T_steady with
+// Δ_impl = 0 — invariant across geometries (8x8/40x40/256x256/256x512),
+// M ∈ {1,2,4,8} and all four modes. The TB dual-compares the hierarchical
+// int32 `y` and the drained 8-bit stream (P26).
 //
 // TB probe contract (verification-only internals, D8 — NOT ports; names are
 // frozen so `v2/tb/tb_dpe_nldpe.v` can read them):
-//   state       : FSM state, 0=IDLE/WEIGHT, 1=LOAD, 2=COMPUTE (P fires +
-//                 MSB shift&acc), 3=ACAM, 4=OUTPUT
+//   state       : control probe (combinational priority): 0=IDLE,
+//                 1=LOAD (burst/vector pending), 2=COMPUTE fires,
+//                 3=ACAM pending, 4=OUTPUT drain
 //   acc         : reg signed [31:0] acc [0:NUM_COLS-1] — pre-ACAM crossbar
 //                 output (F2); valid until the ACAM fire consumes it
 //   acam_fire   : 1-cycle pulse when ACAM converts `acc` into the output
@@ -103,7 +107,7 @@ module dpe #(
     localparam WR_CYC      = R * C;                     // P23, one-time
 
     // ------------------------------------------------------------------
-    // TODO(you): 1 — weight storage + WEIGHT strobe path + mode_q
+    // 1 — weight storage + WEIGHT strobe path + mode_q
     //   §3: R*C int8 words, one per (r, c); §4.2: one byte per strobe
     //   cycle on data_in[7:0], order row-major row-outer (P23);
     //   stationary after programming (A5/A12). WR_CYC = R*C one-time,
@@ -130,7 +134,7 @@ module dpe #(
 
 
     // ------------------------------------------------------------------
-    // TODO(you): 2 — input buffer (single, P1) + corner-turn (§4.3)
+    // 2 — input buffer (single, P1) + corner-turn (§4.3)
     //   P banks x R bits; byte-major writes: bank[b][j] = bit b of x[j].
     //   Burst = R bytes, 5 bytes/cycle. Refill permitted only from the
     //   cycle after MSB fire of the in-flight pass (MSB_SA_Ready rises).
@@ -141,25 +145,84 @@ module dpe #(
     
     integer buf_ptr, k, j;
     wire burst_complete = (buf_ptr + INPUT_ELEMENTS) >= R;
+    reg full_pending;
+    wire burst_done = w_buf_en & MSB_SA_Ready & burst_complete;
+
+    reg comp_busy;
+    reg acc_done;
+    reg acc_free;
+    integer fire_cnt;
+
+    wire compute_entry = full_pending & acc_free & ~comp_busy & ~acc_done;
+    wire fire_en = compute_entry | comp_busy;
+    wire [2:0]  slice_b = comp_busy ? fire_cnt[2:0] : 3'd0;
+    wire fire_msb = fire_en & (slice_b == PRECISION -1);
+    
+    always @(posedge clk ) begin
+        if (reset) begin
+            comp_busy   <=  1'b0;
+            acc_done    <=  1'b0;
+            acc_free    <=  1'b1;
+            fire_cnt    <=  0;
+            shift_add_done  <= 1'b0;
+        end
+        else begin
+            shift_add_done <= 1'b0;            // 1-cycle pulse
+            if (compute_entry) begin
+                comp_busy   <= 1'b1;
+                fire_cnt    <= 1;
+                acc_free    <= 1'b0;
+            end
+            else if (comp_busy) begin
+                if (slice_b == PRECISION - 1) begin
+                    comp_busy   <= 1'b0;
+                    acc_done    <= 1'b1;
+                    shift_add_done <= 1'b1;
+                end
+                else fire_cnt <= fire_cnt + 1;
+            end
+
+            if (acam_fire) begin
+                acc_done <= 1'b0;
+                acc_free <= 1'b1;
+            end
+
+        end
+
+    end
+
 
     always @(posedge clk) begin
         if (reset) begin
             buf_ptr <= 0;
+            full_pending <= 1'b0;
+            MSB_SA_Ready <= 1'b1;
         end
-        else if(w_buf_en & MSB_SA_Ready) begin
-           for(k = 0; k < INPUT_ELEMENTS; k = k + 1) begin
-                for(j = 0; j < PRECISION; j = j + 1) begin
-                    if ((buf_ptr + k) < R)
-                        banks[j][buf_ptr + k] <= data_in[P * k + j]; // store bit-slices
-                end
-           end 
-            buf_ptr <= burst_complete? 0 : buf_ptr + INPUT_ELEMENTS; 
+        else begin
+            if (burst_done) begin
+                full_pending <= 1'b1;
+                MSB_SA_Ready <= 1'b0;
+            end
+            else if (fire_msb) begin
+                full_pending <= 1'b0;
+                MSB_SA_Ready <= 1'b1;
+            end
+
+            if (w_buf_en & MSB_SA_Ready) begin
+                for(k = 0; k < INPUT_ELEMENTS; k = k + 1) begin
+                    for(j = 0; j < PRECISION; j = j + 1) begin
+                        if ((buf_ptr + k) < R)
+                            banks[j][buf_ptr + k] <= data_in[P * k + j]; // store bit-slices
+                    end
+                end 
+                buf_ptr <= burst_complete? 0 : buf_ptr + INPUT_ELEMENTS; 
+            end
         end
     end
 
 
     // ------------------------------------------------------------------
-    // TODO(you): 3+4 — crossbar integer slice partials (§6 F2)
+    // 3+4 — crossbar integer slice partials (§6 F2)
     //   Per slice b (LSB -> MSB), per column c:
     //   s_b[c] = sum_r ( bank_b[r] ? W[r,c] : 0 )    — exact integer.
     //   One slice per cycle.
@@ -181,8 +244,21 @@ module dpe #(
         end
     end
 
+
+    // state probe
+    reg [2:0] state;
+    always@(*) begin
+        if (compute_entry | comp_busy) state = 2;   // fires
+        else if (acc_done)      state = 3;          // ACAM pending
+        else if (draining)      state = 4;          // output drain
+        else if (w_buf_en | full_pending)   state = 1;  // burst start
+        else                    state = 0;      // start state
+    
+    
+    end
+
     // ------------------------------------------------------------------
-    // TODO(you): 5 — ACAM integer modes -> trunc8 (§6 F3 / P16 / P24)
+    // 5 — ACAM integer modes -> trunc8 (§6 F3 / P16 / P24)
     //   REGULAR: y;  ACTIVATION: relu(y);  EXP: 1 + y + floor(y^2/2)
     //   (wide intermediate; the int32 clamp in trunc8 is live); LOG: y - 1.
     //   Then trunc8: clamp to int32, keep the low byte as signed int8.
@@ -213,38 +289,86 @@ module dpe #(
 
 
     // ------------------------------------------------------------------
-    // TODO(you): 6 — output buffer + drain (§4.5 / P11)
+    // 6 — output buffer + drain (§4.5 / P11)
     //   C x 8 bits, written wholesale by ACAM; drained 5 bytes/cycle in
     //   column order, gapless; dpe_done 1-cycle pulse after the last byte;
     //   reg_full marks the buffer busy.
     // ------------------------------------------------------------------
-    reg [7:0] obuf [0:C-1];
+    localparam EPS = BUF / 8;                   // bytes per word (5)
+
+    reg acam_fire;                              // 1-cycle ACAM pulse (probe)
+    reg draining;                               // output drain active
+    integer drain_cnt;                          // word index 0..OUTPUT_CYC-1
+    integer di;                                 // data_out pad loop (unique var)
+
+    wire drain_last  = draining & (drain_cnt == OUTPUT_CYC - 1);
+    wire acam_go     = acc_done & (drain_last | ~draining) & ~acam_fire;
+    wire drain_valid = draining;                // probe (D8)
+
+
+
+
+    
+
+    reg [PRECISION-1:0] obuf [0:C-1];
     integer c6;
     always @(posedge clk) begin
         if (acam_fire)                              // FSM pulse, cs+P+1
-            for (c6 = 0; c6 < C; c6 = c6 + 1) obuf[c6] <= y8[c6];
+            for (c6= 0; c6< C; c6 = c6 + 1) obuf[c6] <= y8[c6];
     end
 
     // ------------------------------------------------------------------
-    // TODO(you): 7 — timing FSM + readiness (§5.1-5.3 / P1 / P10)
-    //   LOAD_CYC -> COMPUTE_CYC (= P+2, must emerge structurally) ->
-    //   ACAM -> OUTPUT_CYC; next ACT burst may start the cycle after MSB
-    //   fire; ACAM strictly after the previous drain (P11) and the
-    //   accumulator is freed by the ACAM write (§5.2); reset synchronous
-    //   active-high (A10); measured(M) = T_fill + (M-1)*T_steady + Δ_impl,
-    //   Δ_impl invariant (I2).
+    // 7 — control channels (§5.1-5.3 / P1 / P10): ACAM fire gated by
+    //   acc_done + previous drain (P11); single accumulator freed by the
+    //   ACAM write (§5.2); drain = OUTPUT_CYC words; dpe_done after the
+    //   last byte (A7). All control is structure/event driven — no cycle
+    //   counters; measured(M) = T_fill + (M-1)*T_steady + Δ_impl with
+    //   Δ_impl = 0 (I2, spec §5.3).
     // ------------------------------------------------------------------
 
-    // Placeholder drivers — replace as each TODO block lands (keeps this
-    // file elaborating cleanly in the meantime). Outputs are `reg` to match
-    // the legacy port declarations exactly.
+
+
+    always @(posedge clk) begin
+        if (reset) begin
+            acam_fire <= 1'b0;
+            draining  <= 1'b0;
+            drain_cnt <= 0;
+            reg_full  <= 1'b0;
+            dpe_done  <= 1'b0;
+        end
+        else begin
+            dpe_done  <= 1'b0;                  // 1-cycle pulse
+            acam_fire <= acam_go;
+
+            if (acam_fire) begin                // ACAM write in this cycle
+                draining  <= 1'b1;              // drain starts next cycle
+                drain_cnt <= 0;
+                reg_full  <= 1'b1;
+            end
+            else if (draining) begin
+                if (drain_cnt == OUTPUT_CYC - 1) begin
+                    draining <= 1'b0;
+                    reg_full <= 1'b0;
+                    dpe_done <= 1'b1;           // after the last byte (A7)
+                end
+                else drain_cnt <= drain_cnt + 1;
+            end
+        end
+    end
+
+    always @(*) begin
+        data_out = {DPE_BUF_WIDTH{1'b0}};
+        if (draining)
+            for (di = 0; di < EPS; di = di + 1)
+                if (drain_cnt * EPS + di < C)
+                    data_out[8*di +: 8] = obuf[drain_cnt * EPS + di];
+    end
+
+    // Reserved output tie-off (§4 table): `shift_add_bypass_ctrl` drives 0;
+    // every other output is driven by its control channel above. Outputs
+    // are `reg` to match the legacy port declarations exactly.
     always @(data_in or nl_dpe_control or shift_add_control or w_buf_en
              or shift_add_bypass or load_output_reg or load_input_reg) begin
-        MSB_SA_Ready          = 1'b0;
-        data_out              = {DPE_BUF_WIDTH{1'b0}};
-        dpe_done              = 1'b0;
-        reg_full              = 1'b0;
-        shift_add_done        = 1'b0;
         shift_add_bypass_ctrl = 1'b0;
     end
 

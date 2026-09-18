@@ -35,6 +35,10 @@
 > (MAC, REGULAR/LOG), while schedule/buffer, weight-interface and ACAM-mode
 > differences are reported, not gated.
 >
-> Ladder position: Stage 1.5 — hand-written integer RTL in progress
-> (`v2/rtl/dpe_nldpe.v` TODO 1–7); cross-check harness ready (GATE 1 wired
-> 2026-09-16).
+> Ladder position: **Stage 1.5 COMPLETE (2026-09-17)** — hand-written integer
+> RTL (`v2/rtl/dpe_nldpe.v`, structure/event-driven control channels) passes
+> GATE 2 on 48/48 default cases + M∈{1,2,4,8} sweep + micro-geometries
+> (Δ_impl = 0, T_steady steps 10/16/60/104 exact). The independent witness
+> (`v2/smoke/legacy_witness.py`) confirms the legacy oracle and the frozen
+> legacy RTL on identical stimulus (mode 0; legacy cadence 52 vs v2 60 is a
+> documented differing witness). Next: Stage 2 — fc_top (VMM/projection).

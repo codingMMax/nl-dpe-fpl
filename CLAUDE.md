@@ -112,7 +112,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 
 **RTL/sim alignment on main — v2 clean-room flow** (opened 2026-05-01)
 
-### Status (as of 2026-09-16)
+### Status (as of 2026-09-17)
 
 **Done — committed**:
 - Reorg `bd229f1` (Aug 27 work): azurelily de-submoduled, legacy archived, stale docs purged, CLAUDE.md/README rewritten.
@@ -128,13 +128,20 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 - `rtl_flow/vtr/run_vtr_smoke.py` — 3/3 OK (NL only): bert_qkv_proj, lenet_fc1, bert_ffn1
 - `python3 v2/oracle/nldpe_ref.py` — ALL PASS; `python3 v2/sim/nldpe_sim.py` — ALL PASS
 - `python3 v2/smoke/gen_cases.py` — 48/48 default cases pass GATE 1 (sim ≡ oracle, run 2026-09-16)
+- `python3 v2/smoke/run_dpe_rtl.py` — **GATE 2 green (2026-09-17)**: 48/48 default
+  (256×256/256×512, M∈{1,2}, modes 0–3, identity/random/extremes) + 16/16 M-sweep
+  (M∈{1,2,4,8}) + 48/48 micro-geometry (8×8, 40×40); Δ_impl = 0 on every geometry
+- `python3 v2/smoke/legacy_witness.py` — independent witness on identical stimulus
+  (mode 0, 256×256 M=1): legacy oracle MAC + bytes OK, frozen legacy RTL PASS
+  (cycles reported: +2 NBA handoff, double-buffer split 52 vs 60)
+- `python3 rtl_flow/smoke/run_dpe_smoke.py` — 52/52 PASS (frozen legacy, unchanged)
 
 **Verification caveat (drives the active plan)**: functional truth for FC is a
 one-byte pattern (`tb_fc.v` `expected_byte_fn`); cycle truth is the Task #98
 formula authored in unremembered sessions. Bottom-up re-verification is in
 progress — see "Direction (2026-08-29)" above.
 
-### In flight: Stage 1.4/1.5 — hand-written v2 RTL + cross-check harness
+### Stage 1.5 — COMPLETE (2026-09-17): hand-written v2 RTL + cross-check harness
 
 - Stage 1.3a DONE: `v2/smoke/gen_cases.py` emits §9 stimulus classes for both
   geometries (256×256, 256×512); modes are a per-workload case axis (P27);
@@ -163,16 +170,25 @@ progress — see "Direction (2026-08-29)" above.
   bits, dual compare P26; cycles = §5.3 + invariant Δ_impl) → RTL`. The RTL is
   integer-only (no fp); all numerical modeling stays in oracle/sim — the same
   policy extends to later stages (softmax, DIMM).
-- Next (user): hand-written integer datapath from spec v2.0.1 only, TODO 1–7
-  (int8 storage, integer MAC, integer ACAM; no fp32 cores; `mode_q` latch in
-  TODO 1). Then: `python3 v2/smoke/run_dpe_rtl.py` (quick first) → full M sweep
-  → legacy witness.
+- **Stage 1.5 COMPLETE (2026-09-17)**: `v2/rtl/dpe_nldpe.v` now implements all
+  seven blocks as structure/event-driven control channels (load/ready, compute
+  fires, ACAM gate, drain) — no cycle counters; COMPUTE_CYC = P+2 emerges
+  structurally (P10). GATE 2: int32 `y` + drained byte stream bit-exact vs the
+  GATE-1-certified sim; `measured = T_fill + (M−1)·T_steady` with **Δ_impl = 0**
+  on every geometry (8×8, 40×40, 256×256, 256×512), M ∈ {1,2,4,8}, all four
+  modes; T_steady steps 10/16/60/104 exact (incl. the compute-bound 8×8 corner).
+  Legacy witness (`v2/smoke/legacy_witness.py`): legacy oracle MAC/bytes and the
+  frozen legacy RTL agree with v2 on identical stimulus (mode 0; cadence is a
+  documented differing witness, 52 vs 60).
+- The harness `run_dpe_rtl.py` now uses the portable tempdir default (the
+  previous hardcoded `/tmp/opencode` was not writable on all nodes).
+- Next: Stage 2 — fc_top (VMM/projection) charter + full GEMM oracle.
 
 ### Forward plan
 
 | Rung | Scope | Gate |
 |---|---|---|
-| Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim (done); hand-written RTL + cross-check harness (ready); legacy witness | Cross-check green (v2 RTL ≡ sim ≡ oracle per case, GATE 1+2; legacy as witness) |
+| Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim; hand-written integer RTL; legacy witness | ✅ **DONE** — RTL ≡ sim ≡ oracle per case, Δ_impl = 0 (GATE 1+2); legacy witness PASS |
 | Stage 2 — fc_top (VMM/projection) | VMM charter; replace one-byte check with full GEMM oracle; re-verify 13 cases | Your sign-off |
 | Stage 3 — softmax | Port oracles + RTL into rtl_flow; pin log-domain output contract | Your sign-off |
 | Stage 4 — projections + DIMM | Q/K/V composition on trusted fc_top; DIMM charter from `paper/methodology/attention_dimm_mapping.md`, oracle → RTL → smoke | Your sign-off |
