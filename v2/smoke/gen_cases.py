@@ -23,11 +23,17 @@ Usage:
   python3 v2/smoke/gen_cases.py --ms 1,2,4,8     # full M sweep (slow)
   python3 v2/smoke/gen_cases.py --classes identity,random --ms 1,2,4,8 --modes 0
   python3 v2/smoke/gen_cases.py --geoms 256x256 --modes 0
+  python3 v2/smoke/gen_cases.py --clean          # drop the accumulated corpus first
+
+The output dir accumulates across runs (old cases stay inspectable via
+`v2/smoke/test_dpe_primitive.py`); `manifest.txt` lists the cases of this
+generation, and the RTL harness executes only those.
 """
 
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
@@ -79,15 +85,20 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(REPO / "v2" / "smoke" / "stimuli"))
     ap.add_argument("--geoms", default="256x256,256x512")
-    ap.add_argument("--ms", default="1,2")
+    ap.add_argument("--ms", default="1,2, 4, 8")
     ap.add_argument("--modes", default="0,1,2,3")
     ap.add_argument("--classes", default="identity,random,extremes")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--clean", action="store_true",
+                    help="delete existing cases under --out first")
     args = ap.parse_args()
 
     out_root = Path(args.out)
+    if args.clean and out_root.exists():
+        shutil.rmtree(out_root)
+    out_root.mkdir(parents=True, exist_ok=True)
     mode_tokens = [int(t) for t in args.modes.split(",")]
-    n = 0
+    names: list[str] = []
     for (R, C) in parse_geoms(args.geoms):
         for kind in args.classes.split(","):
             for M in [int(t) for t in args.ms.split(",")]:
@@ -98,9 +109,10 @@ def main() -> None:
                 for mode in mode_tokens:
                     case_dir = out_root / f"{kind}_{R}x{C}_M{M}_m{mode}"
                     d.dump_case(case_dir, X, mode)
-                    n += 1
+                    names.append(case_dir.name)
                     print(f"wrote {rel(case_dir)}")
-    print(f"gen_cases: {n} cases under {rel(out_root)}")
+    (out_root / "manifest.txt").write_text("\n".join(names) + "\n")
+    print(f"gen_cases: {len(names)} cases under {rel(out_root)} (manifest.txt)")
 
 
 if __name__ == "__main__":

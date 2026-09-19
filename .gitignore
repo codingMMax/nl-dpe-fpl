@@ -97,8 +97,14 @@ rtl_flow/results/legacy/
 # v2 stimulus cases (regenerable via v2/smoke/gen_cases.py)
 v2/smoke/stimuli/
 
+# v2 GEMM-array cases (regenerable via v2/smoke/gen_gemm_cases.py)
+v2/smoke/gemm_stimuli/
+
 # v2 RTL smoke logs (regenerable via v2/smoke/run_dpe_rtl.py)
 v2/smoke/results/
+
+# v2 test logs: per-case TB stdout + run summaries (regenerable)
+v2/smoke/logs/
 
 # v2 harness lock file (transient)
 v2/smoke/.dpe_rtl.lock

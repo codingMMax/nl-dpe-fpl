@@ -39,6 +39,7 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -46,7 +47,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 SMOKE = REPO / "v2" / "smoke"
 STIMULI = SMOKE / "stimuli"
-RESULTS = SMOKE / "results"
+LOGS = SMOKE / "logs"
 TB = REPO / "v2" / "tb" / "tb_dpe_nldpe.v"
 DEFAULT_RTL = REPO / "v2" / "rtl" / "dpe_nldpe.v"
 CHECK_IF = SMOKE / "check_interface.py"
@@ -133,11 +134,24 @@ def expand_vectors(case_dir: Path, meta: dict) -> Path:
 
 
 def load_cases(stimuli: Path) -> list[Case]:
+    """Cases of the latest generation run (manifest.txt), not the whole corpus.
+
+    The stimuli tree accumulates across runs so old cases stay inspectable
+    (`v2/smoke/test_dpe_primitive.py`); only manifest-listed cases are executed.
+    """
+    manifest = stimuli / "manifest.txt"
+    if manifest.exists():
+        dirs = [stimuli / n for n in manifest.read_text().split()]
+    else:
+        dirs = sorted(p.parent for p in stimuli.glob("*/case.json"))
     cases = []
-    for cj in sorted(stimuli.glob("*/case.json")):
+    for d in dirs:
+        cj = d / "case.json"
+        if not cj.exists():
+            continue
         meta = json.loads(cj.read_text())
         cases.append(Case(
-            name=cj.parent.name, path=cj.parent,
+            name=d.name, path=d,
             r=int(meta["R"]), c=int(meta["C"]), buf=int(meta["BUF"]),
             p=int(meta["P"]), m=int(meta["M"]),
             mode=int(meta["mode"]),
@@ -167,9 +181,17 @@ def compile_for(case: Case, rtl: Path, out_dir: Path) -> tuple[Path | None, str]
 
 def run_case(bin_path: Path, case: Case, timeout: int) -> None:
     vdir = case.path / "vectors"
+    odir = case.path / "observed"
+    odir.mkdir(parents=True, exist_ok=True)
     p = run(["vvp", str(bin_path), f"+M={case.m}", f"+MODE={case.mode}",
-             f"+VDIR={vdir.resolve()}", f"+CASE={case.name}"],
+             f"+VDIR={vdir.resolve()}", f"+ODIR={odir.resolve()}",
+             f"+CASE={case.name}"],
             cwd=REPO, timeout=timeout)
+    LOGS.mkdir(parents=True, exist_ok=True)
+    (LOGS / f"{case.name}.log").write_text(
+        f"# {case.name} M={case.m} mode={case.mode} {case.r}x{case.c} "
+        f"BUF={case.buf} P={case.p}\n" + p.stdout
+        + (("\n[stderr]\n" + p.stderr) if p.stderr.strip() else ""))
     m = RESULT_RE.search(p.stdout)
     if not m:
         case.status = "ERROR"
@@ -202,7 +224,7 @@ def main() -> int:
 
     if args.quick:
         geoms = args.geoms or "256x256"
-        ms = args.ms or "1,2"
+        ms = args.ms or "1,2,4"
         modes = args.modes or "0"
         classes = args.classes or "identity,random"
     else:
@@ -246,8 +268,6 @@ def main() -> int:
 def _execute(args: argparse.Namespace, geoms: str, ms: str,
              modes: str, classes: str) -> int:
     if not args.no_gen:
-        if STIMULI.exists():
-            shutil.rmtree(STIMULI)
         cmd = [sys.executable, str(GEN_CASES), "--out", str(STIMULI),
                "--geoms", geoms, "--ms", ms, "--modes", modes,
                "--classes", classes, "--seed", str(args.seed)]
@@ -347,13 +367,16 @@ def _execute(args: argparse.Namespace, geoms: str, ms: str,
         if len(ms) == 1:
             print(f"GATE NOTE: {r}x{c} only M={ms[0]} present; no step to calibrate")
 
-    RESULTS.mkdir(parents=True, exist_ok=True)
-    with open(RESULTS / "dpe_nldpe_rtl_smoke.log", "w") as f:
-        f.write("\n".join(
-            f"{c.name} M={c.m} mode={c.mode} {c.status} "
-            f"measured={c.measured} expected={c.expected} delta={c.delta}"
-            for c in cases) + "\n")
-    print(f"\nlog: {rel(RESULTS / 'dpe_nldpe_rtl_smoke.log')}")
+    LOGS.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary = "\n".join(
+        f"{c.name} M={c.m} mode={c.mode} {c.status} "
+        f"measured={c.measured} expected={c.expected} delta={c.delta}"
+        for c in cases) + "\n"
+    run_log = LOGS / f"rtl_smoke_{stamp}.log"
+    run_log.write_text(summary)
+    (LOGS / "latest.log").write_text(summary)
+    print(f"\nlogs: {rel(run_log)}  (per-case TB logs in {rel(LOGS)}/)")
     print("RESULT: " + ("PASS" if ok else "FAIL"))
     if not args.keep:
         shutil.rmtree(tmp, ignore_errors=True)

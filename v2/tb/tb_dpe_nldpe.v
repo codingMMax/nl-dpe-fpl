@@ -11,6 +11,9 @@
 //   <VDIR>/expo.hex one 2-hex byte per line, M*C (drained stream, §4.5)
 //
 // Plusargs:  +M=<passes>  +MODE=<0..3>  +VDIR=<vectors dir>  [+CASE=<name>]
+//            [+ODIR=<dir>] — if given, dump observed_y.hex / observed_out.hex
+//            / observed_cycles.txt for `v2/smoke/test_dpe_primitive.py` (dir
+//            must exist)
 // The mode is workload configuration (P27): driven on `nl_dpe_control` before
 // and during the WEIGHT strobes, then held for all passes.
 // Geometry:  -DR_TB= -DC_TB= -DBUF_TB= -DP_TB=  (defaults 256/256/40/8)
@@ -175,8 +178,11 @@ module tb_dpe_nldpe;
     integer m, t, k, guard;
     integer errors, ready_errs, span_errs, cycle_errs;
     integer measured, expected, delta;
-    reg [1023:0] vdir, case_name;
+    reg [1023:0] vdir, case_name, odir;
     reg [2047:0] fw, fa, fy, fo;
+    reg [2047:0] foy, foo, foc;
+    reg odir_set;
+    integer fdy, fdo, fdc;
 
     initial begin
         reset = 1;
@@ -194,6 +200,8 @@ module tb_dpe_nldpe;
         ready_violations = 0;
         errors = 0; ready_errs = 0; span_errs = 0; cycle_errs = 0;
         measured = 0; expected = 0; delta = 0;
+        odir_set = 0;
+        for (i = 0; i < MAXM*C; i = i + 1) y_cap[i] = 32'sd0;
         if (!$value$plusargs("CASE=%s", case_name)) case_name = "case";
         if (!$value$plusargs("M=%d", M)) M = 1;
         if (!$value$plusargs("MODE=%d", mode)) mode = 0;
@@ -201,6 +209,7 @@ module tb_dpe_nldpe;
             $display("[tb_dpe_nldpe] FAIL %0s: missing +VDIR=<path>", case_name);
             $finish;
         end
+        if ($value$plusargs("ODIR=%s", odir)) odir_set = 1;
         $sformat(fw, "%0s/w.hex", vdir);
         $sformat(fa, "%0s/act.hex", vdir);
         $sformat(fy, "%0s/expy.hex", vdir);
@@ -326,6 +335,38 @@ module tb_dpe_nldpe;
             $display("[tb_dpe_nldpe]   SPAN ERROR pass=0 compute+acam=%0d expected=%0d",
                      t_acams[0] - t_comp[0] + 1, P + 2);
             span_errs = span_errs + 1;
+        end
+
+        // -- observed dumps (optional; +ODIR=<dir> must already exist) -------
+        // Written verbatim from the capture arrays so a viewer can diff
+        // expected vs observed without re-running the simulation.
+        if (odir_set) begin
+            $sformat(foy, "%0s/observed_y.hex", odir);
+            fdy = $fopen(foy, "w");
+            for (m = 0; m < M; m = m + 1)
+                for (k = 0; k < C; k = k + 1)
+                    $fwrite(fdy, "%08x\n", y_cap[m*C + k]);
+            $fclose(fdy);
+
+            $sformat(foo, "%0s/observed_out.hex", odir);
+            fdo = $fopen(foo, "w");
+            for (m = 0; m < M; m = m + 1)
+                for (k = 0; k < C; k = k + 1)
+                    $fwrite(fdo, "%02x\n", cap[m*OCYC*EPS + k]);
+            $fclose(fdo);
+
+            $sformat(foc, "%0s/observed_cycles.txt", odir);
+            fdc = $fopen(foc, "w");
+            $fwrite(fdc, "first_load=%0d done=%0d measured=%0d expected=%0d delta=%0d errors=%0d ready_err=%0d span_err=%0d cycle_err=%0d verdict=%0s\n",
+                    t_first_load, (done_idx == M) ? t_done[M-1] : -1,
+                    measured, expected, delta,
+                    errors, ready_errs, span_errs, cycle_errs,
+                    (errors == 0 && ready_errs == 0 && span_errs == 0 && cycle_errs == 0)
+                        ? "PASS" : "FAIL");
+            for (m = 0; m < M; m = m + 1)
+                $fwrite(fdc, "pass=%0d comp=%0d sad=%0d acam=%0d done=%0d\n",
+                        m, t_comp[m], t_sad[m], t_acams[m], t_done[m]);
+            $fclose(fdc);
         end
 
         if (errors == 0 && ready_errs == 0 && span_errs == 0 && cycle_errs == 0) begin
