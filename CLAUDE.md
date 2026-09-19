@@ -40,10 +40,15 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 | `rtl_flow/FIDELITY_METHODOLOGY.md` | Legacy RTL/sim methodology (§3 DPE arch, §5 workload classes, §7 tiling) — its §3.2/§4 double-buffered cadence (T_steady=52) is **superseded for v2 by `v2/spec/dpe_nldpe.md` P1/A9** (single buffer: 60/104) |
 | `rtl_flow/SPEC.md` | **Charter home pointer** → first live spec `v2/spec/dpe_nldpe.md` **v2.0.1** (integer rewrite 2026-09-14/15; P1–P27, D1/D8) |
 | `v2/spec/dpe_nldpe.md` | **First live v2 charter** (v2.0.1): int8 weights/activations, exact integer MAC, integer ACAM + trunc8; P1–P27; dual-compare contract P26 |
+| `v2/spec/gemm.md` | **Stage-2 charter (v0.3 FROZEN 2026-09-17)**: GEMM array = V×H `dpe` instances + byte-tree reduce + lane serializer; tiles REGULAR, **no ACAM after reduction**, `out8 = trunc8(Σ y_v)` exactly; G1–G9 |
 | `v2/oracle/nldpe_ref.py` | v2 NumPy oracle — numerical ground truth (GATE 1 reference; exact integer, no quantization policy) |
 | `v2/sim/nldpe_sim.py` | v2 golden model — owns quantize/trunc8; `dump_case` certifies each case vs oracle (GATE 1) before writing expected bits |
 | `v2/smoke/run_dpe_rtl.py` + `v2/tb/tb_dpe_nldpe.v` | v2 RTL cross-check harness (GATE 2: dual compare + Δ_impl/T_steady gates) |
-| `v2/rtl/dpe_nldpe.v` | Hand-written v2 integer RTL (interface frozen 2026-09-15; TODO 1–7 in progress) |
+| `v2/rtl/dpe_nldpe.v` | Hand-written v2 integer RTL — all 7 blocks; structural control channels, Δ_impl = 0 (Stage 1.5 complete) |
+| `v2/smoke/test_dpe_primitive.py` | DPE-primitive case verifier — no args: corpus table (`sim_cyc/rtl_cyc/delta_cyc`, `y32_match`, `out8_match`, verdict); `--list` index (`*` = latest run); `<case>` full view |
+| `v2/oracle/gemm_ref.py` + `v2/sim/gemm_sim.py` | Stage-2 GEMM oracle (exact composition) + golden model (V×H `NldpeDpe`, byte tree, low-byte serializer; GATE 1 in `dump_case`) |
+| `v2/smoke/stimuli/` | Corpus (gitignored, accumulates across runs) + `manifest.txt` scoping the harness to the latest generation |
+| `v2/smoke/logs/` | Test logs (gitignored): `<case>.log` per-case TB stdout + timestamped `rtl_smoke_*.log` run summaries + `latest.log` |
 | `rtl_flow/docs/FC_RTL_PLAN.md` | FC/GEMM RTL build-out plan (Stage 1A→1D) |
 | `rtl_flow/docs/CYCLE_ACCOUNTING.md` | Unified cycle formula: `T(M) = T_fill + (M−1)·T_steady`, `T_fill = L+C+O` |
 | `rtl_flow/rtl/dpe_nldpe.v` | NL-DPE behavior model (Model Y FSM, precision-agnostic, ACAM modes) |
@@ -98,6 +103,10 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
   - `python3 smoke/run_dpe_smoke.py` — primitive smoke (52 cases)
   - `python3 smoke/run_fc_smoke.py` — FC smoke (13 cases; ~13 min, iverilog ~50 s/case)
   - `python3 vtr/run_vtr_smoke.py` — VTR smoke (needs VTR_ROOT)
+- v2 clean-room commands (run from repo root):
+  - `python3 v2/smoke/run_dpe_rtl.py [--quick]` — GATE 2 cross-check; writes observed dumps under `stimuli/<case>/observed/` and logs under `v2/smoke/logs/`
+  - `python3 v2/smoke/test_dpe_primitive.py` (no args: corpus table) · `--list` · `<case> [--full]` — inspect vectors/expected/observed and verify values/cycles
+  - `python3 v2/smoke/legacy_witness.py` — independent legacy witness on identical stimulus
 - For any DSE-era run: 1–3 point dry run first, verify CSV output, then full sweep; resume with `--skip-existing`; `--jobs 12` to limit CPU
 
 ## Context Economy Rules
@@ -182,14 +191,16 @@ progress — see "Direction (2026-08-29)" above.
   documented differing witness, 52 vs 60).
 - The harness `run_dpe_rtl.py` now uses the portable tempdir default (the
   previous hardcoded `/tmp/opencode` was not writable on all nodes).
-- Next: Stage 2 — fc_top (VMM/projection) charter + full GEMM oracle.
+- Next: Stage 2 — GEMM array (`v2/spec/gemm.md` v0.3 **frozen**): `gemm_ref`
+  oracle **done**; `gemm_sim` (V×H `NldpeDpe` + byte tree + low-byte serializer)
+  in progress → `gemm_top` (hand-written) → GATE 2 harness, incremental 1A→1D.
 
 ### Forward plan
 
 | Rung | Scope | Gate |
 |---|---|---|
 | Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim; hand-written integer RTL; legacy witness | ✅ **DONE** — RTL ≡ sim ≡ oracle per case, Δ_impl = 0 (GATE 1+2); legacy witness PASS |
-| Stage 2 — fc_top (VMM/projection) | VMM charter; replace one-byte check with full GEMM oracle; re-verify 13 cases | Your sign-off |
+| Stage 2 — GEMM array (VMM/projection) | `v2/spec/gemm.md` v0.3 frozen (REGULAR tiles, byte tree, no post-reduction ACAM); `gemm_ref` done → `gemm_sim` → `gemm_top` (V×H `dpe`) → GATE 2; incremental 1A→1D | Your sign-off |
 | Stage 3 — softmax | Port oracles + RTL into rtl_flow; pin log-domain output contract | Your sign-off |
 | Stage 4 — projections + DIMM | Q/K/V composition on trusted fc_top; DIMM charter from `paper/methodology/attention_dimm_mapping.md`, oracle → RTL → smoke | Your sign-off |
 | Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
