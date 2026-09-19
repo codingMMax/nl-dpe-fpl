@@ -41,4 +41,12 @@
 > (Δ_impl = 0, T_steady steps 10/16/60/104 exact). The independent witness
 > (`v2/smoke/legacy_witness.py`) confirms the legacy oracle and the frozen
 > legacy RTL on identical stimulus (mode 0; legacy cadence 52 vs v2 60 is a
-> documented differing witness). Next: Stage 2 — fc_top (VMM/projection).
+> documented differing witness).
+>
+> **Stage 2 — GEMM array (in progress)**: second charter
+> [`v2/spec/gemm.md`](../v2/spec/gemm.md) **v0.3 FROZEN** (V×H `dpe` instances
+> + byte-tree reduce + lane serializer; REGULAR tiles, no ACAM after
+> reduction, `out8 = trunc8(Σ y_v)` exactly). Oracle (`v2/oracle/gemm_ref.py`)
+> and behavior model (`v2/sim/gemm_sim.py`, GATE 1 in `dump_case`) are green;
+> `v2/smoke/gen_gemm_cases.py` emits GATE-1-certified 1A–1D cases. Next:
+> GATE-2 TB/harness + hand-written `v2/rtl/gemm_top.v` (1A→1D).
