@@ -18,7 +18,7 @@ Revision history:
 - **v0.1 (2026-09-17)**: initial draft.
 
 **Precedence**: this spec > `gemm_ref` ≡ `gemm_sim` > legacy `fc_top`
-(witness). Below this charter sits [`dpe_nldpe.md`](dpe_nldpe.md) (v2.0.1),
+(witness; waived for Stage 2 — see §9 amendment). Below this charter sits [`dpe_nldpe.md`](dpe_nldpe.md) (v2.0.1),
 whose per-pass schedule and port semantics are **normative and unchanged** —
 the array composes that primitive, it does not modify it.
 **Normative rule**: every choice the oracle/sim make must exist here first;
@@ -370,6 +370,12 @@ the primitive's, and `L_w` is absorbed in the fill.
 - **Witness**: legacy `fc_top`/oracle on identical workloads where
   interfaces permit (byte-tree compatibility expected); cadence differences
   (52 vs 60) reported, not gated.
+> **Amendment (2026-09-20, user directive)**: the legacy-`fc_top` witness
+> above is **waived** — v2 does not depend on v1. The value burden is carried
+> by `gemm_ref` (independent composition + end-to-end
+> `out8 == trunc8(X@W)` identity) and the independent NumPy recompute against
+> RTL dumps (251 cases / 461,920 bytes, 0 mismatches). No normative content
+> changed.
 
 ## §10 Decision log
 

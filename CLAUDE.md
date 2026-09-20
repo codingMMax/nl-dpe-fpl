@@ -6,7 +6,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 ## Direction (2026-08-29, pinned)
 - **Legacy RTL work lives in `rtl_flow/`** — primitives, fc_top, generators (`rtl_flow/gen/`), per-arch specs (`rtl_flow/specs/`), TBs, smoke harnesses, methodology docs, VTR synth path. Entry point: `rtl_flow/README.md`. The active clean-room `v2/` tree lives at the **repo root** `v2/` (moved 2026-09-13) — work there for v2, in `rtl_flow/` for legacy.
 - **Bottom-up primitive-first re-verification is the active plan** (user directive 2026-08-29): current verification is self-consistent but not user-validated (FC functional check is a one-byte pattern; cycle formula from unremembered sessions). Ladder: **primitives → fc_top → softmax → projections+DIMM → (then) mapping+simulator**. Each rung = behavioral charter (user-approved) + independent NumPy oracle + RTL matching both. Ground truth = charter + oracles; faithful RTL enforces them.
-- **Clean-room v2 flow (user directive 2026-08-29)**: legacy generated RTL is FROZEN as reference (still green: 52/52, 13/13 — do not edit). New hand-written flow lives in `v2/` at the repo root (spec/ rtl/ tb/ oracle/ sim/ smoke/). Process per primitive: charter → NumPy oracle (before RTL) → starter skeleton → **user hand-writes RTL** (LLM reviews, never edits) → cross-check v2 vs legacy vs oracle on identical stimulus. Legacy is read-only reference; copying from it mid-flight is forbidden (independent-witness property).
+- **Clean-room v2 flow (user directive 2026-08-29)**: legacy generated RTL is FROZEN as reference (still green: 52/52, 13/13 — do not edit). New hand-written flow lives in `v2/` at the repo root (spec/ rtl/ tb/ oracle/ sim/ smoke/). Process per primitive: charter → NumPy oracle (before RTL) → starter skeleton → **user hand-writes RTL** (LLM reviews, never edits) → cross-check v2 vs legacy vs oracle on identical stimulus. Legacy is read-only reference; copying from it mid-flight is forbidden (independent-witness property). **Scope note (2026-09-20)**: the legacy cross-check applies to Stage 1 only (interface-compatible primitive); **Stage 2+ drops the legacy witness** — v2 does not depend on v1, and the value burden is carried by the oracle + independent NumPy recompute against RTL dumps.
 - Charter home: `rtl_flow/SPEC.md` — first live spec `v2/spec/dpe_nldpe.md` **v2.0 clean integer rewrite 2026-09-14** (int8 weights/activations, exact integer MAC, integer ACAM forms + trunc8 low byte; P1–P13 + P16 + P21–P26 live; supersedes the v1.1 fp32 amendment per advisor consultation). Ladder position: Stage 1.2 (v2 oracle + sim, integer) done → user hand-write → cross-check.
 - The old azurelily simulator stays archived — the new minimal simulator (Stage 5, deferred) will consume the Stage 1–4 charters verbatim.
 
@@ -239,8 +239,12 @@ progress — see "Direction (2026-08-29)" above.
 - **Notes**: sim wall time ∝ `V·H·R·C` (weight strobes) × per-cycle event cost
   (tree fold `TREE_PIPE·H·EPS·V` every clock); 256×256 2048×1024 cases ≈ 2.1M
   cycles → use `--timeout 14400`. `test_gemm.py` skips incomplete case dirs.
-- **Next**: Stage-2 legacy witness (primitive-level witness exists), then
-  Stage 3 (softmax) per the forward plan.
+- **Next**: Stage 3 (softmax) per the forward plan. **Stage-2 legacy witness
+  WAIVED (2026-09-20, user directive)**: v2 does not depend on v1 — legacy
+  `fc_top` has a different port surface/cadence (Phase-2 BRAM wrapper) and a
+  v2-written adapter would dilute the independent-witness value; the Stage-1
+  primitive legacy witness stands as the historical v1 cross-check. No
+  further `rtl_flow/` work is planned for Stage 2+.
 
 ### Forward plan
 

@@ -43,10 +43,15 @@
 > legacy RTL on identical stimulus (mode 0; legacy cadence 52 vs v2 60 is a
 > documented differing witness).
 >
-> **Stage 2 — GEMM array (in progress)**: second charter
+> **Stage 2 — GEMM array (COMPLETE 2026-09-20)**: second charter
 > [`v2/spec/gemm.md`](../v2/spec/gemm.md) **v0.3 FROZEN** (V×H `dpe` instances
 > + byte-tree reduce + lane serializer; REGULAR tiles, no ACAM after
-> reduction, `out8 = trunc8(Σ y_v)` exactly). Oracle (`v2/oracle/gemm_ref.py`)
-> and behavior model (`v2/sim/gemm_sim.py`, GATE 1 in `dump_case`) are green;
-> `v2/smoke/gen_gemm_cases.py` emits GATE-1-certified 1A–1D cases. Next:
-> GATE-2 TB/harness + hand-written `v2/rtl/gemm_top.v` (1A→1D).
+> reduction, `out8 = trunc8(Σ y_v)` exactly). Hand-written
+> `v2/rtl/gemm_top.v` passes GATE 2 on the full corpus: **251/251 PASS,
+> Δ_impl = 0**, T_steady steps 10/16/34/60/104/111/213 exact
+> (`v2/tb/tb_gemm_top.v` + `v2/smoke/run_gemm_rtl.py` + `test_gemm.py`);
+> independent NumPy recompute on 251 cases / 461,920 bytes: 0 mismatches.
+> **Legacy witness WAIVED for Stage 2 (2026-09-20, user directive)**: v2 does
+> not depend on v1 — legacy `fc_top` has a different port surface/cadence and
+> a v2-written adapter would dilute the independent-witness value. The
+> Stage-1 legacy witness above stands as the historical v1 cross-check.
