@@ -108,3 +108,6 @@ v2/smoke/logs/
 
 # v2 harness lock file (transient)
 v2/smoke/.dpe_rtl.lock
+
+# v2 GEMM harness lock file (transient)
+v2/smoke/.gemm_rtl.lock
