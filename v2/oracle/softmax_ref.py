@@ -25,6 +25,11 @@ are bit-identical (f(d) in [0, 8065], no int32 clamp reachable).
 
 Notes
 -----
+* Operator pass layer (§6 F5-F8): ACAM never runs standalone — the EXP of a
+  row slice and the LOG of the lane sums are identity-crossbar passes with
+  capacity I = min(R,C); pass counts are schedule-owned. `safe_softmax_nl`
+  is the pass view; `elementwise_softmax_nl` is the dual view and the
+  self-test asserts bit-equality (the packing/geometry invariance).
 * Output is LOG-domain (log p_i approximation), consumed directly by the
   downstream S*V DIMM input path (`mac_sv`); it is not comparable with a
   linear-domain (Azure-Lily) softmax.
@@ -46,10 +51,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import nldpe_ref as ref  # noqa: E402
 
 
-def safe_softmax_nl(scores: np.ndarray) -> np.ndarray:
-    """NL safe-softmax over an S x S score matrix. Returns int8 [S, S].
+def elementwise_softmax_nl(scores: np.ndarray) -> np.ndarray:
+    """Dual (elementwise, geometry-free) view of NL safe-softmax — int8 [S, S].
 
-    scores : int8 (or integer) [S, S], S a power of two. Log-domain output.
+    Kept as the independent witness for the pass view; do not consume it from
+    the behavior sim (use `safe_softmax_nl`).
     """
     x = np.asarray(scores, dtype=np.int32)
     assert x.ndim == 2 and x.shape[0] == x.shape[1], "scores must be [S, S]"
@@ -62,13 +68,41 @@ def safe_softmax_nl(scores: np.ndarray) -> np.ndarray:
         row = x[r]
         m = int(row.max())
         d = np.maximum(row - m, -128)
-        # ACAM EXP; sum the unsigned byte values (hardware sums bytes).
         eb = ref.acam_transform(d, ref.MODE_EXP).view(np.uint8).astype(np.int64)
         s = int(eb.sum())
         lq = min(s >> log_shift, 127)
         ls = int(ref.acam_transform(np.array([lq], dtype=np.int32),
                                     ref.MODE_LOG)[0])
         out[r] = np.clip(row - m - ls, -128, 127).astype(np.int8)
+    return out
+
+
+def safe_softmax_nl(scores: np.ndarray, R: int = 256, C: int = 256
+                    ) -> np.ndarray:
+    """NL safe-softmax over an S x S score matrix (pass view). int8 [S, S].
+
+    scores : int8 (or integer) [S, S], S a power of two. Log-domain output.
+    R, C   : crossbar geometry for the EXP/LOG identity passes (F5/F6).
+    """
+    x = np.asarray(scores, dtype=np.int32)
+    assert x.ndim == 2 and x.shape[0] == x.shape[1], "scores must be [S, S]"
+    S = x.shape[1]
+    assert S & (S - 1) == 0, "S must be a power of two"
+    log_shift = S.bit_length() - 1
+
+    out = np.zeros_like(x, dtype=np.int8)
+    for r in range(x.shape[0]):
+        row = x[r]
+        m = int(row.max())
+        d = np.maximum(row - m, -128).astype(np.int8)
+        # ACAM EXP is a crossbar pass (identity weights), capacity I = min(R,C).
+        eb, _p_exp = ref.convert_stream(d, ref.MODE_EXP, R, C)
+        s = int(eb.view(np.uint8).astype(np.int64).sum())
+        lq = min(s >> log_shift, 127)
+        # ACAM LOG is a crossbar pass on the int8 lane-sum value.
+        ls, _p_log = ref.convert_stream(np.array([lq], dtype=np.int8),
+                                        ref.MODE_LOG, R, C)
+        out[r] = np.clip(row - m - int(ls[0]), -128, 127).astype(np.int8)
     return out
 
 
@@ -118,6 +152,13 @@ def _self_test() -> None:
         return o
 
     assert np.array_equal(safe_softmax_nl(x), nl_ref(x)), "structural mismatch"
+
+    # ── Pass view == elementwise dual view (F5-F7 geometry invariance) ─────
+    assert np.array_equal(safe_softmax_nl(x), elementwise_softmax_nl(x)), \
+        "pass view != elementwise view"
+    # L > I: R=C=8 forces 16 EXP passes per row (S=128); values unchanged.
+    assert np.array_equal(safe_softmax_nl(x, R=8, C=8),
+                          elementwise_softmax_nl(x)), "geometry changed values"
 
     print("softmax_ref self-test: ALL PASS")
 

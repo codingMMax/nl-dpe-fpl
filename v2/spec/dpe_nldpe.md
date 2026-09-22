@@ -15,6 +15,11 @@ weight/crossbar modeling (v1.1) is retired.
 oracle and spec disagree, the spec is wrong until fixed.
 
 Revision history:
+- **v2.0.2 (2026-09-20)**: operator pass layer (F5-F8): ACAM is the crossbar's
+  output stage, never standalone; identity conversion capacity `I = min(R,C)`,
+  stride-`I` pass schedule with normative padding discard; int8 feed invariance
+  (REGULAR/EXP/LOG; ACTIVATION excluded); packing is a schedule property with
+  **schedule-injected pass counts** (P28). No numeric change to F1-F4.
 - **v2.0.1 (2026-09-15)**: interface freeze (ports identical to legacy
   `rtl_flow/`; parameter superset) + hardware-realizability amendment: §5.2
   accumulator is freed by the **ACAM write** (single-accumulator gate — a
@@ -274,6 +279,40 @@ toward zero for the non-negative squares used in EXP).
   | 10 | EXP | `out8 = trunc8(1 + y + ⌊y²/2⌋)`, evaluated exactly (signed 64-bit is sufficient for `R ≤ 131072`). The `trunc8` clamp is **live**: when the intermediate exceeds int32, `out8` is the clamped value's low byte (`0xFF` for positive overflow) — so "only `y mod 512` matters" holds **only inside the un-clamped range**; no mod-512 shortcut is permitted |
   | 11 | LOG | `out8 = trunc8(y − 1)` |
 
+### Operator pass layer — identity conversion & schedule packing (F5–F8, v2.0.2)
+
+An **operator pass** is the only path through which a value is converted:
+crossbar first, ACAM last. There is no standalone ACAM unit.
+
+- **F5 (pass)**: a pass consumes `x ∈ int8[R]` (the schedule zero-pads to `R`)
+  and `W ∈ int8[R,C]`, producing `out ∈ int8[C]`:
+  `y[c] = Σ_r W[r,c]·x[r]` (F1/F2, exact) and `out[c] = ACAM_mode(y[c])`
+  (F3, `trunc8`). For identity / full-rank `W`, exactly `I = min(R,C)` outputs
+  are meaningful; the remaining columns emit `ACAM(0)` — defined, never
+  consumed.
+- **F6 (identity conversion)**: converting `x ∈ int8[L]` uses
+  `W = [I_{I×I} | 0]` and issues `P = ceil(L/I)` passes with stride `I`: pass
+  `p` consumes `x[p·I : (p+1)·I]` zero-padded to `R`, and only its real
+  outputs are kept. **Padding discard is normative** (e.g. `EXP(0) = 1` must
+  never enter a downstream sum). `L ≤ I` converts in one pass.
+- **F7 (int8 feed invariance)**: for REGULAR, EXP and LOG,
+  `trunc8(ACAM(u)) = trunc8(ACAM(trunc8(u)))` elementwise inside the
+  un-clamped EXP range (`|u| ≤ 65535`); a CLB-computed integer may therefore
+  be truncated to int8 before a pass without value loss. **ACTIVATION is
+  excluded** (relu is sign-dependent).
+- **F8 (packing is a schedule property)**: `K` vectors of length `d` with
+  `K·d ≤ I` may share one pass via `W = blockdiag_k I_{d×d}` and
+  `x = [x_1; …; x_K]`. Values are equal to serial conversion (PF7); only the
+  pass count changes:
+
+  ```
+  ideal (packed):  P = ceil(W_elems / I)
+  unpacked:        P = Σ_i ceil(len_i / I)        (≥ ideal)
+  ```
+
+  The **schedule injects the pass count** it actually issues into the cycle
+  model; `T(p) = T_fill + (p−1)·T_steady` (§5.3) is unchanged by F5–F8.
+
 ## §7 Assumption register (v2.0)
 
 | # | Assumption |
@@ -365,6 +404,7 @@ toward zero for the non-negative squares used in EXP).
 | P25 | Accumulator width | int32 suffices exactly for `R ≤ 131072` (`|y| ≤ R·2^14`); EXP may use a wider intermediate — replaces P19 |
 | P26 | Comparison contract | TB compares full hierarchical int32 `y` **and** the 8-bit stream (dual compare) |
 | P27 | ACAM mode configuration | Mode is **workload configuration**, latched by the WEIGHT strobes into `mode_q` and held across all passes (no per-pass sampling); re-programming changes it. **Supersedes A11's compute-start sampling** (behaviorally identical when the wrapper holds it stable) |
+| P28 | Operator pass layer | Conversion is always a crossbar pass (ACAM last, no standalone unit): capacity `I = min(R,C)`, stride-`I` schedule with normative padding discard, int8 feed invariance (REGULAR/EXP/LOG), packing a schedule property with **schedule-injected pass counts** (§6 F5–F8) |
 | D1 | Ground truth | This spec + oracle; legacy and v2 both implementers |
 | D8 | Wide output view | Hierarchical TB read of the int32 `y` (F2); **no port** |
 

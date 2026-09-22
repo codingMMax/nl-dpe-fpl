@@ -39,9 +39,10 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 |------|------|
 | `rtl_flow/FIDELITY_METHODOLOGY.md` | Legacy RTL/sim methodology (§3 DPE arch, §5 workload classes, §7 tiling) — its §3.2/§4 double-buffered cadence (T_steady=52) is **superseded for v2 by `v2/spec/dpe_nldpe.md` P1/A9** (single buffer: 60/104) |
 | `rtl_flow/SPEC.md` | **Charter home pointer** → first live spec `v2/spec/dpe_nldpe.md` **v2.0.1** (integer rewrite 2026-09-14/15; P1–P27, D1/D8) |
-| `v2/spec/dpe_nldpe.md` | **First live v2 charter** (v2.0.1): int8 weights/activations, exact integer MAC, integer ACAM + trunc8; P1–P27; dual-compare contract P26 |
+| `v2/spec/dpe_nldpe.md` | **First live v2 charter** (v2.0.2): int8 weights/activations, exact integer MAC, integer ACAM + trunc8; P1–P28; dual-compare contract P26; **operator pass layer F5–F8** (ACAM = crossbar output stage; `I = min(R,C)`; stride-`I` schedule + padding discard; int8 feed invariance; packing = schedule property, pass counts injected) |
 | `v2/spec/gemm.md` | **Stage-2 charter (v0.3 FROZEN 2026-09-17)**: GEMM array = V×H `dpe` instances + byte-tree reduce + lane serializer; tiles REGULAR, **no ACAM after reduction**, `out8 = trunc8(Σ y_v)` exactly; G1–G9 |
-| `v2/oracle/nldpe_ref.py` | v2 NumPy oracle — numerical ground truth (GATE 1 reference; exact integer, no quantization policy) |
+| `v2/oracle/nldpe_ref.py` | v2 NumPy oracle — numerical ground truth (GATE 1 reference; exact integer, no quantization policy); F5–F8 operator pass layer (`identity_pass`, `convert_stream`, `convert_packed`) |
+| `v2/spec/dimm.md` | **DIMM spec v0.1 (2026-09-20)**: DIMM-only split of pool/farm — value/pass contracts, schedule-injected `DimmPassPlan`, **balance law with derive-by-default + residual**, cycle contract; softmax deferred |
 | `v2/sim/nldpe_sim.py` | v2 golden model — owns quantize/trunc8; `dump_case` certifies each case vs oracle (GATE 1) before writing expected bits |
 | `v2/smoke/run_dpe_rtl.py` + `v2/tb/tb_dpe_nldpe.v` | v2 RTL cross-check harness (GATE 2: dual compare + Δ_impl/T_steady gates) |
 | `v2/rtl/dpe_nldpe.v` | Hand-written v2 integer RTL — all 7 blocks; structural control channels, Δ_impl = 0 (Stage 1.5 complete) |
@@ -246,14 +247,56 @@ progress — see "Direction (2026-08-29)" above.
   primitive legacy witness stands as the historical v1 cross-check. No
   further `rtl_flow/` work is planned for Stage 2+.
 
+### Stage 3/4 operator layer (in progress, 2026-09-20)
+
+- **Pass layer pinned**: `v2/spec/dpe_nldpe.md` v2.0.2 §6 F5–F8 + P28 — ACAM
+  is the crossbar output stage (no standalone unit); identity conversion has
+  capacity `I = min(R,C)`, stride-`I` passes with normative padding discard;
+  int8 feed invariance (REGULAR/EXP/LOG; ACTIVATION excluded); packing is a
+  schedule property whose pass counts the schedule **injects** into the cycle
+  model (no idealized counts hidden in the model).
+- **Oracle rework DONE**: `v2/oracle/nldpe_ref.py` gains `identity_pass`,
+  `convert_stream`, `convert_packed`; `dimm_ref`/`softmax_ref` are now
+  pass-structured with the elementwise view kept as the dual witness
+  (self-tests assert bit-equality incl. `L > I` geometry and F7 invariance).
+- **DIMM cycle model**: `dimm_sim.dimm_cycle_model(..., plan=DimmPassPlan)` —
+  pass counts are required and schedule-owned; `ideal_pass_plan()` is only a
+  packed-count convenience. Shadow reference values unchanged (1974 etc.).
+- **DIMM spec DONE**: `v2/spec/dimm.md` v0.1 (DIMM-only split of
+  `pool_farm_model.md`; §4 = balance law with **derive-by-default** — exact
+  rule `n_log = max(1, ⌈P_log/⌈P_E/n_E⌉⌉)` (lexicographic optimum for
+  max-T → residual → machines; PF3 closed form kept as the ±1 reference);
+  overrides are **both-or-neither** and must report `balance_residual`;
+  rectangular S×V counts are asymmetric by the law (reference `(1,2)`);
+  §5 cycle contract; §6 worked example). Softmax content stays in
+  `pool_farm_model.md` §6 until its own split.
+- **Ownership / status (2026-09-20)**: the DIMM **cycle core**
+  (derive-by-default + `balanced`/`balance_residual`) and the **behavior**
+  (`NldpeDimm.run_matmul`: producers → parked buffers → exp farm via identity
+  passes → exact reduce → schedule-injected plan → measured cycles) are
+  **implemented** (agent, at user request). `dimm_sim` self-test is **ALL
+  PASS**: values ≡ oracle, measured ≡ shadow, balance contract green
+  (reference 1974; floor residual 1920; PF3/PF4; overrides reported). The
+  behavior reports the passes it actually issues (unpacked per-k farm counts),
+  not the ideal packed count.
+- **Softmax parked** (user directive 2026-09-20): no softmax work until DIMM
+  is done.
+- **Next**: DIMM RTL (scope TBD: wrapper composing identity-programmed
+  `dpe` pools + farm + accumulator, vs scheduler over existing RTL) **or**
+  softmax spec re-derivation + `NldpeSoftmax.run()` (user's call). The DIMM
+  self-test now carries a **staged matrix**: 6 shapes × 2 phase policies,
+  checking crossbar y (int32) → ACAM bytes (int8) → CLB log-add/reduction
+  (int64) → final C (int32) → cycles, with `collect_stages=True`
+  diagnostics (`DimmStages`).
+
 ### Forward plan
 
 | Rung | Scope | Gate |
 |---|---|---|
 | Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim; hand-written integer RTL; legacy witness | ✅ **DONE** — RTL ≡ sim ≡ oracle per case, Δ_impl = 0 (GATE 1+2); legacy witness PASS |
 | Stage 2 — GEMM array (VMM/projection) | `v2/spec/gemm.md` v0.3 frozen; hand-written `gemm_top` (V×H `dpe`) + GATE-2 harness | ✅ **DONE** — 251/251 PASS, Δ_impl = 0, T_steady steps exact (10/16/34/60/104/111/213); independent NumPy witness clean |
-| Stage 3 — softmax | Port oracles + RTL into rtl_flow; pin log-domain output contract | Your sign-off |
-| Stage 4 — projections + DIMM | Q/K/V composition on trusted fc_top; DIMM charter from `paper/methodology/attention_dimm_mapping.md`, oracle → RTL → smoke | Your sign-off |
+| Stage 3 — softmax | `v2/spec/softmax.md` (fresh row-pipeline derivation) + pass layer F5–F8 → behavior (`NldpeSoftmax.run`) → RTL | Your sign-off |
+| Stage 4 — projections + DIMM | `v2/spec/dimm.md` (pool/farm, schedule-injected plans) + attention mapping (`attention_dimm_mapping.md`); oracle → behavior → RTL | Your sign-off |
 | Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
 
 ### Authoritative docs

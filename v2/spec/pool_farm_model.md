@@ -1,5 +1,10 @@
 # Pool/Farm Model — NL-DPE DIMM & softmax operator parallelism
 
+> **Superseded for DIMM**: the DIMM content of this document (§§1–5, 7–9) is
+> now normative in [`v2/spec/dimm.md`](dimm.md) (2026-09-20), which owns the
+> value/pass/pacing/balance/cycle contracts. Only **§6 (softmax
+> row-pipeline)** is retained here until the softmax spec is split off.
+
 **Status**: working spec, 2026-09-15. Applies to the v2 operator layer
 (`v2/sim/dimm_sim.py`, `v2/sim/softmax_sim.py`).
 
@@ -232,7 +237,7 @@ the attention mapping.
 | PF6 | Softmax timing = streaming row-pipeline model (study-locked), **not** pass-gated |
 | PF7 | Values are invariant to pools/lanes/packing; oracles are the value contract |
 | PF8 | Buffer/accumulator bandwidth assumed sufficient unless declared otherwise (advisory check) |
-| PF9 | Identity pass budget: `I = min(R,C)`, `ceil(elements/I)` passes, zero-pad to `R`; primitive unchanged, wrapper owns padding |
+| PF9 | Identity pass budget: `I = min(R,C)`, `ceil(elements/I)` passes, zero-pad to `R`; primitive unchanged, wrapper owns padding. Pass counts are **schedule-injected** (`DimmPassPlan` in `dimm_sim.py`); the normative pass layer is `dpe_nldpe.md` §6 F5–F8 (capacity, stride, padding discard, int8 feed invariance, packing) |
 
 ## 9. TODO
 

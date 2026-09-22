@@ -109,6 +109,67 @@ def acam_transform(y: np.ndarray, mode: int) -> np.ndarray:
         raise ValueError(f"invalid ACAM mode: {mode}")
 
 
+# ---------------------------------------------------------------------------
+# Operator pass layer (§6 F5-F8, v2.0.2): conversion = crossbar pass, ACAM last
+# There is no standalone ACAM path; identity conversion of a stream is a
+# schedule of passes of capacity I = min(R, C) elements each.
+# ---------------------------------------------------------------------------
+def identity_pass(x_win: np.ndarray, mode: int, R: int, C: int) -> np.ndarray:
+    """§6 F5 — one identity-weights pass; ACAM is the crossbar output stage.
+
+    x_win : int8 [R] input window (schedule zero-pads). Returns int8 [C]:
+    c < I = min(R, C) is the converted element; c >= I is ACAM(0) padding
+    (defined, must be discarded by the schedule — §6 F6).
+    """
+    win = np.asarray(x_win, dtype=np.int8).reshape(R)
+    W = np.eye(R, C, dtype=np.int8)
+    y = compute_y(W, win.reshape(1, R))
+    return acam_transform(y, mode)[0]
+
+
+def convert_stream(x: np.ndarray, mode: int, R: int = 256, C: int = 256
+                   ) -> tuple[np.ndarray, int]:
+    """§6 F6 — identity conversion of a flat stream: returns (values, passes).
+
+    P = ceil(L/I) passes, stride I, each window zero-padded to R; only the
+    `len` real outputs of each pass are kept (padding ACAM(0) discarded).
+    """
+    flat = np.asarray(x, dtype=np.int8).reshape(-1)
+    I = min(R, C)
+    if flat.size == 0:
+        return flat.copy(), 0
+    n_passes = -(-flat.size // I)
+    out = np.empty(n_passes * I, dtype=np.int8)
+    for p in range(n_passes):
+        chunk = flat[p * I:(p + 1) * I]
+        win = np.zeros(R, dtype=np.int8)
+        win[:chunk.size] = chunk
+        out[p * I:p * I + chunk.size] = identity_pass(win, mode, R, C)[:chunk.size]
+    return out[:flat.size], n_passes
+
+
+def convert_packed(vecs: np.ndarray, mode: int, R: int = 256, C: int = 256
+                   ) -> tuple[np.ndarray, int]:
+    """§6 F8 — K vectors of length d packed into ONE block-diagonal pass.
+
+    vecs : int8 [K, d] with K*d <= I = min(R, C). Returns ([K, d], passes=1);
+    values equal converting each vector separately (F8/PF7).
+    """
+    v = np.asarray(vecs, dtype=np.int8)
+    assert v.ndim == 2, "vecs must be [K, d]"
+    K, d = v.shape
+    I = min(R, C)
+    assert K * d <= I, f"packed window {K*d} exceeds pass capacity I={I}"
+    W = np.zeros((R, C), dtype=np.int8)
+    for k in range(K):
+        for j in range(d):
+            W[k * d + j, k * d + j] = 1
+    win = np.zeros(R, dtype=np.int8)
+    win[:K * d] = v.reshape(-1)
+    out = identity_pass(win, mode, R, C)
+    return out[:K * d].reshape(K, d), 1
+
+
 def pack_act_stream(x_m: np.ndarray) -> list[int]:
     """§4.3 — one pass's activation byte stream packed into 40-bit words.
 
@@ -240,6 +301,38 @@ def _self_test() -> None:
     assert words_w[-1] == int(W[R - 1, C - 1].view(np.uint8)), "last word order wrong"
     wt_rt = np.array(words_w, dtype=np.uint8).view(np.int8).reshape(R, C)
     assert np.array_equal(wt_rt, W), "weight byte round-trip failed"
+
+    # ── §6 F5-F8 operator pass layer ───────────────────────────────────────
+    # F5: one pass equals the elementwise ACAM on the same [R] window.
+    r8, c8 = 8, 8                     # I = 8
+    win = np.arange(-4, 4, dtype=np.int8)
+    for mode in (MODE_REGULAR, MODE_EXP, MODE_LOG):
+        assert np.array_equal(identity_pass(win, mode, r8, c8),
+                              acam_transform(win.astype(np.int32), mode))
+
+    # F6: L > I chunks with stride I; padding ACAM(0) never appears.
+    xs = np.arange(-37, 43, dtype=np.int8)          # L = 80 = 10 passes
+    for mode in (MODE_REGULAR, MODE_EXP, MODE_LOG):
+        conv, p = convert_stream(xs, mode, r8, c8)
+        assert p == -(-xs.size // 8) and conv.size == xs.size
+        assert np.array_equal(conv, acam_transform(xs.astype(np.int32), mode))
+    one, p1 = convert_stream(np.array([5], dtype=np.int8), MODE_EXP, r8, c8)
+    assert p1 == 1 and one.size == 1 and int(one[0]) == int(
+        acam_transform(np.array([5], dtype=np.int32), MODE_EXP)[0]), \
+        "padding ACAM(0) leaked into the conversion"
+
+    # F7: int8 feed invariance for REGULAR/EXP/LOG (ACT excluded: sign-dependent).
+    u = np.arange(-256, 255, dtype=np.int64)
+    for mode in (MODE_REGULAR, MODE_EXP, MODE_LOG):
+        wide = acam_transform(u, mode)
+        fed, _ = convert_stream(trunc8(u), mode, 256, 256)
+        assert np.array_equal(wide, fed), f"int8-feed invariance broke (mode {mode})"
+
+    # F8: packed (block-diagonal) == serial, one pass.
+    vv = np.array([[1, 2], [3, 4], [-5, 6]], dtype=np.int8)   # K=3, d=2
+    packed, pp = convert_packed(vv, MODE_EXP, r8, c8)
+    serial, _ = convert_stream(vv.reshape(-1), MODE_EXP, r8, c8)
+    assert pp == 1 and np.array_equal(packed, serial.reshape(3, 2))
 
     print("nldpe_ref self-test: ALL PASS")
 
