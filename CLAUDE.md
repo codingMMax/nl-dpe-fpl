@@ -42,12 +42,15 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 | `v2/spec/dpe_nldpe.md` | **First live v2 charter** (v2.0.2): int8 weights/activations, exact integer MAC, integer ACAM + trunc8; P1–P28; dual-compare contract P26; **operator pass layer F5–F8** (ACAM = crossbar output stage; `I = min(R,C)`; stride-`I` schedule + padding discard; int8 feed invariance; packing = schedule property, pass counts injected) |
 | `v2/spec/gemm.md` | **Stage-2 charter (v0.3 FROZEN 2026-09-17)**: GEMM array = V×H `dpe` instances + byte-tree reduce + lane serializer; tiles REGULAR, **no ACAM after reduction**, `out8 = trunc8(Σ y_v)` exactly; G1–G9 |
 | `v2/oracle/nldpe_ref.py` | v2 NumPy oracle — numerical ground truth (GATE 1 reference; exact integer, no quantization policy); F5–F8 operator pass layer (`identity_pass`, `convert_stream`, `convert_packed`) |
-| `v2/spec/dimm.md` | **DIMM spec v0.1 (2026-09-20)**: DIMM-only split of pool/farm — value/pass contracts, schedule-injected `DimmPassPlan`, **balance law with derive-by-default + residual**, cycle contract; softmax deferred |
+| `v2/spec/dimm.md` | **DIMM spec v0.2 (2026-09-22)**: pool/farm value/pass contracts, schedule-injected `DimmPassPlan`, balance law (derive-by-default + residual), **normative schedule mapping (§2.1: rank-1 outer product over k; A column-major/B row-major; convert-once LA/LB) and producer→farm fill `T_start`** in the cycle contract; softmax deferred |
 | `v2/sim/nldpe_sim.py` | v2 golden model — owns quantize/trunc8; `dump_case` certifies each case vs oracle (GATE 1) before writing expected bits |
 | `v2/smoke/run_dpe_rtl.py` + `v2/tb/tb_dpe_nldpe.v` | v2 RTL cross-check harness (GATE 2: dual compare + Δ_impl/T_steady gates) |
 | `v2/rtl/dpe_nldpe.v` | Hand-written v2 integer RTL — all 7 blocks; structural control channels, Δ_impl = 0 (Stage 1.5 complete) |
 | `v2/smoke/test_dpe_primitive.py` | DPE-primitive case verifier — no args: corpus table (`sim_cyc/rtl_cyc/delta_cyc`, `y32_match`, `out8_match`, verdict); `--list` index (`*` = latest run); `<case>` full view |
 | `v2/oracle/gemm_ref.py` + `v2/sim/gemm_sim.py` + `v2/smoke/{gen_gemm_cases,run_gemm_rtl,test_gemm}.py` + `v2/tb/tb_gemm_top.v` | Stage-2 GEMM: oracle (exact composition + end-to-end matmul witness), golden model (GATE 1 in `dump_case`), certified 1A–1D case generator, GATE-2 harness/TB (`S_col` + lanes), verifier |
+| `v2/rtl/dimm_top.v` | **Stage-4 DIMM RTL** (single file, 6 modules): `dimm_wprog`/`dimm_log_pool`/`dimm_exp_farm`/`dimm_reduce`/`dimm_sched`/`dimm_top`; take-now window acceptance, drain queue depth 2, per-port acc banks, same-cycle flush/`win_done`; **exact cycles: Δ_impl = 0** (span == T(p), ser == M·N, fill == T_start) |
+| `v2/smoke/{gen_dimm_cases,run_dimm_rtl,test_dimm}.py` + `v2/tb/tb_dimm_top.v` | Stage-4 DIMM: GATE-1 dumper (`NldpeDimm.dump_case`), case sweep (7 shapes × n_E {1,2,4,8,16} × classes), GATE-2 strict gates (Δ=0, spans == T_A/T_B/T_E, ser == M·N, fill == T_start, window counts == P_A/P_B/P_E), verifier |
+| `v2/docs/gemm_dataflow_reading.md` | Reading list: GEMM/GEMV dot-product vs outer-product dataflows, reuse/buffering theory, accelerator dataflow taxonomy |
 | `v2/smoke/stimuli/` | Corpus (gitignored, accumulates across runs) + `manifest.txt` scoping the harness to the latest generation |
 | `v2/smoke/logs/` | Test logs (gitignored): `<case>.log` per-case TB stdout + timestamped `rtl_smoke_*.log` run summaries + `latest.log` |
 | `rtl_flow/docs/FC_RTL_PLAN.md` | FC/GEMM RTL build-out plan (Stage 1A→1D) |
@@ -281,13 +284,29 @@ progress — see "Direction (2026-08-29)" above.
   not the ideal packed count.
 - **Softmax parked** (user directive 2026-09-20): no softmax work until DIMM
   is done.
-- **Next**: DIMM RTL (scope TBD: wrapper composing identity-programmed
-  `dpe` pools + farm + accumulator, vs scheduler over existing RTL) **or**
-  softmax spec re-derivation + `NldpeSoftmax.run()` (user's call). The DIMM
-  self-test now carries a **staged matrix**: 6 shapes × 2 phase policies,
-  checking crossbar y (int32) → ACAM bytes (int8) → CLB log-add/reduction
-  (int64) → final C (int32) → cycles, with `collect_stages=True`
-  diagnostics (`DimmStages`).
+- **DIMM RTL + cycle alignment DONE (2026-09-22)**: `v2/rtl/dimm_top.v`
+  (6 modules in one file; hand-written behavior after M1–M3). Spec/model
+  v0.2 adds the **producer→farm fill** `T_start = T_fill_p + (⌈W_p/n_p⌉−1)·T_steady_p`,
+  `W_A = ⌈M/I⌉`, `W_B = ⌈N/I⌉`; `total = max(T_A, T_B, T_start + T_E)`.
+  RTL tightened to zero overhead: take-now window acceptance, same-cycle
+  `win_done` and `flush`, combinational first-issue from `start` and from
+  producer completions (with fast-issue accounting), serializer starts in the
+  flush cycle (word 0), `done` after word M·N−1. Strict GATE-2: values staged
+  bit-exact, `Δ_impl = 0`, `span_A/B == T_A/T_B`, `span_F == T_E`,
+  `ser == M·N`, `fill == T_start`, window counts == `P_A/P_B/P_E`.
+  Sweep status: **70/70 cases exact (2026-09-23)** — 7 shapes × n_E ∈
+  {1,2,4,8,16} × {random, extremes}; the heavy 256×256 n_E ∈ {1,2} batch
+  finished exact (Δ_impl = 0, spans == T(P), ser == M·N, fill == T_start,
+  window counts == P_A/P_B/P_E on every case). `dimm_sim` cleanup: `_xbar_total`
+  layer contract (primitive T(p) vs DIMM phase totals), explicit **stage
+  ledger** (add/reduce = 0 by RTL structure — combinational / fused into the
+  exp drain; `serialize_cycles = M·N` = final output stage, reported
+  separately), `run_matmul` dedup to a single cycle source (`shadow.total`).
+  Bugs fixed during bring-up: wprog last-strobe off-by-one; drain-context
+  collision (depth-2 queue); dropped `win_done` on queued handoff; reduce
+  RMW collisions (per-port banks); shared-scratch combinational loops;
+  over-issue when `N_A > 1` (global window-index condition); fast-issue
+  accounting; TB negedge sampling for combinational probes.
 
 ### Forward plan
 
@@ -296,7 +315,7 @@ progress — see "Direction (2026-08-29)" above.
 | Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim; hand-written integer RTL; legacy witness | ✅ **DONE** — RTL ≡ sim ≡ oracle per case, Δ_impl = 0 (GATE 1+2); legacy witness PASS |
 | Stage 2 — GEMM array (VMM/projection) | `v2/spec/gemm.md` v0.3 frozen; hand-written `gemm_top` (V×H `dpe`) + GATE-2 harness | ✅ **DONE** — 251/251 PASS, Δ_impl = 0, T_steady steps exact (10/16/34/60/104/111/213); independent NumPy witness clean |
 | Stage 3 — softmax | `v2/spec/softmax.md` (fresh row-pipeline derivation) + pass layer F5–F8 → behavior (`NldpeSoftmax.run`) → RTL | Your sign-off |
-| Stage 4 — projections + DIMM | `v2/spec/dimm.md` (pool/farm, schedule-injected plans) + attention mapping (`attention_dimm_mapping.md`); oracle → behavior → RTL | Your sign-off |
+| Stage 4 — projections + DIMM | `v2/spec/dimm.md` v0.2 (pool/farm + mapping + fill) + attention mapping (`attention_dimm_mapping.md`); oracle → behavior → RTL **done** | ✅ **DIMM RTL exact** — Δ_impl = 0, spans == T(P), **70/70 cases verified** (heavy batch 2026-09-23); projections next |
 | Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
 
 ### Authoritative docs

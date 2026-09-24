@@ -1,8 +1,9 @@
 # Pool/Farm Model — NL-DPE DIMM & softmax operator parallelism
 
 > **Superseded for DIMM**: the DIMM content of this document (§§1–5, 7–9) is
-> now normative in [`v2/spec/dimm.md`](dimm.md) (2026-09-20), which owns the
-> value/pass/pacing/balance/cycle contracts. Only **§6 (softmax
+> now normative in [`v2/spec/dimm.md`](dimm.md) (v0.2, 2026-09-22), which owns
+> the value/pass/pacing/balance/cycle contracts **plus the schedule mapping
+> (§2.1) and the producer→farm fill `T_start` (§5)**. Only **§6 (softmax
 > row-pipeline)** is retained here until the softmax spec is split off.
 
 **Status**: working spec, 2026-09-15. Applies to the v2 operator layer
