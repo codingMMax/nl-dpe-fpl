@@ -40,7 +40,7 @@ Notes
 * Idealized integer model: log/exp are the ACAM's declared approximations, so
   the result is not numerically meaningful attention. Do not compare against a
   float matmul — the model itself is the contract (cf. spec A13).
-* Final reduce is an exact int32 sum of unsigned int8 exp bytes (no trunc8 at
+* Final reduce is an exact int32 sum of unsigned int8 exp outputs (no trunc8 at
   the output). K * 255 < 2^31 holds for any K <= 2^23.
 
 Functions
@@ -107,15 +107,15 @@ def exp_domain_pass(u: np.ndarray, R: int = 256, C: int = 256
 
 
 # ---------------------------------------------------------------------------
-# Staged views (harness diagnostics): crossbar y -> ACAM bytes per pass.
+# Staged views (harness diagnostics): crossbar y -> ACAM output per pass.
 # ---------------------------------------------------------------------------
 def log_domain_stages(x: np.ndarray, R: int = 256, C: int = 256
                       ) -> tuple[np.ndarray, np.ndarray, int]:
-    """Staged ACAM LOG conversion: (y int32, bytes int8, passes).
+    """Staged ACAM LOG conversion: (y int32, acam_output int8, passes).
 
     Identity weights (F5): the crossbar output is the fed int8 value
-    sign-extended; `bytes = trunc8(y - 1)` (P24). Same windowing/padding as
-    `nldpe_sim.identity_pass`.
+    sign-extended; `acam_output = trunc8(y - 1)` (P24). Same windowing/padding
+    as `nldpe_sim.identity_pass`.
     """
     shape = np.shape(x)
     flat = np.asarray(x, dtype=np.int8).reshape(-1)
@@ -125,22 +125,22 @@ def log_domain_stages(x: np.ndarray, R: int = 256, C: int = 256
     I = min(R, C)
     n_passes = -(-flat.size // I)
     y_out = np.empty(n_passes * I, dtype=np.int32)
-    b_out = np.empty(n_passes * I, dtype=np.int8)
+    acam_output = np.empty(n_passes * I, dtype=np.int8)
     for p in range(n_passes):
         chunk = flat[p * I:(p + 1) * I]
         y = chunk.astype(np.int32)
         y_out[p * I:p * I + chunk.size] = y
-        b_out[p * I:p * I + chunk.size] = ref.acam_transform(y, ref.MODE_LOG)
+        acam_output[p * I:p * I + chunk.size] = ref.acam_transform(y, ref.MODE_LOG)
     return (y_out[:flat.size].reshape(shape),
-            b_out[:flat.size].reshape(shape), n_passes)
+            acam_output[:flat.size].reshape(shape), n_passes)
 
 
 def exp_stages(u: np.ndarray, R: int = 256, C: int = 256
                ) -> tuple[np.ndarray, np.ndarray, int]:
-    """Staged ACAM EXP conversion: (y int32, bytes int8, passes).
+    """Staged ACAM EXP conversion: (y int32, acam_output int8, passes).
 
     F7: the wide CLB argument `u` is truncated to int8 before the crossbar;
-    `y` is that feed sign-extended; `bytes = trunc8(1 + y + y²/2)` (P24).
+    `y` is that feed sign-extended; `acam_output = trunc8(1 + y + y²/2)` (P24).
     """
     shape = np.shape(u)
     fed = ref.trunc8(np.asarray(u)).reshape(-1)
@@ -150,14 +150,14 @@ def exp_stages(u: np.ndarray, R: int = 256, C: int = 256
     I = min(R, C)
     n_passes = -(-fed.size // I)
     y_out = np.empty(n_passes * I, dtype=np.int32)
-    b_out = np.empty(n_passes * I, dtype=np.int8)
+    acam_output = np.empty(n_passes * I, dtype=np.int8)
     for p in range(n_passes):
         chunk = fed[p * I:(p + 1) * I]
         y = chunk.astype(np.int32)
         y_out[p * I:p * I + chunk.size] = y
-        b_out[p * I:p * I + chunk.size] = ref.acam_transform(y, ref.MODE_EXP)
+        acam_output[p * I:p * I + chunk.size] = ref.acam_transform(y, ref.MODE_EXP)
     return (y_out[:fed.size].reshape(shape),
-            b_out[:fed.size].reshape(shape), n_passes)
+            acam_output[:fed.size].reshape(shape), n_passes)
 
 
 def dimm_stages_full(A: np.ndarray, B: np.ndarray, R: int = 256, C: int = 256
@@ -165,7 +165,7 @@ def dimm_stages_full(A: np.ndarray, B: np.ndarray, R: int = 256, C: int = 256
     """All DIMM stages, pass-structured (harness diagnostics).
 
     Keys: logA_y/logA/logB_y/logB [M,K]/[K,N]; exp_u int64, exp_y int32,
-    exp_bytes int8 [M,N,K]; acc int64 [M,N]; C int32 [M,N]; passes tuple.
+    exp_acam_output int8 [M,N,K]; acc int64 [M,N]; C int32 [M,N]; passes tuple.
     """
     A8 = np.asarray(A, dtype=np.int8)
     B8 = np.asarray(B, dtype=np.int8)
@@ -175,17 +175,17 @@ def dimm_stages_full(A: np.ndarray, B: np.ndarray, R: int = 256, C: int = 256
     logB_y, logB, passes_B = log_domain_stages(B8, R, C)
     exp_u = np.empty((M, N, K), dtype=np.int64)
     exp_y = np.empty((M, N, K), dtype=np.int32)
-    exp_b = np.empty((M, N, K), dtype=np.int8)
+    exp_out = np.empty((M, N, K), dtype=np.int8)
     passes_E = 0
     for k in range(K):
         u = (logA[:, k].astype(np.int64)[:, None]
              + logB[k, :].astype(np.int64)[None, :])
-        y, b, p = exp_stages(u, R, C)
-        exp_u[:, :, k], exp_y[:, :, k], exp_b[:, :, k] = u, y, b
+        y, acam_output, p = exp_stages(u, R, C)
+        exp_u[:, :, k], exp_y[:, :, k], exp_out[:, :, k] = u, y, acam_output
         passes_E += p
-    acc = exp_b.view(np.uint8).astype(np.int64).sum(axis=2)
+    acc = exp_out.view(np.uint8).astype(np.int64).sum(axis=2)
     return dict(logA_y=logA_y, logA=logA, logB_y=logB_y, logB=logB,
-                exp_u=exp_u, exp_y=exp_y, exp_bytes=exp_b, acc=acc,
+                exp_u=exp_u, exp_y=exp_y, exp_acam_output=exp_out, acc=acc,
                 C=acc.astype(np.int32), passes=(passes_A, passes_B, passes_E))
 
 
@@ -226,7 +226,7 @@ def dimm_matmul(A: np.ndarray, B: np.ndarray, R: int = 256, C: int = 256
     """Exact idealized DIMM: C[m,n] = sum_k exp(logA[m,k] + logB[k,n]).
 
     A : int8 [M, K]; B : int8 [K, N]. Returns int32 [M, N], the exact sum of
-    the unsigned int8 EXP bytes over k (see module docstring).
+    the unsigned int8 EXP outputs over k (see module docstring).
     """
     return dimm_stages(A, B, R, C)[2]
 
@@ -306,7 +306,7 @@ def _self_test() -> None:
     assert np.array_equal(st["logB_y"], B.astype(np.int32))
     assert np.array_equal(st["logA"], log_domain(A))
     assert np.array_equal(st["logB"], log_domain(B))
-    assert np.array_equal(st["exp_bytes"], exp_domain(st["exp_u"]))
+    assert np.array_equal(st["exp_acam_output"], exp_domain(st["exp_u"]))
     assert np.array_equal(st["acc"], y.astype(np.int64))
     assert np.array_equal(st["C"], y)
     assert st["passes"][2] == sum(

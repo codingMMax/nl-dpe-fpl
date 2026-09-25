@@ -35,7 +35,7 @@ Cycle contract : `DimmCycleModel` / `dimm_cycle_model()` in this file
 The self-test gates values (≡ oracle) and cycles (measured ≡ shadow) and the
 balance contract (derive-by-default counts + residual). `run_matmul(...,
 collect_stages=True)` returns per-stage diagnostics (`DimmStages`) for staged
-intermediate verification: crossbar y (int32) → ACAM bytes (int8) → CLB add /
+intermediate verification: crossbar y (int32) → ACAM output (int8) → CLB add /
 exact reduction (int64) → final C (int32).
 
 Run:  python3 v2/sim/dimm_sim.py
@@ -342,7 +342,7 @@ class DimmStages:
     """Staged diagnostics for one DIMM run (`collect_stages=True`).
 
     Stage order mirrors the datapath: crossbar y (int32, pre-ACAM) → ACAM
-    bytes (int8) → CLB log-add / exact reduction (int64) → final (int32).
+    output (int8) → CLB log-add / exact reduction (int64) → final (int32).
     """
 
     logA_y: np.ndarray      # int32 [M, K] producer crossbar output
@@ -351,7 +351,7 @@ class DimmStages:
     logB: np.ndarray        # int8  [K, N]
     exp_u: np.ndarray       # int64 [M, N, K] CLB log-domain add
     exp_y: np.ndarray       # int32 [M, N, K] farm crossbar output (= trunc8(u))
-    exp_bytes: np.ndarray   # int8  [M, N, K] farm ACAM EXP output
+    exp_acam_output: np.ndarray   # int8  [M, N, K] farm ACAM EXP output
     acc: np.ndarray         # int64 [M, N] exact reduction (pre-cast)
 
 
@@ -431,33 +431,33 @@ class NldpeDimm:
 
         # 3 — exp farm: per k, exact CLB add -> trunc8 to int8 feed (the
         #     int8 feed is mode-invariant for LOG/EXP/REGULAR modes) ->
-        #     identity EXP passes; accumulate the unsigned bytes (work M*N*K).
+        #     identity EXP passes; accumulate the unsigned outputs (work M*N*K).
         acc = np.zeros((M, N), dtype=np.int64)
         tot_exp_passes = 0
         if collect_stages:
             exp_u = np.empty((M, N, K), dtype=np.int64)
             exp_y = np.empty((M, N, K), dtype=np.int32)
-            exp_b = np.empty((M, N, K), dtype=np.int8)
+            exp_out = np.empty((M, N, K), dtype=np.int8)
         for k in range(K):
             log_sum = (logA[:, k].astype(np.int64)[:, None]
                        + logB[k, :].astype(np.int64)[None, :])
             conv = identity_pass(nref.trunc8(log_sum), prim.MODE_EXP,
                                  **xbar_geom, dpe=self._dpe_exp,
                                  return_y=collect_stages)
-            exp_bytes, k_passes = conv[0], conv[1]
-            acc += exp_bytes.view(np.uint8).reshape(M, N).astype(np.int64)
+            exp_acam_output, k_passes = conv[0], conv[1]
+            acc += exp_acam_output.view(np.uint8).reshape(M, N).astype(np.int64)
             tot_exp_passes += k_passes
             if collect_stages:
                 exp_u[:, :, k] = log_sum
                 exp_y[:, :, k] = conv[2].reshape(M, N)
-                exp_b[:, :, k] = exp_bytes.reshape(M, N)
+                exp_out[:, :, k] = exp_acam_output.reshape(M, N)
 
-        # 4 — reduction: exact int32 sum of the unsigned exp bytes.
+        # 4 — reduction: exact int32 sum of the unsigned exp outputs.
         assert int(np.abs(acc).max()) <= 2**31 - 1, "C exceeds int32 (B8)"
         C = acc.astype(np.int32)
         stages = (DimmStages(logA_y=prodA[2].reshape(M, K), logA=logA,
                              logB_y=prodB[2].reshape(K, N), logB=logB,
-                             exp_u=exp_u, exp_y=exp_y, exp_bytes=exp_b,
+                             exp_u=exp_u, exp_y=exp_y, exp_acam_output=exp_out,
                              acc=acc)
                   if collect_stages else None)
 
@@ -483,7 +483,7 @@ class NldpeDimm:
         """Write stimulus + expected files for the DIMM RTL cross-check.
 
         GATE 1: certify this exact case against `dimm_ref.dimm_stages_full`
-        (logA, logB, exp_u, exp_bytes, acc, C), the issued pass counts and the
+        (logA, logB, exp_u, exp_acam_output, acc, C), the issued pass counts and the
         schedule cycle total BEFORE any file is written; an uncertified case
         is never dumped.
 
@@ -520,7 +520,7 @@ class NldpeDimm:
             ("logA (int8)", st.logA, exp["logA"]),
             ("logB (int8)", st.logB, exp["logB"]),
             ("exp_u (int64)", st.exp_u, exp["exp_u"]),
-            ("exp bytes (int8)", st.exp_bytes, exp["exp_bytes"]),
+            ("exp output (int8)", st.exp_acam_output, exp["exp_acam_output"]),
             ("acc (int64)", st.acc, exp["acc"]),
             ("C (int32)", res.C, exp["C"]),
         )
@@ -790,7 +790,7 @@ def _test_behavior() -> None:
     """Staged end-to-end over a shape matrix.
 
     Per shape and phase policy: intermediates must align first (crossbar y
-    int32 -> ACAM bytes int8 -> CLB add -> exact reduction int64), then the
+    int32 -> ACAM output int8 -> CLB add -> exact reduction int64), then the
     final int32 output and the cycle contract.
     """
     shapes = [
@@ -818,9 +818,10 @@ def _test_behavior() -> None:
             _check_stage("exp crossbar y (int32)", st.exp_y, exp["exp_y"])
 
             # Stage 2 — ACAM outputs (int8).
-            _check_stage("logA ACAM bytes (int8)", st.logA, exp["logA"])
-            _check_stage("logB ACAM bytes (int8)", st.logB, exp["logB"])
-            _check_stage("exp ACAM bytes (int8)", st.exp_bytes, exp["exp_bytes"])
+            _check_stage("logA ACAM output (int8)", st.logA, exp["logA"])
+            _check_stage("logB ACAM output (int8)", st.logB, exp["logB"])
+            _check_stage("exp ACAM output (int8)", st.exp_acam_output,
+                         exp["exp_acam_output"])
 
             # Stage 3 — CLB add and exact reduction (int64).
             _check_stage("CLB log-add u (int64)", st.exp_u, exp["exp_u"])

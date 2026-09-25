@@ -4,7 +4,7 @@
 Sweeps the pool/farm shape matrix over the farm-crossbar count `n_E`
 (the RTL `N_E` parameter; `n_A`/`n_B` are derived by the balance law and
 emitted per case). Every case is written through `NldpeDimm.dump_case`, which
-GATE-1-certifies `sim ≡ dimm_ref` (logA/logB/exp_u/exp_bytes/acc/C), the
+GATE-1-certifies `sim ≡ dimm_ref` (logA/logB/exp_u/exp_acam_output/acc/C), the
 issued pass counts, and the schedule cycle total BEFORE any file is written.
 
 Axes:
