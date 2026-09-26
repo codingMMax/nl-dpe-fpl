@@ -155,6 +155,20 @@ def softmax_stage_values(scores: np.ndarray) -> dict:
             "log_output": log_output, "softmax_out": softmax_out}
 
 
+def packed_pass_counts(S: int, R: int = 256, C: int = 256) -> tuple[int, int]:
+    """Schedule pass counts for the packed-window softmax structure.
+
+    EXP stream: the S x S exp_input matrix read row-major (S^2 elements)
+                -> ceil(S^2 / I) identity passes;
+    LOG stream: the S row sums (lq), read in row order
+                -> ceil(S / I) identity passes.
+    I = min(R, C) is the identity-pass capacity (F5/F6); windows are packed
+    stride-I with the final window zero-padded and its padding discarded.
+    """
+    I = min(R, C)
+    return -(-(S * S) // I), -(-S // I)
+
+
 # ---------------------------------------------------------------------------
 # Self-test — run:  python3 softmax_ref.py
 # ---------------------------------------------------------------------------
@@ -256,6 +270,12 @@ def _self_test() -> None:
     assert np.array_equal(stages["softmax_out"],
                           softmax_elementwise_view(scores)), \
         "staged softmax_out != elementwise view"
+
+    # ── Packed-window pass counts (schedule formula, structure-level) ──────
+    assert packed_pass_counts(128, 256, 256) == (64, 1)
+    assert packed_pass_counts(256, 256, 256) == (256, 1)
+    assert packed_pass_counts(512, 256, 256) == (1024, 2)
+    assert packed_pass_counts(128, 8, 8) == (2048, 16)
 
     print("softmax_ref self-test: ALL PASS")
 

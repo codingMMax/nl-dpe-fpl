@@ -1,0 +1,18 @@
+# v2 golden corpus manifest — Phase 0 freeze (refactor regression contract)
+#
+# Method: per corpus dir, sha256 over the sorted (path, sha256) listing:
+#   find <dir> -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+# Re-check after any sim refactor: run the same command and compare. A pure
+# behavior-preserving refactor must leave every hash unchanged (no RTL re-run
+# needed; the RTL witness attaches to these certified dumps).
+
+dc514d33e144da2af5235729282af8418d57777cb06481d83820309a48335dbe  v2/smoke/stimuli  (1165 files)
+6c42fa570511fad9fe034c01411dff58d76bf7239bca088a50f42ed09cb364db  v2/smoke/gemm_stimuli  (3013 files)
+7ead51cadd18e24db743a14c6cd430eec2508004c41a9f02ad0d8d52dfb922ce  v2/smoke/dimm_stimuli  (1261 files)
+
+# Softmax measured pins (characterization freeze, asserted in the
+# softmax_sim self-test — `_FROZEN_MEASURED_PINS`):
+#   S=128 n_exp=1 n_log=1 -> used 20359, compute 4000
+#   S=128 n_exp=4 n_log=2 -> used 17479, compute 1120
+#   S=256 n_exp=1 n_log=1 -> used 81033, compute 15548
+#   S=256 n_exp=2 n_log=2 -> used 73353, compute 7868
