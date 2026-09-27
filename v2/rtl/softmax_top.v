@@ -193,7 +193,7 @@ module softmax_max_unit #(
                 waddr <= rows_done;
                 wdata <= pipe[MAX_LAT-1];
                 rows_done <= rows_done + 1;
-                pipe_valid[MAX_LAT-1] <= 1'b0;
+                // consumed: the shift already replaces this stage
             end
 
             if (busy && group_cnt >= NGROUPS && rows_done == S)
@@ -557,7 +557,7 @@ module softmax_sum_unit #(
                 sum_waddr <= pipe_row[SUM_LAT-1];
                 sum_wdata <= total_r;
                 lq_done_count <= lq_done_count + 1;
-                pipe_valid[SUM_LAT-1] <= 1'b0;
+                // consumed: the shift already replaces this stage
             end
         end
     end
