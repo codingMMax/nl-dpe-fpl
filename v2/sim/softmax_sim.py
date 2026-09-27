@@ -23,9 +23,13 @@ Machine model (DIMM-style crossbars, fused compute/cycle simulation):
       row max -> EXP pass -> row-sum lq -> LOG pass -> clamp -> output drain
 
   Buffering is unbounded (full in-flight overlap): every unit starts a new
-  item as soon as its inputs are ready and the unit is free. There are no
-  residual cycle constants; the crossbar event offsets are the certified
-  primitive model (`nldpe_sim.NldpeDpe.run_workload` semantics).
+  item as soon as its inputs are ready and the unit is free. The row-max fold
+  streams rows at `clb_width` bytes/cycle (row r completes `log2(S) + 1`
+  cycles after its last byte enters), so EXP window readiness is staggered by
+  row order; the row-sum `lq` keeps the tree latency after the row's last
+  output drains. There are no residual cycle constants; the crossbar event
+  offsets are the certified primitive model (`nldpe_sim.NldpeDpe.run_workload`
+  semantics).
 
 Value contract : `v2/oracle/softmax_ref.py` (bit-exact; imported as ref).
 Check model    : `SoftmaxCycleModel` / `softmax_cycle_model()` — the phase
@@ -38,6 +42,7 @@ Run:  python3 v2/sim/softmax_sim.py
 
 from __future__ import annotations
 
+import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +53,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "oracle"))
 import nldpe_sim as prim  # noqa: E402
+import nldpe_ref as nref  # noqa: E402
 import softmax_ref as ref  # noqa: E402
 from dimm_sim import identity_pass  # noqa: E402
 from pass_engine import (crossbar_total, packed_windows,  # noqa: E402
@@ -217,14 +223,17 @@ class NldpeSoftmax:
 
     def __init__(self, S: int, R: int = 256, C: int = 256, BUF: int = 40,
                  P: int = 8, n_exp: int = 1, n_log: int = 1,
-                 overlap: bool = True, clb_pipe: int = 1) -> None:
+                 overlap: bool = True, clb_pipe: int = 1,
+                 clb_width: int = 32) -> None:
         assert S > 0 and (S & (S - 1)) == 0, "S must be a power of two"
         assert n_exp >= 1 and n_log >= 1
+        assert clb_width > 0, "clb_width must be positive"
         self.S, self.R, self.C, self.BUF, self.P = S, R, C, BUF, P
         self.I = min(R, C)
         self.n_exp, self.n_log = n_exp, n_log
         self.overlap = overlap
         self.clb_pipe = clb_pipe
+        self.clb_width = clb_width
         log2_S = S.bit_length() - 1
         self.clb_tree_latency = log2_S + clb_pipe     # max / sum trees
         self.clb_clamp_latency = 1 + clb_pipe         # subtract + clamp
@@ -309,6 +318,27 @@ class NldpeSoftmax:
                 "drain_start_cycle": drain_start_cycle,
                 "timeline": timeline}
 
+    def exp_window_ready(self) -> np.ndarray:
+        """Readiness cycle of each packed EXP window (streaming row-max fold).
+
+        Row r completes `clb_tree_latency` cycles after its last byte passes
+        the tree (at `clb_width` bytes/cycle); a window is ready when all the
+        rows it covers are ready.
+        """
+        S, I = self.S, self.I
+        n_windows, window_lo, window_len, _ = packed_windows(
+            S * S, I, self.n_exp)
+        row_max_ready = np.array(
+            [self.clb_tree_latency + -(-(r + 1) * S // self.clb_width)
+             for r in range(S)], dtype=np.int64)
+        ready = np.zeros(n_windows, dtype=np.int64)
+        for j in range(n_windows):
+            lo = int(window_lo[j])
+            hi = lo + int(window_len[j])
+            rows_lo, rows_hi = lo // S, (hi - 1) // S
+            ready[j] = int(row_max_ready[rows_lo:rows_hi + 1].max())
+        return ready
+
     def run(self, scores: np.ndarray,
             collect_stages: bool = False) -> SoftmaxResult:
         """Run safe softmax on int8 scores [S, S] -> SoftmaxResult.
@@ -353,16 +383,18 @@ class NldpeSoftmax:
             - log_output[:, None].astype(np.int16),
             -128, 127).astype(np.int8)
 
-        # Event schedule: EXP windows ready at L_max (all row maxes in
-        # parallel); LOG windows ready when their lq inputs are ready.
+        # Event schedule: the row-max fold streams rows at clb_width bytes/
+        # cycle, so row r completes max_latency cycles after its last byte
+        # passes the tree; an EXP window is ready when all its rows are.
+        # LOG windows are ready when their lq inputs are ready.
         n_windows_exp, _, _, per_xbar_exp = packed_windows(
             S * S, I, self.n_exp)
         n_windows_log, log_lo, log_len, per_xbar_log = packed_windows(
             S, I, self.n_log)
-        exp_ready = [self.clb_tree_latency] * n_windows_exp
+        exp_ready = self.exp_window_ready()
         exp_events = [
-            schedule_pass_sequence([exp_ready[j] for j in per_xbar_exp[c]],
-                               self.R, self.C, self.BUF, self.P)
+            schedule_pass_sequence([int(exp_ready[j]) for j in per_xbar_exp[c]],
+                                   self.R, self.C, self.BUF, self.P)
             for c in range(self.n_exp)]
 
         lq_ready = self._lq_ready_from_events(exp_events)
@@ -397,6 +429,89 @@ class NldpeSoftmax:
                              stages=stages,
                              timeline=machine["timeline"])
 
+    # -- stimulus dump (GATE 1 + GATE 2 expected files) ---------------------
+    def dump_case(self, case_dir: Path, scores: np.ndarray) -> None:
+        """Write stimulus + expected files for the softmax RTL cross-check.
+
+        GATE 1: certify this exact case against `softmax_ref` (all eight
+        stages) and the packed pass counts BEFORE any file is written; an
+        uncertified case is never dumped.
+
+        File contract (consumed by `v2/tb/tb_softmax_top.v`, expanded by
+        `v2/smoke/run_softmax_rtl.py`):
+          scores.mem            — S*S int8 row-major, packed BUF-wide (10-hex)
+          expected_rowmax.mem   — S int8 (2-hex/line)
+          expected_expin.mem    — S*S int8  (crossbar feed input)
+          expected_expout.mem   — S*S int8  (ACAM_EXP output)
+          expected_sum.mem      — S int32 (8-hex/line)
+          expected_lq.mem       — S int8
+          expected_logout.mem   — S int8   (ACAM_LOG output)
+          expected_out.mem      — S*S int8 (softmax_out stream order)
+          case.json             — params + pass counts + measured cycles
+        """
+        scores = np.asarray(scores, dtype=np.int8)
+        assert scores.shape == (self.S, self.S), \
+            f"scores must be [{self.S}, {self.S}]"
+        result = self.run(scores, collect_stages=True)
+        stages = result.stages
+        expected = ref.softmax_stage_values(scores)
+
+        # -- GATE 1: per-case oracle certification -------------------------
+        for key in _STAGE_KEYS:
+            got, want = getattr(stages, key), expected[key]
+            if got.shape != want.shape or not np.array_equal(got, want):
+                raise RuntimeError(
+                    f"GATE 1: sim/oracle stage '{key}' mismatch "
+                    f"— case not dumped")
+        expected_passes = ref.packed_pass_counts(self.S, self.R, self.C)
+        issued_passes = (result.passes_exp, result.passes_log)
+        if issued_passes != expected_passes:
+            raise RuntimeError(
+                f"GATE 1: issued passes {issued_passes} != schedule formula "
+                f"{expected_passes} — case not dumped")
+
+        case_dir = Path(case_dir)
+        case_dir.mkdir(parents=True, exist_ok=True)
+
+        # scores.mem — packed BUF-wide stream words
+        with open(case_dir / "scores.mem", "w") as f:
+            for word in nref.pack_act_stream(scores.reshape(-1)):
+                f.write(f"{word:010x}\n")
+
+        def write_int8(name: str, values: np.ndarray) -> None:
+            with open(case_dir / name, "w") as f:
+                for v in np.asarray(values).reshape(-1):
+                    f.write(f"{int(v) & 0xFF:02x}\n")
+
+        def write_int32(name: str, values: np.ndarray) -> None:
+            with open(case_dir / name, "w") as f:
+                for v in np.asarray(values).reshape(-1):
+                    f.write(f"{int(v) & 0xFFFFFFFF:08x}\n")
+
+        write_int8("expected_rowmax.mem", stages.row_max)
+        write_int8("expected_expin.mem", stages.exp_input)
+        write_int8("expected_expout.mem", stages.exp_acam_output)
+        write_int32("expected_sum.mem", stages.output_sum)
+        write_int8("expected_lq.mem", stages.log_input)
+        write_int8("expected_logout.mem", stages.log_output)
+        write_int8("expected_out.mem", stages.softmax_out)
+
+        case = {
+            "S": self.S, "R": self.R, "C": self.C, "BUF": self.BUF,
+            "P": self.P, "n_exp": self.n_exp, "n_log": self.n_log,
+            "clb_width": self.clb_width, "clb_pipe": self.clb_pipe,
+            "passes_exp": int(result.passes_exp),
+            "passes_log": int(result.passes_log),
+            "used_cycles": int(result.used_cycles),
+            "compute_cycles": int(result.compute_cycles),
+            "drain_cycles": int(result.drain_cycles),
+            "load_words": int(len(nref.pack_act_stream(scores.reshape(-1)))),
+            "weight_cycles": int(self.R * self.C),
+        }
+        with open(case_dir / "case.json", "w") as f:
+            json.dump(case, f, indent=2)
+            f.write("\n")
+
     def _lq_ready_from_events(self, exp_events: list) -> np.ndarray:
         """Row-sum readiness from the EXP event schedule (shared by run)."""
         S, I = self.S, self.I
@@ -427,10 +542,10 @@ _STAGE_KEYS = ("row_max", "exp_input", "exp_crossbar_y", "exp_acam_output",
 # (used_cycles, compute_cycles) per config. These are schedule-determined —
 # independent of the score values — so any input of the right shape matches.
 _FROZEN_MEASURED_PINS = {
-    (128, 1, 1): (20359, 4000),
-    (128, 4, 2): (17479, 1120),
-    (256, 1, 1): (81033, 15548),
-    (256, 2, 2): (73353, 7868),
+    (128, 1, 1): (20367, 4008),
+    (128, 4, 2): (17511, 1152),
+    (256, 1, 1): (81041, 15556),
+    (256, 2, 2): (73369, 7884),
 }
 
 
@@ -522,12 +637,14 @@ def _self_test() -> None:
     assert run_4.used_cycles < run_1.used_cycles, \
         (run_4.used_cycles, run_1.used_cycles)
     clb_slack = 2 * unit_4.clb_tree_latency + unit_4.clb_clamp_latency
+    prologue_1 = int(unit_1.exp_window_ready()[:unit_1.n_exp].max())
+    prologue_4 = int(unit_4.exp_window_ready()[:unit_4.n_exp].max())
     assert run_1.compute_cycles >= run_1.cycle_model.T_exp \
         + unit_1.clb_tree_latency
-    assert run_1.compute_cycles <= serial_1.total + clb_slack
+    assert run_1.compute_cycles <= serial_1.total + prologue_1 + clb_slack
     assert run_4.compute_cycles >= run_4.cycle_model.T_exp \
         + unit_4.clb_tree_latency
-    assert run_4.compute_cycles <= serial_4.total + clb_slack
+    assert run_4.compute_cycles <= serial_4.total + prologue_4 + clb_slack
     assert run_4.used_cycles - run_4.compute_cycles < run_4.drain_cycles, \
         "drain must overlap compute, not serialize after it"
     # n_log cannot bind for S <= I (single LOG window): timing is identical.
@@ -537,9 +654,9 @@ def _self_test() -> None:
     print(f"  [measured] S=128: n_exp=1 -> {run_1.used_cycles} cyc "
           f"(compute {run_1.compute_cycles}), n_exp=4 -> "
           f"{run_4.used_cycles} cyc (compute {run_4.compute_cycles}); "
-          f"corridors [T_exp+L_max, serial+slack] = "
+          f"corridors [T_exp+L_max, serial+prologue+slack] = "
           f"[{run_4.cycle_model.T_exp + unit_4.clb_tree_latency}, "
-          f"{serial_4.total + clb_slack}]: OK")
+          f"{serial_4.total + prologue_4 + clb_slack}]: OK")
 
     # ── Edge classes (routing exercised: n_exp=2, n_log=2) ─────────────────
     tie_row = np.full(128, 5, dtype=np.int8)

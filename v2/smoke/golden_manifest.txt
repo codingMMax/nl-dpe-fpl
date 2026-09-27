@@ -11,8 +11,9 @@ dc514d33e144da2af5235729282af8418d57777cb06481d83820309a48335dbe  v2/smoke/stimu
 7ead51cadd18e24db743a14c6cd430eec2508004c41a9f02ad0d8d52dfb922ce  v2/smoke/dimm_stimuli  (1261 files)
 
 # Softmax measured pins (characterization freeze, asserted in the
-# softmax_sim self-test — `_FROZEN_MEASURED_PINS`):
-#   S=128 n_exp=1 n_log=1 -> used 20359, compute 4000
-#   S=128 n_exp=4 n_log=2 -> used 17479, compute 1120
-#   S=256 n_exp=1 n_log=1 -> used 81033, compute 15548
-#   S=256 n_exp=2 n_log=2 -> used 73353, compute 7868
+# softmax_sim self-test — `_FROZEN_MEASURED_PINS`; updated with the streaming
+# row-max readiness model, clb_width = 32 B/cycle):
+#   S=128 n_exp=1 n_log=1 -> used 20367, compute 4008
+#   S=128 n_exp=4 n_log=2 -> used 17511, compute 1152
+#   S=256 n_exp=1 n_log=1 -> used 81041, compute 15556
+#   S=256 n_exp=2 n_log=2 -> used 73369, compute 7884
