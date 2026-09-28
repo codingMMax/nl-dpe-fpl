@@ -50,6 +50,9 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 | `v2/oracle/gemm_ref.py` + `v2/sim/gemm_sim.py` + `v2/smoke/{gen_gemm_cases,run_gemm_rtl,test_gemm}.py` + `v2/tb/tb_gemm_top.v` | Stage-2 GEMM: oracle (exact composition + end-to-end matmul witness), golden model (GATE 1 in `dump_case`), certified 1A–1D case generator, GATE-2 harness/TB (`S_col` + lanes), verifier |
 | `v2/rtl/dimm_top.v` | **Stage-4 DIMM RTL** (single file, 6 modules): `dimm_wprog`/`dimm_log_pool`/`dimm_exp_farm`/`dimm_reduce`/`dimm_sched`/`dimm_top`; take-now window acceptance, drain queue depth 2, per-port acc banks, same-cycle flush/`win_done`; **exact cycles: Δ_impl = 0** (span == T(p), ser == M·N, fill == T_start) |
 | `v2/smoke/{gen_dimm_cases,run_dimm_rtl,test_dimm}.py` + `v2/tb/tb_dimm_top.v` | Stage-4 DIMM: GATE-1 dumper (`NldpeDimm.dump_case`), case sweep (7 shapes × n_E {1,2,4,8,16} × classes), GATE-2 strict gates (Δ=0, spans == T_A/T_B/T_E, ser == M·N, fill == T_start, window counts == P_A/P_B/P_E), verifier |
+| `v2/spec/softmax.md` | **Stage-3 softmax charter v0.1 (2026-09-27)**: value contract, packed-window machine (`n_exp`/`n_log`, `CLB_WIDTH=32`, `L_max/L_sum`, 1 value/cycle drain), measured-cycle contract + corridor check, RTL mapping/probes, decisions S1–S6; **supersedes** the old streaming sketch (§6 of `dimm_throughput_model.md`) |
+| `v2/rtl/softmax_top.v` | **Stage-3 softmax RTL** (single file, 7 modules): `softmax_wprog`/`max_unit`/`exp_feed`/`sum_unit`/`log_unit`/`out_unit`/`top`; fused `exp_input` in the feed path, streaming row-max fold, all-`N_LOG` drain merge; **exact: Δ_impl = 0** |
+| `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` + `v2/tb/tb_softmax_top.v` | Stage-3 softmax: GATE-1 dumper (`NldpeSoftmax.dump_case`), geometry axis (`--RCs`) + PLOG>1 X2 corpus, GATE-2 (7 stage probes bit-exact, Δ=0, S² words, per-case logs), verifier table **67/67 PASS** |
 | `v2/docs/gemm_dataflow_reading.md` | Reading list: GEMM/GEMV dot-product vs outer-product dataflows, reuse/buffering theory, accelerator dataflow taxonomy |
 | `v2/smoke/stimuli/` | Corpus (gitignored, accumulates across runs) + `manifest.txt` scoping the harness to the latest generation |
 | `v2/smoke/logs/` | Test logs (gitignored): `<case>.log` per-case TB stdout + timestamped `rtl_smoke_*.log` run summaries + `latest.log` |
@@ -266,13 +269,13 @@ progress — see "Direction (2026-08-29)" above.
   pass counts are required and schedule-owned; `ideal_pass_plan()` is only a
   packed-count convenience. Shadow reference values unchanged (1974 etc.).
 - **DIMM spec DONE**: `v2/spec/dimm.md` v0.1 (DIMM-only split of
-  `pool_farm_model.md`; §4 = balance law with **derive-by-default** — exact
+  `dimm_throughput_model.md`; §4 = balance law with **derive-by-default** — exact
   rule `n_log = max(1, ⌈P_log/⌈P_E/n_E⌉⌉)` (lexicographic optimum for
   max-T → residual → machines; PF3 closed form kept as the ±1 reference);
   overrides are **both-or-neither** and must report `balance_residual`;
   rectangular S×V counts are asymmetric by the law (reference `(1,2)`);
-  §5 cycle contract; §6 worked example). Softmax content stays in
-  `pool_farm_model.md` §6 until its own split.
+  §5 cycle contract; §6 worked example). Softmax split off to `v2/spec/softmax.md`
+  (2026-09-27); the renamed `dimm_throughput_model.md` keeps the DIMM derivation.
 - **Ownership / status (2026-09-20)**: the DIMM **cycle core**
   (derive-by-default + `balanced`/`balance_residual`) and the **behavior**
   (`NldpeDimm.run_matmul`: producers → parked buffers → exp farm via identity

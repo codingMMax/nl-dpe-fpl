@@ -1,7 +1,7 @@
 # Spec — NL-DPE DIMM operator (v2 clean-room, Stage 4)
 
 **Status**: v0.2 working spec, 2026-09-22. DIMM-only split of
-[`pool_farm_model.md`](pool_farm_model.md) (whose DIMM sections this spec
+[`dimm_throughput_model.md`](dimm_throughput_model.md) (whose DIMM sections this spec
 supersedes); the softmax row-pipeline model there (§6) is **deferred** to its
 own spec and is out of scope here.
 
@@ -214,13 +214,13 @@ hidden).
 | D2 | Pass counts: schedule-injected (`DimmPassPlan`); ideal formula is a convenience |
 | D3 | Balance: derive-by-default from `n_E` (law + discrete objective); overrides must report residual |
 | D4 | Timing: primitive `T(p)`; overlapped = `max`, phase-separated = `sum` |
-| D5 | **Softmax is out of scope** here (its row-pipeline model stays in `pool_farm_model.md` §6 until split off) |
+| D5 | **Softmax is out of scope** here (its row-pipeline model stays in `dimm_throughput_model.md` §6 until split off) |
 | D6 | Multi-output "different matrices side-by-side" trick: **out of scope** (not needed by DIMM/softmax conversion) |
 | D7 | Values are invariant to pools/lanes/packing (PF7); oracles are the value contract |
 | D8 | Schedule mapping (normative, §2.1): rank-1 outer product over `k`; A column-major / B row-major; operands converted once into LA/LB, farm re-reads (PF2) |
 | D9 | Cycle contract includes the producer→farm fill `T_start` (true data dependency): `total = max(T_A, T_B, T_start + T_E)`; the serializer is reported separately (`M·N` words) |
 | D10 | Window = one identity pass of `I = min(R,C)` elements; block availability is the prefix gate `ceil((k+1)·M/I)` / `ceil((k+1)·N/I)` (§3) |
 
-Carried design decisions PF1–PF9 from `pool_farm_model.md` (PF2 reuse theorem,
+Carried design decisions PF1–PF9 from `dimm_throughput_model.md` (PF2 reuse theorem,
 PF3 balance/K-cancellation, PF4 scaling floor, PF5 phase policy, PF8 buffer
 bandwidth advisory, PF9 identity pass budget).

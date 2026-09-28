@@ -1,13 +1,13 @@
-# Pool/Farm Model — NL-DPE DIMM & softmax operator parallelism
+# DIMM Throughput Model — NL-DPE pool/farm operator parallelism
 
-> **Superseded for DIMM**: the DIMM content of this document (§§1–5, 7–9) is
-> now normative in [`v2/spec/dimm.md`](dimm.md) (v0.2, 2026-09-22), which owns
-> the value/pass/pacing/balance/cycle contracts **plus the schedule mapping
-> (§2.1) and the producer→farm fill `T_start` (§5)**. Only **§6 (softmax
-> row-pipeline)** is retained here until the softmax spec is split off.
+> **Softmax moved out**: the softmax operator (packed-window machine,
+> cycle contract, RTL mapping, verification) is now normative in
+> [`softmax.md`](softmax.md). This document is the DIMM throughput /
+> parallelism derivation companion to [`dimm.md`](dimm.md); §§1–5 and
+> the decision ledger are retained for reference.
 
-**Status**: working spec, 2026-09-15. Applies to the v2 operator layer
-(`v2/sim/dimm_sim.py`, `v2/sim/softmax_sim.py`).
+**Status**: DIMM-only throughput model, 2026-09-27. Applies to
+`v2/sim/dimm_sim.py`; normative contracts live in `dimm.md`.
 
 **Contracts above this doc**:
 
@@ -183,49 +183,6 @@ stage worth scaling, and its serialized log phase is avoidable by overlap.
 - **Geometry changes the ratio**: use the general `n_A` formula when pools and
   farm use different `(I, L)`.
 
-## 6. Softmax — streaming row-pipeline model (distinct machine)
-
-Softmax is **not** modeled with the pass-gated pool/farm timing. It is a
-row-pipeline stage machine with dedicated **streaming** converters (measured,
-locked in `softmax_study/SOFTMAX_STUDY.md` §1/§4):
-
-```
-row pipeline per lane (16 lanes, rows {k, k+16, ...}, RPL = S/16):
-  A: max tree (WPR)
-  B: (x−max) clamped, ACAM EXP via n_exp DPEs, 5 elem/cycle/port (LCYC)
-  Cs: unsigned byte sum + shared log DPE (20)
-  D: clamp(x−max−ls) → log-domain int8 (WPR)
-  steady = max(WPR, LCYC);  fill = (WPR+4)+(LCYC+10+LCYC+2)+20+WPR+4
-  total  = fill + (RPL−1)·steady
-```
-
-**PF6 (rationale)** — softmax's converters are fed continuously row-by-row
-(rows overlap), so the binding rate is the 5 elem/cycle port, not the
-pass-gated `LOAD+P` interval: `steady = 26` cycles/row for `S=128` streaming,
-versus 34 under the pass-gated primitive (≈30% slower). This model is locked
-to measured RTL and its anchors: `290` (`S=128, n_exp=1`), `514`
-(`S=256, n_exp=2`), `956` (`S=256, n_exp=1`).
-
-Producer/consumer reading of the same structure (explains why the log stage
-never binds):
-
-| work | expression |
-|---|---|
-| exp | `S²` (one per element) |
-| log | `S` (one per row sum) |
-
-exp : log = `S : 1`, so `n_log/n_exp ≈ 1/S`. The study's 1 shared log DPE per
-16 lanes is over-provisioned by `S/(16·n_exp)` (8× at `S=128, n_exp=1`) — which
-is exactly why the Cs/log occupancy of 20 cycles never binds.
-
-## 7. Composition note (attention)
-
-Softmax emits **log-domain** values, and the S×V operator's inner loop needs
-`log(attn) + log(V)`. Therefore the S×V DIMM's attenuation-side logB pool is
-not needed when fed by softmax (its A-side producer *is* softmax's output);
-only the V-side log pool runs. This is the log-domain fusion already assumed by
-the attention mapping.
-
 ## 8. Decisions & assumptions
 
 | # | Decision |
@@ -235,15 +192,12 @@ the attention mapping.
 | PF3 | Balance ratio `n_A = ceil(n_E/N)`, `n_B = ceil(n_E/M)`; independent of `K` |
 | PF4 | Throughput scales with `n_E`; log pools scale `1/N`, `1/M`, minimum 1 |
 | PF5 | DIMM timing = pass-gated primitive `T(passes)`; overlap policy configurable (`max` vs `sum`) |
-| PF6 | Softmax timing = streaming row-pipeline model (study-locked), **not** pass-gated |
+| PF6 | ~~Softmax timing = streaming row-pipeline model~~ **superseded** by `softmax.md` (packed-window machine) |
 | PF7 | Values are invariant to pools/lanes/packing; oracles are the value contract |
 | PF8 | Buffer/accumulator bandwidth assumed sufficient unless declared otherwise (advisory check) |
 | PF9 | Identity pass budget: `I = min(R,C)`, `ceil(elements/I)` passes, zero-pad to `R`; primitive unchanged, wrapper owns padding. Pass counts are **schedule-injected** (`DimmPassPlan` in `dimm_sim.py`); the normative pass layer is `dpe_nldpe.md` §6 F5–F8 (capacity, stride, padding discard, int8 feed invariance, packing) |
 
 ## 9. TODO
 
-- **User behavior**: fill `NldpeDimm.run_matmul()` and `NldpeSoftmax.run()`
-  TODO blocks; self-tests are gated until then.
-- Later: reconcile softmax's streaming steady rate with the pass-gated
-  primitive if/when the primitive gains a streaming mode.
-- Later: attention composition (QK^T → softmax → S×V) reusing §7.
+- Later: attention composition (QK^T → softmax → S×V); the softmax side is
+  normative in `softmax.md` §7.

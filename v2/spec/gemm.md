@@ -76,7 +76,7 @@ serializer, and control/readiness.
 
 **Out of scope**: all nonlinear output forms (ACTIVATION/EXP/LOG) at this
 array — they live downstream (mapping / later stages); attention
-projections/composition (Stage 4); log-domain DIMM (`pool_farm_model.md`);
+projections/composition (Stage 4); log-domain DIMM (`dimm_throughput_model.md`);
 softmax (Stage 3); VTR wrapping (Stage 5); weight/activation quantization
 policy (streams arrive int8).
 
