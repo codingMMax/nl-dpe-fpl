@@ -135,6 +135,8 @@ def main() -> None:
     LOCK.write_text(str(work))
     results = []
     t0 = time.time()
+    logs_dir = REPO / "v2" / "smoke" / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
     try:
         for name in names:
             case_dir = stimuli / name
@@ -142,6 +144,7 @@ def main() -> None:
             vvp = compile_case(case, work)
             res = run_case(case_dir, case, vvp, work, args.timeout)
             results.append(res)
+            (logs_dir / f"softmax_{name}.log").write_text(res.get("log", ""))
             status = "PASS" if res["ok"] else "FAIL"
             if res["ok"]:
                 print(f"  {status} {name}: measured={res['measured']} "

@@ -105,6 +105,7 @@ v2/smoke/dimm_stimuli/
 
 # v2 softmax cases (regenerable via v2/smoke/gen_softmax_cases.py)
 v2/smoke/softmax_stimuli/
+v2/smoke/softmax_x2_stimuli/
 
 # v2 RTL smoke logs (regenerable via v2/smoke/run_dpe_rtl.py)
 v2/smoke/results/

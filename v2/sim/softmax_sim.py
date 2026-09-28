@@ -658,6 +658,26 @@ def _self_test() -> None:
           f"[{run_4.cycle_model.T_exp + unit_4.clb_tree_latency}, "
           f"{serial_4.total + prologue_4 + clb_slack}]: OK")
 
+    # ── PLOG > 1: n_log splits the LOG windows, values invariant ───────────
+    small_scores = rng.integers(-128, 128, size=(128, 128), dtype=np.int8)
+    small_outs = {}
+    small_tlogs = {}
+    for n_log in (1, 2):
+        unit = NldpeSoftmax(S=128, R=64, C=64, n_exp=2, n_log=n_log)
+        res = unit.run(small_scores, collect_stages=True)
+        _check_stages(res, ref.softmax_stage_values(small_scores),
+                      f"S=128 R=C=64 n_log={n_log}")
+        assert (res.passes_exp, res.passes_log) == (256, 2), (n_log, res.passes_log)
+        assert res.cycle_model.xbar_passes_log == -(-2 // n_log)
+        small_outs[n_log] = res.softmax_out
+        small_tlogs[n_log] = res.cycle_model.T_log
+    assert np.array_equal(small_outs[1], small_outs[2]), "n_log changed values"
+    assert small_tlogs[1] == crossbar_total(2, 64, 64, 8, 40)
+    assert small_tlogs[2] == crossbar_total(1, 64, 64, 8, 40)
+    assert small_tlogs[2] < small_tlogs[1]
+    print(f"  [n_log split] R=C=64 S=128 PLOG=2: values invariant, "
+          f"T_log {small_tlogs[1]} -> {small_tlogs[2]}: OK")
+
     # ── Edge classes (routing exercised: n_exp=2, n_log=2) ─────────────────
     tie_row = np.full(128, 5, dtype=np.int8)
     single_max = np.zeros((128, 128), dtype=np.int8)

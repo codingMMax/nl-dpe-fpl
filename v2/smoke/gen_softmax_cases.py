@@ -69,6 +69,8 @@ def main() -> None:
     ap.add_argument("--out",
                     default=str(REPO / "v2" / "smoke" / "softmax_stimuli"))
     ap.add_argument("--Ss", default="128,256")
+    ap.add_argument("--RCs", default="256",
+                    help="crossbar geometries R=C (default 256)")
     ap.add_argument("--nExps", default="1,2,4")
     ap.add_argument("--nLogs", default="1,2")
     ap.add_argument("--classes", default="random,extremes,uniform,ties,"
@@ -78,6 +80,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--clean", action="store_true",
                     help="delete existing cases under --out first")
+    ap.add_argument("--append", action="store_true",
+                    help="append to an existing manifest instead of rewriting")
     args = ap.parse_args()
 
     out_root = Path(args.out)
@@ -86,23 +90,30 @@ def main() -> None:
     out_root.mkdir(parents=True, exist_ok=True)
 
     only = args.only.split(",") if args.only else None
+    manifest_path = out_root / "manifest.txt"
     names: list[str] = []
+    if args.append and manifest_path.exists():
+        names = [n for n in manifest_path.read_text().split() if n]
     for size in [int(s) for s in args.Ss.split(",")]:
-        for kind in args.classes.split(","):
-            if only is not None and kind not in only:
-                continue
-            rng = np.random.default_rng(args.seed + 17 * size + len(kind))
-            scores = make_scores(kind, size, rng)
-            for n_exp in [int(t) for t in args.nExps.split(",")]:
-                for n_log in [int(t) for t in args.nLogs.split(",")]:
-                    unit = S.NldpeSoftmax(S=size, n_exp=n_exp, n_log=n_log)
-                    case_dir = (out_root /
-                                f"{kind}_S{size}_nX{n_exp}_nL{n_log}")
-                    unit.dump_case(case_dir, scores)
-                    names.append(case_dir.name)
-                    print(f"wrote {rel(case_dir)}")
+        for rc in [int(t) for t in args.RCs.split(",")]:
+            for kind in args.classes.split(","):
+                if only is not None and kind not in only:
+                    continue
+                rng = np.random.default_rng(
+                    args.seed + 17 * size + 31 * rc + len(kind))
+                scores = make_scores(kind, size, rng)
+                geom = "" if rc == 256 else f"_R{rc}C{rc}"
+                for n_exp in [int(t) for t in args.nExps.split(",")]:
+                    for n_log in [int(t) for t in args.nLogs.split(",")]:
+                        unit = S.NldpeSoftmax(S=size, R=rc, C=rc,
+                                              n_exp=n_exp, n_log=n_log)
+                        case_dir = (out_root /
+                                    f"{kind}_S{size}{geom}_nX{n_exp}_nL{n_log}")
+                        unit.dump_case(case_dir, scores)
+                        names.append(case_dir.name)
+                        print(f"wrote {rel(case_dir)}")
 
-    (out_root / "manifest.txt").write_text("\n".join(names) + "\n")
+    manifest_path.write_text("\n".join(names) + "\n")
     print(f"gen_softmax_cases: {len(names)} cases under {rel(out_root)} "
           f"(Ss={args.Ss}, nExps={args.nExps}, nLogs={args.nLogs}, "
           f"classes={args.classes}, manifest.txt)")

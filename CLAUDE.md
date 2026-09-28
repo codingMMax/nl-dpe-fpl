@@ -314,7 +314,7 @@ progress — see "Direction (2026-08-29)" above.
 |---|---|---|
 | Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim; hand-written integer RTL; legacy witness | ✅ **DONE** — RTL ≡ sim ≡ oracle per case, Δ_impl = 0 (GATE 1+2); legacy witness PASS |
 | Stage 2 — GEMM array (VMM/projection) | `v2/spec/gemm.md` v0.3 frozen; hand-written `gemm_top` (V×H `dpe`) + GATE-2 harness | ✅ **DONE** — 251/251 PASS, Δ_impl = 0, T_steady steps exact (10/16/34/60/104/111/213); independent NumPy witness clean |
-| Stage 3 — softmax | `v2/spec/softmax.md` (fresh row-pipeline derivation) + pass layer F5–F8 → behavior (`NldpeSoftmax.run`) → RTL | Your sign-off |
+| Stage 3 — softmax | `v2/sim/softmax_sim.py` (fused packed-window machine: values + measured cycles) + `v2/rtl/softmax_top.v` (7 modules) + GATE-2 `v2/tb/tb_softmax_top.v` / `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` | ✅ **DONE** — 60/60 corpus PASS, all 7 stage probes bit-exact, Δ_impl = 0 (S=128 + S=256, R=C=256); `PLOG>1` merge verified by the X2 corpus (R=C=64/128, `n_log∈{1,2,4}`, 66/66 incl. sweeps) |
 | Stage 4 — projections + DIMM | `v2/spec/dimm.md` v0.2 (pool/farm + mapping + fill) + attention mapping (`attention_dimm_mapping.md`); oracle → behavior → RTL **done** | ✅ **DIMM RTL exact** — Δ_impl = 0, spans == T(P), **70/70 cases verified** (heavy batch 2026-09-23); projections next |
 | Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
 
