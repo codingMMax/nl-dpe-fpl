@@ -760,15 +760,16 @@ module softmax_out_unit #(
     parameter S = 128,
     parameter PORTS = 16,
     parameter CLAMP_LAT = 2,
-    parameter AW = 16
+    parameter AW = 16,
+    parameter N_LOG = 1
 ) (
     input  wire clk,
     input  wire reset,
     input  wire start,
-    input  wire log_valid,
-    input  wire [AW-1:0] log_base,
-    input  wire [(PORTS/8)-1:0] log_mask,
-    input  wire [PORTS-1:0] log_data,
+    input  wire [N_LOG-1:0] log_valid,
+    input  wire [N_LOG*AW-1:0] log_base,
+    input  wire [N_LOG*(PORTS/8)-1:0] log_mask,
+    input  wire [N_LOG*PORTS-1:0] log_data,
     output wire [AW-1:0] score_addr,
     input  wire [7:0] score_rdata,
     output wire [AW-1:0] rmax_addr,
@@ -784,20 +785,20 @@ module softmax_out_unit #(
     reg [7:0] log_sram [0:S-1];
     reg [S-1:0] row_ready;
 
-    reg [CLAMP_LAT-1:0] dl_valid;
-    reg [AW-1:0] dl_base [0:CLAMP_LAT-1];
-    integer dl_i;
+    reg [N_LOG-1:0]     dl_valid [0:CLAMP_LAT-1];
+    reg [AW-1:0]        dl_base  [0:N_LOG-1][0:CLAMP_LAT-1];
+    reg [(PORTS/8)-1:0] dl_mask  [0:N_LOG-1][0:CLAMP_LAT-1];
+    integer dl_i, lp;
 
     integer r, j;
     reg running;
     reg [AW-1:0] row, col;
     reg signed [15:0] acc;
+    reg [7:0] clamp_value;
 
-    // combinational reads at the current (row, col)
     assign score_addr = row * S + col;
     assign rmax_addr  = row;
 
-    reg [7:0] clamp_value;
     always @(*) begin
         acc = $signed(score_rdata) - $signed(rmax_rdata)
               - $signed(log_sram[row]);
@@ -814,29 +815,42 @@ module softmax_out_unit #(
             row <= 0;
             col <= 0;
             row_ready <= 0;
-            dl_valid <= 0;
             for (dl_i = 0; dl_i < CLAMP_LAT; dl_i = dl_i + 1)
-                dl_base[dl_i] <= 0;
+                dl_valid[dl_i] <= 0;
+            for (lp = 0; lp < N_LOG; lp = lp + 1)
+                for (dl_i = 0; dl_i < CLAMP_LAT; dl_i = dl_i + 1) begin
+                    dl_base[lp][dl_i] <= 0;
+                    dl_mask[lp][dl_i] <= 0;
+                end
             for (r = 0; r < S; r = r + 1) log_sram[r] <= 0;
         end
         else begin
             done <= 1'b0;
 
-            if (log_valid)
-                for (j = 0; j < EPS; j = j + 1)
-                    if (log_mask[j] && ((log_base + j) < S))
-                        log_sram[log_base + j] <= log_data[j*8 +: 8];
-
-            dl_valid[0] <= log_valid;
-            dl_base[0] <= log_base;
-            for (dl_i = CLAMP_LAT-1; dl_i > 0; dl_i = dl_i - 1) begin
-                dl_valid[dl_i] <= dl_valid[dl_i-1];
-                dl_base[dl_i] <= dl_base[dl_i-1];
+            // merge every LOG crossbar's drain: SRAM write + ready marking
+            for (lp = 0; lp < N_LOG; lp = lp + 1) begin
+                if (log_valid[lp])
+                    for (j = 0; j < EPS; j = j + 1)
+                        if (log_mask[lp*EPS + j]
+                            && ((log_base[lp*AW +: AW] + j) < S))
+                            log_sram[log_base[lp*AW +: AW] + j]
+                                <= log_data[lp*PORTS + j*8 +: 8];
+                dl_valid[0][lp] <= log_valid[lp];
+                dl_base[lp][0] <= log_base[lp*AW +: AW];
+                dl_mask[lp][0] <= log_mask[lp*EPS +: EPS];
             end
-            if (dl_valid[CLAMP_LAT-1])
-                for (j = 0; j < EPS; j = j + 1)
-                    if ((dl_base[CLAMP_LAT-1] + j) < S)
-                        row_ready[dl_base[CLAMP_LAT-1] + j] <= 1'b1;
+            for (dl_i = CLAMP_LAT-1; dl_i > 0; dl_i = dl_i - 1)
+                for (lp = 0; lp < N_LOG; lp = lp + 1) begin
+                    dl_valid[dl_i][lp] <= dl_valid[dl_i-1][lp];
+                    dl_base[lp][dl_i] <= dl_base[lp][dl_i-1];
+                    dl_mask[lp][dl_i] <= dl_mask[lp][dl_i-1];
+                end
+            for (lp = 0; lp < N_LOG; lp = lp + 1)
+                if (dl_valid[CLAMP_LAT-1][lp])
+                    for (j = 0; j < EPS; j = j + 1)
+                        if (dl_mask[lp][CLAMP_LAT-1][j]
+                            && ((dl_base[lp][CLAMP_LAT-1] + j) < S))
+                            row_ready[dl_base[lp][CLAMP_LAT-1] + j] <= 1'b1;
 
             if (start && !running) running <= 1'b1;
 
@@ -1031,9 +1045,15 @@ module softmax_top #(
                         score_buf[exp_score_addrs[c][j*AW +: AW]];
                 else
                     exp_score_rdata[c][j*8 +: 8] = 8'h80;
-                if (exp_rmax_addrs[c][j*AW +: AW] < S)
-                    exp_rmax_rdata[c][j*8 +: 8] =
-                        row_max_q[exp_rmax_addrs[c][j*AW +: AW]];
+                if (exp_rmax_addrs[c][j*AW +: AW] < S) begin
+                    // write-through bypass: the SRAM write commits one cycle
+                    // after rows_done, so forward the in-flight write
+                    if (max_we && (max_waddr == exp_rmax_addrs[c][j*AW +: AW]))
+                        exp_rmax_rdata[c][j*8 +: 8] = max_wdata;
+                    else
+                        exp_rmax_rdata[c][j*8 +: 8] =
+                            row_max_q[exp_rmax_addrs[c][j*AW +: AW]];
+                end
                 else
                     exp_rmax_rdata[c][j*8 +: 8] = 8'h80;
             end
@@ -1139,13 +1159,13 @@ module softmax_top #(
     assign out_rmax_rdata  = row_max_q[(out_rmax_addr < S)
                                        ? out_rmax_addr : 0];
     softmax_out_unit #(
-        .S(S), .PORTS(BUF), .CLAMP_LAT(1), .AW(AW)
+        .S(S), .PORTS(BUF), .CLAMP_LAT(1), .AW(AW), .N_LOG(N_LOG)
     ) u_out (
         .clk(clk), .reset(reset), .start(start),
-        .log_valid(log_dr_valid[0]),
-        .log_base(log_dr_base[0*AW +: AW]),
-        .log_mask(log_dr_mask[0*EPS +: EPS]),
-        .log_data(log_dr_data[0*BUF +: BUF]),
+        .log_valid(log_dr_valid),
+        .log_base(log_dr_base),
+        .log_mask(log_dr_mask),
+        .log_data(log_dr_data),
         .score_addr(out_score_addr), .score_rdata(out_score_rdata),
         .rmax_addr(out_rmax_addr), .rmax_rdata(out_rmax_rdata),
         .data_out(data_out), .out_valid(out_valid), .done(done)
