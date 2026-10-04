@@ -43,23 +43,25 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 | `v2/spec/gemm.md` | **Stage-2 charter (v0.3 FROZEN 2026-09-17)**: GEMM array = V×H `dpe` instances + byte-tree reduce + lane serializer; tiles REGULAR, **no ACAM after reduction**, `out8 = trunc8(Σ y_v)` exactly; G1–G9 |
 | `v2/oracle/nldpe_ref.py` | v2 NumPy oracle — numerical ground truth (GATE 1 reference; exact integer, no quantization policy); F5–F8 operator pass layer (`identity_pass`, `convert_stream`, `convert_packed`) |
 | `v2/spec/dimm.md` | **DIMM spec v0.2 (2026-09-22)**: pool/farm value/pass contracts, schedule-injected `DimmPassPlan`, balance law (derive-by-default + residual), **normative schedule mapping (§2.1: rank-1 outer product over k; A column-major/B row-major; convert-once LA/LB) and producer→farm fill `T_start`** in the cycle contract; softmax deferred |
-| `v2/sim/nldpe_sim.py` | v2 golden model — owns quantize/trunc8; `dump_case` certifies each case vs oracle (GATE 1) before writing expected bits |
+| `v2/sim/simulator/kernels/nldpe_sim.py` | v2 golden model — owns quantize/trunc8; `dump_case` certifies each case vs oracle (GATE 1) before writing expected bits |
 | `v2/smoke/run_dpe_rtl.py` + `v2/tb/tb_dpe_nldpe.v` | v2 RTL cross-check harness (GATE 2: dual compare + Δ_impl/T_steady gates) |
 | `v2/rtl/dpe_nldpe.v` | Hand-written v2 integer RTL — all 7 blocks; structural control channels, Δ_impl = 0 (Stage 1.5 complete) |
 | `v2/smoke/test_dpe_primitive.py` | DPE-primitive case verifier — no args: corpus table (`sim_cyc/rtl_cyc/delta_cyc`, `y32_match`, `out8_match`, verdict); `--list` index (`*` = latest run); `<case>` full view |
-| `v2/oracle/gemm_ref.py` + `v2/sim/gemm_sim.py` + `v2/smoke/{gen_gemm_cases,run_gemm_rtl,test_gemm}.py` + `v2/tb/tb_gemm_top.v` | Stage-2 GEMM: oracle (exact composition + end-to-end matmul witness), golden model (GATE 1 in `dump_case`), certified 1A–1D case generator, GATE-2 harness/TB (`S_col` + lanes), verifier |
+| `v2/oracle/gemm_ref.py` + `v2/sim/simulator/kernels/gemm_sim.py` + `v2/smoke/{gen_gemm_cases,run_gemm_rtl,test_gemm}.py` + `v2/tb/tb_gemm_top.v` | Stage-2 GEMM: oracle (exact composition + end-to-end matmul witness), golden model (GATE 1 in `dump_case`), certified 1A–1D case generator, GATE-2 harness/TB (`S_col` + lanes), verifier |
 | `v2/rtl/dimm_top.v` | **Stage-4 DIMM RTL** (single file, 6 modules): `dimm_wprog`/`dimm_log_pool`/`dimm_exp_farm`/`dimm_reduce`/`dimm_sched`/`dimm_top`; take-now window acceptance, drain queue depth 2, per-port acc banks, same-cycle flush/`win_done`; **exact cycles: Δ_impl = 0** (span == T(p), ser == M·N, fill == T_start) |
 | `v2/smoke/{gen_dimm_cases,run_dimm_rtl,test_dimm}.py` + `v2/tb/tb_dimm_top.v` | Stage-4 DIMM: GATE-1 dumper (`NldpeDimm.dump_case`), case sweep (7 shapes × n_E {1,2,4,8,16} × classes), GATE-2 strict gates (Δ=0, spans == T_A/T_B/T_E, ser == M·N, fill == T_start, window counts == P_A/P_B/P_E), verifier |
 | `v2/spec/softmax.md` | **Stage-3 softmax charter v0.1 (2026-09-27)**: value contract, packed-window machine (`n_exp`/`n_log`, `CLB_WIDTH=32`, `L_max/L_sum`, 1 value/cycle drain), measured-cycle contract + corridor check, RTL mapping/probes, decisions S1–S6 (**S6 superseded** by `softmax_online.md`/`flash_attention.md`); **supersedes** the old streaming sketch (§6 of `dimm_throughput_model.md`) |
 | `v2/spec/softmax_online.md` | **Online softmax charter v0.3 (2026-09-30)**: key-block stream, deferred-α; contract = **ACAM mapping, same as `softmax_ref`/`softmax_sim`** (no np.exp/np.log/float `/`); **bit-identical to `softmax_ref` at `Bkv∈{1,S}`**, offset-skewed approximation in between; O1–O8 |
 | `v2/spec/flash_attention.md` | **FlashAttention charter v0.1 (2026-09-30, spec-only)**: log-carry FA (`(m, log l, log\|o\|, sign(o))`, no mul/div), NL integer binding, composition (DIMM + sign path + `softmax_online`), **DIMM sign extension required for FA**, cycle/energy-vs-full-row contract; reference `v2/oracle/flash-attention-log-domain.ipynb` (float golden witness) |
 | `v2/oracle/softmax_online_ref.py` | **Online softmax oracle (2026-09-30)**: `model` = **ACAM** streamed realization (contract); `exact`/`regular_exact` = reference witnesses; `global` = shipped; gates `model(Bkv=S) ≡ softmax_ref` bit-exact + budgets; **ALL PASS** |
-| `v2/sim/softmax_online_sim.py` | **Online softmax behavior model (2026-09-30)**: `NldpeSoftmaxOnline` (block-max fold → ACAM EXP → deferred-α merge → ACAM LOG → emit), bit-exact vs the ACAM `model` oracle **via the certified primitive**; `Bkv=S` == full-row bit-exact; envelope + fused event timing; **ALL PASS**; cycles `S²`-drain dominated (online win = storage) |
+| `v2/sim/simulator/kernels/softmax_online_sim.py` | **Online softmax behavior model (2026-09-30)**: `NldpeSoftmaxOnline` (block-max fold → ACAM EXP → deferred-α merge → ACAM LOG → emit), bit-exact vs the ACAM `model` oracle **via the certified primitive**; `Bkv=S` == full-row bit-exact; envelope + fused event timing; **ALL PASS**; cycles `S²`-drain dominated (online win = storage) |
 | `v2/smoke/compare_softmax.py` | **Conventional vs online softmax comparison (2026-09-30)**: ACAM online vs shipped; offset / rel / distribution L1 / clamp% / cycles / storage; gates `conv ≡ softmax_ref`, `online ≡ model`; results in `v2/spec/softmax_online.md` §10 — online ≡ `softmax_ref` at `Bkv∈{1,S}`, offset-skewed (48–99% clamped) at `Bkv=16`; 2.3–3.6× less storage; ~parity cycles |
 | `v2/rtl/softmax_online_top.v` | **Online softmax RTL (2026-09-30; no-drain 2026-10-03)**: parametric (`S`,`BKV`,`N_EXP`,`N_LOG`,`N_FAC`) — `online_blk_loader`/`online_max_unit`/`online_combine`/`online_out_unit`/`softmax_online_top`, reusing the unified `softmax_wprog`/`exp_feed`/`sum_unit`; `N_FAC`-wide parallel factor bank (`gen_fac`, round-robin windows — the sim's `n_fac` sweep knob as hardware), sum unit `DIRECT_COMMIT=1` (per-row commit, no row-order pipe), combine gate = `all_exp_done && all_fac_done`, LOG starts at `combine_done`; block-major `BUF`-wide stream, block max + ACAM EXP + deferred-α combine (`factor=ACAM_EXP(m_b−m)`, `>>log2S`, ACAM_LOG); **`done` = whole result computed; no output drain**; **GATE 2: 64/64 PASS, Δ_impl = 0 (2026-10-03)** (compile with `softmax_top.v`) |
 | `v2/tb/tb_softmax_online_top.v` + `v2/smoke/{gen_softmax_online_cases,run_softmax_online_rtl}.py` | **Online softmax GATE-2 harness (2026-09-30)**: GATE-1 dumper (all probes) + TB (streams blocks on the port, probes, `measured == compute_cycles`) + runner |
 | `v2/rtl/softmax_top.v` | **Stage-3 softmax RTL** (7 modules): `softmax_wprog`/`max_unit`/`exp_feed`/`sum_unit`/`log_unit`/`out_unit`(combinational result read, no drain)/`top`; fused `exp_input`, streaming row-max fold; **exact: Δ_impl = 0**; `done` = whole result computed. `exp_feed`/`sum_unit` are **parameterized and shared** with the online RTL (`ROW_STRIDE`/`NELEM`/`win_span`; `RS`/`NROWS`/`SPAN`/`OUT_LQ`; sum unit gains `DIRECT_COMMIT` — 0 = conventional certified path, 1 = online per-row commit) |
 | `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` + `v2/tb/tb_softmax_top.v` | Stage-3 softmax: GATE-1 dumper (`NldpeSoftmax.dump_case`), geometry axis (`--RCs`) + PLOG>1 X2 corpus, GATE-2 (7 stage probes bit-exact, Δ=0, S² words, per-case logs), verifier table **67/67 PASS** |
+| `v2/spec/simulator.md` | **Stage-5 backbone simulator charter v0.2** (values + cycles + energy, both platforms); file layout pinned in §13.0; phases 0–1 built (as-built note in the header; §3/§4/§10 format text pending rewrite) |
+| `v2/sim/simulator/` | **Backbone simulator (2026-10-03)**: `configs/{nl_dpe,azure_lily}.json` (shared crossbar + buffers, one output stage ACAM/ADC, per-unit costs) · `platforms.py` (`Platform(config, rows, cols, buffer_size)`, `--imc` CLI) · `cost.py` (per-op prices + per-tile cycle law) · `kernels/` (the six certified kernel sims, moved from `v2/sim/` 2026-10-04: `nldpe_sim`, `pass_engine`, `gemm_sim`, `dimm_sim`, `softmax_sim`, `softmax_online_sim`); phases 2–5 (`backbone.py`, `workloads/`, `main.py`, `test_simulator.py`) per charter §13.0. Self-tests: `python3 v2/sim/simulator/{platforms,cost}.py` |
 | `v2/docs/gemm_dataflow_reading.md` | Reading list: GEMM/GEMV dot-product vs outer-product dataflows, reuse/buffering theory, accelerator dataflow taxonomy |
 | `v2/smoke/stimuli/` | Corpus (gitignored, accumulates across runs) + `manifest.txt` scoping the harness to the latest generation |
 | `v2/smoke/logs/` | Test logs (gitignored): `<case>.log` per-case TB stdout + timestamped `rtl_smoke_*.log` run summaries + `latest.log` |
@@ -121,7 +123,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
   - `python3 v2/smoke/run_dpe_rtl.py [--quick]` — GATE 2 cross-check; writes observed dumps under `stimuli/<case>/observed/` and logs under `v2/smoke/logs/`
   - `python3 v2/smoke/test_dpe_primitive.py` (no args: corpus table) · `--list` · `<case> [--full]` — inspect vectors/expected/observed and verify values/cycles
   - `python3 v2/smoke/legacy_witness.py` — independent legacy witness on identical stimulus
-  - `python3 v2/oracle/gemm_ref.py` · `python3 v2/sim/gemm_sim.py` — Stage-2 GEMM self-tests
+  - `python3 v2/oracle/gemm_ref.py` · `python3 v2/sim/simulator/kernels/gemm_sim.py` — Stage-2 GEMM self-tests
   - `python3 v2/smoke/gen_gemm_cases.py [--stage 1A|1B|1C|1D]` — GATE-1-certified GEMM cases under `v2/smoke/gemm_stimuli/`
   - `python3 v2/smoke/run_gemm_rtl.py [--stage 1A]` — Stage-2 GATE-2 cross-check (RTL vs certified bits; logs + observed dumps)
   - `python3 v2/smoke/test_gemm.py` (no args: table) · `--list` · `<case>` — GEMM case verifier (mirrors `test_dpe_primitive.py`)
@@ -147,13 +149,13 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 - DPE behavior model primitives, Model Y FSM, module name `dpe` matching VTR arch XML contract.
 - Stages 1A (V=1 H=1), 1B (V>1 H=1), 1C (V=1 H>1) validated.
 - `softmax_study/` — COMPLETE (committed Aug 2026).
-- **v2 clean-room Stage 1.2 — DONE** (2026-09-13, re-transcribed 2026-09-14): spec **v2.0 clean integer rewrite** (int8 weights/activations, exact integer MAC, integer ACAM forms + trunc8 low byte; fp32 amendment retired per advisor consultation); `v2/oracle/nldpe_ref.py` + `v2/sim/nldpe_sim.py` self-tests green; independent review passed (dual compare: full int32 `y` + byte stream, all 4 modes/geometries, measured cycles ≡ §5.3, P1/P10/P11 timeline invariants); `pack_weight_stream` (P23) and `dump_case` file contract round-trip verified. v2 tree at repo root `v2/`.
+- **v2 clean-room Stage 1.2 — DONE** (2026-09-13, re-transcribed 2026-09-14): spec **v2.0 clean integer rewrite** (int8 weights/activations, exact integer MAC, integer ACAM forms + trunc8 low byte; fp32 amendment retired per advisor consultation); `v2/oracle/nldpe_ref.py` + `v2/sim/simulator/kernels/nldpe_sim.py` self-tests green; independent review passed (dual compare: full int32 `y` + byte stream, all 4 modes/geometries, measured cycles ≡ §5.3, P1/P10/P11 timeline invariants); `pack_weight_stream` (P23) and `dump_case` file contract round-trip verified. v2 tree at repo root `v2/`.
 
 **Validation state (regression guards, re-run green after migration)**:
 - `rtl_flow/smoke/run_dpe_smoke.py` — 52/52 PASS
 - `rtl_flow/smoke/run_fc_smoke.py` — 13/13 PASS, fidelity reported not gated (Stages 1A+1B+1C)
 - `rtl_flow/vtr/run_vtr_smoke.py` — 3/3 OK (NL only): bert_qkv_proj, lenet_fc1, bert_ffn1
-- `python3 v2/oracle/nldpe_ref.py` — ALL PASS; `python3 v2/sim/nldpe_sim.py` — ALL PASS
+- `python3 v2/oracle/nldpe_ref.py` — ALL PASS; `python3 v2/sim/simulator/kernels/nldpe_sim.py` — ALL PASS
 - `python3 v2/smoke/gen_cases.py` — 48/48 default cases pass GATE 1 (sim ≡ oracle, run 2026-09-16)
 - `python3 v2/smoke/run_dpe_rtl.py` — **GATE 2 green (2026-09-17)**: 48/48 default
   (256×256/256×512, M∈{1,2}, modes 0–3, identity/random/extremes) + 16/16 M-sweep
@@ -166,7 +168,7 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 **Stage-2 validation state (2026-09-17)**:
 - `python3 v2/oracle/gemm_ref.py` — ALL PASS: composition + structural dual +
   end-to-end single-matmul identity (`out8 == trunc8(X@W)`)
-- `python3 v2/sim/gemm_sim.py` — ALL PASS: 34 runs, R∈{64..512}, C∈{64..256},
+- `python3 v2/sim/simulator/kernels/gemm_sim.py` — ALL PASS: 34 runs, R∈{64..512}, C∈{64..256},
   random prime M/K/N (V,H ∈ 1..3); aggregate + per-tile `y`/`out8` vs `nldpe_ref`
 - `python3 v2/smoke/gen_gemm_cases.py` — 16/16 default cases GATE-1 certified
   (1A–1D, M∈{1,2}: cycles 115/175/116/176)
@@ -230,7 +232,7 @@ progress — see "Direction (2026-08-29)" above.
 - **Oracle DONE** (`v2/oracle/gemm_ref.py`): exact composition transcribed
   from the charter; vectorized vs structural dual implementation; I6/I7;
   end-to-end single-matmul identity witness (`out8 == trunc8(X@W)`).
-- **Behavior model DONE** (`v2/sim/gemm_sim.py`): `NldpeGemm` instantiates
+- **Behavior model DONE** (`v2/sim/simulator/kernels/gemm_sim.py`): `NldpeGemm` instantiates
   `V·H` `NldpeDpe` (lockstep; timeline from the primitive + `L_w`); `run()`
   returns `S`/`out8`/`cycle`/`timeline` (+ optional per-tile results);
   `dump_case` wires **GATE 1** (per case: `S` int32 + bytes ≡ oracle and
@@ -326,7 +328,7 @@ progress — see "Direction (2026-08-29)" above.
 |---|---|---|
 | Stage 1 — primitives | v2 clean-room: spec v2.0.1 + NumPy oracle + sim; hand-written integer RTL; legacy witness | ✅ **DONE** — RTL ≡ sim ≡ oracle per case, Δ_impl = 0 (GATE 1+2); legacy witness PASS |
 | Stage 2 — GEMM array (VMM/projection) | `v2/spec/gemm.md` v0.3 frozen; hand-written `gemm_top` (V×H `dpe`) + GATE-2 harness | ✅ **DONE** — 251/251 PASS, Δ_impl = 0, T_steady steps exact (10/16/34/60/104/111/213); independent NumPy witness clean |
-| Stage 3 — softmax | `v2/sim/softmax_sim.py` (fused packed-window machine: values + measured cycles) + `v2/rtl/softmax_top.v` (7 modules) + GATE-2 `v2/tb/tb_softmax_top.v` / `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` | ✅ **DONE** — 60/60 corpus PASS, all 7 stage probes bit-exact, Δ_impl = 0 (S=128 + S=256, R=C=256); `PLOG>1` merge verified by the X2 corpus (R=C=64/128, `n_log∈{1,2,4}`, 66/66 incl. sweeps) |
+| Stage 3 — softmax | `v2/sim/simulator/kernels/softmax_sim.py` (fused packed-window machine: values + measured cycles) + `v2/rtl/softmax_top.v` (7 modules) + GATE-2 `v2/tb/tb_softmax_top.v` / `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` | ✅ **DONE** — 60/60 corpus PASS, all 7 stage probes bit-exact, Δ_impl = 0 (S=128 + S=256, R=C=256); `PLOG>1` merge verified by the X2 corpus (R=C=64/128, `n_log∈{1,2,4}`, 66/66 incl. sweeps) |
 | Stage 4 — projections + DIMM | `v2/spec/dimm.md` v0.2 (pool/farm + mapping + fill) + attention mapping (`attention_dimm_mapping.md`); oracle → behavior → RTL **done** | ✅ **DIMM RTL exact** — Δ_impl = 0, spans == T(P), **70/70 cases verified** (heavy batch 2026-09-23); projections next |
 | Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
 | Stage 6 — online softmax + FlashAttention | `v2/spec/softmax_online.md` (blocked / deferred-α, **ACAM**) + `v2/spec/flash_attention.md` (log-carry FA); oracle + behavior model + **RTL** landed | ✅ **ONLINE SOFTMAX DONE (2026-10-03)** — oracle/sim/RTL ALL PASS; **GATE 2: 64/64 PASS, Δ_impl = 0** (S∈{16,32,64}, `BKV`∈{8,16,32}, `n_exp∈{1,4}`, `N_FAC=n_exp`; conventional inertness 60/60); **online ≡ `softmax_ref` only at `Bkv∈{1,S}`**, offset-skewed between; **stream-bound** (BUF/8 port); FA RTL + **DIMM sign extension** still pending |

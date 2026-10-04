@@ -1,0 +1,36 @@
+{
+  "platform_name": "azure_lily",
+  "fabric": {
+    "clock_mhz": 300,
+    "block_ram": {"port_width_bits": 40, "energy_pj_per_access": 0.0495},
+    "clb": {
+      "energy_pj_per_op_unit": 0.66,
+      "add_pj": 0.08498,
+      "compare_pj": 0.26439,
+      "activation_unit_pj": 0.45,
+      "lookup_table_read_pj": 2.64,
+      "lookup_activity_factor": 1.0
+    },
+    "dsp": {"multiply_accumulate_pj": 1.2}
+  },
+  "compute_tile": {
+    "rows": 512,
+    "cols": 128,
+    "input_bit_slices": 8,
+    "port_width_bits": 16,
+    "buffer_size": 512,
+    "crossbar":      {"area_um2_per_cell": 0.175994873046875, "energy_pj_per_cell": 0.000019989013671875},
+    "input_buffer":  {"area_um2_per_entry": 1.38359375, "energy_pj_per_byte": 0.00495},
+    "output_buffer": {"area_um2_per_entry": 1.38359375, "energy_pj_per_byte": 0.00495},
+    "adc":           {"cols_per_adc": 16, "area_um2_per_adc": 4400.0, "energy_pj_per_conversion": 2.33,
+                      "modes": ["identity"]}
+  },
+  "resource_budgets": {
+    "total_io": 2630,
+    "total_clb": 6688,
+    "total_dsp": 16,
+    "total_mem": 264,
+    "total_imc": 896,
+    "total_softmax_lanes": 16
+  }
+}

@@ -19,10 +19,10 @@ survives only as an `exact` reference witness).
 - Values: `v2/oracle/softmax_online_ref.py` — `softmax_online_model` (the **ACAM
   contract**), `softmax_online_exact` / `regular_exact` (reference witnesses),
   `softmax_online_global`, `softmax_online_pass_counts`.
-- Behavior/timing: `v2/sim/softmax_online_sim.py` — `NldpeSoftmaxOnline`,
+- Behavior/timing: `v2/sim/simulator/kernels/softmax_online_sim.py` — `NldpeSoftmaxOnline`,
   `softmax_online_cycle_model`.
 - Shipped operator: `v2/oracle/softmax_ref.py` (`NldpeSoftmax` in
-  `v2/sim/softmax_sim.py`); the `Bkv = S` case.
+  `v2/sim/simulator/kernels/softmax_sim.py`); the `Bkv = S` case.
 - Primitive timing: `v2/spec/dpe_nldpe.md` §5.3 — `T(p)`.
 - Operator pass layer: `v2/spec/dpe_nldpe.md` §6 F5–F8 — capacity `I = min(R, C)`,
   stride-`I` windows, padding discard, packing a schedule property.
@@ -193,7 +193,7 @@ schedule-injected (`SoftmaxOnlinePassPlan`).
 - `python3 v2/oracle/softmax_online_ref.py` — **ALL PASS**: `exact ≡ textbook`,
   `model` ACAM ranges + determinism, **`model(Bkv=S)` ≡ `softmax_ref` bit-exactly**,
   budgets vs `softmax_ref`/exact, pass counts, extremes.
-- `python3 v2/sim/softmax_online_sim.py` — **ALL PASS**: bit-exact vs the ACAM
+- `python3 v2/sim/simulator/kernels/softmax_online_sim.py` — **ALL PASS**: bit-exact vs the ACAM
   `model` oracle across S ∈ {32,128}, `Bkv ∈ {4,16,32,128}`, `n_exp ∈ {1,2,4}`;
   **`Bkv=S` == full-row `NldpeSoftmax` bit-exact**; corridor; cycles-vs-full-row.
 - **GATE 2** (`v2/rtl/softmax_online_top.v` + `v2/tb/tb_softmax_online_top.v`

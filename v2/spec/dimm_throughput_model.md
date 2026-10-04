@@ -7,7 +7,7 @@
 > the decision ledger are retained for reference.
 
 **Status**: DIMM-only throughput model, 2026-09-27. Applies to
-`v2/sim/dimm_sim.py`; normative contracts live in `dimm.md`.
+`v2/sim/simulator/kernels/dimm_sim.py`; normative contracts live in `dimm.md`.
 
 **Contracts above this doc**:
 

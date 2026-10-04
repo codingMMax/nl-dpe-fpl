@@ -66,7 +66,7 @@ import numpy as np
 
 # Make the sibling modules importable regardless of cwd.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "oracle"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "oracle"))
 import nldpe_sim as dpe_sim  # noqa: E402
 import gemm_ref as ref  # noqa: E402
 import nldpe_ref as nref  # noqa: E402  (self-test per-tile expectations only)

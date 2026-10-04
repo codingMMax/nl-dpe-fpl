@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 
 # Make the sibling oracle module importable regardless of cwd.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "oracle"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "oracle"))
 import nldpe_ref as ref  # noqa: E402
 
 # Mode codes — mirror nldpe_ref (keep the spec's one source of truth).

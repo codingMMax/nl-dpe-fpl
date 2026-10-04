@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "v2" / "sim"))
+sys.path.insert(0, str(REPO / "v2" / "sim" / "simulator" / "kernels"))
 sys.path.insert(0, str(REPO / "v2" / "oracle"))
 import gemm_sim as G  # noqa: E402
 

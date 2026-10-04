@@ -51,7 +51,7 @@ import numpy as np
 
 # Make sibling modules importable regardless of cwd.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "oracle"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "oracle"))
 import nldpe_sim as prim  # noqa: E402
 import nldpe_ref as nref  # noqa: E402
 import softmax_ref as ref  # noqa: E402

@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent / "sim"))
+sys.path.insert(0, str(HERE.parent / "sim" / "simulator" / "kernels"))
 sys.path.insert(0, str(HERE.parent / "oracle"))
 import softmax_ref as sref  # noqa: E402
 import softmax_online_ref as oref  # noqa: E402

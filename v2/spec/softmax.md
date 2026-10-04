@@ -1,6 +1,6 @@
 # Softmax — NL-DPE full-row operator (packed-window model)
 
-**Status**: v0.1, 2026-09-27. Normative for `v2/sim/softmax_sim.py` and
+**Status**: v0.1, 2026-09-27. Normative for `v2/sim/simulator/kernels/softmax_sim.py` and
 `v2/rtl/softmax_top.v`. Supersedes the §6 streaming row-pipeline sketch that
 lived in `pool_farm_model.md` (now `dimm_throughput_model.md`).
 

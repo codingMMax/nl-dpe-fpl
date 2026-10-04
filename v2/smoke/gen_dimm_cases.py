@@ -40,7 +40,7 @@ from pathlib import Path
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO / "v2" / "sim"))
+sys.path.insert(0, str(REPO / "v2" / "sim" / "simulator" / "kernels"))
 sys.path.insert(0, str(REPO / "v2" / "oracle"))
 import dimm_sim as D  # noqa: E402
 

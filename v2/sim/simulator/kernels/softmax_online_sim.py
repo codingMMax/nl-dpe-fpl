@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "oracle"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "oracle"))
 import nldpe_ref as nref  # noqa: E402
 import nldpe_sim as prim  # noqa: E402
 import softmax_online_ref as oref  # noqa: E402

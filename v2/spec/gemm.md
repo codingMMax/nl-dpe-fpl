@@ -69,7 +69,7 @@ lane serializer**:
 **Instantiation (normative)**: the RTL module `gemm_top` **instantiates
 `V·H` instances of the primitive module `dpe`** — no MAC, crossbar or ACAM
 logic is re-implemented at the array level. The golden sim instantiates
-`V·H` `NldpeDpe` objects (`v2/sim/nldpe_sim.py`); the oracle calls
+`V·H` `NldpeDpe` objects (`v2/sim/simulator/kernels/nldpe_sim.py`); the oracle calls
 `nldpe_ref.compute_y` / `acam_transform` per tile. New logic at this level
 is exactly: weight routing, activation fan-out, the reduce tree, the lane
 serializer, and control/readiness.
@@ -353,7 +353,7 @@ the primitive's, and `L_w` is absorbed in the fill.
   (per-tile `nldpe_ref` calls, byte-tree reduce, low-byte serializer);
   written from the charter, no RTL/sim mimicry; self-test includes I6/I7 and
   padding/ordering cases.
-- **Sim** `v2/sim/gemm_sim.py`: golden model instantiating `NldpeDpe`
+- **Sim** `v2/sim/simulator/kernels/gemm_sim.py`: golden model instantiating `NldpeDpe`
   instances (tiles REGULAR); schedule copied from primitive
   `SimResult.timeline` (no re-derived cycle math); `dump_case` analogue
   certifies `sim ≡ oracle` (wide `S`, output bytes, cycle formula)
