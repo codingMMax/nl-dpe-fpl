@@ -110,6 +110,7 @@ v2/smoke/softmax_stimuli_x2/
 v2/smoke/softmax_online_stimuli/
 
 # v2 RTL smoke logs (regenerable via v2/smoke/run_dpe_rtl.py)
+
 v2/smoke/results/
 
 # v2 test logs: per-case TB stdout + run summaries (regenerable)
@@ -122,3 +123,8 @@ v2/smoke/.softmax_rtl.lock
 
 # v2 GEMM harness lock file (transient)
 v2/smoke/.gemm_rtl.lock
+
+# session tooling + strays (not project artifacts)
+.opencode/
+v2/test.csv
+v2/sim/mem.md

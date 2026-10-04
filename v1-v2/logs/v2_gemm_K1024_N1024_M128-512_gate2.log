@@ -1,0 +1,20 @@
+==============================================================================
+v2 GEMM array RTL cross-check (Stage 2)
+  rtl     : v2/rtl/gemm_top.v
+  stage   : all
+==============================================================================
+cases: 3
+compiled 1 geometry binaries
+
+case                                           P status measured expected delta  errs
+-------------------------------------------------------------------------------------
+random_256x256_1024x1024_M128                128   PASS     7737     7737     0     0
+random_256x256_1024x1024_M256                256   PASS    15417    15417     0     0
+random_256x256_1024x1024_M512                512   PASS    30777    30777     0     0
+
+GATE OK  : K=1024 N=1024 256x256 delta_impl = 0 (constant)
+GATE OK  : K=1024 N=1024 256x256 step M=128->256 = 7680 (T_steady=60 x 128)
+GATE OK  : K=1024 N=1024 256x256 step M=256->512 = 15360 (T_steady=60 x 256)
+
+logs: v2/smoke/logs/rtl_smoke_gemm_20260929_141515.log  (per-case TB logs in v2/smoke/logs/)
+RESULT: PASS

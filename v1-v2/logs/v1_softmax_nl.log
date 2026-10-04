@@ -1,0 +1,6 @@
+[nl_p1_s128  ] PASS         cycles=290 pred=290
+[nl_p2_s128  ] PASS         cycles=290 pred=290
+[nl_p1_s256  ] PASS         cycles=514 pred=514
+[nl_p2_s256  ] PASS         cycles=956 pred=956
+
+4/4 PASS  (details: /mnt/vault0/jiajunh5/nl-dpe-fpl/softmax_study/results/smoke.json)

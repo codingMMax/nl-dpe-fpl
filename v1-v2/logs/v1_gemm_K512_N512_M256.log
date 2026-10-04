@@ -1,0 +1,13 @@
+=== FC smoke sweep — 1 cases ===
+Stage:      all
+Precision:  8
+tmpdir:     /tmp/fc_smoke_632948s4
+log:        /mnt/vault0/jiajunh5/nl-dpe-fpl/rtl_flow/results/fc_smoke.log
+
+STATUS   LABEL                  ARCH     M     K     N   V   H  ACT   LCYC CCYC OCYC   Tf_sim Tstd_sim   sim_exp  rtl_obs  delta   nba  tree  clb  wrap
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+PASS     custom_nldpe_M256_K512_N512_none nldpe  256   512   512   2   2 none     52   10   52      114       52     13374    13382     +8     0     1    1     6
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+SUMMARY: 1/1 PASS, 0 FAIL
+Log: /mnt/vault0/jiajunh5/nl-dpe-fpl/rtl_flow/results/fc_smoke.log

@@ -1,0 +1,14 @@
+workload,shape,basis,v1_cycles,v2_cycles,note
+dpe_primitive,M=1,full,116,114,
+dpe_primitive,M=2,full,168,174,
+dpe_primitive,M=4,full,272,294,
+gemm,"K=512, N=512 (V=2, H=2, M=2)",full,174,176,"v1 delta=+8; v2 case generated for this comparison"
+gemm,"K=1024, N=512 (V=4, H=2, M=2)",full,175,177,"v1 delta=+9"
+gemm,"K=512, N=512 (V=2, H=2, M=128)",full,6726,7736,"M sweep; D=+1010"
+gemm,"K=512, N=512 (V=2, H=2, M=256)",full,13382,15416,"M sweep; D=+2034"
+gemm,"K=512, N=512 (V=2, H=2, M=512)",full,26694,30776,"M sweep; D=+4082"
+gemm,"K=1024, N=1024 (V=4, H=4, M=128)",full,6727,7737,"M sweep; D=+1010"
+gemm,"K=1024, N=1024 (V=4, H=4, M=256)",full,13383,15417,"M sweep; D=+2034"
+gemm,"K=1024, N=1024 (V=4, H=4, M=512)",full,26695,30777,"M sweep; D=+4082"
+softmax,"S=128, n_exp=1",compute,290,4008,"NIFA 17 units vs NIFA++ n_exp+n_log=2; input excluded both"
+softmax,"S=256, n_exp=1",compute,956,15556,"same basis"

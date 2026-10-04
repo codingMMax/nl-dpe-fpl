@@ -37,7 +37,7 @@ REPO = HERE.parent
 RTL = HERE / "rtl"
 TB = HERE / "tb"
 RESULTS = HERE / "results"
-DPE_MODEL = REPO / "fc_verification" / "rtl" / "dpe_nldpe.v"
+DPE_MODEL = REPO / "rtl_flow" / "rtl" / "dpe_nldpe.v"
 
 W = 16          # lanes
 SEED = 7

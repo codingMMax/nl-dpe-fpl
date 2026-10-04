@@ -1,0 +1,5 @@
+=== v1 DPE primitive M-sweep (NL R=256 C=256 BUF=40 PREC=8, REGULAR) — 4 cases ===
+[PASS] MSW_NLDPE_R256_C256_M1  observed=116  rtl_exp=116  sim=114
+[PASS] MSW_NLDPE_R256_C256_M2  observed=168  rtl_exp=168  sim=166
+[PASS] MSW_NLDPE_R256_C256_M4  observed=272  rtl_exp=272  sim=270
+[PASS] MSW_NLDPE_R256_C256_M8  observed=480  rtl_exp=480  sim=478

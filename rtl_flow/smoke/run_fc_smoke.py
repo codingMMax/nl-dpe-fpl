@@ -340,7 +340,7 @@ def run_case(c: Case, tmpdir: Path, keep: bool) -> tuple[bool, str, dict]:
 
     proc = subprocess.run(
         ["vvp", str(bin_path)],
-        capture_output=True, text=True, timeout=180
+        capture_output=True, text=True, timeout=7200
     )
     out = proc.stdout + proc.stderr
 

@@ -158,7 +158,8 @@ def load_cases(stimuli: Path) -> list[Case]:
     return cases
 
 
-def compile_for(case: Case, rtl: Path, out_dir: Path) -> tuple[Path | None, str]:
+def compile_for(case: Case, rtl: Path, out_dir: Path,
+                maxm: int | None = None) -> tuple[Path | None, str]:
     bin_path = out_dir / f"gemm_{case.k}x{case.n}_{case.r}x{case.c}_{case.p}.vvp"
     if bin_path.exists():
         return bin_path, ""
@@ -167,8 +168,10 @@ def compile_for(case: Case, rtl: Path, out_dir: Path) -> tuple[Path | None, str]
         f"-DK_TB={case.k}", f"-DN_TB={case.n}",
         f"-DR_TB={case.r}", f"-DC_TB={case.c}",
         f"-DBUF_TB={case.buf}", f"-DP_TB={case.p}",
-        str(TB), str(rtl), str(PRIM_RTL),
     ]
+    if maxm is not None:
+        cmd.append(f"-DMAXM_TB={maxm}")
+    cmd += [str(TB), str(rtl), str(PRIM_RTL)]
     p = run(cmd, cwd=REPO)
     if p.returncode != 0:
         missing = [pr for pr in PROBES if pr in p.stderr]
@@ -272,11 +275,12 @@ def _execute(args: argparse.Namespace) -> int:
 
     rtl = Path(args.rtl).resolve()
     tmp = Path(tempfile.mkdtemp(prefix="v2gemm_"))
+    maxm = max(c.m for c in cases)
     bins: dict[tuple[int, int, int, int], Path] = {}
     for case in cases:
         if case.geom in bins:
             continue
-        bin_path, err = compile_for(case, rtl, tmp)
+        bin_path, err = compile_for(case, rtl, tmp, maxm)
         if bin_path is None:
             print(f"\nCOMPILE FAILED ({case.k}x{case.n} rlt={case.r}x{case.c}):\n{err}")
             print("\nThe RTL probe contract (`S_col`, `out_valid`) or the port "
