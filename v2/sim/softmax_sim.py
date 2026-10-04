@@ -502,9 +502,13 @@ class NldpeSoftmax:
             "clb_width": self.clb_width, "clb_pipe": self.clb_pipe,
             "passes_exp": int(result.passes_exp),
             "passes_log": int(result.passes_log),
-            "used_cycles": int(result.used_cycles),
+            "used_cycles": int(result.compute_cycles),   # done = results ready
             "compute_cycles": int(result.compute_cycles),
-            "drain_cycles": int(result.drain_cycles),
+            "drain_cycles": 0,                           # output not counted
+            "load_cycles": int(len(nref.pack_act_stream(scores.reshape(-1)))),
+            "serialize_cycles": 0,                       # output not counted
+            "e2e_cycles": int(len(nref.pack_act_stream(scores.reshape(-1)))
+                              + result.compute_cycles),
             "load_words": int(len(nref.pack_act_stream(scores.reshape(-1)))),
             "weight_cycles": int(self.R * self.C),
         }

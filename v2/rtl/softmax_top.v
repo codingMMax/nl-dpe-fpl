@@ -18,7 +18,7 @@
 //                     exp_input = score - row_max in the feed path
 //   softmax_sum_unit  per-crossbar partial banks + combine pipeline -> lq
 //   softmax_log_unit  one LOG crossbar: window engine over the lq stream
-//   softmax_out_unit  clamp + 1 value/cycle row-major drain
+//   softmax_out_unit  combinational final result: clamp(score - row_max - log)
 //   softmax_top       buffers, instances, window issue, probes
 //
 // Scheduling contract (see `v2/sim/softmax_sim.py`):
@@ -28,7 +28,8 @@
 //     crossbar run back-to-back through the primitive event chain;
 //   * lq[r] is written `log2(S)+1` cycles after row r's last element drains;
 //   * a LOG window issues once its rows' lq values are all written;
-//   * the output drain streams row r at 1 value/cycle, gated by row order.
+//   * `done` (results computed) fires once the last normalizer row is ready;
+//     the final result is read combinationally and is NOT drained/timed.
 //
 // Setup cycles (excluded from the measured run; reported by the harness):
 //   weight programming  R*C broadcast strobes
@@ -210,6 +211,9 @@ endmodule
 // ============================================================================
 module softmax_exp_feed #(
     parameter S = 128,
+    parameter ROW_STRIDE = 0,      // 0 => S (full-row); else the row stride (online = BKV)
+    parameter NELEM = 0,           // 0 => S*S; else the flat element count
+    parameter RMOD = 0,            // 0 => row index = ae/RS; 1 => ae % RS (factor table)
     parameter R = 256,
     parameter C = 256,
     parameter BUF = 40,
@@ -227,6 +231,7 @@ module softmax_exp_feed #(
     input  wire [1:0] nl_dpe_control,
     input  wire win_start,
     input  wire [AW-1:0] win_base,
+    input  wire [AW-1:0] win_span,         // inclusive element hi for this window
     output wire win_busy,
     output wire win_done,
     // feed-side probe write port (exp_input)
@@ -245,7 +250,8 @@ module softmax_exp_feed #(
     localparam I    = (R < C) ? R : C;
     localparam LCYC = (R * 8 + BUF - 1) / BUF;
     localparam OCYC = (C * 8 + BUF - 1) / BUF;
-    localparam SQ   = S * S;
+    localparam RS   = (ROW_STRIDE == 0) ? S : ROW_STRIDE;
+    localparam NEL  = (NELEM == 0) ? S * S : NELEM;
 
     reg  [BUF-1:0] dpe_in;
     reg            dpe_w_buf_en;
@@ -266,26 +272,30 @@ module softmax_exp_feed #(
         .reg_full(dpe_reg_full)
     );
 
-    reg [AW-1:0] feed_base, lat_base;
+    reg [AW-1:0] feed_base, feed_hi, lat_base, lat_hi;
     integer      feed_cnt;
     reg          feeding, have_win;
-    reg [AW-1:0] drn_base;
+    reg [AW-1:0] drn_base, drn_hi;
     integer      drn_cnt;
     reg          draining;
-    reg [AW-1:0] que_base;
+    reg [AW-1:0] que_base, que_hi;
     reg          que_valid;
 
     integer jf, jd;
-    integer acol, ae, arow, fcol, fe, dcol, de, dw;
+    integer acol, ae, arow, fcol, fe, dcol, de;
+
     wire take_now = win_start && !win_busy && dpe_ready;
     wire [AW-1:0] start_base = take_now ? win_base : lat_base;
+    wire [AW-1:0] start_hi   = take_now ? win_span : lat_hi;
     wire start_feed = take_now || (have_win && !feeding && dpe_ready);
     wire feed_active = feeding || start_feed;
     wire [AW-1:0] feed_base_w = start_feed ? start_base : feed_base;
+    wire [AW-1:0] feed_hi_w   = start_feed ? start_hi : feed_hi;
     wire [AW-1:0] feed_word = start_feed ? {AW{1'b0}} : feed_cnt;
     wire feed_done_w = start_feed ? (LCYC == 1)
                       : (feeding && dpe_ready && (feed_cnt == LCYC-1));
     wire [AW-1:0] feed_done_base = start_feed ? start_base : feed_base;
+    wire [AW-1:0] feed_done_hi   = start_feed ? start_hi   : feed_hi;
     wire drain_done_w = draining && dpe_done_w;
 
     assign win_busy = feeding || have_win;
@@ -306,7 +316,6 @@ module softmax_exp_feed #(
     assign in_wr_mask = in_wr_mask_q;
     assign in_wr_data = in_wr_data_q;
 
-    // feed addresses + fused subtract data
     always @(*) begin
         score_addrs = 0;
         rmax_addrs = 0;
@@ -315,9 +324,9 @@ module softmax_exp_feed #(
             for (jf = 0; jf < EPS; jf = jf + 1) begin
                 acol = feed_word * EPS + jf;
                 ae = feed_base_w + acol;
-                if ((acol < I) && (ae < SQ)) begin
+                if ((acol < I) && (ae < NEL) && (ae <= feed_hi_w)) begin
                     score_addrs[jf*AW +: AW] = ae;
-                    arow = ae / S;
+                    arow = RMOD ? (ae % RS) : (ae / RS);
                     rmax_addrs[jf*AW +: AW] = arow;
                     in_wr_mask_next[jf] = 1'b1;
                 end
@@ -335,11 +344,11 @@ module softmax_exp_feed #(
             for (jf = 0; jf < EPS; jf = jf + 1) begin
                 fcol = feed_word * EPS + jf;
                 fe = feed_base_w + fcol;
-                if ((fcol < I) && (fe < SQ)) begin
+                if ((fcol < I) && (fe < NEL) && (fe <= feed_hi_w)) begin
                     din_diff = $signed(score_rdata[jf*8 +: 8])
                                - $signed(rmax_rdata[jf*8 +: 8]);
                     if (din_diff < -9'sd128)
-                        dpe_in[jf*8 +: 8] = 8'h80;   // F: clamp at -128
+                        dpe_in[jf*8 +: 8] = 8'h80;
                     else
                         dpe_in[jf*8 +: 8] = din_diff[7:0];
                 end
@@ -349,7 +358,6 @@ module softmax_exp_feed #(
 
     always @(*) dpe_w_buf_en = feed_active && dpe_ready;
 
-    // drain word: per-lane validity mask (padding and out-of-range lanes)
     always @(*) begin
         dr_valid = 1'b0;
         dr_mask = 0;
@@ -358,38 +366,30 @@ module softmax_exp_feed #(
             for (jd = 0; jd < EPS; jd = jd + 1) begin
                 dcol = drn_cnt * EPS + jd;
                 de = drn_base + dcol;
-                if ((dcol < I) && (de < SQ)) dr_mask[jd] = 1'b1;
+                if ((dcol < I) && (de < NEL) && (de <= drn_hi)) dr_mask[jd] = 1'b1;
             end
         end
     end
 
     always @(posedge clk) begin
         if (reset) begin
-            feed_base <= 0;
-            lat_base <= 0;
-            feed_cnt <= 0;
-            feeding <= 1'b0;
-            have_win <= 1'b0;
-            drn_base <= 0;
-            drn_cnt <= 0;
-            draining <= 1'b0;
-            que_base <= 0;
-            que_valid <= 1'b0;
+            feed_base <= 0; feed_hi <= 0; lat_base <= 0; lat_hi <= 0;
+            feed_cnt <= 0; feeding <= 1'b0; have_win <= 1'b0;
+            drn_base <= 0; drn_hi <= 0; drn_cnt <= 0; draining <= 1'b0;
+            que_base <= 0; que_hi <= 0; que_valid <= 1'b0;
             in_wr_valid <= 1'b0;
         end
         else begin
             in_wr_valid <= feed_active;
             if (win_start && !win_busy && !dpe_ready) begin
-                lat_base <= win_base;
-                have_win <= 1'b1;
+                lat_base <= win_base; lat_hi <= win_span; have_win <= 1'b1;
             end
             if (start_feed) begin
                 have_win <= 1'b0;
                 if (LCYC == 1) feeding <= 1'b0;
                 else begin
-                    feeding  <= 1'b1;
-                    feed_base <= start_base;
-                    feed_cnt <= 1;
+                    feeding <= 1'b1; feed_base <= start_base;
+                    feed_hi <= start_hi; feed_cnt <= 1;
                 end
             end
             else if (feeding && dpe_ready && (feed_cnt != LCYC-1))
@@ -399,26 +399,24 @@ module softmax_exp_feed #(
 
             if (drain_done_w) begin
                 if (que_valid) begin
-                    drn_base  <= que_base;
-                    drn_cnt   <= 0;
-                    que_base  <= feed_done_base;
+                    drn_base <= que_base; drn_hi <= que_hi; drn_cnt <= 0;
+                    que_base <= feed_done_base; que_hi <= feed_done_hi;
                     que_valid <= feed_done_w;
                 end
                 else if (feed_done_w) begin
-                    drn_base <= feed_done_base;
-                    drn_cnt  <= 0;
+                    drn_base <= feed_done_base; drn_hi <= feed_done_hi;
+                    drn_cnt <= 0;
                 end
                 else draining <= 1'b0;
             end
             else if (feed_done_w) begin
                 if (draining) begin
-                    que_base  <= feed_done_base;
+                    que_base <= feed_done_base; que_hi <= feed_done_hi;
                     que_valid <= 1'b1;
                 end
                 else begin
-                    draining <= 1'b1;
-                    drn_base <= feed_done_base;
-                    drn_cnt  <= 0;
+                    draining <= 1'b1; drn_base <= feed_done_base;
+                    drn_hi <= feed_done_hi; drn_cnt <= 0;
                 end
             end
 
@@ -426,8 +424,8 @@ module softmax_exp_feed #(
                 drn_cnt <= drn_cnt + 1;
         end
     end
-
 endmodule
+
 
 
 // ============================================================================
@@ -440,10 +438,15 @@ endmodule
 // ============================================================================
 module softmax_sum_unit #(
     parameter S = 128,
+    parameter RS = 0,              // 0 => S; else the row stride (online = BKV)
+    parameter NROWS = 0,           // 0 => S; else the row count (online = B*S)
+    parameter SPAN = 0,            // 0 => S; else elements per completed row (online = BKV)
+    parameter OUT_LQ = 1,          // 1 => also emit lq = min(sum>>log2 S,127)
     parameter N_EXP = 1,
     parameter PORTS = 16,
     parameter SUM_LAT = 8,
-    parameter AW = 16
+    parameter AW = 16,
+    parameter DIRECT_COMMIT = 0
 ) (
     input  wire clk,
     input  wire reset,
@@ -451,52 +454,58 @@ module softmax_sum_unit #(
     input  wire [N_EXP*AW-1:0] dr_base,
     input  wire [N_EXP*(PORTS/8)-1:0] dr_mask,
     input  wire [N_EXP*PORTS-1:0] dr_data,
-    output reg  lq_we,
+    output reg  sp_we,                     // raw combined sum for a completed row
+    output reg  [AW-1:0] sp_waddr,
+    output reg  [31:0] sp_wdata,
+    output reg  lq_we,                     // (OUT_LQ) shifted / capped lq
     output reg  [AW-1:0] lq_waddr,
     output reg  [7:0] lq_wdata,
     output reg  [31:0] lq_done_count,
-    output reg  sum_we,
-    output reg  [AW-1:0] sum_waddr,
-    output reg  [31:0] sum_wdata
+    // DIRECT_COMMIT per-crossbar write bus (online): a row's `sp` is written
+    // at the cycle its element count completes (out-of-order, no row-order
+    // pipe). Top writes sp_q from these; the scalar sp_we path is unused.
+    output wire [N_EXP-1:0] dc_we,
+    output wire [N_EXP*AW-1:0] dc_waddr,
+    output wire [N_EXP*32-1:0] dc_wdata
 );
 
     localparam EPS = PORTS / 8;
     localparam LOG2S = $clog2(S);
-    localparam SQ = S * S;
+    localparam RST = (RS == 0) ? S : RS;
+    localparam NR  = (NROWS == 0) ? S : NROWS;
+    localparam SP  = (SPAN == 0) ? S : SPAN;
 
-    reg [31:0] bank [0:N_EXP-1][0:S-1];
-    reg [31:0] count [0:S-1];
+    reg [31:0] bank [0:N_EXP-1][0:NR-1];
+    reg [31:0] count [0:NR-1];
     integer rows_pushed;
 
-    // combinational per-cycle increments (one write per row per cycle)
-    reg [31:0] add_cnt [0:S-1];
-    reg [31:0] add_sum [0:S-1];
-    reg [31:0] bank_add [0:N_EXP-1][0:S-1];
+    reg [31:0] add_cnt [0:NR-1];
+    reg [31:0] cnt_p [0:N_EXP-1][0:NR-1];
+    reg [31:0] bank_add [0:N_EXP-1][0:NR-1];
     integer p, j, e, r;
 
     always @(*) begin
-        for (r = 0; r < S; r = r + 1) begin
+        for (r = 0; r < NR; r = r + 1) begin
             add_cnt[r] = 0;
-            add_sum[r] = 0;
             for (p = 0; p < N_EXP; p = p + 1) bank_add[p][r] = 0;
         end
+        for (p = 0; p < N_EXP; p = p + 1)
+            for (r = 0; r < NR; r = r + 1) cnt_p[p][r] = 0;
         for (p = 0; p < N_EXP; p = p + 1)
             if (dr_valid[p])
                 for (j = 0; j < EPS; j = j + 1)
                     if (dr_mask[p*EPS + j]) begin
                         e = dr_base[p*AW +: AW] + j;
-                        if (e < SQ) begin
-                            r = e / S;
+                        r = e / RST;
+                        if (r < NR) begin
                             add_cnt[r] = add_cnt[r] + 1;
-                            add_sum[r] = add_sum[r]
-                                + {24'b0, dr_data[p*PORTS + j*8 +: 8]};
+                            cnt_p[p][r] = cnt_p[p][r] + 1;
                             bank_add[p][r] = bank_add[p][r]
                                 + {24'b0, dr_data[p*PORTS + j*8 +: 8]};
                         end
                     end
     end
 
-    // combine pipeline
     reg [SUM_LAT-1:0] pipe_valid;
     reg [AW-1:0] pipe_row [0:SUM_LAT-1];
     reg [31:0] total_r;
@@ -510,59 +519,87 @@ module softmax_sum_unit #(
         if (lq_value > 32'd127) lq_value = 32'd127;
     end
 
+    // ---------------- direct per-row commit (DIRECT_COMMIT=1, online) ------
+    // A row's total = sum of the per-crossbar banks (+ this cycle's drain
+    // words). Row r's live total is written at the cycle r's element count
+    // completes, i.e. when (count < SP) && (count + add_cnt >= SP); count
+    // itself then reaches SP, so each row commits exactly once. Rows are
+    // single-window (BKV divides I); a crossbar's drain word completes at
+    // most one row (two completing rows in one word need EPS > BKV), so one
+    // write slot per crossbar per cycle suffices.
+    reg [N_EXP-1:0]     dc_v;
+    reg [N_EXP*AW-1:0]  dc_abus;
+    reg [N_EXP*32-1:0]  dc_dbus;
+    integer d1, d2, d3;
+    always @(*) begin
+        for (d1 = 0; d1 < N_EXP; d1 = d1 + 1) begin
+            dc_v[d1] = 1'b0;
+            dc_abus[d1*AW +: AW] = 0;
+            dc_dbus[d1*32 +: 32] = 32'b0;
+        end
+        for (d1 = 0; d1 < N_EXP; d1 = d1 + 1)
+            for (d2 = 0; d2 < NR; d2 = d2 + 1)
+                if (!dc_v[d1] && (cnt_p[d1][d2] != 0)
+                    && (count[d2] < SP)
+                    && ((count[d2] + add_cnt[d2]) >= SP)) begin
+                    dc_abus[d1*AW +: AW] = d2[AW-1:0];
+                    dc_v[d1] = 1'b1;
+                    for (d3 = 0; d3 < N_EXP; d3 = d3 + 1)
+                        dc_dbus[d1*32 +: 32] = dc_dbus[d1*32 +: 32]
+                            + bank[d3][d2] + bank_add[d3][d2];
+                end
+    end
+    assign dc_we = (DIRECT_COMMIT != 0) ? dc_v : {N_EXP{1'b0}};
+    assign dc_waddr = dc_abus;
+    assign dc_wdata = dc_dbus;
+
     always @(posedge clk) begin
         if (reset) begin
-            lq_we <= 1'b0;
-            sum_we <= 1'b0;
-            lq_done_count <= 0;
-            rows_pushed <= 0;
-            pipe_valid <= 0;
+            sp_we <= 1'b0; lq_we <= 1'b0; lq_done_count <= 0;
+            rows_pushed <= 0; pipe_valid <= 0;
             for (p = 0; p < N_EXP; p = p + 1)
-                for (r = 0; r < S; r = r + 1) bank[p][r] <= 0;
-            for (r = 0; r < S; r = r + 1) count[r] <= 0;
+                for (r = 0; r < NR; r = r + 1) bank[p][r] <= 0;
+            for (r = 0; r < NR; r = r + 1) count[r] <= 0;
         end
         else begin
+            sp_we <= 1'b0;
             lq_we <= 1'b0;
-            sum_we <= 1'b0;
 
-            // apply this cycle's increments (one write per row per cycle)
-            for (r = 0; r < S; r = r + 1)
+            for (r = 0; r < NR; r = r + 1)
                 if (add_cnt[r] != 0) count[r] <= count[r] + add_cnt[r];
             for (p = 0; p < N_EXP; p = p + 1)
-                for (r = 0; r < S; r = r + 1)
+                for (r = 0; r < NR; r = r + 1)
                     if (bank_add[p][r] != 0)
                         bank[p][r] <= bank[p][r] + bank_add[p][r];
 
-            // shift the combine pipeline
             pipe_valid[0] <= 1'b0;
             for (j = SUM_LAT-1; j > 0; j = j - 1) begin
                 pipe_valid[j] <= pipe_valid[j-1];
                 pipe_row[j] <= pipe_row[j-1];
             end
 
-            // push the next expected row when its total reaches S
-            if ((rows_pushed < S)
-                && ((count[rows_pushed] + add_cnt[rows_pushed]) >= S)) begin
+            if ((rows_pushed < NR)
+                && ((count[rows_pushed] + add_cnt[rows_pushed]) >= SP)) begin
                 pipe_row[0] <= rows_pushed[AW-1:0];
                 pipe_valid[0] <= 1'b1;
                 rows_pushed <= rows_pushed + 1;
             end
 
-            // write lq + sum probe when a combine result exits
             if (pipe_valid[SUM_LAT-1]) begin
-                lq_we <= 1'b1;
-                lq_waddr <= pipe_row[SUM_LAT-1];
-                lq_wdata <= lq_value[7:0];
-                sum_we <= 1'b1;
-                sum_waddr <= pipe_row[SUM_LAT-1];
-                sum_wdata <= total_r;
+                sp_we <= 1'b1;
+                sp_waddr <= pipe_row[SUM_LAT-1];
+                sp_wdata <= total_r;
                 lq_done_count <= lq_done_count + 1;
-                // consumed: the shift already replaces this stage
+                if (OUT_LQ) begin
+                    lq_we <= 1'b1;
+                    lq_waddr <= pipe_row[SUM_LAT-1];
+                    lq_wdata <= lq_value[7:0];
+                end
             end
         end
     end
-
 endmodule
+
 
 
 // ============================================================================
@@ -750,131 +787,32 @@ endmodule
 
 
 // ============================================================================
-// softmax_out_unit — clamp + 1 value/cycle row-major drain.
-//
-// Log drain words arrive with (base, mask, data); after CLAMP_LAT cycles the
-// covered rows become ready. The drain walks rows in order, starting row r no
-// earlier than its ready cycle, emitting S values (one per cycle).
+// softmax_out_unit — final softmax result, purely combinational:
+//   data_out = clamp(score[out_addr] - row_max[out_addr/S] - log[out_addr/S])
+// No drain/serialize stage; the top generates `done` (whole result computed).
 // ============================================================================
 module softmax_out_unit #(
     parameter S = 128,
-    parameter PORTS = 16,
-    parameter CLAMP_LAT = 2,
-    parameter AW = 16,
-    parameter N_LOG = 1
+    parameter AW = 16
 ) (
-    input  wire clk,
-    input  wire reset,
-    input  wire start,
-    input  wire [N_LOG-1:0] log_valid,
-    input  wire [N_LOG*AW-1:0] log_base,
-    input  wire [N_LOG*(PORTS/8)-1:0] log_mask,
-    input  wire [N_LOG*PORTS-1:0] log_data,
+    input  wire [AW-1:0] out_addr,
     output wire [AW-1:0] score_addr,
     input  wire [7:0] score_rdata,
     output wire [AW-1:0] rmax_addr,
     input  wire [7:0] rmax_rdata,
-    output reg  [7:0] data_out,
-    output reg  out_valid,
-    output reg  done
+    input  wire [7:0] log_rdata,
+    output reg  [7:0] data_out
 );
 
-    localparam EPS = PORTS / 8;
-    localparam SQ = S * S;
+    assign score_addr = out_addr;
+    assign rmax_addr  = out_addr / S;
 
-    reg [7:0] log_sram [0:S-1];
-    reg [S-1:0] row_ready;
-
-    reg [N_LOG-1:0]     dl_valid [0:CLAMP_LAT-1];
-    reg [AW-1:0]        dl_base  [0:N_LOG-1][0:CLAMP_LAT-1];
-    reg [(PORTS/8)-1:0] dl_mask  [0:N_LOG-1][0:CLAMP_LAT-1];
-    integer dl_i, lp;
-
-    integer r, j;
-    reg running;
-    reg [AW-1:0] row, col;
     reg signed [15:0] acc;
-    reg [7:0] clamp_value;
-
-    assign score_addr = row * S + col;
-    assign rmax_addr  = row;
-
     always @(*) begin
-        acc = $signed(score_rdata) - $signed(rmax_rdata)
-              - $signed(log_sram[row]);
-        if (acc > 16'sd127) clamp_value = 8'd127;
-        else if (acc < -16'sd128) clamp_value = 8'd128;
-        else clamp_value = acc[7:0];
-    end
-
-    always @(posedge clk) begin
-        if (reset) begin
-            out_valid <= 1'b0;
-            done <= 1'b0;
-            running <= 1'b0;
-            row <= 0;
-            col <= 0;
-            row_ready <= 0;
-            for (dl_i = 0; dl_i < CLAMP_LAT; dl_i = dl_i + 1)
-                dl_valid[dl_i] <= 0;
-            for (lp = 0; lp < N_LOG; lp = lp + 1)
-                for (dl_i = 0; dl_i < CLAMP_LAT; dl_i = dl_i + 1) begin
-                    dl_base[lp][dl_i] <= 0;
-                    dl_mask[lp][dl_i] <= 0;
-                end
-            for (r = 0; r < S; r = r + 1) log_sram[r] <= 0;
-        end
-        else begin
-            done <= 1'b0;
-
-            // merge every LOG crossbar's drain: SRAM write + ready marking
-            for (lp = 0; lp < N_LOG; lp = lp + 1) begin
-                if (log_valid[lp])
-                    for (j = 0; j < EPS; j = j + 1)
-                        if (log_mask[lp*EPS + j]
-                            && ((log_base[lp*AW +: AW] + j) < S))
-                            log_sram[log_base[lp*AW +: AW] + j]
-                                <= log_data[lp*PORTS + j*8 +: 8];
-                dl_valid[0][lp] <= log_valid[lp];
-                dl_base[lp][0] <= log_base[lp*AW +: AW];
-                dl_mask[lp][0] <= log_mask[lp*EPS +: EPS];
-            end
-            for (dl_i = CLAMP_LAT-1; dl_i > 0; dl_i = dl_i - 1)
-                for (lp = 0; lp < N_LOG; lp = lp + 1) begin
-                    dl_valid[dl_i][lp] <= dl_valid[dl_i-1][lp];
-                    dl_base[lp][dl_i] <= dl_base[lp][dl_i-1];
-                    dl_mask[lp][dl_i] <= dl_mask[lp][dl_i-1];
-                end
-            for (lp = 0; lp < N_LOG; lp = lp + 1)
-                if (dl_valid[CLAMP_LAT-1][lp])
-                    for (j = 0; j < EPS; j = j + 1)
-                        if (dl_mask[lp][CLAMP_LAT-1][j]
-                            && ((dl_base[lp][CLAMP_LAT-1] + j) < S))
-                            row_ready[dl_base[lp][CLAMP_LAT-1] + j] <= 1'b1;
-
-            if (start && !running) running <= 1'b1;
-
-            if (running) begin
-                if ((col == 0) && !row_ready[row]) begin
-                    out_valid <= 1'b0;
-                end
-                else begin
-                    data_out <= clamp_value;
-                    out_valid <= 1'b1;
-                    if (col == S - 1) begin
-                        col <= 0;
-                        if (row == S - 1) begin
-                            running <= 1'b0;
-                            done <= 1'b1;
-                            row <= 0;
-                        end
-                        else row <= row + 1;
-                    end
-                    else col <= col + 1;
-                end
-            end
-            else out_valid <= 1'b0;
-        end
+        acc = $signed(score_rdata) - $signed(rmax_rdata) - $signed(log_rdata);
+        if (acc > 16'sd127) data_out = 8'd127;
+        else if (acc < -16'sd128) data_out = 8'd128;
+        else data_out = acc[7:0];
     end
 
 endmodule
@@ -901,9 +839,9 @@ module softmax_top #(
     output wire load_ready,
     input  wire start,
     output wire busy,
+    input  wire [$clog2(S*S):0] out_addr,
     output wire [7:0] data_out,
-    output wire out_valid,
-    output wire done
+    output reg  done
 );
 
     localparam EPS     = BUF / 8;
@@ -1013,7 +951,8 @@ module softmax_top #(
     generate
         for (gc = 0; gc < N_EXP; gc = gc + 1) begin : gen_exp
             softmax_exp_feed #(
-                .S(S), .R(R), .C(C), .BUF(BUF), .P(P), .AW(AW)
+                .S(S), .ROW_STRIDE(S), .NELEM(SQ),
+                .R(R), .C(C), .BUF(BUF), .P(P), .AW(AW)
             ) u_feed (
                 .clk(clk), .reset(reset),
                 .score_addrs(exp_score_addrs[gc]),
@@ -1024,6 +963,7 @@ module softmax_top #(
                 .nl_dpe_control(mode_exp),
                 .win_start(exp_win_start[gc]),
                 .win_base(exp_win_base[gc*AW +: AW]),
+                .win_span(SQ - 1),
                 .win_busy(exp_win_busy[gc]), .win_done(exp_win_done[gc]),
                 .in_wr_valid(exp_in_valid[gc]),
                 .in_wr_base(exp_in_base[gc*AW +: AW]),
@@ -1084,15 +1024,16 @@ module softmax_top #(
     wire [31:0] sum_sum_wdata;
     wire [31:0] lq_done_count;
     softmax_sum_unit #(
-        .S(S), .N_EXP(N_EXP), .PORTS(BUF), .SUM_LAT(SUM_LAT), .AW(AW)
+        .S(S), .RS(S), .NROWS(S), .SPAN(S), .OUT_LQ(1),
+        .N_EXP(N_EXP), .PORTS(BUF), .SUM_LAT(SUM_LAT), .AW(AW)
     ) u_sum (
         .clk(clk), .reset(reset),
         .dr_valid(exp_dr_valid), .dr_base(exp_dr_base),
         .dr_mask(exp_dr_mask), .dr_data(exp_dr_data),
         .lq_we(sum_lq_we), .lq_waddr(sum_lq_waddr), .lq_wdata(sum_lq_wdata),
         .lq_done_count(lq_done_count),
-        .sum_we(sum_q_we), .sum_waddr(sum_sum_waddr),
-        .sum_wdata(sum_sum_wdata)
+        .sp_we(sum_q_we), .sp_waddr(sum_sum_waddr),
+        .sp_wdata(sum_sum_wdata)
     );
     always @(posedge clk) begin
         if (sum_lq_we) lq_q[sum_lq_waddr] <= sum_lq_wdata;
@@ -1151,25 +1092,46 @@ module softmax_top #(
                             <= log_dr_data[c*BUF + j*8 +: 8];
     end
 
-    // ---------------- output drain -----------------------------------------
+    // ---------------- final result (combinational; no drain) ---------------
     wire [AW-1:0] out_score_addr, out_rmax_addr;
-    wire [7:0] out_score_rdata, out_rmax_rdata;
+    wire [7:0] out_score_rdata, out_rmax_rdata, out_log_rdata;
     assign out_score_rdata = score_buf[(out_score_addr < SQ)
                                        ? out_score_addr : 0];
     assign out_rmax_rdata  = row_max_q[(out_rmax_addr < S)
                                        ? out_rmax_addr : 0];
-    softmax_out_unit #(
-        .S(S), .PORTS(BUF), .CLAMP_LAT(1), .AW(AW), .N_LOG(N_LOG)
-    ) u_out (
-        .clk(clk), .reset(reset), .start(start),
-        .log_valid(log_dr_valid),
-        .log_base(log_dr_base),
-        .log_mask(log_dr_mask),
-        .log_data(log_dr_data),
+    assign out_log_rdata   = log_out_q[(out_rmax_addr < S)
+                                       ? out_rmax_addr : 0];
+    softmax_out_unit #(.S(S), .AW(AW)) u_out (
+        .out_addr(out_addr),
         .score_addr(out_score_addr), .score_rdata(out_score_rdata),
         .rmax_addr(out_rmax_addr), .rmax_rdata(out_rmax_rdata),
-        .data_out(data_out), .out_valid(out_valid), .done(done)
+        .log_rdata(out_log_rdata), .data_out(data_out)
     );
+
+    // ---------------- results ready (whole result computed) ----------------
+    // `done` at the cycle after the last normalizer row's LOG drain word
+    // (replicates the old out_unit's CLAMP_LAT=1 marking). No drain is timed.
+    reg [N_LOG-1:0]     dn_valid;
+    reg [N_LOG*AW-1:0]  dn_base;
+    reg [N_LOG*EPS-1:0] dn_mask;
+    integer dn_j, dn_p;
+    always @(posedge clk) begin
+        if (reset) begin
+            done <= 1'b0; dn_valid <= 0; dn_base <= 0; dn_mask <= 0;
+        end
+        else begin
+            done <= 1'b0;
+            dn_valid <= log_dr_valid;
+            dn_base  <= log_dr_base;
+            dn_mask  <= log_dr_mask;
+            for (dn_p = 0; dn_p < N_LOG; dn_p = dn_p + 1)
+                if (dn_valid[dn_p])
+                    for (dn_j = 0; dn_j < EPS; dn_j = dn_j + 1)
+                        if (dn_mask[dn_p*EPS + dn_j]
+                            && ((dn_base[dn_p*AW +: AW] + dn_j) == S-1))
+                            done <= 1'b1;
+        end
+    end
     // NOTE: for S <= I (the target corpus) PLOG == 1, so only LOG unit 0
     // carries windows; N_LOG > 1 is an idle-resource sweep axis.
 

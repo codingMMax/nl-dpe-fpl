@@ -50,8 +50,15 @@ NL-DPE FPGA hard block research: crossbar-size DSE (complete) + RTL/sim fidelity
 | `v2/oracle/gemm_ref.py` + `v2/sim/gemm_sim.py` + `v2/smoke/{gen_gemm_cases,run_gemm_rtl,test_gemm}.py` + `v2/tb/tb_gemm_top.v` | Stage-2 GEMM: oracle (exact composition + end-to-end matmul witness), golden model (GATE 1 in `dump_case`), certified 1A–1D case generator, GATE-2 harness/TB (`S_col` + lanes), verifier |
 | `v2/rtl/dimm_top.v` | **Stage-4 DIMM RTL** (single file, 6 modules): `dimm_wprog`/`dimm_log_pool`/`dimm_exp_farm`/`dimm_reduce`/`dimm_sched`/`dimm_top`; take-now window acceptance, drain queue depth 2, per-port acc banks, same-cycle flush/`win_done`; **exact cycles: Δ_impl = 0** (span == T(p), ser == M·N, fill == T_start) |
 | `v2/smoke/{gen_dimm_cases,run_dimm_rtl,test_dimm}.py` + `v2/tb/tb_dimm_top.v` | Stage-4 DIMM: GATE-1 dumper (`NldpeDimm.dump_case`), case sweep (7 shapes × n_E {1,2,4,8,16} × classes), GATE-2 strict gates (Δ=0, spans == T_A/T_B/T_E, ser == M·N, fill == T_start, window counts == P_A/P_B/P_E), verifier |
-| `v2/spec/softmax.md` | **Stage-3 softmax charter v0.1 (2026-09-27)**: value contract, packed-window machine (`n_exp`/`n_log`, `CLB_WIDTH=32`, `L_max/L_sum`, 1 value/cycle drain), measured-cycle contract + corridor check, RTL mapping/probes, decisions S1–S6; **supersedes** the old streaming sketch (§6 of `dimm_throughput_model.md`) |
-| `v2/rtl/softmax_top.v` | **Stage-3 softmax RTL** (single file, 7 modules): `softmax_wprog`/`max_unit`/`exp_feed`/`sum_unit`/`log_unit`/`out_unit`/`top`; fused `exp_input` in the feed path, streaming row-max fold, all-`N_LOG` drain merge; **exact: Δ_impl = 0** |
+| `v2/spec/softmax.md` | **Stage-3 softmax charter v0.1 (2026-09-27)**: value contract, packed-window machine (`n_exp`/`n_log`, `CLB_WIDTH=32`, `L_max/L_sum`, 1 value/cycle drain), measured-cycle contract + corridor check, RTL mapping/probes, decisions S1–S6 (**S6 superseded** by `softmax_online.md`/`flash_attention.md`); **supersedes** the old streaming sketch (§6 of `dimm_throughput_model.md`) |
+| `v2/spec/softmax_online.md` | **Online softmax charter v0.3 (2026-09-30)**: key-block stream, deferred-α; contract = **ACAM mapping, same as `softmax_ref`/`softmax_sim`** (no np.exp/np.log/float `/`); **bit-identical to `softmax_ref` at `Bkv∈{1,S}`**, offset-skewed approximation in between; O1–O8 |
+| `v2/spec/flash_attention.md` | **FlashAttention charter v0.1 (2026-09-30, spec-only)**: log-carry FA (`(m, log l, log\|o\|, sign(o))`, no mul/div), NL integer binding, composition (DIMM + sign path + `softmax_online`), **DIMM sign extension required for FA**, cycle/energy-vs-full-row contract; reference `v2/oracle/flash-attention-log-domain.ipynb` (float golden witness) |
+| `v2/oracle/softmax_online_ref.py` | **Online softmax oracle (2026-09-30)**: `model` = **ACAM** streamed realization (contract); `exact`/`regular_exact` = reference witnesses; `global` = shipped; gates `model(Bkv=S) ≡ softmax_ref` bit-exact + budgets; **ALL PASS** |
+| `v2/sim/softmax_online_sim.py` | **Online softmax behavior model (2026-09-30)**: `NldpeSoftmaxOnline` (block-max fold → ACAM EXP → deferred-α merge → ACAM LOG → emit), bit-exact vs the ACAM `model` oracle **via the certified primitive**; `Bkv=S` == full-row bit-exact; envelope + fused event timing; **ALL PASS**; cycles `S²`-drain dominated (online win = storage) |
+| `v2/smoke/compare_softmax.py` | **Conventional vs online softmax comparison (2026-09-30)**: ACAM online vs shipped; offset / rel / distribution L1 / clamp% / cycles / storage; gates `conv ≡ softmax_ref`, `online ≡ model`; results in `v2/spec/softmax_online.md` §10 — online ≡ `softmax_ref` at `Bkv∈{1,S}`, offset-skewed (48–99% clamped) at `Bkv=16`; 2.3–3.6× less storage; ~parity cycles |
+| `v2/rtl/softmax_online_top.v` | **Online softmax RTL (2026-09-30; no-drain 2026-10-03)**: parametric (`S`,`BKV`,`N_EXP`,`N_LOG`,`N_FAC`) — `online_blk_loader`/`online_max_unit`/`online_combine`/`online_out_unit`/`softmax_online_top`, reusing the unified `softmax_wprog`/`exp_feed`/`sum_unit`; `N_FAC`-wide parallel factor bank (`gen_fac`, round-robin windows — the sim's `n_fac` sweep knob as hardware), sum unit `DIRECT_COMMIT=1` (per-row commit, no row-order pipe), combine gate = `all_exp_done && all_fac_done`, LOG starts at `combine_done`; block-major `BUF`-wide stream, block max + ACAM EXP + deferred-α combine (`factor=ACAM_EXP(m_b−m)`, `>>log2S`, ACAM_LOG); **`done` = whole result computed; no output drain**; **GATE 2: 64/64 PASS, Δ_impl = 0 (2026-10-03)** (compile with `softmax_top.v`) |
+| `v2/tb/tb_softmax_online_top.v` + `v2/smoke/{gen_softmax_online_cases,run_softmax_online_rtl}.py` | **Online softmax GATE-2 harness (2026-09-30)**: GATE-1 dumper (all probes) + TB (streams blocks on the port, probes, `measured == compute_cycles`) + runner |
+| `v2/rtl/softmax_top.v` | **Stage-3 softmax RTL** (7 modules): `softmax_wprog`/`max_unit`/`exp_feed`/`sum_unit`/`log_unit`/`out_unit`(combinational result read, no drain)/`top`; fused `exp_input`, streaming row-max fold; **exact: Δ_impl = 0**; `done` = whole result computed. `exp_feed`/`sum_unit` are **parameterized and shared** with the online RTL (`ROW_STRIDE`/`NELEM`/`win_span`; `RS`/`NROWS`/`SPAN`/`OUT_LQ`; sum unit gains `DIRECT_COMMIT` — 0 = conventional certified path, 1 = online per-row commit) |
 | `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` + `v2/tb/tb_softmax_top.v` | Stage-3 softmax: GATE-1 dumper (`NldpeSoftmax.dump_case`), geometry axis (`--RCs`) + PLOG>1 X2 corpus, GATE-2 (7 stage probes bit-exact, Δ=0, S² words, per-case logs), verifier table **67/67 PASS** |
 | `v2/docs/gemm_dataflow_reading.md` | Reading list: GEMM/GEMV dot-product vs outer-product dataflows, reuse/buffering theory, accelerator dataflow taxonomy |
 | `v2/smoke/stimuli/` | Corpus (gitignored, accumulates across runs) + `manifest.txt` scoping the harness to the latest generation |
@@ -285,8 +292,10 @@ progress — see "Direction (2026-08-29)" above.
   (reference 1974; floor residual 1920; PF3/PF4; overrides reported). The
   behavior reports the passes it actually issues (unpacked per-k farm counts),
   not the ideal packed count.
-- **Softmax parked** (user directive 2026-09-20): no softmax work until DIMM
-  is done.
+- **Softmax COMPLETE (2026-10-03)** — conventional (Stage 3, 60/60 + X2
+  certified) and online (Stage 6, 64/64, Δ_impl = 0) both done; charters
+  `v2/spec/softmax.md` / `v2/spec/softmax_online.md`; flash-attention is the
+  next consumer.
 - **DIMM RTL + cycle alignment DONE (2026-09-22)**: `v2/rtl/dimm_top.v`
   (6 modules in one file; hand-written behavior after M1–M3). Spec/model
   v0.2 adds the **producer→farm fill** `T_start = T_fill_p + (⌈W_p/n_p⌉−1)·T_steady_p`,
@@ -320,6 +329,26 @@ progress — see "Direction (2026-08-29)" above.
 | Stage 3 — softmax | `v2/sim/softmax_sim.py` (fused packed-window machine: values + measured cycles) + `v2/rtl/softmax_top.v` (7 modules) + GATE-2 `v2/tb/tb_softmax_top.v` / `v2/smoke/{gen_softmax_cases,run_softmax_rtl,test_softmax}.py` | ✅ **DONE** — 60/60 corpus PASS, all 7 stage probes bit-exact, Δ_impl = 0 (S=128 + S=256, R=C=256); `PLOG>1` merge verified by the X2 corpus (R=C=64/128, `n_log∈{1,2,4}`, 66/66 incl. sweeps) |
 | Stage 4 — projections + DIMM | `v2/spec/dimm.md` v0.2 (pool/farm + mapping + fill) + attention mapping (`attention_dimm_mapping.md`); oracle → behavior → RTL **done** | ✅ **DIMM RTL exact** — Δ_impl = 0, spans == T(P), **70/70 cases verified** (heavy batch 2026-09-23); projections next |
 | Stage 5 — mapping + simulator | Spec module from Stage 1–4 charters; new minimal sim consuming it; BERT-Tiny end-to-end; VTR closure | Deferred until ladder trusted |
+| Stage 6 — online softmax + FlashAttention | `v2/spec/softmax_online.md` (blocked / deferred-α, **ACAM**) + `v2/spec/flash_attention.md` (log-carry FA); oracle + behavior model + **RTL** landed | ✅ **ONLINE SOFTMAX DONE (2026-10-03)** — oracle/sim/RTL ALL PASS; **GATE 2: 64/64 PASS, Δ_impl = 0** (S∈{16,32,64}, `BKV`∈{8,16,32}, `n_exp∈{1,4}`, `N_FAC=n_exp`; conventional inertness 60/60); **online ≡ `softmax_ref` only at `Bkv∈{1,S}`**, offset-skewed between; **stream-bound** (BUF/8 port); FA RTL + **DIMM sign extension** still pending |
+
+### Follow-ups (queued)
+
+- **(done 2026-10-03) Online softmax cycle alignment**: RTL made to match the
+  frozen sim exactly — `N_FAC` parallel factor bank (round-robin windows;
+  `n_fac` stays a sim sweep knob, RTL `N_FAC` param set from `case.json`
+  `n_fac`/`n_exp`), sum-unit **direct per-row commit** (`DIRECT_COMMIT=1`,
+  conventional path untouched — inertness proof 60/60), combine gate =
+  `all_exp_done && all_fac_done` (handshake demoted to observability), LOG
+  starts at `combine_done`. **GATE 2: 64/64 PASS, Δ_impl = 0**; pins
+  525/4436/3586/7300 hit exactly; sim untouched throughout.
+- **(done 2026-10-03) Softmax output stage removed**: both `softmax_top` and
+  `softmax_online_top` compute the final result combinationally (`out_addr` →
+  `data_out`); no drain/serialize is timed (`serialize_cycles = drain_cycles = 0`),
+  `done` = whole result computed (O6). TBs sweep `out_addr` per element; `e2e = load
+  + compute`. Output BW / producer stream wrapper for P·V deferred to the
+  attention-head step.
+- **v1↔v2 comparison**: `v1-v2/README.md` (+ `cycles.csv`, `logs/`) — DPE primitive,
+  GEMM, softmax simulated cycles with per-block "Major changes" and basis notes.
 
 ### Authoritative docs
 - Methodology: `rtl_flow/docs/FIDELITY_METHODOLOGY.md` (§3 DPE arch, §4 pipeline, §5 workload classes, §7 tiling)
@@ -328,3 +357,4 @@ progress — see "Direction (2026-08-29)" above.
 - Pipeline model context: `paper/methodology/dpe_pipeline_model.md` (design-space reference; some sections describe retired Layout B / transpose block / Regime C — reference only, not implemented)
 - Attention mapping: `paper/methodology/attention_dimm_mapping.md`
 - Softmax study: `softmax_study/SOFTMAX_STUDY.md`
+- Online softmax / FA charters: `v2/spec/softmax_online.md`, `v2/spec/flash_attention.md`
