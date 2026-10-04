@@ -242,27 +242,39 @@ the ±128 rails. (Online rows use `Bkv=16`.)
   structure `s_j − s_k` is exact), so the divergence is entirely the offset shifting
   values onto the int8 rails.
 
-### B. Cycles (identical scores/geometry; `conv` = full-row machine)
+### B. Cycles (identical scores/geometry; `conv` = full-row machine; **no-drain
+### convention 2026-10-03**: the output stage is not timed — `e2e = load +
+### compute` for `conv`, `e2e = compute` for `online` (stream overlapped))
 
-| S | Bkv | n_exp | n_log | conv used | conv comp | online used | online comp | online emit | Δused |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 128 | 16 | 1 | 1 | 20367 | 4008 | 20710 | 20709 | 4326 | +343 |
-| 128 | 16 | 4 | 2 | 17511 | 1152 | 19860 | 19859 | 3476 | +2349 |
-| 128 | 32 | 1 | 1 | 20367 | 4008 | 21119 | 21118 | 4735 | +752 |
-| 128 | 128 | 1 | 1 | 20367 | 4008 | 23574 | 23573 | 7190 | +3207 |
-| 256 | 16 | 1 | 1 | 81041 | 15556 | 81794 | 81793 | 16258 | +753 |
-| 256 | 32 | 1 | 1 | 81041 | 15556 | 82612 | 82611 | 17076 | +1571 |
-| 256 | 256 | 1 | 1 | 81041 | 15556 | 94078 | 94077 | 28542 | +13037 |
+| S | Bkv | n_exp | n_log | conv load | conv comp | conv e2e | online comp (=e2e) | Δe2e | online load (in-stream) |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 128 | 16 | 1 | 1 | 3277 | 4008 | 7285 | 4436 | −2849 | 3280 |
+| 128 | 16 | 2 | 1 | 3277 | 2096 | 5373 | 3706 | −1667 | 3280 |
+| 128 | 16 | 4 | 2 | 3277 | 1152 | 4429 | 3586 | −843 | 3280 |
+| 128 | 32 | 1 | 1 | 3277 | 4008 | 7285 | 4845 | −2440 | 3280 |
+| 128 | 32 | 4 | 2 | 3277 | 1152 | 4429 | 3705 | −724 | 3280 |
+| 128 | 128 | 1 | 1 | 3277 | 4008 | 7285 | 7300 | +15 | 3277 |
+| 128 | 128 | 4 | 2 | 3277 | 1152 | 4429 | 4420 | −9 | 3277 |
+| 256 | 16 | 1 | 1 | 13108 | 15556 | 28664 | 16368 | −12296 | 13120 |
+| 256 | 16 | 2 | 1 | 13108 | 7884 | 20992 | 13789 | −7203 | 13120 |
+| 256 | 16 | 4 | 2 | 13108 | 4060 | 17168 | 13549 | −3619 | 13120 |
+| 256 | 32 | 1 | 1 | 13108 | 15556 | 28664 | 17186 | −11478 | 13112 |
+| 256 | 32 | 4 | 2 | 13108 | 4060 | 17168 | 13779 | −3389 | 13112 |
+| 256 | 256 | 1 | 1 | 13108 | 15556 | 28664 | 28652 | −12 | 13108 |
+| 256 | 256 | 4 | 2 | 13108 | 4060 | 17168 | 17132 | −36 | 13108 |
 
-- With the score stream on the `BUF`-wide port (`stream_bytes = BUF/8`), the
-  online machine is **stream-bound**: the block-major stream (`B·STREAM` words,
-  per-block padded) dominates `emit_start`, so the online is **slower** than the
-  full-row machine and `Δused` grows with `Bkv` (larger blocks ⇒ more padding and
-  a longer stream). Cycles for the online are the RTL-matching sim numbers
-  (`Δ_impl = 0`).
-- The RTL asserts `done` at the last normalizer ready (**O6**) = whole result
-  computed; the final result is read combinationally (no drain). `compute_cycles`
-  is that value (`Δ_impl = 0`).
+- `n_log > 1` is an idle axis at `R=C=256` (`S ≤ I` ⇒ `passes_log = 1`; S4).
+- **Flipped vs the 2026-09-30 table** (that table counted the removed output
+  drain on the conv side: `used = comp + S²·drain`): with the output stage
+  untimed, the online machine is **faster end-to-end** at intermediate `Bkv`
+  (streaming overlaps the block-max/EXP/factor chain), converging to **parity
+  at `Bkv = S`** (the full-row degenerate case, +12..15 prologue cycles).
+  Compute-only, the conventional machine is faster (its EXP chain is shorter;
+  the online pays block-max + factor + deferred-α combine). Cycles are the
+  certified sim numbers (`Δ_impl = 0` on the GATE-2 corpus; S=128/256 online
+  rows are the same frozen sim, pins 4436/3586/7300).
+- The comparator's `conv_used` column still reports the legacy drain-inclusive
+  makespan (`result.used_cycles`); the contract columns are `comp` / `e2e`.
 
 ### C. Pass counts + score-side storage
 
@@ -286,10 +298,11 @@ With **ACAM exp/log** (same mapping as `softmax_ref`), the online operator is
 **bit-identical to `softmax_ref` only at `Bkv ∈ {1, S}`**; for intermediate `Bkv`
 the deferred-α factor cannot reconstruct the global-max normalizer (the ACAM is not
 shift-invariant), so it is a distinct, offset-skewed approximation that clamps
-48–99% of outputs. With the score stream on the `BUF`-wide port the machine is
-**stream-bound** (`Δused > 0`, growing with `Bkv`); the material remaining
-advantage is **storage** (2.3–3.6× less at `Bkv ∈ {16,32}`). The RTL reproduces
-the sim **bit-exactly with `Δ_impl = 0`** (§9).
+48–99% of outputs. With the output stage untimed (no-drain convention), the
+online machine is **faster end-to-end** at intermediate `Bkv` (streaming overlap)
+and ~parity at `Bkv = S`; compute-only the conventional machine is faster. The
+material structural advantage remains **storage** (2.3–3.6× less at
+`Bkv ∈ {16,32}`). The RTL reproduces the sim **bit-exactly with `Δ_impl = 0`** (§9).
 
 Gates in `compare_softmax.py`: `conv ≡ softmax_ref`, `online ≡ model` (bit-equal);
 oracle self-test: `model(Bkv=S) ≡ softmax_ref` bit-equal + budgets; GATE 2:
