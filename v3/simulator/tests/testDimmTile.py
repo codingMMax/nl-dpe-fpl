@@ -14,7 +14,7 @@
   timing     values off: identical events and counts; random step orders: identical Report
   mutants    a latency + 1 (DEC_LAT, CR_LAT, IDLE_LAT), a dropped credit, a wrong release: each fails a check
   memories   the A / B memory list (words x bits, counts) of the QK and PV instances == the memories Yosys infers
-             from the RTL (pinned from v3/vtr/vtr_dse.py's elaboration, 2026-10-15), I = 128 and I = 256
+             from the RTL (pinned from v3/dse/vtr_dse.py's elaboration, 2026-10-15), I = 128 and I = 256
              (runs once the attention head workload is built)
 Run: python3 v3/simulator/tests/testDimmTile.py
 """

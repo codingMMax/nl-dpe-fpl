@@ -74,10 +74,12 @@ v3/
   simulator/   the behavior-model package: core/ (engine, crossbar), models/ (module models, workloads), platform/,
                tests/
                (README.md = the map and the rules of the code)
-  vtr/         everything that runs VTR: arch/ (the 12 arch XMLs), clock.sdc, run_vtr.py, smoke.py, vtr_dse.py
-               (the DSE driver), dse_watch.py
-  dse/         space.py (shapes, configs), att_rows.py, rank.py, breakdown.py, plot_dse.py, results_page.py;
-               fc_snapshot/ (v2's FC rows); results/ (tracked: vtr_att_72.csv, att_priced_72.csv, breakdown.json, and
+  vtr/         the generic VTR flow: arch/ (the 12 arch XMLs), clock.sdc, run_vtr.py, smoke.py
+  dse/         README.md + run_all.sh (the pipeline), space.py (shapes, configs), vtr_dse.py (the VTR run of the 72
+               builds and its CSV; dse_watch.py watches a run), fc_rows.py and attn_rows.py (the priced tables),
+               data.py (their loader), rank.py, breakdown.py, plot_dse.py, results_page.py;
+               results/ (tracked: fc_vtr_results.csv, fc_priced_results.csv, attn_vtr_results.csv,
+               attn_priced_results.csv, breakdown.json, and
                adp/ = latency vs area + area-delay product, edap/ = the earlier energy-delay-area ranking)
   tools/       copies.py + copies.lock (copy lock), check_twins.py (twin check), lint_rtl.py, check_head_params.py,
                f1_check.py / f2_check.py (the gates), rtl_gate2.py (the GATE-2 runner), probe_site/ (isolation probe)
@@ -95,7 +97,7 @@ v3/
 | accumulator | `att_ocarry_top.v` + `att_oc_engine` twins, `ocarry_sim.py` | `ip/softmax/softmax_online_acc`. Datapath kept; stream inputs, $\alpha$ ring, credits, O reader (`architecture.md` §4.6). |
 | FIFO | `att_fifo.v` | `ip/lib/` |
 | oracles | `v2/sim/oracle/{nldpe_ref,gemm_ref,softmax_online_ref,attention_ref}.py` and their imports | `oracle/`. The head's contract is `attention_ref.head_stages`, stage `O8`. |
-| FC DSE results | `v2/experiment/dse/results/{vtr_results.csv,dse_v2.csv,ranking_fc.json}` (FC rows) | `dse/fc_snapshot/`, no re-run (user 2026-10-13). Valid while the FC shapes, `gemm_top`, the prices and the area formula are unchanged. |
+| FC DSE results | `v2/experiment/dse/results/{vtr_results.csv,dse_v2.csv,ranking_fc.json}` (FC rows) | `dse/results/fc_vtr_results.csv` (the 48 FC rows of v2's VTR table; the v3 model prices them into `fc_priced_results.csv`), v2's own rows kept in `simulator/tests/ref/` as the regression reference; no re-run (user 2026-10-13). Valid while the FC shapes, `gemm_top`, the prices and the area formula are unchanged. |
 | platform and prices | `v2/sim/simulator/{configs/,platforms.py,cost.py}`; the energy counting rules of `v2/sim/spec/simulator.md` §4 | `simulator/platform/` (v3's own code since 2026-10-17; the two configs stay verbatim copies; only NL-DPE is used, decision 12). |
 | VTR flow | `v2/experiment/arch/nl_dpe_*_auto.xml`, `v2/experiment/vtr/{run_vtr.py,clock.sdc,clean_vtr_intermediates.sh}`, `v2/experiment/dse/run_vtr_dse.py` | `vtr/` (arch XMLs in `vtr/arch/`) |
 | gates | `v2/experiment/rtl/check_split.py`, `check_kernel.py` (no-runtime-products lint), `v2/simnext/tools/copies.py`, `v2/simnext/cocheck/structure.py` | `tools/` |

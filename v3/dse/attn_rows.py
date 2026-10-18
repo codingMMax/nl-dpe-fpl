@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""att_rows.py — the attention DSE rows from the head workload: one row per build (docs/experiment.md §4.3, §5).
+"""attn_rows.py — the attention DSE rows from the head workload: one row per build (docs/experiment.md §4.3, §5).
 
 The fixed mapping (2026-10-15, user): P_PROJ 1, N_E = N_EP = 2d, N_EXP 2, N_OC by the floor rule, B_kv 16, X_S 16,
 B_q = S (the headParams defaults; tools/check_head_params.py proves the RTL builds the same head for every build).
@@ -7,9 +7,9 @@ Each row is simulator/platform/rows.py `attentionRow`: the head's compute cycles
 energy from the Report's counts x the platform's frozen prices (in total, per term and per role; weight programming
 apart, as setup), the crossbar area (count x the arch XML's wc footprint) and the memory inventory with its predicted
 blocks. CLB and memory blocks come from VTR; a build with VTR metrics (--vtr: a smoke's result.json, or the DSE's
-dse/results/vtr_att_72.csv from v3/vtr/vtr_dse.py) also gets its total area, latency and EDAP (pJ x ns x mm^2).
-Usage: python3 v3/dse/att_rows.py v3/dse/results/att_priced_72.csv --vtr v3/dse/results/vtr_att_72.csv
-       python3 v3/dse/att_rows.py OUT.csv [--vtr RESULT.json | VTR_ATT_72.csv ...]
+dse/results/attn_vtr_results.csv from v3/dse/vtr_dse.py) also gets its total area, latency and EDAP (pJ x ns x mm^2).
+Usage: python3 v3/dse/attn_rows.py v3/dse/results/attn_priced_results.csv --vtr v3/dse/results/attn_vtr_results.csv
+       python3 v3/dse/attn_rows.py OUT.csv [--vtr RESULT.json | VTR_ATT_72.csv ...]
 """
 from __future__ import annotations
 
@@ -27,8 +27,8 @@ from simulator.platform.rows import attentionRow  # noqa: E402
 
 
 def load_vtr(paths: list) -> dict:
-    """{(shape, R, C): VTR metrics} from smoke result.json files or the DSE's CSV (v3/vtr/vtr_dse.py, dse/results/
-    vtr_att_72.csv: its ok lines, Fmax = the seeds' mean)."""
+    """{(shape, R, C): VTR metrics} from smoke result.json files or the DSE's CSV (v3/dse/vtr_dse.py, dse/results/
+    attn_vtr_results.csv: its ok lines, Fmax = the seeds' mean)."""
     out = {}
     for f in paths:
         if str(f).endswith(".csv"):
@@ -69,7 +69,7 @@ def main() -> int:
         w = csv.DictWriter(f, fieldnames=keys)
         w.writeheader()
         w.writerows(rows)
-    print(f"att_rows: {len(rows)} builds -> {out}")
+    print(f"attn_rows: {len(rows)} builds -> {out}")
     return 0
 
 

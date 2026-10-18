@@ -67,7 +67,7 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
 ## Repo map
 | Path | Role |
 |------|------|
-| `v3/` | **LIVE.** `docs/` (experiment, architecture, simulator, mapping_tiling; `architecture_page/`) · `ip/{xbar,gemm,dimm,softmax,lib}` (RTL per module: `rtl/{sim,vtr}`, `tb/`, `spec.md`) · `top/` (`att_ctrl`, `att_head`) · `oracle/` (numpy oracles; `v2_kernels/` = test references, never models) · `simulator/` (the behavior-model package) · `vtr/` (12 arch XMLs, `clock.sdc`, `run_vtr.py`, `smoke.py`, `vtr_dse.py`) · `dse/` (`space.py`, scripts, `results/{adp,edap}`) · `tools/` (gates) · `work/` (runs and logs, gitignored) |
+| `v3/` | **LIVE.** `docs/` (experiment, architecture, simulator, mapping_tiling; `architecture_page/`) · `ip/{xbar,gemm,dimm,softmax,lib}` (RTL per module: `rtl/{sim,vtr}`, `tb/`, `spec.md`) · `top/` (`att_ctrl`, `att_head`) · `oracle/` (numpy oracles; `v2_kernels/` = test references, never models) · `simulator/` (the behavior-model package) · `vtr/` (the generic flow: 12 arch XMLs, `clock.sdc`, `run_vtr.py`, `smoke.py`) · `dse/` (`README.md` + `run_all.sh`, `space.py`, `vtr_dse.py` = the VTR run of the builds and its CSV, the collecting and plotting scripts, `results/{adp,edap}`) · `tools/` (gates) · `work/` (runs and logs, gitignored) |
 | `memory.md` | durable repo facts, settled decisions, pitfalls |
 | `rtl_flow/` | legacy v1 flow, frozen reference |
 | `softmax_study/` | safe-softmax RTL + VTR + energy study (complete) |
@@ -80,8 +80,9 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
 - 12 configs: $R \in \{128, 256, 512, 1024\} \times C \in \{64, 128, 256\}$, $I = \min(R, C)$; `BUF` = 40 bits (a crossbar
   loads 5 B per cycle), `P` = 8.
 - FC: four GEMMs $(K, N) \in \{(512,128), (2048,256), (256,512), (512,512)\}$, $V = \lceil K/R \rceil$,
-  $H = \lceil N/C \rceil$, batch 1, used pass extent (P29). Its 48 rows are the v2 snapshot in `v3/dse/fc_snapshot/`, not
-  re-run.
+  $H = \lceil N/C \rceil$, batch 1, used pass extent (P29). Its 48 rows use v2's VTR run (`v3/dse/results/fc_vtr_results.csv`, not
+  re-run), priced by the v3 model into `fc_priced_results.csv`; v2's own rows are the regression reference in
+  `v3/simulator/tests/ref/`.
 - Attention: one head, six shapes (`v3/dse/space.py`), 72 builds. One fixed mapping: $P_{proj} = 1$, $N_E = N_{EP} = 2d$,
   $N_{EXP} = 2$, $N_{OC}$ by the floor rule (2–8), $B_{kv} = 16$, $X_S = 16$, $B_q = S$.
 - Cycles: the simulator's compute cycles, weights preloaded, $T = t_{done} - t_{start}$ (pinned to the RTL by the gates).
@@ -99,12 +100,13 @@ export PYTHONDONTWRITEBYTECODE=1 TMPDIR=$PWD/v3/work/tmp
 python3 v3/tools/f2_check.py                        # the 8 simulator tests, ~25 s
 python3 v3/simulator/tests/checkEquivalence.py      # the simulator against the frozen pre-refactor outputs
 python3 v3/tools/copies.py; python3 v3/tools/check_twins.py; python3 v3/tools/lint_rtl.py; python3 v3/tools/check_head_params.py
-python3 v3/vtr/vtr_dse.py --self-test               # the VTR driver with fake tools; the real run takes hours: user's go only
+python3 v3/dse/vtr_dse.py --self-test               # the VTR driver with fake tools; the real run takes hours: user's go only
+bash v3/dse/run_all.sh                              # priced rows -> rankings -> breakdown -> figures -> pages (12 s; v3/dse/README.md)
 ```
 
 ## Context economy
 - Do not re-read `paper_outline.md` unless working on the paper narrative.
-- Do not re-run VTR on finished builds: results are in `v3/dse/results/vtr_att_72.csv` and `v3/work/vtr/dse/<build>_<hash12>/`
+- Do not re-run VTR on finished builds: results are in `v3/dse/results/attn_vtr_results.csv` and `v3/work/vtr/dse/<build>_<hash12>/`
   (the hash is the circuit's sha256, so an RTL edit gives every build a new folder).
 - `archive/`, `rtl_flow/` and the `v2-final` tag are reference: read on demand.
 

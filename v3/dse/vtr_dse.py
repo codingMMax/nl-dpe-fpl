@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vtr_dse.py — VTR of the attention DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/vtr_att_72.csv.
+"""vtr_dse.py — VTR of the attention DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/attn_vtr_results.csv.
 
 A build is one attention head (`att_head`) at the fixed mapping (the `head_params` defaults, experiment.md §4.2) for one
 shape (§3.2) on one crossbar config: 6 shapes x 12 configs = 72 builds. Its circuit is the smoke's (smoke.circuit: the
@@ -32,10 +32,10 @@ Run log: one timestamped line per event, appended to work/dse/vtr_dse.log and ec
 into the same file); each tool's PID is logged at its start.
 
 Usage:
-  python3 v3/vtr/vtr_dse.py --elab-only                        the elaboration checks of the 72 builds
-  python3 v3/vtr/vtr_dse.py [--build JetFormer-150P@128x128]   the builds end to end (default all 72), seeds 11,13,17
-  python3 v3/vtr/vtr_dse.py --aggregate                        rebuild the CSV from the folders (no tool)
-  python3 v3/vtr/vtr_dse.py --self-test                        fake tools, no VTR
+  python3 v3/dse/vtr_dse.py --elab-only                        the elaboration checks of the 72 builds
+  python3 v3/dse/vtr_dse.py [--build JetFormer-150P@128x128]   the builds end to end (default all 72), seeds 11,13,17
+  python3 v3/dse/vtr_dse.py --aggregate                        rebuild the CSV from the folders (no tool)
+  python3 v3/dse/vtr_dse.py --self-test                        fake tools, no VTR
 """
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 V3 = HERE.parent
 sys.path.insert(0, str(V3))
-sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(V3 / "vtr"))          # run_vtr.py and smoke.py: the generic VTR flow
 import smoke  # noqa: E402
 from dse.space import CONFIGS, SHAPES  # noqa: E402
 from run_vtr import build_vtr_command, find_vpr_log, parse_metrics, parse_resources  # noqa: E402
@@ -68,7 +68,7 @@ from simulator.platform import area  # noqa: E402
 from simulator.models.attentionHead import attentionHead, headParams  # noqa: E402
 
 OUT = V3 / "work" / "vtr" / "dse"
-CSV_PATH = V3 / "dse" / "results" / "vtr_att_72.csv"
+CSV_PATH = V3 / "dse" / "results" / "attn_vtr_results.csv"     # vtr_att_72.csv until 2026-10-17
 RUN_LOG = V3 / "work" / "dse" / "vtr_dse.log"
 SEEDS = (11, 13, 17)
 TOOLS = dict(flow=smoke.VTR_ROOT / "vtr_flow" / "scripts" / "run_vtr_flow.py", python=smoke.VTR_ROOT / ".venv" / "bin" /

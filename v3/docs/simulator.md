@@ -310,7 +310,7 @@ v3/
   oracle/                the numpy oracles (copies) and v2_kernels/: the ten v2 kernels, closed-form witnesses for
                          the tests, never models (what the simulator is checked against)
   vtr/                   the VTR flow: arch/, clock.sdc, runner, DSE driver, watcher
-  dse/                   scripts (rows, ranking, breakdown, figures, page), fc_snapshot/, results/{adp,edap}/ (calls simulator/)
+  dse/                   scripts (rows, ranking, breakdown, figures, page), results/ (the fc_ / attn_ VTR and priced tables, adp/, edap/) (calls simulator/)
   tools/                 structure gate, copy lock, the F1 / F2 gates
 ```
 

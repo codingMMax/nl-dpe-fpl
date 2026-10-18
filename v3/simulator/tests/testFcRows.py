@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """testFcRows.py — the 48 FC rows of the v2 snapshot (docs/simulator.md §7, "FC regression").
 
-Every FC row of dse/fc_snapshot/dse_v2.csv (family gemm: 12 crossbar configs x 4 shapes, P29 "used" extent) is rebuilt
-from the FC workload: cycles from the run, energy from the Report's counts x the platform prices, area from the
-crossbar count and the snapshot's VTR metrics. Integers exactly, floats to 1e-12 relative (the same operations in the
-same order give the same doubles).
+Every FC row of v2's priced table (simulator/tests/ref/dse_v2.csv, family gemm: 12 crossbar configs x 4 shapes, P29
+"used" extent) is rebuilt from the FC workload: cycles from the run, energy from the Report's counts x the platform
+prices, area from the crossbar count and v2's VTR metrics (ref/vtr_results.csv). Integers exactly, floats to 1e-12
+relative (the same operations in the same order give the same doubles). The v3 rows name the memory term e_mem_pj
+where v2 wrote e_ser_pj.
 
 The pass price changed on 2026-10-17 (user): the whole array still fires on every pass, but only the rows in use are
 read (the input-buffer bytes and the input port words follow ROWS_USED); v2 priced both sides of every pass as the full
@@ -29,11 +30,12 @@ from simulator.platform.rows import fcRow  # noqa: E402
 from simulator.platform import area  # noqa: E402
 from simulator.platform.platform import BUFFER_ACCESSES, Platform  # noqa: E402
 
-SNAP = V3 / "dse" / "fc_snapshot"
+REF = V3 / "simulator" / "tests" / "ref"           # v2's priced FC rows and VTR table, locked copies (tools/copies.py)
 INT_COLS = ("R", "C", "M", "K", "N", "V", "H", "dpe_count", "T_cycles", "area_wc_mwta", "clb_count", "mem_blocks",
             "wc_vtr", "area_mem_mwta", "area_total_mwta")
 FLOAT_COLS = ("e_adds_pj", "e_ser_pj", "e_setup_pj", "fmax_mhz", "latency_ns")     # the same under both price rules
 PASS_COLS = ("e_pass_pj", "e_traffic_pj", "e_total_pj")                              # the input side moved
+V3_NAME = {"e_ser_pj": "e_mem_pj"}                                                   # v2's column -> the v3 row's
 
 
 def close(a: float, b: float) -> float:
@@ -41,10 +43,10 @@ def close(a: float, b: float) -> float:
 
 
 def main() -> int:
-    with open(SNAP / "dse_v2.csv", newline="") as f:
+    with open(REF / "dse_v2.csv", newline="") as f:
         rows = [r for r in csv.DictReader(f) if r["family"] == "gemm"]
     assert len(rows) == 48, len(rows)
-    vtr = area.vtrTable(SNAP / "vtr_results.csv")
+    vtr = area.vtrTable(REF / "vtr_results.csv")
     bad, worst, cheaper, savings = [], 0.0, 0, []
     for r in rows:
         R, C, M, K, N = (int(r[k]) for k in ("R", "C", "M", "K", "N"))
@@ -57,10 +59,10 @@ def main() -> int:
             if int(r[k]) != int(got[k]):
                 bad.append(f"{tag} {k}: {r[k]} != {got[k]}")
         for k in FLOAT_COLS:
-            rel = close(float(r[k]), float(got[k]))
+            rel = close(float(r[k]), float(got[V3_NAME.get(k, k)]))
             worst = max(worst, rel)
             if rel > 1e-12:
-                bad.append(f"{tag} {k}: {r[k]} != {got[k]!r}")
+                bad.append(f"{tag} {k}: {r[k]} != {got[V3_NAME.get(k, k)]!r}")
         for k in PASS_COLS:                                        # 1 the full extent prices every pass as v2 did
             rel = close(float(r[k]), float(full[k]))
             worst = max(worst, rel)

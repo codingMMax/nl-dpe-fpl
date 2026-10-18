@@ -1,7 +1,9 @@
 # v3/dse — the DSE's numbers, rankings, figures and pages
 
-Everything here reads two tables (the 72 priced attention builds and the 48 FC rows of the v2 snapshot) and writes
-`results/`. From the repository root, with `export PYTHONDONTWRITEBYTECODE=1 TMPDIR=$PWD/v3/work/tmp`:
+Everything here lives in `results/`, one pair of tables per family: the VTR table (what VTR measured per build) and the
+priced table (what the simulator computed per build, with the VTR columns joined in), `fc_vtr_results.csv`,
+`fc_priced_results.csv`, `attn_vtr_results.csv`, `attn_priced_results.csv`; then the rankings, the breakdown, the
+figures and the pages. From the repository root, with `export PYTHONDONTWRITEBYTECODE=1 TMPDIR=$PWD/v3/work/tmp`:
 
 ```text
 bash v3/dse/run_all.sh          every step below, in order (about a minute; the VTR results are inputs, never re-run)
@@ -10,8 +12,10 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 | step | script | reads | writes |
 |---|---|---|---|
 | — | `space.py` | — | the 6 attention shapes and the 12 crossbar configs, defined once; imported by every script |
-| 1 | `att_rows.py OUT.csv --vtr results/vtr_att_72.csv` | the simulator (one head per build, `simulator/platform/rows.py attentionRow`), the VTR table | `results/att_priced_72.csv`: per build the cycles, the pass count, the energy per term and per role, the crossbars, the memory inventory, and with VTR the area, latency and EDAP |
-| — | `data.py` | `results/att_priced_72.csv`; `fc_snapshot/` through the simulator (`fcRow`) | the two tables every script loads: `attentionRows()`, `fcRows()` |
+| 0 | `vtr_dse.py` (hours; on your go only; not part of `run_all.sh`) | the 72 builds' circuits from the VTR twins (`top/`, `ip/*/rtl/vtr`), `vtr/arch/`, `vtr/run_vtr.py`, `vtr/smoke.py`, VTR | the run folders `work/vtr/dse/<build>_<hash>/` and `results/attn_vtr_results.csv`: per build Fmax per seed and the mean, CLB, memory, crossbars, I/O, DSP, the elaboration check. `--aggregate` rebuilds the CSV from the folders with no tool; `--self-test` runs it on fake tools; `dse_watch.py --pid PID` reports on a running driver. The FC table `results/fc_vtr_results.csv` is v2's run (below), not regenerated |
+| 1 | `fc_rows.py OUT.csv --vtr results/fc_vtr_results.csv` | the simulator (one GEMV per row, `simulator/platform/rows.py fcRow`; `space.py FC_SHAPES` × `CONFIGS`), the FC VTR table | `results/fc_priced_results.csv`: per row the cycles, the pass count, the energy per term, the crossbars, and with VTR the area, latency and EDAP |
+| 1 | `attn_rows.py OUT.csv --vtr results/attn_vtr_results.csv` | the simulator (one head per build, `attentionRow`), the attention VTR table | `results/attn_priced_results.csv`: the same per build, plus the energy per role and the memory inventory |
+| — | `data.py` | the two priced tables | `fcRows()`, `attentionRows()` for the scripts below |
 | 2 | `rank.py` | both tables | `results/adp/latency_area.json`: per family $G_A$, $G_D$, $G_E$ and the latency vs area front; $G_{ADP}$ and the cross-family front and distance. `results/edap/ranking_{fc,attention,cross}.json`: the EDAP view. `--self-test` checks the arithmetic |
 | 3 | `breakdown.py` | both tables; the simulator for the projections' end | `results/breakdown.json`: per config the area split (DPE tiles / CLBs / memory blocks, VPR counts), the energy split (DPE passes / CLB / port traffic / memory bytes, the simulator's ledger), the means (crossbars, CLBs, cycles, Fmax, passes, the price paid per pass); prints the split tables |
 | 4 | `plot_dse.py` (matplotlib: the miniconda Python) | the JSONs | `results/adp/dse_la_fc.png`, `dse_la_attention.png`: (a) the Pareto front, (b) the area split, (c) the energy split; `dse_adp_cross.png`; `dse_la.{png,pdf}` (the three ADP panels, for the paper); `results/edap/dse_{fc,attention,pareto,cross}.{png,pdf}` |
@@ -33,9 +37,12 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 
 ## Inputs that are not regenerated here
 
-- `results/vtr_att_72.csv`: the VTR run of the 72 builds (`v3/vtr/vtr_dse.py`, 2026-10-15/16, 19 h).
-- `fc_snapshot/`: v2's FC rows (`dse_v2.csv`, `vtr_results.csv`, `ranking_fc.json`), locked copies
-  (`tools/copies.py`); the v3 model rebuilds the rows from them (`simulator/tests/testFcRows.py` proves it).
+- `results/attn_vtr_results.csv`: the VTR run of the 72 attention builds (`vtr_dse.py`, 2026-10-15/16, 19 h; the run
+  folders are in `v3/work/vtr/dse/`, 276 GB, and `vtr_dse.py --aggregate` rebuilds the CSV from them).
+- `results/fc_vtr_results.csv`: the VTR run of the 48 FC rows, v2's run of 2026-10-10 (user 2026-10-13: reused, not
+  re-run): the 48 `family == gemm` rows of v2's `vtr_results.csv`, verbatim (`tools/copies.py` records the source).
+  v2's own priced rows and ranking (`dse_v2.csv`, `ranking_fc.json`, with the 84-row `vtr_results.csv`) are the
+  regression reference of `simulator/tests/testFcRows.py`, kept in `simulator/tests/ref/` as locked copies.
 
 ## Checks
 

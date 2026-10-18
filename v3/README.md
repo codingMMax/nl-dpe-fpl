@@ -12,8 +12,8 @@ equal to the pre-refactor one. `LEDGER.md` has the status, the decisions, what w
 | `ip/` `top/` | what we build: RTL per module (`xbar gemm dimm softmax lib`) and the head (`top` = `att_ctrl` + `att_head`): `spec.md`, `rtl/{sim,vtr}`, `tb/`, `cases.py`, `gen_cases.py` |
 | `oracle/` | what the simulator is checked against: the numpy oracles and `v2_kernels/` (never imported by the models) |
 | `simulator/` | the behavior models (`core` engine + crossbar, `models` module models + workloads, `platform` prices, area, DSE rows, `tests`); `README.md` = layout, rules, how to call it |
-| `vtr/` | everything that runs VTR: `arch/` (12 arch XMLs), `clock.sdc`, `run_vtr.py`, `smoke.py`, `vtr_dse.py` (the DSE driver), `dse_watch.py` |
-| `dse/` | `README.md` (the pipeline, step by step, and `run_all.sh`), `space.py` (the 6 shapes x 12 configs, defined once), `data.py` (the two input tables) and the scripts that turn results into tables and figures; `fc_snapshot/` (v2's FC rows); `results/` (tracked): the VTR and priced CSVs and `breakdown.json`, then one folder per view: `adp/` (the current one: latency vs area, area-delay product) and `edap/` (the earlier energy-delay-area ranking), each with its JSON, figures and page |
+| `vtr/` | the generic VTR flow: `arch/` (12 arch XMLs), `clock.sdc`, `run_vtr.py`, `smoke.py` (one module's or the head's VTR smoke) |
+| `dse/` | `README.md` (the pipeline, step by step, and `run_all.sh`), `space.py` (the 6 shapes x 12 configs, defined once), `fc_rows.py` and `attn_rows.py` (the priced tables), `data.py` (their loader), `vtr_dse.py` (the VTR run of the 72 builds and its CSV; `dse_watch.py` watches a run) and the scripts that turn results into tables and figures; `results/` (tracked): per family the VTR table and the priced table (`fc_vtr_results.csv`, `fc_priced_results.csv`, `attn_vtr_results.csv`, `attn_priced_results.csv`) and `breakdown.json`, then one folder per view: `adp/` (the current one: latency vs area, area-delay product) and `edap/` (the earlier energy-delay-area ranking), each with its JSON, figures and page |
 | `tools/` | static checks and gates: copy lock, RTL twins, lint, head params, the F1 / F2 gates, the GATE-2 runner |
 | `work/` | scratch, gitignored: `vtr/{dse,smoke}` (the VTR runs, 276 GB), `corpus`, `equivalence`, `dse` (logs), `tmp`, per-module RTL runs |
 
@@ -31,6 +31,6 @@ go in `work/`.
 | static gates | `python3 v3/tools/copies.py` · `check_twins.py` · `lint_rtl.py` · `check_head_params.py` |
 | F1 gate (copies, twins, self-tests, corpora) | `python3 v3/tools/f1_check.py --steps probe,lock,twins,selftests,regen`; its `rtl` step simulates (needs approval) |
 | a module's corpus, then GATE 2 | `python3 v3/ip/<module>/gen_cases.py` → `python3 v3/ip/<module>/tb/run_*_rtl.py --stimuli DIR` (iverilog: needs approval) |
-| VTR of the 72 builds | `python3 v3/vtr/vtr_dse.py` (hours; `--elab-only`, `--build SHAPE@RxC`, `--aggregate`, `--self-test`); `python3 v3/vtr/dse_watch.py --pid PID` |
+| VTR of the 72 builds | `python3 v3/dse/vtr_dse.py` (hours; `--elab-only`, `--build SHAPE@RxC`, `--aggregate` = rebuild `results/attn_vtr_results.csv` from the run folders, `--self-test`); `python3 v3/dse/dse_watch.py --pid PID` |
 | the DSE results, end to end | `bash v3/dse/run_all.sh`: priced rows → rankings → breakdown → figures → pages; each step and what it writes in `v3/dse/README.md` |
 | architecture page | `python3 v3/docs/architecture_page/page_data.py v3/work/arch_page/builds.json` → `build.py` |

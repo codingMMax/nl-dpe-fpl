@@ -305,7 +305,7 @@ def main_edap() -> int:
 <div class="notes muted">
   <p>The 16 attention builds of the d = 64 shapes at C = 64 are priced from VPR's own memory count, which is 5–8 blocks above the simulator's prediction (397–400 against 392). Every other count matches the prediction.</p>
   <p>Fmax is the mean of the three seeds (93–148 MHz over the 72 builds). Latency = cycles ÷ Fmax; area counts CLBs, crossbar tiles and memory blocks from VPR.</p>
-  <p>Data: <code>v3/dse/results/att_priced_72.csv</code>, <code>v3/dse/results/edap/ranking_fc.json</code>, <code>v3/dse/results/edap/ranking_attention.json</code>, <code>v3/dse/results/edap/ranking_cross.json</code>.</p>
+  <p>Data: <code>v3/dse/results/attn_priced_results.csv</code>, <code>v3/dse/results/fc_priced_results.csv</code>, <code>v3/dse/results/edap/ranking_fc.json</code>, <code>v3/dse/results/edap/ranking_attention.json</code>, <code>v3/dse/results/edap/ranking_cross.json</code>.</p>
 </div>
 </div>
 <script>{SCRIPT}</script>

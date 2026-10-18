@@ -80,16 +80,16 @@ format: `rep.eventLines()`), `counts[instance]` and `totalCounts` (passes, CLB a
 (crossbars, memories), `roles[instance]` (gemm / qk / sm / pv / acc / ctrl, for `platform/breakdown.py`).
 With values on (`withValues=True`, weights and inputs given), the same run also computes the outputs
 (`fc.result(sink, ...)`, the head's O8 windows); `top/cases.py` `runCase` runs a head that way and compares every stream
-with the oracle (GATE 1). Area and Fmax come from VTR (`dse/results/vtr_att_72.csv`); `area.withVtr(cycles, R, C, row)`
+with the oracle (GATE 1). Area and Fmax come from VTR (`dse/results/attn_vtr_results.csv`); `area.withVtr(cycles, R, C, row)`
 turns cycles + a VTR row into area (mm²) and latency (ns).
 
 **How the DSE calls it** (`platform/rows.py` is the one entry for rows):
 
 | script | call | uses |
 |---|---|---|
-| `dse/att_rows.py` | `attentionRow(shape, n, d_model, d, R, C, vtr)` per build, 72 times | `headParams` → `attentionHead` → `run` → cycles = `ctrl.done - ctrl.tStart`; `prices.energy(totalCounts)`; crossbars and memory blocks; with the VTR row: area, latency, EDAP → `dse/results/att_priced_72.csv` |
-| `dse/rank.py` | `fcRow(R, C, (M, K, N), platform, vtr)` for the 48 FC rows; reads the priced attention CSV | `fc` → `run` → the same pricing; the FC snapshot's VTR table |
-| `vtr/vtr_dse.py` | `Build`: `headParams` + `attentionHead` per build | the expected crossbars (`wc`) and memory list for the elaboration check and the VPR check; `area.predictedMemBlocks` |
+| `dse/attn_rows.py` | `attentionRow(shape, n, d_model, d, R, C, vtr)` per build, 72 times | `headParams` → `attentionHead` → `run` → cycles = `ctrl.done - ctrl.tStart`; `prices.energy(totalCounts)`; crossbars and memory blocks; with the VTR row: area, latency, EDAP → `dse/results/attn_priced_results.csv` |
+| `dse/fc_rows.py` | `fcRow(R, C, (M, K, N), platform, vtr)` per row, 48 times | `fc` → `run` → the same pricing; the FC VTR table → `dse/results/fc_priced_results.csv` (`dse/rank.py` and `dse/breakdown.py` read the two priced tables, never the simulator) |
+| `dse/vtr_dse.py` | `Build`: `headParams` + `attentionHead` per build | the expected crossbars (`wc`) and memory list for the elaboration check and the VPR check; `area.predictedMemBlocks` |
 | `dse/breakdown.py` | `attentionHead` + `run`, `analysis.breakdown.projectionEnd` | where the projection stream ends in the events |
 | `tools/check_head_params.py` | `headParams` + `attentionHead` | the model's module parameters == the RTL's, for the 72 builds |
 | `ip/*/cases.py`, `top/cases.py` | module graphs with `Source` / `Sink`, `run`, GATE 1 | the testbench files and `events.txt` that GATE 2 compares with the RTL |

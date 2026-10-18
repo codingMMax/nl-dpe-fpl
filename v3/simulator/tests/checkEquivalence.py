@@ -36,7 +36,7 @@ from simulator.core.engine import run  # noqa: E402
 from simulator.platform import area  # noqa: E402
 from simulator.platform.platform import Platform  # noqa: E402
 
-SNAP = V3 / "dse" / "fc_snapshot"
+REF = V3 / "simulator" / "tests" / "ref"          # v2's FC VTR table, a locked copy (in dse/fc_snapshot/ before 2026-10-17)
 GENERATORS = {   # corpus name -> (generator, arguments), the same scripts the freeze ran (ported to the new package)
     "dimm_64x64": ("ip/dimm/gen_cases.py", ()),
     "softmax_64x64": ("ip/softmax/gen_cases.py", ("--preset", "corpus")),
@@ -195,13 +195,14 @@ def checkRows(ref: Path, say) -> dict:
     if rows is None or not hasattr(rows, "fcRow"):
         out["fc"] = ("not built", len(fcRef))
     else:
-        vtr = area.vtrTable(SNAP / "vtr_results.csv")
+        vtr = area.vtrTable(REF / "vtr_results.csv")
         bad = 0
         for r in fcRef:
             R, C = int(r["R"]), int(r["C"])
             got = rows.fcRow(R, C, (int(r["M"]), int(r["K"]), int(r["N"])), Platform("nl_dpe", rows=R, cols=C), vtr,
                              passExtent=r["pass_extent"])
-            diff = [k for k in r if k not in REPRICED and not sameCell(r[k], got.get(k))]
+            diff = [k for k in r if k not in REPRICED           # the frozen rows name the memory term e_ser_pj (v2)
+                    and not sameCell(r[k], got.get("e_mem_pj" if k == "e_ser_pj" else k))]
             if diff:
                 bad += 1
                 say(f"    FAIL fc row {r['config']} {r['M']}x{r['K']}x{r['N']}: columns {diff[:5]}")

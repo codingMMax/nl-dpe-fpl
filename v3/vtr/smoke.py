@@ -140,7 +140,7 @@ def eval_width(expr: str, params: dict) -> int:
 
 def circuit(module: str, point: str, params: dict | None = None) -> tuple:
     """(top, circuit text, expected crossbars, parameters) of a module at a point of its table, or at `params` (the
-    point then only names the top, e.g. the DSE builds of v3/vtr/vtr_dse.py)."""
+    point then only names the top, e.g. the DSE builds of v3/dse/vtr_dse.py)."""
     spec = MODULES[module]
     p = spec["points"]()[point] if params is None else params
     src = "".join(f.read_text() + "\n" for f in spec.get("deps", [])) + spec["file"].read_text()   # the twin + its files

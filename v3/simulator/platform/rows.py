@@ -1,8 +1,8 @@
 """rows.py — a run priced into a DSE row (docs/experiment.md §5): cycles from the run, energy from the Report's counts
 x the platform's prices, area from the crossbar count and the row's VTR metrics.
 
-The column names are the DSE's (dse/fc_snapshot/dse_v2.csv, dse/results/att_priced_72.csv): they are the data format
-of the results, not Python names.
+The column names are the DSE's (dse/results/fc_priced_results.csv, dse/results/attn_priced_results.csv; the energy
+terms e_*_pj are the same in both): they are the data format of the results, not Python names.
 """
 from __future__ import annotations
 
@@ -27,13 +27,15 @@ def fcRow(R: int, C: int, shape: tuple, platform: Platform, vtr: dict | None = N
     res = rep.resources["gemm"]
     row = dict(config=f"{R}x{C}", R=R, C=C, family="gemm", M=M, K=K, N=N, V=gemm.d.V, H=gemm.d.H,
                dpe_count=res.nCrossbars, T_cycles=rep.cycles, pass_extent=passExtent,
-               passes=rep.totalCounts.nPasses, e_pass_pj=e["e_pass_pj"],
-               e_adds_pj=e["e_adds_pj"], e_traffic_pj=e["e_traffic_pj"], e_ser_pj=e["e_mem_pj"],
-               e_total_pj=e["e_total_pj"], e_setup_pj=prices.setupEnergyPj(platform, res.nCrossbars),
+               passes=rep.totalCounts.nPasses, e_total_pj=e["e_total_pj"], e_pass_pj=e["e_pass_pj"],
+               e_traffic_pj=e["e_traffic_pj"], e_adds_pj=e["e_adds_pj"], e_cmp_pj=e["e_cmp_pj"],
+               e_mem_pj=e["e_mem_pj"], e_setup_pj=prices.setupEnergyPj(platform, res.nCrossbars),
                area_wc_mwta=area.areaWcMwta(res.nCrossbars, R, C))
     m = (vtr or {}).get((row["config"], "gemm", M, K, N))
     if m is not None:
         row.update(area.withVtr(rep.cycles, R, C, m))
+        row["area_total_mm2"] = round(row["area_total_mwta"] * UM2_PER_MWTA / 1e6, 4)
+        row["edap"] = round(e["e_total_pj"] * row["latency_ns"] * row["area_total_mm2"], 1)   # pJ x ns x mm^2
     return row
 
 

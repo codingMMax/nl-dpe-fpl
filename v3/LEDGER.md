@@ -92,6 +92,7 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 | 2026-10-17 | **One ranking notation for both views:** per workload, score = value ÷ the worst config's value (1 = the worst, lower is better); $G_X$ = their geometric mean over a family's workloads, $X$ = A, D, E, ADP, EDAP. The EDAP view changes from best ÷ EDAP (higher is better) to this; its ranks and every Pareto front stay; its cross-family distance is now from the origin of $(G_{EDAP}^{FC}, G_{EDAP}^{ATT})$ (`experiment.md` §5). | user |
 | 2026-10-17 | **The pass price: the whole array fires every time, only the rows in use are read, outputs full.** The $R \times C$ cells, the ACAM on every column, the output buffer and the output drain are charged in full; the input-buffer bytes and the input port words follow `ROWS_USED` (P29). The earlier full-array price on both sides overcharged every conversion pass on $R > C$ arrays and every GEMM pass with $K < R$ (`simulator/platform/prices.py`). | user |
 | 2026-10-17 | **Area and energy splits per config** (the (b) and (c) panels): attention = the geometric mean of each share over its 6 shapes; FC = the share of the total summed over its 4 shapes (FC builds without a memory block or a CLB add would make a geometric mean 0). Energy parts: DPE passes, CLB adds + compares, the passes' block-RAM port traffic, memory bytes. | user (recommendation accepted) |
+| 2026-10-18 | **`dse/results/` holds both families, one VTR table and one priced table each:** `fc_vtr_results.csv` (the 48 FC rows of v2's VTR table, verbatim), `fc_priced_results.csv` (the v3 model on them, `dse/fc_rows.py`), `attn_vtr_results.csv` (`dse/vtr_dse.py`), `attn_priced_results.csv` (`dse/attn_rows.py`). `fc_snapshot/` is merged away; v2's own rows and ranking are the regression reference in `simulator/tests/ref/`. `rank.py` and `breakdown.py` read the two priced tables and never run the simulator. The FC shapes are `space.py FC_SHAPES`. | user |
 
 ## Needs you
 
@@ -898,3 +899,24 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   `README.md` (the pipeline, step by step), `run_all.sh` (one command, about a minute) and `data.py` (the two input
   tables, loaded once for `rank.py` and `breakdown.py`); `experiment.md` §5, §8 ($G_E$ columns), §9.2, §9.4, §9.6 and
   `simulator.md` §4.7 state the rule and the new numbers; the page is republished.
+- 2026-10-17 (your "these scripts together with the driver should be all placed inside dse/"): `vtr_dse.py` (the VTR
+  run of the 72 builds; `--aggregate` rebuilds `results/vtr_att_72.csv` from the run folders) and `dse_watch.py` moved
+  from `vtr/` to `dse/`, path lines only (the driver puts `v3/vtr` on its path for `run_vtr.py` and `smoke.py`);
+  verified from the new place: both self-tests pass and `--aggregate` reproduces the committed CSV byte for byte.
+  `vtr/` keeps the generic flow (`arch/`, `clock.sdc`, `run_vtr.py`, `smoke.py`). `dse/README.md` has the driver as
+  step 0 (not part of `run_all.sh`, which never runs VTR). The originals leave with your `git rm`
+  (`v3/work/tmp/move_vtr_dse.sh`, which also commits the move as renames).
+- 2026-10-18 (your "use the vtr_results.csv and re-price the FC results. and merge the fc_snapshot/ and results/ ...
+  naming"): `dse/fc_rows.py` (new, the mirror of the attention row writer) prices the 48 FC rows of `space.py FC_SHAPES`
+  × `CONFIGS` with the v3 model on `results/fc_vtr_results.csv` and writes `results/fc_priced_results.csv` (the same
+  e_*_pj columns as the attention table: the memory term is `e_mem_pj`, v2's `e_ser_pj`; plus `area_total_mm2`, `edap`);
+  `att_rows.py` becomes `attn_rows.py` → `attn_priced_results.csv` (byte-identical to `att_priced_72.csv`);
+  `vtr_att_72.csv` becomes `attn_vtr_results.csv` (`vtr_dse.py` writes it; `--aggregate` reproduces it byte for byte).
+  `data.py` loads the two priced tables (no simulator run), so `rank.py`'s and `breakdown.py`'s JSONs come out
+  byte-identical to the committed ones. v2's `dse_v2.csv`, `vtr_results.csv`, `ranking_fc.json` move to
+  `simulator/tests/ref/` as the locked regression reference (copy lock 48/48, 29 forked, `fc_vtr_results.csv` recorded
+  as the 48 gemm rows of v2's table); `testFcRows.py` and `checkEquivalence.py` read them there (ALL PASS / rows ok).
+  README, PLAN, `dse/README.md` (step 1 is now two writers), `experiment.md` §3.1 and §6, `simulator.md`, CLAUDE.md
+  and memory.md name the new files. The old paths (`fc_snapshot/`, the two old CSVs, `att_rows.py`, and the earlier
+  `vtr/vtr_dse.py`, `vtr/dse_watch.py`) leave with your `git rm` (`v3/work/tmp/finish_results_layout.sh`, one commit
+  with the renames).

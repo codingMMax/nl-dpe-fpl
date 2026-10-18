@@ -9,8 +9,8 @@ the failures (from the run log since the driver started), memory-gate waits, the
 processes' memory, disk), and an end estimate for each running ABC from its netlist size [estimate]:
 ABC hours = 3.58 x (netlist MB / 99.4)^2.24 (fitted on the head smoke, 99.4 MB -> 3.58 h, and the driver test's
 JetFormer build, 53.0 MB -> 0.875 h), with the finished syntheses' actual / predicted ratio beside it.
-Usage: python3 v3/vtr/dse_watch.py --pid DRIVER_PID [--every 90] [--status PATH] [--once]
-       python3 v3/vtr/dse_watch.py --self-test
+Usage: python3 v3/dse/dse_watch.py --pid DRIVER_PID [--every 90] [--status PATH] [--once]
+       python3 v3/dse/dse_watch.py --self-test
 """
 from __future__ import annotations
 

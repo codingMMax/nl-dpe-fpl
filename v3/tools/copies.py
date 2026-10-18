@@ -152,9 +152,10 @@ COPIES = [
     ("vtr/clock.sdc", f"{X}/vtr/clock.sdc", ()),
     # twin-diff baselines recorded in v2 (the copied twins must reproduce them)
     *[(f"tools/twin_baseline/{k}.diff", f"{X}/rtl/split_baseline/{k}.diff", ()) for k in ("gemm",)],
-    # the FC snapshot (user 2026-10-13): only the rows with family == gemm are used; the attention rows are the
-    # earlier attention DSE, which is not a valid experiment
-    *[(f"dse/fc_snapshot/{f}", f"{X}/dse/results/{f}", ()) for f in ("vtr_results.csv", "dse_v2.csv", "ranking_fc.json")],
+    # v2's FC results (user 2026-10-13: the FC rows are reused, not re-run; the attention rows in these files are the
+    # earlier attention DSE, which is not a valid experiment): the regression reference of simulator/tests/testFcRows.py
+    # (in dse/fc_snapshot/ until 2026-10-17; the current FC results are dse/results/fc_*_results.csv)
+    *[(f"simulator/tests/ref/{f}", f"{X}/dse/results/{f}", ()) for f in ("vtr_results.csv", "dse_v2.csv", "ranking_fc.json")],
 ]
 
 # copies v3 has since edited or replaced: (path under v3/, the v2 source it started from). They are v3 files now; the
@@ -190,6 +191,8 @@ FORKED = [
     ("dse/plot_dse.py", f"{X}/dse/plot_dse.py"),
     ("dse/plot_dse.py", "v2/work/dse_v1/combined/plot_pareto_family.py"),   # its Pareto part
     ("dse/plot_dse.py", "v2/work/dse_v1/combined/plot_pareto.py"),          # the FC x attention cross score
+    # the FC VTR table of the results (2026-10-17): the 48 family == gemm rows of v2's vtr_results.csv, verbatim lines
+    ("dse/results/fc_vtr_results.csv", f"{X}/dse/results/vtr_results.csv"),
 ]
 
 # ---------------------------------------------------------------------------------------------------------------------

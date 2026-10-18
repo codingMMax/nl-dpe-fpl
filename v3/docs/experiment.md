@@ -61,7 +61,10 @@ config and mapping are all build-time parameters, so each row is one VTR circuit
 
 - Results reused (user, 2026-10-13):
   - 48 VTR rows (seeds {11, 13, 17}, all ok) and 48 priced rows (used extent);
-  - files: `v2/experiment/dse/results/{vtr_results.csv, dse_v2.csv, ranking_fc.json}`.
+  - files: v2's `vtr_results.csv`, `dse_v2.csv`, `ranking_fc.json`, kept as locked copies in `simulator/tests/ref/`
+    (the regression reference of `testFcRows.py`); the FC results of this experiment are `dse/results/fc_vtr_results.csv`
+    (the 48 FC rows of v2's VTR table) and `dse/results/fc_priced_results.csv` (the v3 model's rows on them,
+    `dse/fc_rows.py`; 2026-10-17).
 - The snapshot stays valid while the FC shapes, `gemm_top`, the prices and the area formula are unchanged. The v3
   model must reproduce its cycles and energy row by row (§6).
 - Optional open item: these are the Round-1 FC shapes, not the FFNs of the six attention models.
@@ -190,9 +193,10 @@ The module work and its gates are in `architecture.md` §7–§8. The experiment
    - values = `attention_ref.head_stages`, stage `O8`.
 3. **The 72 builds (§4.3):**
    - the model's compute cycles, energy, crossbar count and memory-block prediction for each build (done 2026-10-15:
-     `dse/att_rows.py`);
+     `dse/attn_rows.py`, then `att_rows.py`);
    - VTR, on your go: the launch plan below;
-   - pricing: area, latency and EDAP per build from the VTR counts (`dse/att_rows.py --vtr`).
+   - pricing: area, latency and EDAP per build from the VTR counts (`dse/attn_rows.py --vtr`; the FC rows the same way
+     with `dse/fc_rows.py --vtr`).
 4. **Figures**, per family (FC: the 48 snapshot rows; attention: the 72 builds), as v2's `rank_dse.py`, `plot_dse.py`
    and `plot_pareto_family.py` (matplotlib, the miniconda Python):
    - **geomean ranking** (§5 notation, since 2026-10-17): rank by $G_{EDAP}$, lower is better. One figure with four
@@ -215,13 +219,13 @@ The module work and its gates are in `architecture.md` §7–§8. The experiment
 | item | plan |
 |---|---|
 | what | the 72 builds, the final RTL (fixed DIMM, no O reader), the fixed mapping from `head_params`; the smokes' VTR set-up (VTR twins + the smoke's parameter wrapper, the config's arch XML, channel width 300, `clock.sdc`); seeds {11, 13, 17} |
-| driver | `vtr/vtr_dse.py` (`--self-test`: fake tools, ALL PASS; 6 of 6 injected bugs caught) |
+| driver | `dse/vtr_dse.py` (in `vtr/` until 2026-10-17; `--self-test`: fake tools, ALL PASS; 6 of 6 injected bugs caught) |
 | per build | circuit (its sha256 names the run folder) → elaboration check (Yosys: the top, crossbars = the simulator's, memory list = the simulator's, legal memory shapes; a failure stops the build; Yosys's result is cached, the check is recomputed on every run) → one synthesis (Parmys + ABC, `-end abc`) → VPR per seed on that netlist (byte-identical to the full flow's VPR input, checked on the accumulator and head smokes) → checks per seed (flow OK, Fmax > 0, crossbars and memory blocks = the simulator's) |
 | result | per build: Fmax = the mean of the passing seeds, each seed's Fmax kept in the CSV; CLB, memory, crossbars, I/O = the largest; notes |
 | workers | 36, memory-guarded. The head smoke peaked at 0.68 GB (Yosys elaboration), 3.0 GB (Parmys, 2 min), 1.0 GB (ABC, 3.6 h) and 8.1 GB (VPR, 22 min); 125 GB in the machine. Each tool process reserves its expected peak: elaboration 2, Parmys 6, ABC 1.5, VPR 12 GiB (about 1.5× the smoke; v2's VPR peaks grew with the grid, 2.4–8.2 GiB), raised during the run to 1.25× the largest peak measured. A process starts when the reserves of the running ones plus its own fit in the memory available at the start less 16 GiB, and the machine has its reserve + 16 GiB free. Syntheses start at least 60 s apart and never while a VPR waits; at most 12 VPRs at once; per-process cap 48 GiB (v2's, via `prlimit`); no timeout |
 | order | the 72 elaboration checks first; then the syntheses, largest first (the simulator's memory bits); a waiting VPR seed before a waiting synthesis |
 | time | about 350 CPU-hours [estimate]. ABC grows about with the square of the netlist size (43 runs of v2 and v3; the driver test's 53 MB netlist: 52 min; the head smoke's 99 MB: 3.6 h), so the $I = 256$ builds may take 11–16 h each if their netlists are about 1.6× the smoke's, as in v2; 216 VPR runs of 7–25 min. Wall about 12–17 h, set by the largest build's ABC [estimate] |
-| storage | run folders `work/vtr/dse/<build>_<hash>/` (circuit, elaboration, `synth/`, `s11/`, `s13/`, `s17/`); results `dse/results/vtr_att_72.csv`; log `work/dse/vtr_dse.log` (one timestamped line per event). About 2–6 GB per build, 0.3–0.5 TB in all [estimate], 1.2 TB free; checked at start |
+| storage | run folders `work/vtr/dse/<build>_<hash>/` (circuit, elaboration, `synth/`, `s11/`, `s13/`, `s17/`); results `dse/results/attn_vtr_results.csv` (`vtr_att_72.csv` until 2026-10-17); log `work/dse/vtr_dse.log` (one timestamped line per event). About 2–6 GB per build, 0.3–0.5 TB in all [estimate], 1.2 TB free; checked at start |
 | resume | the same command skips every finished step of the same circuit |
 | driver test | the elaboration check of all 72 builds (Yosys only, about 5 min at 36); one small build (JetFormer-150P, 128×128) end to end with its 3 seeds; the same command again (every step skipped, the CSV row and folders in place). Elaboration result (2026-10-15): crossbars equal on all 72; the memory lists found two simulator bugs (the DIMM's two bank kinds of one shape counted once, and depths not rounded to the RTL's address fields; fixed, 18 predictions at $I = 256$ rose by 14–56 blocks) and one RTL issue: with $V > 1$ (21 builds) `gemm_top`'s reduction `tree` array is inferred as a many-port memory (24 × 32 bits with 5 read / 12 write ports at $V = 2$, up to 128 × 32 with 149 / 128 at $V = 6$), which the simulator does not have. Fixed the same day (you): the tree is one wide register in both twins; the 64×64 head check with $V = 3$ passed (every event) and the elaboration check passes on all 72 builds |
 | then | pricing (step 3), figures (step 4) |

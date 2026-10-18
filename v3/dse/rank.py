@@ -15,10 +15,10 @@ distance d does.
 Ported from v2/experiment/dse/rank_dse.py (the inputs are v3's). The raw data only (user, 2026-10-16: no resampling):
 every point uses its build's Fmax as measured, the mean of its three VTR seeds.
 Inputs:
-  attention  the 72 builds priced by dse/att_rows.py --vtr (dse/results/att_priced_72.csv): workloads = the six shapes
-  FC         the 48 rows of the v2 snapshot (dse/fc_snapshot/) rebuilt by the FC workload
-             (simulator/platform/rows.py fcRow, as simulator/tests/testFcRows.py checks them): workloads = the four
-             M x K x N shapes
+  attention  the 72 priced builds, dse/results/attn_priced_results.csv (dse/attn_rows.py --vtr): workloads = the six
+             shapes
+  FC         the 48 priced rows, dse/results/fc_priced_results.csv (dse/fc_rows.py --vtr; the v3 model on v2's FC VTR
+             table, as simulator/tests/testFcRows.py checks it against v2's rows): workloads = the four M x K x N shapes
 Usage: python3 v3/dse/rank.py              # dse/results/edap/ranking_{fc,attention,cross}.json, adp/latency_area.json
        python3 v3/dse/rank.py --self-test
 """
@@ -169,9 +169,9 @@ def attention_points() -> list:
 
 
 def fc_points() -> list:
-    """The same for the 48 FC rows of the v2 snapshot, rebuilt by the v3 model (dse/data.py)."""
-    return [dict(workload=data.fcWorkload(r), config=r["config"], E=r["e_total_pj"], D=r["latency_ns"],
-                 A=r["area_total_mwta"] * data.MM2_PER_MWTA) for r in data.fcRows()]
+    """The same for the 48 priced FC rows (dse/data.py)."""
+    return [dict(workload=data.fcWorkload(r), config=r["config"], E=float(r["e_total_pj"]), D=float(r["latency_ns"]),
+                 A=int(r["area_total_mwta"]) * data.MM2_PER_MWTA) for r in data.fcRows()]
 
 
 def _self_test() -> None:
