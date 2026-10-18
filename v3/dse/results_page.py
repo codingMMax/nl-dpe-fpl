@@ -2,7 +2,7 @@
 """results_page.py — the DSE results pages, one per view:
   adp/dse_results.html        latency vs area (user, 2026-10-16) per family and across the families, from dse/rank.py's
                               adp/latency_area.json and dse/plot_dse.py's dse_la_{fc,attention}.png, dse_adp_cross.png
-                              (published beside the page)
+                              (published beside the page); and EDAP against ADP per family, from edap/ranking_*.json
   edap/dse_results_edap.html  the earlier EDAP page (not published), from edap/ranking_*.json and its figures
 The raw data only: Fmax = the mean of the 3 VTR seeds.
 Usage: python3 v3/dse/results_page.py      (then publish the ADP page with its three PNGs)
@@ -146,6 +146,51 @@ def adp_table(rows: list) -> str:
             f'<th>front</th></tr></thead><tbody>{body}</tbody></table></div>')
 
 
+def compare_table(fam: str, la: dict, tid: str) -> tuple:
+    """EDAP against ADP for one family: the configs in ADP order, each with both ranks, both G values and G_E (EDAP =
+    E x ADP, so energy alone moves a config between the two orders). Returns (table, Spearman rank correlation,
+    ADP #1, EDAP #1)."""
+    ed = {c["config"]: c for c in json.loads((EDAP / f"ranking_{fam}.json").read_text())["configs"]}
+    g = la["adp"][fam]["G_ADP"]
+    if set(g) != set(ed):
+        raise ValueError(f"{fam}: the EDAP and ADP results cover different configs")
+    adp_order = sorted(g, key=lambda c: (g[c], c))
+    r_adp = {c: k + 1 for k, c in enumerate(adp_order)}
+    n = len(adp_order)
+    rho = 1 - 6 * sum((ed[c]["rank"] - r_adp[c]) ** 2 for c in g) / (n * (n * n - 1))
+
+    def delta(c: str) -> str:
+        d = ed[c]["rank"] - r_adp[c]
+        return "0" if d == 0 else f"+{d}" if d > 0 else f"−{-d}"
+    body = "".join(f'<tr{" class=\"top\"" if 1 in (r_adp[c], ed[c]["rank"]) else ""}><td>{r_adp[c]}</td><td>{cx(c)}</td>'
+                   f'<td>{g[c]:.3f}</td><td>{ed[c]["rank"]}</td><td>{ed[c]["G_EDAP"]:.3f}</td><td>{delta(c)}</td>'
+                   f'<td>{ed[c]["G_E"]:.3f}</td></tr>' for c in adp_order)
+    table = (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>ADP #</th><th>R × C</th><th>G<sub>ADP</sub></th>'
+             f'<th>EDAP #</th><th>G<sub>EDAP</sub></th><th>Δ #</th><th>G<sub>E</sub></th></tr></thead><tbody>{body}'
+             f'</tbody></table></div>')
+    edap1 = min(ed, key=lambda c: ed[c]["rank"])
+    return table, rho, adp_order[0], edap1
+
+
+def edap_vs_adp_section(la: dict) -> str:
+    """The two metrics side by side per family (user, 2026-10-17)."""
+    cards = []
+    for fam, title, tid in (("fc", "FC", "t_cmp_fc"), ("attention", "Attention head", "t_cmp_att")):
+        table, rho, a1, e1 = compare_table(fam, la, tid)
+        top = f"#1 under both: {cx(a1)}" if a1 == e1 else f"#1 by ADP: {cx(a1)}; by EDAP: {cx(e1)}"
+        cards.append(f'  <div class="family">\n    <h2>{title}</h2>\n    <p class="muted">{top}. Rank correlation '
+                     f'(Spearman) between the two orders: {rho:.2f}.</p>\n    {table}\n  </div>')
+    cards_html = "\n".join(cards)
+    return f"""<section aria-labelledby="h_cmp">
+  <h2 id="h_cmp">EDAP against ADP, per family</h2>
+  <p class="lede">EDAP is energy × ADP, so the two orders differ only through energy: a config with a low G<sub>E</sub> moves up under EDAP, one with a high G<sub>E</sub> moves down. Rows in ADP order; # is the rank (1 = best); Δ # = the EDAP rank − the ADP rank, so + means worse under EDAP. Shaded: #1 under either metric.</p>
+  <div class="families">
+{cards_html}
+  </div>
+</section>
+"""
+
+
 def analysis_section() -> str:
     """Why attention and FC differ (experiment.md §9), from dse/breakdown.py's breakdown.json."""
     bd = json.loads((RESULTS / "breakdown.json").read_text())
@@ -201,6 +246,7 @@ def main() -> int:
         "Attention G_ADP against the FC G_ADP for 12 crossbar configs, with the Pareto front",
         f"x = G<sub>ADP</sub> in FC, y = G<sub>ADP</sub> in attention; each is area × latency ÷ the largest on each workload, geometric mean over the family's workloads. Pareto front, from the best in FC to the best in attention: {front_text(la['adp']['cross']['configs'], 'G_FC')}. The circles mark equal distance d from the origin; the table is sorted by d. {cx(la['adp']['cross']['configs'][0]['config'])} (d = {la['adp']['cross']['configs'][0]['d']:.3f}) and {cx(la['adp']['cross']['configs'][1]['config'])} (d = {la['adp']['cross']['configs'][1]['d']:.3f}) are {100 * (la['adp']['cross']['configs'][1]['d'] / la['adp']['cross']['configs'][0]['d'] - 1):.2f} % apart: a tie.")}  {adp_table(la["adp"]["cross"]["configs"])}
 </section>
+{edap_vs_adp_section(la)}
 <div class="notes muted">
   <p>Latency = cycles ÷ Fmax, with Fmax the mean of the three VTR seeds; area counts CLBs, crossbar tiles and memory blocks from VPR. The 16 attention builds of the d = 64 shapes at C = 64 use VPR's own memory count, 5–8 blocks above the simulator's prediction.</p>
   <p>The three panels side by side (for a paper): <code>v3/dse/results/adp/dse_la.pdf</code>. Scores: <code>v3/dse/results/adp/latency_area.json</code>. The earlier EDAP rankings stay in <code>v3/dse/results/edap/ranking_*.json</code>.</p>
