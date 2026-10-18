@@ -90,6 +90,8 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 | 2026-10-17 | **v2/ is untracked and removed from the tree** ("now we are fully committed to v3"). Its last state is the tag `v2-final`; the copy lock (`tools/copies.py`) reads its sources from the tag; the F1 gate no longer runs v2. | user |
 | 2026-10-17 | **`CLAUDE.md` is rewritten for v3** (112 lines; the v2-era text is commit `d44e71d`). | user |
 | 2026-10-17 | **One ranking notation for both views:** per workload, score = value ÷ the worst config's value (1 = the worst, lower is better); $G_X$ = their geometric mean over a family's workloads, $X$ = A, D, E, ADP, EDAP. The EDAP view changes from best ÷ EDAP (higher is better) to this; its ranks and every Pareto front stay; its cross-family distance is now from the origin of $(G_{EDAP}^{FC}, G_{EDAP}^{ATT})$ (`experiment.md` §5). | user |
+| 2026-10-17 | **The pass price: the whole array fires every time, only the rows in use are read, outputs full.** The $R \times C$ cells, the ACAM on every column, the output buffer and the output drain are charged in full; the input-buffer bytes and the input port words follow `ROWS_USED` (P29). The earlier full-array price on both sides overcharged every conversion pass on $R > C$ arrays and every GEMM pass with $K < R$ (`simulator/platform/prices.py`). | user |
+| 2026-10-17 | **Area and energy splits per config** (the (b) and (c) panels): attention = the geometric mean of each share over its 6 shapes; FC = the share of the total summed over its 4 shapes (FC builds without a memory block or a CLB add would make a geometric mean 0). Energy parts: DPE passes, CLB adds + compares, the passes' block-RAM port traffic, memory bytes. | user (recommendation accepted) |
 
 ## Needs you
 
@@ -875,3 +877,24 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   stay first and second, 512×64 and 512×128 swap places 3 and 4, 128×64 stays 5th; its front is unchanged.
   `rank.py --self-test` ALL PASS (26 checks, rewritten for the new direction). `experiment.md` §5 has a notation row,
   §6 and §8 use the names. The published results page is not republished.
+- 2026-10-17 (the pass price; your words: "we always fire full crossbar, every time, it is just no reading all row inputs
+  when only some rows are used", then "outputs full, fix it and re-price"): `prices.py` prices each ledger key (mode, rows
+  used, columns used) on its own: cells, ACAM, output buffer and drain in full, the input-buffer bytes and input port words
+  by the rows used; the dead `activeColumns` argument (an ADC term NL-DPE has no component for) is gone. Effect on the 72
+  attention builds (nothing but energy changed): e_total −6 % at 128×64, −15 % at 256×64, −27 % at 512×64, −41 % at
+  1024×64, −14 % at 512×128, −12 to −15 % at 1024×256, under −1 % at 128×128; an attention pass now costs 13.9 pJ at
+  128×64 (14.8 full), 23.0 at 1024×64 (37.3), 91.7 at 1024×256 (103.4). FC: 12 of 48 rows (K < R with V = 1) are
+  7.4–39.0 % cheaper. Rankings: the latency vs area view and the ADP cross are bit-identical (no energy in them); EDAP
+  per family keeps #1 and #2 in both families (FC 512×128 then 512×256 now, 256×128 third; attention 128×64, 256×64);
+  1024×64 rises 9 → 6 in attention and 10 → 9 in FC; EDAP across the families: 256×64 (d 0.340), 256×128 (0.366),
+  512×64 (0.369, now on the front), 512×128, 1024×64, 128×64 (6th). Tests: `testFcRows.py` rewritten (the full extent
+  reproduces v2's energy exactly; the used extent equals v2 minus the unread rows' input cost, computed from the raw price
+  table; 48/48, max relative difference 2.2e-16); `checkEquivalence.py` leaves the 8 re-priced columns to it (the
+  reports, counts and the other columns stay equal). Gates: F2 ALL PASS, equivalence ALL EQUAL, head params 72/72, rank
+  self-test 26. `dse/breakdown.py` now writes `area_split` and `energy_split` per config (and prints both tables), the
+  pass count from the rows' new `passes` column, the mean price paid per pass beside the full-array price; the per-family
+  figures have three panels (Pareto front, area split, energy split). Energy splits: attention DPE passes 54–70 %, CLB
+  25–40 %, port traffic 4–5 %, memory under 1 %; FC DPE 69–88 %, CLB 2–23 %, port traffic 5–17 %. `dse/` got
+  `README.md` (the pipeline, step by step), `run_all.sh` (one command, about a minute) and `data.py` (the two input
+  tables, loaded once for `rank.py` and `breakdown.py`); `experiment.md` §5, §8 ($G_E$ columns), §9.2, §9.4, §9.6 and
+  `simulator.md` §4.7 state the rule and the new numbers; the page is republished.

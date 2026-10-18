@@ -271,7 +271,9 @@ so any order gives the same values, times and counts. A test runs every workload
   - nothing for Azure-Lily is built now: no module models, workloads or tests. Its config comes along with the
     platform copy only because the copied self-tests load both configs.
 - **Energy** = $\sum$ counts × prices, from the platform files and `cost.py`:
-  - crossbar passes, priced as the full array (P29);
+  - crossbar passes: the whole array fires (the cells, the ACAM on every column, the output buffer and the drain);
+    only the rows in use are read, so the input-buffer bytes and the input port words follow `ROWS_USED` (P29;
+    user 2026-10-17, before that every pass was priced as the full array on both sides);
   - CLB adds and compares;
   - memory bytes per access;
   - FIFO traffic.

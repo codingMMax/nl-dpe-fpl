@@ -33,12 +33,11 @@ from pathlib import Path
 
 V3 = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(V3))
-RESULTS = V3 / "dse" / "results"
+from dse import data  # noqa: E402
+
+RESULTS = data.RESULTS
 EDAP = RESULTS / "edap"            # the earlier view: energy x delay x area product ranking
 ADP = RESULTS / "adp"              # the current view: latency vs area per family, area-delay product across them
-ATT_CSV = RESULTS / "att_priced_72.csv"
-SNAP = V3 / "dse" / "fc_snapshot"
-MM2_PER_MWTA = 0.033864e-6          # 1 MWTA = 0.033864 um^2
 
 
 def geomean(xs: list) -> float:
@@ -163,32 +162,16 @@ def adp_cross(fc: dict, at: dict, energy: dict | None = None) -> dict:
     return cross_point(fc["G_ADP"], at["G_ADP"], energy)
 
 
-def attention_points(path: Path = ATT_CSV) -> list:
-    with open(path, newline="") as f:
-        rows = list(csv.DictReader(f))
-    if len(rows) != 72 or any(not r.get("edap") for r in rows):
-        raise SystemExit(f"{path}: expected 72 priced builds (dse/att_rows.py --vtr), got "
-                         f"{sum(bool(r.get('edap')) for r in rows)} of {len(rows)}")
+def attention_points() -> list:
+    """(workload, config, E [pJ], D [ns], A [mm^2]) per priced attention build (dse/data.py)."""
     return [dict(workload=r["shape"], config=r["config"], E=float(r["e_total_pj"]), D=float(r["latency_ns"]),
-                 A=float(r["area_total_mm2"])) for r in rows]
+                 A=float(r["area_total_mm2"])) for r in data.attentionRows()]
 
 
 def fc_points() -> list:
-    from simulator.platform.rows import fcRow
-    from simulator.platform import area
-    from simulator.platform.platform import Platform
-    vtr = area.vtrTable(SNAP / "vtr_results.csv")
-    with open(SNAP / "dse_v2.csv", newline="") as f:
-        snap = [r for r in csv.DictReader(f) if r["family"] == "gemm"]
-    pts = []
-    for r in snap:
-        R, C, M, K, N = (int(r[k]) for k in ("R", "C", "M", "K", "N"))
-        row = fcRow(R, C, (M, K, N), Platform("nl_dpe", rows=R, cols=C), vtr, passExtent=r["pass_extent"])
-        pts.append(dict(workload=f"{M}x{K}x{N}", config=row["config"], E=row["e_total_pj"], D=row["latency_ns"],
-                        A=row["area_total_mwta"] * MM2_PER_MWTA))
-    if len(pts) != 48:
-        raise SystemExit(f"FC: {len(pts)} rows, expected 48")
-    return pts
+    """The same for the 48 FC rows of the v2 snapshot, rebuilt by the v3 model (dse/data.py)."""
+    return [dict(workload=data.fcWorkload(r), config=r["config"], E=r["e_total_pj"], D=r["latency_ns"],
+                 A=r["area_total_mwta"] * data.MM2_PER_MWTA) for r in data.fcRows()]
 
 
 def _self_test() -> None:

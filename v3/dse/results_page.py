@@ -180,22 +180,25 @@ def analysis_section() -> str:
     bd = json.loads((RESULTS / "breakdown.json").read_text())
     pick = ("128x64", "256x64", "256x128", "512x128", "1024x256")
     rows = "".join(
-        f'<tr><td>{cx(c)}</td><td>{bd["fc"][c]["crossbars"]:.0f}</td><td>{100 * bd["fc"][c]["area_xbar"]:.0f} %</td>'
+        f'<tr><td>{cx(c)}</td><td>{bd["fc"][c]["crossbars"]:.0f}</td><td>{100 * bd["fc"][c]["area_split"]["dpe"]:.0f} %</td>'
         f'<td>{bd["fc"][c]["cycles"]:.0f}</td><td>{bd["fc"][c]["fmax_mhz"]:.0f}</td>'
-        f'<td>{bd["attention"][c]["crossbars"]:.0f}</td><td>{100 * bd["attention"][c]["area_clb"]:.0f} %</td>'
+        f'<td>{bd["attention"][c]["crossbars"]:.0f}</td><td>{100 * bd["attention"][c]["area_split"]["clb"]:.0f} %</td>'
         f'<td>{bd["attention"][c]["cycles"]:,.0f}</td><td>{bd["attention"][c]["fmax_mhz"]:.0f}</td></tr>' for c in pick)
     ps = bd["projection_share"]
+    at = bd["attention"]
+    paid = lambda c: at[c]["pass_price_pj"]           # noqa: E731  the mean price paid per pass on the attention builds
+    kp = lambda c: f"{at[c]['passes'] / 1000:.0f}k"   # noqa: E731
     return f"""<section aria-labelledby="h_why">
   <h2 id="h_why">Why attention and FC differ</h2>
   <p class="lede">FC rewards large crossbars: a larger array holds more weights per tile, so a layer needs fewer tiles and less area, at the cost of longer passes. Attention rewards small crossbars: its crossbar count is set by the mapping, not by the array size, and each crossbar works on an I × I window (I = min(R, C)). A larger array adds area, energy per pass and soft logic, but no useful work.</p>
   <div class="tablewrap"><table id="t_why"><thead><tr><th>R × C</th><th>FC crossbars</th><th>FC tile area</th><th>FC cycles</th><th>FC MHz</th><th>attention crossbars</th><th>attention CLB area</th><th>attention cycles</th><th>attention MHz</th></tr></thead><tbody>{rows}</tbody></table></div>
-  <p class="legend muted">Means over each family's workloads; area shares from the VPR counts.</p>
+  <p class="legend muted">Crossbars, cycles and MHz: means over each family's workloads. Area shares from the VPR counts, summarized as in the figures above: attention the geometric mean of each share over its shapes, FC the share of the area summed over its shapes.</p>
   <div class="notes">
     <p><b>Architecture.</b> FC is a weight-stationary GEMV: the crossbars store the weights, 1 to 64 tiles per build. Attention multiplies activations by activations, so its crossbars act as EXP and LOG converters with identity weights on one I-wide window per pass. Their number follows the head dimension (78, 146 or 278–297 crossbars for d = 16, 32, 64) and hardly changes with the array size; at 1024 × 64 only 6 % of a converter's cells are in use.</p>
-    <p><b>Area.</b> FC area is crossbar tiles (75–96 %), and a larger tile stores a weight in less area (8× the grid area for 32× the cells), so FC area falls as the array grows. Attention area is soft logic (65–86 % CLB: about 10.4k CLBs at C = 64, 12.9k at 128, 17.5k at 256), plus crossbar tiles that grow with R × C.</p>
+    <p><b>Area.</b> FC area is crossbar tiles (77–97 %), and a larger tile stores a weight in less area (8× the grid area for 32× the cells), so FC area falls as the array grows. Attention area is soft logic (65–86 % CLB: about 10.4k CLBs at C = 64, 12.9k at 128, 17.5k at 256), plus crossbar tiles that grow with R × C.</p>
     <p><b>Latency.</b> FC is one pass per tile, 52–172 cycles at 358–451 MHz. Attention takes 12k–22k cycles at 110–131 MHz. Its projections stream every token through one GEMM copy and end at n × (⌈min(d<sub>model</sub>, R)/5⌉ + 8) cycles, a median {100 * ps['median']:.0f} % of the total ({100 * ps['min']:.0f}–{100 * ps['max']:.0f} %); that part grows with R only while d<sub>model</sub> &gt; R. The rest is bound by the score stream into the softmax (one 40-bit port, about n²/5 cycles), whatever the array size.</p>
-    <p><b>Energy.</b> A crossbar pass is priced as the full array (14.8 pJ at 128 × 64 up to 103.4 pJ at 1024 × 256). FC needs fewer passes as the array grows (30 to 2), so its energy falls with size. Attention's pass count depends on I only (about 62k, 31k, 16k at I = 64, 128, 256), so at a fixed I its energy rises with R.</p>
-    <p><b>Assumptions behind it.</b> The fixed attention mapping (the crossbar count does not follow the array size), the full-array pass price, one projection copy, the 40-bit ports, and FC as a single GEMV. Changing any of them could move the attention ranking.</p>
+    <p><b>Energy.</b> A crossbar pass fires the whole array (the cells, the ACAM on every column, the output buffer) and reads only the rows in use, so an attention pass costs {paid('128x64'):.1f} pJ at 128 × 64 and {paid('1024x256'):.1f} pJ at 1024 × 256 on average (the full array would be {at['128x64']['pass_price_full_pj']:.1f} and {at['1024x256']['pass_price_full_pj']:.1f}). FC needs fewer passes as the array grows (30 to 2), so its energy falls with size. Attention's pass count depends on I only (about {kp('128x64')}, {kp('128x128')}, {kp('256x256')} at I = 64, 128, 256), and the price still grows with R through the cells and the ACAM, so at a fixed I its energy rises with R.</p>
+    <p><b>Assumptions behind it.</b> The fixed attention mapping (the crossbar count does not follow the array size), the pass price (the whole array fires; only the rows in use are read), one projection copy, the 40-bit ports, and FC as a single GEMV. Changing any of them could move the attention ranking.</p>
   </div>
 </section>
 """
@@ -219,12 +222,12 @@ def main() -> int:
 
 {edap_vs_adp_section(la)}
 {la_section("fc", "FC", "dse_la_fc.png",
-            "FC: G_D against G_A for 12 crossbar configs with the Pareto front, and each config's area split into DPE tiles, CLBs and memory as stacked bars",
-            f"{nfc} workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. (a) Pareto front, from the smallest area to the lowest latency: {front_text(la['fc']['configs'])}. (b) Each config's area split into DPE tiles, CLBs and memory, as the share of the area summed over the {nfc} shapes (several FC builds have no memory block, so a geometric mean of the memory share would be 0); front configs in bold.",
+            "FC: G_D against G_A for 12 crossbar configs with the Pareto front, then each config's area split and energy split as stacked bars",
+            f"{nfc} workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. (a) Pareto front, from the smallest area to the lowest latency: {front_text(la['fc']['configs'])}. (b) Each config's area split into DPE tiles, CLBs and memory blocks (the VPR counts). (c) Its energy split into the DPE passes, the CLB adds, the passes' block-RAM port traffic and the memory bytes (the simulator's ledger). Both as the share of the total summed over the {nfc} shapes: several FC builds have no memory block and no CLB add, so a geometric mean of those shares would be 0. Front configs in bold.",
             la["fc"]["configs"])}
 {la_section("att", "Attention head", "dse_la_attention.png",
-            "Attention: G_D against G_A for 12 crossbar configs with the Pareto front, and each config's area split into DPE tiles, CLBs and memory as stacked bars",
-            f"{nat} workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). (a) Pareto front: {front_text(la['attention']['configs'])}, the smallest area and the lowest latency at once. (b) Each config's area split into DPE tiles, CLBs and memory, the geometric mean of each share over the {nat} shapes; front config in bold.",
+            "Attention: G_D against G_A for 12 crossbar configs with the Pareto front, then each config's area split and energy split as stacked bars",
+            f"{nat} workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). (a) Pareto front: {front_text(la['attention']['configs'])}, the smallest area and the lowest latency at once. (b) Each config's area split into DPE tiles, CLBs and memory blocks (the VPR counts). (c) Its energy split into the DPE passes, the CLB adds and compares, the passes' block-RAM port traffic and the memory bytes (the simulator's ledger). Both as the geometric mean of each share over the {nat} shapes. Front config in bold.",
             la["attention"]["configs"])}
 {analysis_section()}
 {figure("cross", "Across the families: area-delay product", "dse_adp_cross.png",

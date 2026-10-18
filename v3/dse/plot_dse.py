@@ -12,7 +12,8 @@ ADP view (the current one, user 2026-10-16: latency vs area per family, area-del
 from adp/latency_area.json, written to adp/:
   dse_la.{png,pdf}                              three panels side by side (for a paper)
   dse_la_fc.png, dse_la_attention.png           per family: (a) G_D vs G_A with the Pareto front, (b) the area split
-                                                per config (DPE tiles / CLBs / memory; dse/results/breakdown.json)
+                                                per config (DPE tiles / CLBs / memory blocks), (c) the energy split
+                                                (DPE passes / CLB / port traffic / memory bytes); dse/results/breakdown.json
   dse_adp_cross.png                             G_ADP in FC (x) vs G_ADP in attention (y), circles of equal distance
 EDAP view (the earlier one: energy x delay x area product), from edap/ranking_*.json, written to edap/:
   dse_{fc,attention}.{png,pdf}   per family, four panels:
@@ -351,17 +352,21 @@ def adp_panel(ax, rows: list, n_fc: int, n_att: int, title: str) -> None:
                  Line2D([], [], color="#9a9a9a", lw=.7, ls=":", label="equal distance d from the origin")]
 
 
-SPLIT = (("dpe", "DPE tiles", "#0072B2", "white"), ("clb", "CLBs", "#E69F00", "black"),
-         ("mem", "memory", "#009E73", "white"))
+AREA_SPLIT = (("dpe", "DPE tiles", "#0072B2", "white"), ("clb", "CLBs", "#E69F00", "black"),
+              ("mem", "memory blocks", "#009E73", "white"))
+ENERGY_SPLIT = (("dpe", "DPE passes", "#0072B2", "white"), ("clb", "CLB adds + compares", "#E69F00", "black"),
+                ("traffic", "port traffic (block RAM)", "#009E73", "white"),
+                ("mem", "memory bytes (block RAM)", "#CC79A7", "white"))
 
 
-def split_panel(ax, split: dict, front: set, title: str) -> None:
-    """The area split per config (user, 2026-10-17; dse/breakdown.py's area_split): stacked bars of the DPE tiles, the
-    CLBs and the memory in % of the area; configs grouped by R, the front configs' labels in bold."""
+def split_panel(ax, split: dict, front: set, title: str, parts: tuple = AREA_SPLIT, ylabel: str = "share of the area (%)"
+                ) -> None:
+    """A split per config (user, 2026-10-17; dse/breakdown.py's area_split / energy_split): stacked bars of the parts
+    in % of the total; configs grouped by R, the front configs' labels in bold, segments of 6 % and more labelled."""
     cfgs = [f"{r}x{c}" for r in RS for c in CS]
     x = np.arange(len(cfgs))
     bottom = np.zeros(len(cfgs))
-    for k, lab, col, tcol in SPLIT:
+    for k, lab, col, tcol in parts:
         v = np.array([100 * split[c][k] for c in cfgs])
         ax.bar(x, v, bottom=bottom, color=col, width=0.72, label=lab, zorder=2)
         for xi, (b, h) in enumerate(zip(bottom, v)):
@@ -376,9 +381,10 @@ def split_panel(ax, split: dict, front: set, title: str) -> None:
             t.set_fontweight("bold")
     ax.set_xlim(-0.6, len(cfgs) - 0.4)
     ax.set_ylim(0, 100)
-    ax.set_ylabel("share of the area (%)")
+    ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=10.5)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=3, fontsize=9, frameon=False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=2 if len(parts) > 3 else 3, fontsize=9,
+              frameon=False)
 
 
 def latency_area(la: dict, bd: dict) -> dict:
@@ -408,21 +414,25 @@ def latency_area(la: dict, bd: dict) -> dict:
     for ext in ("png", "pdf"):
         fig.savefig(ADP / f"dse_la.{ext}", dpi=150)
     plt.close(fig)
-    fam_titles = {     # the per-family figures (user, 2026-10-17): (a) the Pareto front, (b) the area split
-        "fc": (f"(a) FC: latency vs area  ({nfc} workloads)",
-               f"(b) FC: area split per config\n(share of the area summed over the {nfc} shapes)"),
-        "attention": (f"(a) attention head: latency vs area  ({nat} workloads)",
-                      f"(b) attention head: area split per config\n(geometric mean of each share over the {nat} shapes)")}
+    how = {"fc": f"share of the total summed over the {nfc} shapes",
+           "attention": f"geometric mean of each share over the {nat} shapes"}
+    name = {"fc": "FC", "attention": "attention head"}
+    # the per-family figures (user, 2026-10-17): (a) the Pareto front, (b) the area split, (c) the energy split
     for fam, fn, stem, loc in draw:
         if fam == "cross":
             fig, ax = plt.subplots(figsize=(6.8, 7.0), constrained_layout=True)
             fn(ax)
         else:
-            fig, (ax, bx) = plt.subplots(1, 2, figsize=(13.8, 7.0), constrained_layout=True,
-                                         gridspec_kw=dict(width_ratios=[1, 1.05]))
-            la_panel(ax, la[fam]["configs"], fam_titles[fam][0])
-            split_panel(bx, {c: v["area_split"] for c, v in bd[fam].items()},
-                        {c["config"] for c in la[fam]["configs"] if c["front"]}, fam_titles[fam][1])
+            fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(20.4, 7.0), constrained_layout=True,
+                                             gridspec_kw=dict(width_ratios=[1.08, 1, 1]))
+            n = nfc if fam == "fc" else nat
+            la_panel(ax, la[fam]["configs"], f"(a) {name[fam]}: latency vs area  ({n} workloads)")
+            front = {c["config"] for c in la[fam]["configs"] if c["front"]}
+            split_panel(bx, {c: v["area_split"] for c, v in bd[fam].items()}, front,
+                        f"(b) {name[fam]}: area split per config\n({how[fam]})")
+            split_panel(cx, {c: v["energy_split"] for c, v in bd[fam].items()}, front,
+                        f"(c) {name[fam]}: energy split per config\n({how[fam]})", ENERGY_SPLIT,
+                        "share of the energy (%)")
         place_labels(fig, ax)
         ax.legend(handles=hs + getattr(ax, "_extra", []), loc=loc, fontsize=8.5, framealpha=.92)
         fig.savefig(ADP / f"{stem}.png", dpi=160)

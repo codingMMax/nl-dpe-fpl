@@ -4,240 +4,276 @@
    "crossbars": 30,
    "tile_cells": 5,
    "clb_count": 4.75,
-   "area_clb": 0.041098752519700826,
-   "area_xbar": 0.9374624140658623,
-   "area_mem": 0.021438833414436885,
    "cycles": 52.25,
    "fmax_mhz": 378.86225,
-   "e_pass": 0.7090084339258804,
-   "e_adds": 0.19008974262339423,
-   "passes": 30.0,
+   "passes": 30,
    "pass_price_pj": 14.783150000000001,
+   "pass_price_full_pj": 14.783150000000001,
    "area_split": {
     "dpe": 0.9569377990430622,
     "clb": 0.030303030303030304,
     "mem": 0.012759170653907496,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.6949443962373567,
+    "clb": 0.20879716811425822,
+    "traffic": 0.09075130516406972,
+    "mem": 0.005507130484315342,
+    "method": "share of the total summed over the shapes"
    }
   },
   "128x128": {
    "crossbars": 15,
    "tile_cells": 11,
    "clb_count": 3.75,
-   "area_clb": 0.03234703822293517,
-   "area_xbar": 0.9479325256509704,
-   "area_mem": 0.019720436126094445,
    "cycles": 65.25,
    "fmax_mhz": 401.67175,
-   "e_pass": 0.7184242577337605,
-   "e_adds": 0.20571477004116268,
-   "passes": 15.0,
+   "passes": 15,
    "pass_price_pj": 27.6655,
+   "pass_price_full_pj": 27.6655,
    "area_split": {
     "dpe": 0.9663250366032211,
     "clb": 0.021961932650073207,
     "mem": 0.01171303074670571,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7029364536942512,
+    "clb": 0.22570909968777464,
+    "traffic": 0.06540125541952983,
+    "mem": 0.0059531911984443825,
+    "method": "share of the total summed over the shapes"
    }
   },
   "128x256": {
    "crossbars": 8,
    "tile_cells": 21,
    "clb_count": 3.25,
-   "area_clb": 0.02411316930806373,
-   "area_xbar": 0.9602987139212582,
-   "area_mem": 0.015588116770677967,
    "cycles": 84.75,
    "fmax_mhz": 438.13925,
-   "e_pass": 0.7469428644300706,
-   "e_adds": 0.19060682973309429,
-   "passes": 8.0,
+   "passes": 8,
    "pass_price_pj": 53.430200000000006,
+   "pass_price_full_pj": 53.430200000000006,
    "area_split": {
     "dpe": 0.9696969696969697,
     "clb": 0.01875901875901876,
     "mem": 0.011544011544011544,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7182772890154903,
+    "clb": 0.22391239389006826,
+    "traffic": 0.051904514916448145,
+    "mem": 0.005905802177993299,
+    "method": "share of the total summed over the shapes"
    }
   },
   "256x64": {
    "crossbars": 15,
    "tile_cells": 6,
    "clb_count": 11.5,
-   "area_clb": 0.14560593415468642,
-   "area_xbar": 0.8297381629365846,
-   "area_mem": 0.024655902908728905,
    "cycles": 77.25,
    "fmax_mhz": 400.71725000000004,
-   "e_pass": 0.7495674486966604,
-   "e_adds": 0.1017362240571613,
-   "passes": 15.0,
+   "passes": 15,
    "pass_price_pj": 17.99395,
+   "pass_price_full_pj": 17.99395,
    "area_split": {
     "dpe": 0.8737864077669902,
     "clb": 0.11165048543689321,
     "mem": 0.014563106796116505,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7229310116838416,
+    "clb": 0.1383883058573163,
+    "traffic": 0.12926736653668372,
+    "mem": 0.009413315922158506,
+    "method": "share of the total summed over the shapes"
    }
   },
   "256x128": {
    "crossbars": 7.5,
    "tile_cells": 12,
    "clb_count": 5,
-   "area_clb": 0.08144176486614178,
-   "area_xbar": 0.8938411082487558,
-   "area_mem": 0.024717126885102303,
    "cycles": 90.25,
    "fmax_mhz": 440.25250000000005,
-   "e_pass": 0.7735934289996009,
-   "e_adds": 0.11658934433338336,
    "passes": 7.5,
    "pass_price_pj": 32.1863,
+   "pass_price_full_pj": 32.1863,
    "area_split": {
     "dpe": 0.9326424870466321,
     "clb": 0.05181347150259067,
     "mem": 0.015544041450777202,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7415353193702137,
+    "clb": 0.15871567814285,
+    "traffic": 0.08895299764460018,
+    "mem": 0.010796004842336091,
+    "method": "share of the total summed over the shapes"
    }
   },
   "256x256": {
    "crossbars": 4,
    "tile_cells": 24,
    "clb_count": 3.75,
-   "area_clb": 0.05316157034724639,
-   "area_xbar": 0.9299159012731079,
-   "area_mem": 0.01692252837964574,
    "cycles": 109.75,
    "fmax_mhz": 450.607,
-   "e_pass": 0.8051602639830084,
-   "e_adds": 0.10979467263150211,
-   "passes": 4.0,
+   "passes": 4,
    "pass_price_pj": 60.571000000000005,
+   "pass_price_full_pj": 60.571000000000005,
    "area_split": {
     "dpe": 0.9481481481481482,
     "clb": 0.037037037037037035,
     "mem": 0.014814814814814815,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7617596193201536,
+    "clb": 0.16244768176806806,
+    "traffic": 0.06474283931683728,
+    "mem": 0.011049859594940979,
+    "method": "share of the total summed over the shapes"
    }
   },
   "512x64": {
    "crossbars": 8.5,
    "tile_cells": 8,
    "clb_count": 19.5,
-   "area_clb": 0.2491138925040844,
-   "area_xbar": 0.7471547642123335,
-   "area_mem": 0.0037313432835820895,
    "cycles": 114.75,
    "fmax_mhz": 392.045,
-   "e_pass": 0.7720455318072654,
-   "e_adds": 0.029646370742727694,
    "passes": 8.5,
-   "pass_price_pj": 24.415550000000003,
+   "pass_price_pj": 23.46515,
+   "pass_price_full_pj": 24.415550000000003,
    "area_split": {
     "dpe": 0.7727272727272727,
     "clb": 0.2215909090909091,
     "mem": 0.005681818181818182,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7586929618581314,
+    "clb": 0.0619167669746277,
+    "traffic": 0.16605340283962397,
+    "mem": 0.013336868327616859,
+    "method": "share of the total summed over the shapes"
    }
   },
   "512x128": {
    "crossbars": 4.25,
    "tile_cells": 15,
    "clb_count": 6.5,
-   "area_clb": 0.11909523809523809,
-   "area_xbar": 0.8769047619047619,
-   "area_mem": 0.004,
    "cycles": 127.75,
    "fmax_mhz": 444.539,
-   "e_pass": 0.8161785075636896,
-   "e_adds": 0.0363594679785778,
    "passes": 4.25,
-   "pass_price_pj": 41.227900000000005,
+   "pass_price_pj": 40.2775,
+   "pass_price_full_pj": 41.227900000000005,
    "area_split": {
     "dpe": 0.901060070671378,
     "clb": 0.09187279151943463,
     "mem": 0.007067137809187279,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.7941062535882383,
+    "clb": 0.07558624045574405,
+    "traffic": 0.11402623376441683,
+    "mem": 0.016281272191600995,
+    "method": "share of the total summed over the shapes"
    }
   },
   "512x256": {
    "crossbars": 2.25,
    "tile_cells": 30,
    "clb_count": 4.5,
-   "area_clb": 0.07418181818181818,
-   "area_xbar": 0.9218181818181818,
-   "area_mem": 0.004,
    "cycles": 147.25,
    "fmax_mhz": 450.607,
-   "e_pass": 0.8513003172534327,
-   "e_adds": 0.04100165693720324,
    "passes": 2.25,
-   "pass_price_pj": 74.85260000000001,
+   "pass_price_pj": 73.90220000000001,
+   "pass_price_full_pj": 74.85260000000001,
    "area_split": {
     "dpe": 0.9310344827586207,
     "clb": 0.06206896551724138,
     "mem": 0.006896551724137931,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.8229221792626343,
+    "clb": 0.08063372265804908,
+    "traffic": 0.07907559848862178,
+    "mem": 0.017368499590694964,
+    "method": "share of the total summed over the shapes"
    }
   },
   "1024x64": {
    "crossbars": 6.5,
    "tile_cells": 11,
    "clb_count": 19.25,
-   "area_clb": 0.20098020699554278,
-   "area_xbar": 0.7936434489184357,
-   "area_mem": 0.005376344086021506,
    "cycles": 140,
    "fmax_mhz": 357.7845,
-   "e_pass": 0.7562443376700283,
-   "e_adds": 0.013306489653922442,
    "passes": 6.5,
-   "pass_price_pj": 37.258750000000006,
+   "pass_price_pj": 30.605950000000004,
+   "pass_price_full_pj": 37.258750000000006,
    "area_split": {
     "dpe": 0.7835616438356164,
     "clb": 0.21095890410958903,
     "mem": 0.005479452054794521,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.796077226028047,
+    "clb": 0.021608847838484477,
+    "traffic": 0.16835029209304106,
+    "mem": 0.013963634040427473,
+    "method": "share of the total summed over the shapes"
    }
   },
   "1024x128": {
    "crossbars": 3.25,
    "tile_cells": 21,
    "clb_count": 6.5,
-   "area_clb": 0.09286845565383696,
-   "area_xbar": 0.9015135668180732,
-   "area_mem": 0.0056179775280898875,
    "cycles": 153,
    "fmax_mhz": 400.4195,
-   "e_pass": 0.8106151631069893,
-   "e_adds": 0.017697755838965625,
    "passes": 3.25,
-   "pass_price_pj": 59.3111,
+   "pass_price_pj": 52.658300000000004,
+   "pass_price_full_pj": 59.3111,
    "area_split": {
     "dpe": 0.9069767441860465,
     "clb": 0.08637873754152824,
     "mem": 0.006644518272425249,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.8420710420232722,
+    "clb": 0.026649566423678772,
+    "traffic": 0.1140584459636421,
+    "mem": 0.017220945589406893,
+    "method": "share of the total summed over the shapes"
    }
   },
   "1024x256": {
    "crossbars": 1.75,
    "tile_cells": 40,
    "clb_count": 4.5,
-   "area_clb": 0.06114911080711354,
-   "area_xbar": 0.93296853625171,
-   "area_mem": 0.0058823529411764705,
    "cycles": 172.5,
    "fmax_mhz": 450.607,
-   "e_pass": 0.8573521562440118,
-   "e_adds": 0.021195036014320618,
    "passes": 1.75,
-   "pass_price_pj": 103.4158,
+   "pass_price_pj": 96.763,
+   "pass_price_full_pj": 103.4158,
    "area_split": {
     "dpe": 0.9333333333333333,
     "clb": 0.06,
     "mem": 0.006666666666666667,
-    "method": "share of the area summed over the shapes"
+    "method": "share of the total summed over the shapes"
+   },
+   "energy_split": {
+    "dpe": 0.8776372375888968,
+    "clb": 0.028148510783533354,
+    "traffic": 0.07602468843094871,
+    "mem": 0.018189563196621263,
+    "method": "share of the total summed over the shapes"
    }
   }
  },
@@ -246,19 +282,22 @@
    "crossbars": 230.83333333333334,
    "tile_cells": 5,
    "clb_count": 10440.833333333334,
-   "area_clb": 0.8603683744341415,
-   "area_xbar": 0.09288928511469373,
-   "area_mem": 0.04674234045116474,
    "cycles": 12217.666666666666,
    "fmax_mhz": 130.33566666666667,
-   "e_pass": 0.5460454557245951,
-   "e_adds": 0.36042851147605065,
-   "passes": 62203.50004340527,
-   "pass_price_pj": 14.783150000000001,
+   "passes": 62203.5,
+   "pass_price_pj": 13.846337168783782,
+   "pass_price_full_pj": 14.783150000000001,
    "area_split": {
     "dpe": 0.09268304110511003,
     "clb": 0.8602534746256875,
     "mem": 0.045800728937693776,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.5428802439391547,
+    "clb": 0.3976835270855746,
+    "traffic": 0.05083753994947194,
+    "mem": 0.008326158652261283,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.5
@@ -267,19 +306,22 @@
    "crossbars": 228.16666666666666,
    "tile_cells": 11,
    "clb_count": 12886.666666666666,
-   "area_clb": 0.8121872787637324,
-   "area_xbar": 0.15376117507922699,
-   "area_mem": 0.03405154615704065,
    "cycles": 12307,
    "fmax_mhz": 124.2385,
-   "e_pass": 0.5559413495361958,
-   "e_adds": 0.3698141485537952,
-   "passes": 32110.0,
-   "pass_price_pj": 27.6655,
+   "passes": 32110,
+   "pass_price_pj": 27.58381714737315,
+   "pass_price_full_pj": 27.6655,
    "area_split": {
     "dpe": 0.1530280427447479,
     "clb": 0.8119510283088217,
     "mem": 0.033346554177667714,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.5556043578614489,
+    "clb": 0.3849617409666614,
+    "traffic": 0.050731098143048145,
+    "mem": 0.00791714930601576,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 1.0
@@ -288,19 +330,22 @@
    "crossbars": 228.16666666666666,
    "tile_cells": 21,
    "clb_count": 12913.666666666666,
-   "area_clb": 0.7132138711982019,
-   "area_xbar": 0.2570003957767797,
-   "area_mem": 0.029785733025018423,
    "cycles": 12307,
    "fmax_mhz": 122.52333333333334,
-   "e_pass": 0.6954104919032061,
-   "e_adds": 0.23976257905577902,
-   "passes": 32109.999993761325,
-   "pass_price_pj": 53.430200000000006,
+   "passes": 32110,
+   "pass_price_pj": 53.34851672664461,
+   "pass_price_full_pj": 53.430200000000006,
    "area_split": {
     "dpe": 0.25604432311571834,
     "clb": 0.7127687147205042,
     "mem": 0.02922593953702977,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6954687085778494,
+    "clb": 0.24914891706482825,
+    "traffic": 0.04961606914918348,
+    "mem": 0.00512401354711561,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.5
@@ -309,19 +354,22 @@
    "crossbars": 227.33333333333334,
    "tile_cells": 6,
    "clb_count": 10425,
-   "area_clb": 0.845819246282651,
-   "area_xbar": 0.10830881663496839,
-   "area_mem": 0.04587193708238063,
    "cycles": 14435.833333333334,
    "fmax_mhz": 130.55833333333334,
-   "e_pass": 0.569147155438669,
-   "e_adds": 0.3099294565107489,
-   "passes": 61499.499924511656,
-   "pass_price_pj": 17.99395,
+   "passes": 61499.5,
+   "pass_price_pj": 15.164254530202223,
+   "pass_price_full_pj": 17.99395,
    "area_split": {
     "dpe": 0.10811039280101231,
     "clb": 0.8457003462753062,
     "mem": 0.04494575121289365,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.5643034652720693,
+    "clb": 0.37900557884138625,
+    "traffic": 0.04844619559780187,
+    "mem": 0.0079717226657354,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.25
@@ -330,19 +378,22 @@
    "crossbars": 224.66666666666666,
    "tile_cells": 12,
    "clb_count": 12892,
-   "area_clb": 0.802737778809998,
-   "area_xbar": 0.16361973143769676,
-   "area_mem": 0.033642489752305216,
    "cycles": 13696.166666666666,
    "fmax_mhz": 126.32666666666667,
-   "e_pass": 0.5766361160705942,
-   "e_adds": 0.33384865553156046,
-   "passes": 31406.00001657019,
-   "pass_price_pj": 32.1863,
+   "passes": 31406,
+   "pass_price_pj": 30.234344245994535,
+   "pass_price_full_pj": 32.1863,
    "area_split": {
     "dpe": 0.16293183148246582,
     "clb": 0.8025026289970015,
     "mem": 0.03294508752209475,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.5752232691310956,
+    "clb": 0.36804162485264225,
+    "traffic": 0.04830140370833922,
+    "mem": 0.007604097966365876,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.5
@@ -351,19 +402,22 @@
    "crossbars": 225.33333333333334,
    "tile_cells": 24,
    "clb_count": 17521.166666666668,
-   "area_clb": 0.7485787684407237,
-   "area_xbar": 0.2258773028636214,
-   "area_mem": 0.025543928695654985,
    "cycles": 15608.666666666666,
    "fmax_mhz": 114.37316666666668,
-   "e_pass": 0.5945614249687474,
-   "e_adds": 0.3348143480803356,
-   "passes": 16363.000005503183,
-   "pass_price_pj": 60.571000000000005,
+   "passes": 16363,
+   "pass_price_pj": 60.16702080368982,
+   "pass_price_full_pj": 60.571000000000005,
    "area_split": {
     "dpe": 0.2250738984397548,
     "clb": 0.7482725763826434,
     "mem": 0.025168642826387935,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.5939427631304128,
+    "clb": 0.3483109387492343,
+    "traffic": 0.048039262817757465,
+    "mem": 0.007168377151575318,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 1.0
@@ -372,19 +426,22 @@
    "crossbars": 226.33333333333334,
    "tile_cells": 8,
    "clb_count": 10423.833333333334,
-   "area_clb": 0.816654520644513,
-   "area_xbar": 0.13898832242158177,
-   "area_mem": 0.04435715693390512,
    "cycles": 17699.5,
    "fmax_mhz": 129.84583333333333,
-   "e_pass": 0.6017150664225607,
-   "e_adds": 0.2418219902073156,
-   "passes": 61307.500001706554,
-   "pass_price_pj": 24.415550000000003,
+   "passes": 61307.5,
+   "pass_price_pj": 17.79710465447596,
+   "pass_price_full_pj": 24.415550000000003,
    "area_split": {
     "dpe": 0.13877522070641252,
     "clb": 0.8165200482925843,
     "mem": 0.04347665168946931,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6027293272193813,
+    "clb": 0.3453618377736244,
+    "traffic": 0.0443662783934051,
+    "mem": 0.007274203074062148,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.125
@@ -393,19 +450,22 @@
    "crossbars": 223.66666666666666,
    "tile_cells": 15,
    "clb_count": 12869,
-   "area_clb": 0.7715260256103103,
-   "area_xbar": 0.19610182499175993,
-   "area_mem": 0.032372149397929886,
    "cycles": 16959.833333333332,
    "fmax_mhz": 120.25433333333334,
-   "e_pass": 0.6110756948575404,
-   "e_adds": 0.2773876538552528,
-   "passes": 31213.999985446746,
-   "pass_price_pj": 41.227900000000005,
+   "passes": 31214,
+   "pass_price_pj": 35.50433869252178,
+   "pass_price_full_pj": 41.227900000000005,
    "area_split": {
     "dpe": 0.19533990654997344,
     "clb": 0.7712340526017485,
     "mem": 0.031710495550013644,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6128909833057369,
+    "clb": 0.33519117393545805,
+    "traffic": 0.04415270585337713,
+    "mem": 0.0069350218600148315,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.25
@@ -414,19 +474,22 @@
    "crossbars": 224.33333333333334,
    "tile_cells": 30,
    "clb_count": 17532.333333333332,
-   "area_clb": 0.7094598826506346,
-   "area_xbar": 0.2663588531919314,
-   "area_mem": 0.024181264157433914,
    "cycles": 18872.333333333332,
    "fmax_mhz": 113.51166666666667,
-   "e_pass": 0.6288382393268966,
-   "e_adds": 0.28938080957001433,
-   "passes": 16170.999983077852,
-   "pass_price_pj": 74.85260000000001,
+   "passes": 16171,
+   "pass_price_pj": 70.72111878000652,
+   "pass_price_full_pj": 74.85260000000001,
    "area_split": {
     "dpe": 0.26553751929370734,
     "clb": 0.7090898970587973,
     "mem": 0.023838695226670613,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6301250917715169,
+    "clb": 0.31700736432381793,
+    "traffic": 0.04377460809822679,
+    "mem": 0.006533224474112036,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.5
@@ -435,19 +498,22 @@
    "crossbars": 225.33333333333334,
    "tile_cells": 11,
    "clb_count": 10419.5,
-   "area_clb": 0.7766918305038,
-   "area_xbar": 0.18108806637640207,
-   "area_mem": 0.042220103119797986,
    "cycles": 20963.166666666668,
    "fmax_mhz": 129.93783333333334,
-   "e_pass": 0.6370755174359326,
-   "e_adds": 0.16801860334959262,
-   "passes": 61115.50002795763,
-   "pass_price_pj": 37.258750000000006,
+   "passes": 61115.5,
+   "pass_price_pj": 23.029762456133355,
+   "pass_price_full_pj": 37.258750000000006,
    "area_split": {
     "dpe": 0.18084734006809497,
     "clb": 0.7765294002143285,
     "mem": 0.041385468000704216,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6623539695339442,
+    "clb": 0.2936667189265708,
+    "traffic": 0.03753942557584906,
+    "mem": 0.006194027331388082,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.0625
@@ -456,19 +522,22 @@
    "crossbars": 222.66666666666666,
    "tile_cells": 21,
    "clb_count": 12883.166666666666,
-   "area_clb": 0.7165346124689346,
-   "area_xbar": 0.25347293295194884,
-   "area_mem": 0.02999245457911661,
    "cycles": 20223.5,
    "fmax_mhz": 124.9545,
-   "e_pass": 0.6540041623147408,
-   "e_adds": 0.20730103053038282,
-   "passes": 31022.000013488203,
-   "pass_price_pj": 59.3111,
+   "passes": 31022,
+   "pass_price_pj": 45.97525409066582,
+   "pass_price_full_pj": 59.3111,
    "area_split": {
     "dpe": 0.25264804109649464,
     "clb": 0.7161438831836029,
     "mem": 0.029400437580031524,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6713909125210457,
+    "clb": 0.28464581620102636,
+    "traffic": 0.03726552548557047,
+    "mem": 0.005897492219884689,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.125
@@ -477,19 +546,22 @@
    "crossbars": 223.33333333333334,
    "tile_cells": 40,
    "clb_count": 17507.833333333332,
-   "area_clb": 0.6522671722457072,
-   "area_xbar": 0.32549330756344946,
-   "area_mem": 0.022239520190843375,
    "cycles": 22136,
    "fmax_mhz": 110.31483333333333,
-   "e_pass": 0.6757714645442192,
-   "e_adds": 0.22752400711350274,
-   "passes": 15979.000017405464,
-   "pass_price_pj": 103.4158,
+   "passes": 15979,
+   "pass_price_pj": 91.68267124820821,
+   "pass_price_full_pj": 103.4158,
    "area_split": {
     "dpe": 0.32464859832829773,
     "clb": 0.6517905405392109,
     "mem": 0.021937124727990864,
+    "method": "geometric mean of the per-shape shares"
+   },
+   "energy_split": {
+    "dpe": 0.6864621173326892,
+    "clb": 0.2686976333829639,
+    "traffic": 0.03679200814212506,
+    "mem": 0.005545355362592407,
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.25

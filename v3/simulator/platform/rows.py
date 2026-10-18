@@ -26,7 +26,8 @@ def fcRow(R: int, C: int, shape: tuple, platform: Platform, vtr: dict | None = N
     e = prices.energy(rep.totalCounts, platform)
     res = rep.resources["gemm"]
     row = dict(config=f"{R}x{C}", R=R, C=C, family="gemm", M=M, K=K, N=N, V=gemm.d.V, H=gemm.d.H,
-               dpe_count=res.nCrossbars, T_cycles=rep.cycles, pass_extent=passExtent, e_pass_pj=e["e_pass_pj"],
+               dpe_count=res.nCrossbars, T_cycles=rep.cycles, pass_extent=passExtent,
+               passes=rep.totalCounts.nPasses, e_pass_pj=e["e_pass_pj"],
                e_adds_pj=e["e_adds_pj"], e_traffic_pj=e["e_traffic_pj"], e_ser_pj=e["e_mem_pj"],
                e_total_pj=e["e_total_pj"], e_setup_pj=prices.setupEnergyPj(platform, res.nCrossbars),
                area_wc_mwta=area.areaWcMwta(res.nCrossbars, R, C))
@@ -51,7 +52,7 @@ def attentionRow(name: str, nseq: int, dModel: int, d: int, R: int, C: int, vtr:
     memories = [(words, bits, k) for r in rep.resources.values() for (words, bits), k in r.memories.items()]
     row = dict(shape=name, n=nseq, d_model=dModel, d=d, config=f"{R}x{C}", R=R, C=C, R_b=hp.RB, V=hp.V,
                P_PROJ=hp.P_PROJ, N_E=hp.N_E, N_EP=hp.N_EP, N_EXP=hp.N_EXP, N_OC=hp.N_OC, B_kv=hp.BKV,
-               T_cycles=T, crossbars=nXbar,
+               T_cycles=T, crossbars=nXbar, passes=rep.totalCounts.nPasses,
                e_total_pj=round(e["e_total_pj"], 2), e_pass_pj=round(e["e_pass_pj"], 2),
                e_traffic_pj=round(e["e_traffic_pj"], 2), e_adds_pj=round(e["e_adds_pj"], 2),
                e_cmp_pj=round(e["e_cmp_pj"], 2), e_mem_pj=round(e["e_mem_pj"], 2),

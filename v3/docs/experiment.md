@@ -169,7 +169,7 @@ $$
 | quantity | definition |
 |---|---|
 | cycles $T$ | The v3 model: the composition of the module models (`architecture.md` §6). Each module is pinned to its RTL at its gate, and the head's events equal the RTL on 64×64 (gate H, `architecture.md` §7). Compute cycles, cold, weights preloaded (user, 2026-10-15): $T = t_{done} - t_{start}$, the head's `done` in the model and in the RTL. `done` comes two cycles after the last run's last $O_8$ word leaves the accumulator on E9 ($t_{o8} + 2$). There is no O read-out: the head outputs the final $O_8$ values as they are computed (`o_v`, `o_d`: $N_{OC}$ words per cycle) and the O projection reads them (user, 2026-10-15: the old read-out was set by the 40-bit port, not by the crossbars or the mapping; `acc_spec.md` §10 item 7). |
-| energy $E$ | Frozen per-operation prices (`cost.py` + `Platform("nl_dpe", rows=R, cols=C)`), counted per module: crossbar passes (full-array price) and their port traffic, CLB adds and compares, memory bytes. The DIMM counts one pairing add per product and one compare per narrowed output; FIFO words count as memory bytes, written once and read once (v2's ledger, 2026-10-15). CLB selects are not priced. Weight programming is excluded (setup). |
+| energy $E$ | Frozen per-operation prices (`cost.py` + `Platform("nl_dpe", rows=R, cols=C)`), counted per module: crossbar passes, CLB adds and compares, memory bytes. **The pass price (user, 2026-10-17):** the whole array fires on every pass, so the $R \times C$ cells, the ACAM on every column, the output buffer and the output drain are charged in full; only the rows in use are read, so the input-buffer bytes and the input port words follow `ROWS_USED` (P29). Until that date every pass was priced as the full array on both sides, which overcharged the input side of every conversion pass on $R > C$ arrays and of every GEMM pass with $K < R$ (attention energy fell by 6 % at 128×64 and 41 % at 1024×64; `simulator/platform/prices.py`). The DIMM counts one pairing add per product and one compare per narrowed output; FIFO words count as memory bytes, written once and read once (v2's ledger, 2026-10-15). CLB selects are not priced. Weight programming is excluded (setup). |
 | area $A$ | $(clb + \sum_{wc} W H + 2\, mem) \times 66{,}117$ MWTA. The counts come from VPR (the largest over the seeds); each used cell is priced at the routing-aware CLB tile (2239 µm²). The simulator predicts $mem$ and the crossbar count; every build's VPR counts must equal them (a mismatch stops the build for a look). |
 | Fmax | VTR, the mean over seeds {11, 13, 17}. Route channel width 300. SDC = `clock.sdc` (I/O-excluding). |
 | latency | $D[\mathrm{ns}] = T \cdot 1000 / F_{max}[\mathrm{MHz}]$ |
@@ -246,11 +246,11 @@ better and the worst config is 1. Fmax is the mean of the three seeds.
 
 | family | front config | $G_A$ | $G_D$ | $G_E$ |
 |---|---|---|---|---|
-| FC | 512×128 | 0.353 | 0.710 | 0.306 |
-| FC | 256×128 | 0.467 | 0.516 | 0.424 |
-| FC | 256×64 | 0.511 | 0.489 | 0.489 |
-| FC | 128×64 | 0.740 | 0.354 | 0.848 |
-| attention | 128×64 | 0.449 | 0.522 | 0.470 |
+| FC | 512×128 | 0.353 | 0.710 | 0.311 |
+| FC | 256×128 | 0.467 | 0.516 | 0.447 |
+| FC | 256×64 | 0.511 | 0.489 | 0.515 |
+| FC | 128×64 | 0.740 | 0.354 | 0.893 |
+| attention | 128×64 | 0.449 | 0.522 | 0.622 |
 
 FC has a real trade-off: the larger crossbars save area and cost latency. In attention, 128×64 has both the smallest
 area and the lowest latency, so it alone is the front.
@@ -259,17 +259,17 @@ area and the lowest latency, so it alone is the front.
 
 | # | config | FC $G_{ADP}$ | attention $G_{ADP}$ | $d$ | FC $G_E$ | attention $G_E$ | front |
 |---|---|---|---|---|---|---|---|
-| 1 | 128×64 | 0.439 | 0.238 | 0.499 | 0.848 | 0.470 | yes |
-| 2 | 256×64 | 0.419 | 0.272 | 0.500 | 0.489 | 0.544 | yes |
-| 3 | 256×128 | 0.404 | 0.384 | 0.558 | 0.424 | 0.505 | yes |
-| 4 | 512×64 | 0.546 | 0.325 | 0.635 | 0.383 | 0.696 | |
-| 5 | 512×128 | 0.421 | 0.481 | 0.639 | 0.306 | 0.608 | |
+| 1 | 128×64 | 0.439 | 0.238 | 0.499 | 0.893 | 0.622 | yes |
+| 2 | 256×64 | 0.419 | 0.272 | 0.500 | 0.515 | 0.650 | yes |
+| 3 | 256×128 | 0.404 | 0.384 | 0.558 | 0.447 | 0.669 | yes |
+| 4 | 512×64 | 0.546 | 0.325 | 0.635 | 0.381 | 0.712 | |
+| 5 | 512×128 | 0.421 | 0.481 | 0.639 | 0.311 | 0.734 | |
 
 - The front is 256×128 (the best in FC), 256×64 and 128×64 (the best in attention). Every other config is beaten in
   both families.
 - 128×64 and 256×64 are 0.13 % apart in $d$: a tie. The energy separates them: in FC, 128×64 uses 1.7× the energy of
-  256×64 ($G_E$ 0.848 against 0.489); in attention they are close (0.470 against 0.544). **256×64 is the
-  balanced choice.**
+  256×64 ($G_E$ 0.893 against 0.515); in attention they are close (0.622 against 0.650). **256×64 is the
+  balanced choice.** ($G_E$ values after the 2026-10-17 pass-price fix, §5; the fronts and $d$ do not involve energy.)
 - The large configs (1024 rows, or 256 columns with at least 256 rows) are never competitive.
 
 Files: `dse/results/adp/latency_area.json`, `dse/results/adp/dse_la.pdf` (the three panels for a paper), the results page
@@ -280,8 +280,9 @@ Files: `dse/results/adp/latency_area.json`, `dse/results/adp/dse_la.pdf` (the th
 **In short.** FC rewards large crossbars: a larger array holds more weights per tile, so a layer needs fewer tiles and
 less area, at the cost of longer passes. Attention rewards small crossbars: its crossbar count is set by the mapping,
 not by the array size, and each crossbar works on an $I \times I$ window ($I = \min(R, C)$). A larger array adds
-area, energy per pass and soft logic, but no useful work. The numbers below are means over each family's workloads
-(`dse/breakdown.py`, `dse/results/breakdown.json`).
+area, energy per pass and soft logic, but no useful work. The counts below are means over each family's workloads;
+the area and energy shares are the splits of `dse/breakdown.py` (attention: the geometric mean of each share over
+its shapes; FC: the share of the total summed over its shapes), all in `dse/results/breakdown.json`.
 
 ### 9.1 Architecture: what the crossbars do
 
@@ -299,13 +300,13 @@ area, energy per pass and soft logic, but no useful work. The numbers below are 
 
 | config | FC: crossbars (mean) | FC: tile / CLB / memory share | attention: crossbars (mean) | attention: tile / CLB / memory share | attention CLBs (mean) |
 |---|---|---|---|---|---|
-| 128×64 | 30 | 94 / 4 / 2 % | 231 | 9 / 86 / 5 % | 10,441 |
-| 256×64 | 15 | 83 / 15 / 2 % | 227 | 11 / 85 / 5 % | 10,425 |
-| 256×128 | 8 | 89 / 8 / 2 % | 225 | 16 / 80 / 3 % | 12,892 |
-| 512×128 | 4 | 88 / 12 / 0 % | 224 | 20 / 77 / 3 % | 12,869 |
+| 128×64 | 30 | 96 / 3 / 1 % | 231 | 9 / 86 / 5 % | 10,441 |
+| 256×64 | 15 | 87 / 11 / 2 % | 227 | 11 / 85 / 4 % | 10,425 |
+| 256×128 | 8 | 93 / 5 / 2 % | 225 | 16 / 80 / 3 % | 12,892 |
+| 512×128 | 4 | 90 / 9 / 1 % | 224 | 20 / 77 / 3 % | 12,869 |
 | 1024×256 | 2 | 93 / 6 / 1 % | 223 | 33 / 65 / 2 % | 17,508 |
 
-- **FC area is crossbar tiles** (75–96 %). A tile takes 5 grid cells at 128×64 and 40 at 1024×256: 8× the grid area
+- **FC area is crossbar tiles** (77–97 %). A tile takes 5 grid cells at 128×64 and 40 at 1024×256: 8× the grid area
   for 32× the crossbar cells, so a larger array stores a weight in less area, and FC area falls as the array grows.
 - **Attention area is soft logic** (CLB 65–86 %). The CLB count follows the datapath width $I$: about 10.4k at
   $C = 64$, 12.9k at $C = 128$, 17.5k at $C = 256$. On top of it, the crossbar tiles grow with $R \times C$ (9 % of the
@@ -332,13 +333,16 @@ area, energy per pass and soft logic, but no useful work. The numbers below are 
 
 ### 9.4 Energy breakdown
 
-- **The pricing assumption:** a crossbar pass costs the full $R \times C$ array, 14.8 pJ at 128×64 up to 103.4 pJ at
-  1024×256, whatever part of it is used (P29 changes the time, not the energy).
-- **FC:** passes are 71–86 % of the energy. The pass count falls with the array size (30 to 2 per build) faster than
-  the price rises, so FC energy falls as the array grows: the same direction as its area (rank correlation 0.87–0.97
-  across the 12 configs).
-- **Attention:** passes are 55–68 % and CLB adds 17–37 %. The pass count depends on $I$ only (about 62k at
-  $I = 64$, 31k at 128, 16k at 256), so at a fixed $I$ the energy rises with $R$: the price grows, the work does not.
+- **The pass price (§5; 2026-10-17):** the whole array fires on every pass (the cells and the ACAM at the full
+  $R \times C$, the output buffer and the drain), and only the rows in use are read. An attention pass therefore costs
+  13.9 pJ at 128×64 and 91.7 pJ at 1024×256 on average (the full array would be 14.8 and 103.4), and 23.0 pJ at
+  1024×64 (37.3 as the full array): a conversion on an $R > C$ array reads $I$ of its $R$ rows.
+- **FC:** the DPE passes are 69–88 % of the energy, the CLB adds 2–23 % (the adder tree, so only with $V > 1$), the
+  passes' port traffic 5–17 %. The pass count falls with the array size (30 to 2 per build) faster than the price
+  rises, so FC energy falls as the array grows: the same direction as its area.
+- **Attention:** the DPE passes are 54–70 %, the CLB adds and compares 25–40 %, the port traffic 4–5 %, the memory
+  bytes under 1 %. The pass count depends on $I$ only (about 62k at $I = 64$, 31k at 128, 16k at 256), so at a fixed
+  $I$ the energy rises with $R$: the cells and the ACAM grow with the array, the work does not.
 
 ### 9.5 What follows
 
@@ -350,7 +354,9 @@ ones (area, latency and Fmax). The cross-family front therefore sits in the midd
 1. **The fixed attention mapping** (§4.2). The crossbar count does not follow the array size. A mapping that used the
    extra cells of a large array (several windows packed into one crossbar, or more GEMM copies) would change the
    attention ranking.
-2. **Full-array pass energy** for every pass.
+2. **The pass price:** the whole array fires on every pass (the cells and the ACAM at the full $R \times C$), and only
+   the rows in use are read (2026-10-17; before, both sides were priced as the full array). The fixed part, cells plus
+   ACAM, is what makes a large array expensive per pass whatever the window.
 3. **One projection copy** ($P_{proj} = 1$). The X stream is serial, 5 bytes per cycle per copy, which makes the
    projections half of the attention cycles.
 4. **The 40-bit ports.** They bound both the score stream (the core's $n^2/5$) and the projection load.
