@@ -148,16 +148,13 @@ def adp_table(rows: list) -> str:
 
 def compare_table(fam: str, la: dict, tid: str) -> tuple:
     """EDAP against ADP for one family: the configs in ADP order, each with both ranks, both G values and G_E (EDAP =
-    E x ADP, so energy alone moves a config between the two orders). Returns (table, Spearman rank correlation,
-    ADP #1, EDAP #1)."""
+    E x ADP, so energy alone moves a config between the two orders). Returns (table, ADP #1, EDAP #1)."""
     ed = {c["config"]: c for c in json.loads((EDAP / f"ranking_{fam}.json").read_text())["configs"]}
     g = la["adp"][fam]["G_ADP"]
     if set(g) != set(ed):
         raise ValueError(f"{fam}: the EDAP and ADP results cover different configs")
     adp_order = sorted(g, key=lambda c: (g[c], c))
     r_adp = {c: k + 1 for k, c in enumerate(adp_order)}
-    n = len(adp_order)
-    rho = 1 - 6 * sum((ed[c]["rank"] - r_adp[c]) ** 2 for c in g) / (n * (n * n - 1))
 
     def delta(c: str) -> str:
         d = ed[c]["rank"] - r_adp[c]
@@ -169,17 +166,17 @@ def compare_table(fam: str, la: dict, tid: str) -> tuple:
              f'<th>EDAP #</th><th>G<sub>EDAP</sub></th><th>Δ #</th><th>G<sub>E</sub></th></tr></thead><tbody>{body}'
              f'</tbody></table></div>')
     edap1 = min(ed, key=lambda c: ed[c]["rank"])
-    return table, rho, adp_order[0], edap1
+    return table, adp_order[0], edap1
 
 
 def edap_vs_adp_section(la: dict) -> str:
     """The two metrics side by side per family (user, 2026-10-17)."""
     cards = []
     for fam, title, tid in (("fc", "FC", "t_cmp_fc"), ("attention", "Attention head", "t_cmp_att")):
-        table, rho, a1, e1 = compare_table(fam, la, tid)
+        table, a1, e1 = compare_table(fam, la, tid)
         top = f"#1 under both: {cx(a1)}" if a1 == e1 else f"#1 by ADP: {cx(a1)}; by EDAP: {cx(e1)}"
-        cards.append(f'  <div class="family">\n    <h2>{title}</h2>\n    <p class="muted">{top}. Rank correlation '
-                     f'(Spearman) between the two orders: {rho:.2f}.</p>\n    {table}\n  </div>')
+        cards.append(f'  <div class="family">\n    <h2>{title}</h2>\n    <p class="muted">{top}.</p>\n    {table}\n'
+                     f'  </div>')
     cards_html = "\n".join(cards)
     return f"""<section aria-labelledby="h_cmp">
   <h2 id="h_cmp">EDAP against ADP, per family</h2>
