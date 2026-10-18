@@ -48,10 +48,12 @@ def completeParams(params: dict) -> dict:
     return asdict(DimmTileParams(**params))
 
 
-def convPeriod(L: int, BUF: int = 40, P: int = 8) -> int:
-    """The converter's pass period for a row of L elements (spec §3: the int8 port contract)."""
-    load = -(-8 * L // BUF)
-    return max(load + P, P + 2, load + 1)
+def convPeriod(L: int, C: int, BUF: int = 40, P: int = 8) -> int:
+    """The converter's pass period for a row of L elements on a C-column array (spec §3: the int8 port contract): the
+    load of L elements, the accumulator, and the drain, which walks every column of the array (2026-10-18; until then
+    the drain stopped after the L columns in use, so the period did not depend on C)."""
+    load, drain = -(-8 * L // BUF), -(-8 * C // BUF)
+    return max(load + P, P + 2, drain + 1)
 
 
 def aStream(case: Case) -> list:
@@ -255,15 +257,15 @@ def _smoke() -> None:
     # QK-like: S 32, d 16, Bkv 16 on 64x64 (I 64): NB 4, W_K 8; N_E 32: NG 2, T_W 4, 2 slices of 8 columns
     p = qkParams(32, 16, 16, 64, 64, 32, pProj=2, runs=2, blocks=2)
     jobs = [(r, b, 0) for r in range(2) for b in range(2)]
-    c = randomCase("qk_smoke", p, 2, 2, jobs, rng, aPeriod=convPeriod(16), bPeriod=convPeriod(16))
+    c = randomCase("qk_smoke", p, 2, 2, jobs, rng, aPeriod=convPeriod(16, 64), bPeriod=convPeriod(16, 64))
     r = runCase(c)
     print("qk", r["report"].cycles, [s.events["t_go"] for s in r["report"].steps["dimm"] if s.process == "jobs"])
     # PV-like (spec §9, N_EP = 2d): S 32, d 16, Bkv 16 on 64x64: NB 4, W_K 8, NG 2, E_w 8 words per window per slice;
-    # the softmax sends a window per EXP lane every convPeriod(I) = 21 cycles
+    # the softmax sends a window per EXP lane every convPeriod(I, C) = 21 cycles
     for d_, nEp in ((16, 32), (64, 128)):
         p = pvParams(32, d_, 16, 64, 64, nEp, nExp=2, blocks=2)
         jobs = [(j % 2, j % 2, 1) for j in range(4)]
-        c = randomCase(f"pv_smoke_d{d_}", p, 4, 2, jobs, rng, aPeriod=convPeriod(64), bPeriod=convPeriod(d_))
+        c = randomCase(f"pv_smoke_d{d_}", p, 4, 2, jobs, rng, aPeriod=convPeriod(64, 64), bPeriod=convPeriod(d_, 64))
         r = runCase(c)
         print(f"pv d{d_}", r["report"].cycles, [s.events["t_go"] for s in r["report"].steps["dimm"] if s.process == "jobs"])
 

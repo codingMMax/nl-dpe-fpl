@@ -157,10 +157,13 @@ every module's domain (head model, 2026-10-15).
 The head model gives the cycles; this first-order model explains them (checked on the 72 rows, 2026-10-15):
 
 $$
-T \approx \underbrace{\frac{S\, T_p}{P_{proj}}}_{\text{front}} + \underbrace{R_b B \cdot \max\!\Big(\Big\lceil \frac{S B_{kv}}{5} \Big\rceil,\ T_{QK},\ T_{PV},\ T_{EXP},\ T_{ACC}\Big)}_{\text{core}} + \text{fill}, \qquad T_p = \Big\lceil \frac{\min(d_m, R)}{5} \Big\rceil + 8
+T \approx \underbrace{\frac{S\, T_p}{P_{proj}}}_{\text{front}} + \underbrace{R_b B \cdot \max\!\Big(\Big\lceil \frac{S B_{kv}}{5} \Big\rceil,\ T_{QK},\ T_{PV},\ T_{EXP},\ T_{ACC}\Big)}_{\text{core}} + \text{fill}, \qquad T_p = \max\!\Big(\Big\lceil \frac{\min(d_m, R)}{5} \Big\rceil + 8,\ \Big\lceil \frac{8C}{40} \Big\rceil + 1\Big)
 $$
 
-- front: the first run's $Q$ through the projections; exact to within 80–140 cycles.
+- front: the first run's $Q$ through the projections; exact to within 80–140 cycles. $T_p$ is a projection copy's
+  row period: the X load of $\min(d_m, R)$ rows, or the GEMM's drain of all $C$ columns (2026-10-18), whichever is
+  longer; the drain wins where $d_m$ is small and $C$ large (JetFormer-150P at $C \ge 128$, every shape at
+  $C = 256$ with $d_m \le 128$).
 - core: $R_b B$ key blocks, each at least the score stream $\lceil S B_{kv}/5 \rceil$ (one 40-bit port into the online
   softmax). The mapping above keeps every stage at that floor on most rows: the measured block period is 1.02× the
   estimate (median). Summed, the core's floor is about $n^2/5$ cycles, whatever the crossbar size.
@@ -322,12 +325,13 @@ its shapes; FC: the share of the total summed over its shapes), all in `dse/resu
   $\min(C, N)$ outputs out through the 40-bit port. Fmax 358–451 MHz: the designs are tiny (3–20 CLBs). Several
   builds report the same 450.6 MHz, which suggests the crossbar block's own timing sets it (an inference, not
   checked).
-- **Attention:** 12k–22k cycles, in two parts measured in the simulator:
-  1. **The projection stream.** Every token passes through the one GEMM copy ($P_{proj} = 1$) at
-     $\lceil \min(d_m, R)/5 \rceil + 8$ cycles, so the projections end at $n (\lceil \min(d_m, R)/5 \rceil + 8)$
-     cycles (equal to the simulator's last projection output within 7 cycles on all 72 builds). That is a median 50 %
-     of the cycles (36–86 %). It grows with $R$ only while $d_m > R$: for BERT-base ($d_m = 768$), 4.4k cycles at
-     $R = 128$ and 20.7k at $R = 1024$; for BERT-Tiny ($d_m = 128$) it stays at 4.4k.
+- **Attention:** 12k–23k cycles, in two parts measured in the simulator:
+  1. **The projection stream.** Every token passes through the one GEMM copy ($P_{proj} = 1$) at $T_p$ cycles (§4.4:
+     the X load of $\min(d_m, R)$ rows, or the drain of all $C$ columns since 2026-10-18), so the projections end at
+     $n\,T_p$ (within 28 cycles of the simulator's last projection output on all 72 builds; with the load alone the
+     formula was 7 cycles exact before the drain rule). That is a median 56 % of the cycles (36–86 %). It grows with
+     $R$ while $d_m > R$: for BERT-base ($d_m = 768$), 4.4k cycles at $R = 128$ and 20.7k at $R = 1024$; for
+     BERT-Tiny ($d_m = 128$) it stays at 4.4k up to $C = 128$ and reaches 6.8k at $C = 256$, where the drain paces it.
   2. **The core.** Bound by the score stream into the online softmax (one 40-bit port, about $n^2/5$ cycles), which
      does not depend on the array size. A smaller $I$ means smaller query runs ($S = \min(n, I)$) that overlap the
      projection stream better: BERT-Tiny takes 7,752 cycles at 128×64 and 9,405 at 128×128.

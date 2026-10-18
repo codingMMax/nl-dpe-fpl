@@ -2,10 +2,13 @@
 """testCrossbar.py — gates of the crossbar model `Crossbar` / `CrossbarGroup` (docs/simulator.md §4.2).
 
   corpus   the v2 crossbar corpora (default 96 cases, P29 162; GATE-2-certified on the RTL in v2): the values equal
-           the expected files (int32 y, every output byte), the run's cycles equal case.json, and every pass event
-           equals the v2 kernel `nldpe_sim.run_workload` on the same stimulus (the RTL-pinned witness, delta 0)
-  closed   back-to-back passes reproduce `nldpe_sim.cycle_model` (total, T_fill, T_steady) over R, C, extent, M
-  gated    passes with readiness gaps equal `pass_engine.schedule_pass_sequence`
+           the expected files (int32 y, every output byte); the cycles and every pass event equal the v2 kernel
+           `nldpe_sim.run_workload` on the same stimulus with its drain over every column (cols_used = C: the model's
+           rule since 2026-10-18, where the RTL still stops after COLS_USED); where the case drains every column
+           anyway, the cycles also equal case.json (the RTL-pinned witness, delta 0)
+  closed   back-to-back passes reproduce `nldpe_sim.cycle_model` at cols = C (total, T_fill, T_steady) over R, C, the
+           load extent, M
+  gated    passes with readiness gaps equal `pass_engine.schedule_pass_sequence` at cols = C
   group    CrossbarGroup(n) == n single crossbars in values; one timing state
   forms    the four output forms at their edges
   domain   the RTL guard (extent), int8 inputs, the platform's modes (Azure-Lily: identity only)
@@ -63,11 +66,15 @@ def checkCase(d: Path, cj: dict, rowsUsed=None) -> list:
         problems.append("output bytes")
     if not all(np.array_equal(p.window.view(np.uint8), p.out[:cu]) for p in passes):
         problems.append("drained window")
-    if passes[-1].events["drain_end"] + 1 != cj["used_cycles"]:
-        problems.append(f"cycles {passes[-1].events['drain_end'] + 1} != {cj['used_cycles']}")
-    ref = nldpe_sim.NldpeDpe(cj["R"], cj["C"], cj["BUF"], cj["P"], rows_used=ru, cols_used=cu)
+    # the timing witness: the kernel with the drain over every column (cols_used = C; the model's rule since
+    # 2026-10-18), the load at the case's rows; where the case drains every column anyway, case.json's cycles too
+    ref = nldpe_sim.NldpeDpe(cj["R"], cj["C"], cj["BUF"], cj["P"], rows_used=ru, cols_used=cj["C"])
     ref.program_weights(W)
     timeline = ref.run_workload(X, cj["mode"]).timeline
+    if passes[-1].events["drain_end"] + 1 != timeline[-1].drain_end + 1:
+        problems.append(f"cycles {passes[-1].events['drain_end'] + 1} != {timeline[-1].drain_end + 1}")
+    if cu == cj["C"] and passes[-1].events["drain_end"] + 1 != cj["used_cycles"]:
+        problems.append(f"cycles {passes[-1].events['drain_end'] + 1} != case.json {cj['used_cycles']}")
     for m, (p, t) in enumerate(zip(passes, timeline)):
         bad = [e for e in EVENTS if p.events[e] != getattr(t, e)]
         if bad:
@@ -93,7 +100,7 @@ def testClosed() -> int:
             for M in (1, 2, 3, 7):
                 crossbar = xb.Crossbar(R, C, rowsUsed=rows, colsUsed=cols, withValues=False)
                 passes = [crossbar.run(None, 0) for _ in range(M)]
-                cm = nldpe_sim.cycle_model(M, R, C, rows=rows, cols=cols)
+                cm = nldpe_sim.cycle_model(M, R, C, rows=rows, cols=C)      # the drain over every column
                 assert passes[-1].events["drain_end"] + 1 == cm.total, (R, C, rows, cols, M)
                 assert passes[0].events["drain_end"] + 1 == cm.t_fill
                 if M > 1:
@@ -111,7 +118,7 @@ def testGated(rng) -> int:
             for extent in ((None, None), (min(R, C), min(R, C))):
                 crossbar = xb.Crossbar(R, C, rowsUsed=extent[0], colsUsed=extent[1], withValues=False)
                 got = [crossbar.run(None, t).events for t in ready]
-                want = pass_engine.schedule_pass_sequence(ready, R, C, 40, 8, rows=extent[0], cols=extent[1])
+                want = pass_engine.schedule_pass_sequence(ready, R, C, 40, 8, rows=extent[0], cols=C)
                 for g, w in zip(got, want):
                     assert all(g[k] == w[k] for k in w), (R, C, ready, g, w)
                 n += 1

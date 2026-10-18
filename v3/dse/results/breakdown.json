@@ -306,7 +306,7 @@
    "crossbars": 228.16666666666666,
    "tile_cells": 11,
    "clb_count": 12886.666666666666,
-   "cycles": 12307,
+   "cycles": 12338,
    "fmax_mhz": 124.2385,
    "passes": 32110,
    "pass_price_pj": 27.58381714737315,
@@ -330,7 +330,7 @@
    "crossbars": 228.16666666666666,
    "tile_cells": 21,
    "clb_count": 12913.666666666666,
-   "cycles": 12307,
+   "cycles": 16148.666666666666,
    "fmax_mhz": 122.52333333333334,
    "passes": 32110,
    "pass_price_pj": 53.34851672664461,
@@ -378,7 +378,7 @@
    "crossbars": 224.66666666666666,
    "tile_cells": 12,
    "clb_count": 12892,
-   "cycles": 13696.166666666666,
+   "cycles": 13727.166666666666,
    "fmax_mhz": 126.32666666666667,
    "passes": 31406,
    "pass_price_pj": 30.234344245994535,
@@ -402,7 +402,7 @@
    "crossbars": 225.33333333333334,
    "tile_cells": 24,
    "clb_count": 17521.166666666668,
-   "cycles": 15608.666666666666,
+   "cycles": 16833.333333333332,
    "fmax_mhz": 114.37316666666668,
    "passes": 16363,
    "pass_price_pj": 60.16702080368982,
@@ -450,7 +450,7 @@
    "crossbars": 223.66666666666666,
    "tile_cells": 15,
    "clb_count": 12869,
-   "cycles": 16959.833333333332,
+   "cycles": 16990.833333333332,
    "fmax_mhz": 120.25433333333334,
    "passes": 31214,
    "pass_price_pj": 35.50433869252178,
@@ -474,7 +474,7 @@
    "crossbars": 224.33333333333334,
    "tile_cells": 30,
    "clb_count": 17532.333333333332,
-   "cycles": 18872.333333333332,
+   "cycles": 20097,
    "fmax_mhz": 113.51166666666667,
    "passes": 16171,
    "pass_price_pj": 70.72111878000652,
@@ -522,7 +522,7 @@
    "crossbars": 222.66666666666666,
    "tile_cells": 21,
    "clb_count": 12883.166666666666,
-   "cycles": 20223.5,
+   "cycles": 20254.5,
    "fmax_mhz": 124.9545,
    "passes": 31022,
    "pass_price_pj": 45.97525409066582,
@@ -546,7 +546,7 @@
    "crossbars": 223.33333333333334,
    "tile_cells": 40,
    "clb_count": 17507.833333333332,
-   "cycles": 22136,
+   "cycles": 23360.666666666668,
    "fmax_mhz": 110.31483333333333,
    "passes": 15979,
    "pass_price_pj": 91.68267124820821,
@@ -593,9 +593,9 @@
    "n": 256,
    "d_model": 768,
    "config": "128x256",
-   "cycles": 22204,
-   "end": 8711,
-   "stream": 8704,
+   "cycles": 28065,
+   "end": 13556,
+   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -713,9 +713,9 @@
    "n": 256,
    "d_model": 192,
    "config": "128x256",
-   "cycles": 22202,
-   "end": 8709,
-   "stream": 8704,
+   "cycles": 28063,
+   "end": 13554,
+   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -743,9 +743,9 @@
    "n": 256,
    "d_model": 192,
    "config": "256x256",
-   "cycles": 28867,
-   "end": 12036,
-   "stream": 12032,
+   "cycles": 30397,
+   "end": 13566,
+   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -773,9 +773,9 @@
    "n": 256,
    "d_model": 192,
    "config": "512x256",
-   "cycles": 28867,
-   "end": 12036,
-   "stream": 12032,
+   "cycles": 30397,
+   "end": 13566,
+   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -803,9 +803,9 @@
    "n": 256,
    "d_model": 192,
    "config": "1024x256",
-   "cycles": 28867,
-   "end": 12036,
-   "stream": 12032,
+   "cycles": 30397,
+   "end": 13566,
+   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -833,9 +833,9 @@
    "n": 128,
    "d_model": 768,
    "config": "128x256",
-   "cycles": 9408,
-   "end": 4359,
-   "stream": 4352,
+   "cycles": 12830,
+   "end": 6772,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -953,9 +953,9 @@
    "n": 128,
    "d_model": 128,
    "config": "128x256",
-   "cycles": 9405,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 12827,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -983,9 +983,9 @@
    "n": 128,
    "d_model": 128,
    "config": "256x256",
-   "cycles": 9251,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 11664,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1013,9 +1013,9 @@
    "n": 128,
    "d_model": 128,
    "config": "512x256",
-   "cycles": 9251,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 11664,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1043,9 +1043,9 @@
    "n": 128,
    "d_model": 128,
    "config": "1024x256",
-   "cycles": 9251,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 11664,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1063,9 +1063,9 @@
    "n": 32,
    "d_model": 64,
    "config": "128x128",
-   "cycles": 1346,
-   "end": 676,
-   "stream": 672,
+   "cycles": 1532,
+   "end": 862,
+   "stream": 864,
    "core_floor": 204
   },
   {
@@ -1073,9 +1073,9 @@
    "n": 32,
    "d_model": 64,
    "config": "128x256",
-   "cycles": 1346,
-   "end": 676,
-   "stream": 672,
+   "cycles": 2459,
+   "end": 1668,
+   "stream": 1696,
    "core_floor": 204
   },
   {
@@ -1093,9 +1093,9 @@
    "n": 32,
    "d_model": 64,
    "config": "256x128",
-   "cycles": 1346,
-   "end": 676,
-   "stream": 672,
+   "cycles": 1532,
+   "end": 862,
+   "stream": 864,
    "core_floor": 204
   },
   {
@@ -1103,9 +1103,9 @@
    "n": 32,
    "d_model": 64,
    "config": "256x256",
-   "cycles": 1587,
-   "end": 676,
-   "stream": 672,
+   "cycles": 2579,
+   "end": 1668,
+   "stream": 1696,
    "core_floor": 204
   },
   {
@@ -1123,9 +1123,9 @@
    "n": 32,
    "d_model": 64,
    "config": "512x128",
-   "cycles": 1346,
-   "end": 676,
-   "stream": 672,
+   "cycles": 1532,
+   "end": 862,
+   "stream": 864,
    "core_floor": 204
   },
   {
@@ -1133,9 +1133,9 @@
    "n": 32,
    "d_model": 64,
    "config": "512x256",
-   "cycles": 1587,
-   "end": 676,
-   "stream": 672,
+   "cycles": 2579,
+   "end": 1668,
+   "stream": 1696,
    "core_floor": 204
   },
   {
@@ -1153,9 +1153,9 @@
    "n": 32,
    "d_model": 64,
    "config": "1024x128",
-   "cycles": 1346,
-   "end": 676,
-   "stream": 672,
+   "cycles": 1532,
+   "end": 862,
+   "stream": 864,
    "core_floor": 204
   },
   {
@@ -1163,9 +1163,9 @@
    "n": 32,
    "d_model": 64,
    "config": "1024x256",
-   "cycles": 1587,
-   "end": 676,
-   "stream": 672,
+   "cycles": 2579,
+   "end": 1668,
+   "stream": 1696,
    "core_floor": 204
   },
   {
@@ -1193,9 +1193,9 @@
    "n": 128,
    "d_model": 128,
    "config": "128x256",
-   "cycles": 9277,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 12648,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1223,9 +1223,9 @@
    "n": 128,
    "d_model": 128,
    "config": "256x256",
-   "cycles": 9169,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 11582,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1253,9 +1253,9 @@
    "n": 128,
    "d_model": 128,
    "config": "512x256",
-   "cycles": 9169,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 11582,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1283,16 +1283,16 @@
    "n": 128,
    "d_model": 128,
    "config": "1024x256",
-   "cycles": 9169,
-   "end": 4356,
-   "stream": 4352,
+   "cycles": 11582,
+   "end": 6769,
+   "stream": 6784,
    "core_floor": 3276
   }
  ],
  "projection_share": {
-  "median": 0.5022288261515602,
+  "median": 0.5619195046439629,
   "min": 0.3570286557618989,
   "max": 0.8592973152137885,
-  "stream_max_diff": 7
+  "stream_max_diff": 28
  }
 }

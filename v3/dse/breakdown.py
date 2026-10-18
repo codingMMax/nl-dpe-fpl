@@ -119,7 +119,8 @@ def main() -> int:
         for R, C in CONFIGS:
             T, end = projectionsEnd(n, dm, d, R, C)
             res["projections"].append(dict(shape=name, n=n, d_model=dm, config=f"{R}x{C}", cycles=T, end=end,
-                                           stream=n * (-(-min(dm, R) // 5) + 8), core_floor=n * n // 5))
+                                           stream=n * max(-(-min(dm, R) // 5) + 8, -(-8 * C // 40) + 1),
+                                           core_floor=n * n // 5))     # a copy's row period: the X load or the drain
     shares = [p["end"] / p["cycles"] for p in res["projections"]]
     res["projection_share"] = dict(median=st.median(shares), min=min(shares), max=max(shares),
                                    stream_max_diff=max(abs(p["end"] - p["stream"]) for p in res["projections"]))
@@ -134,7 +135,8 @@ def main() -> int:
                   f"{o['fmax_mhz']:6.1f} {o['passes']:8.0f} {o['pass_price_pj']:8.2f}  ({o['pass_price_full_pj']:7.2f})")
     ps = res["projection_share"]
     print(f"attention: projections end at {100*ps['median']:.0f} % of the cycles (median; {100*ps['min']:.0f}-"
-          f"{100*ps['max']:.0f} %), = n x (ceil(min(d_m, R)/5) + 8) within {ps['stream_max_diff']} cycles -> "
+          f"{100*ps['max']:.0f} %), = n x max(ceil(min(d_m, R)/5) + 8, ceil(8C/40) + 1) within "
+          f"{ps['stream_max_diff']} cycles -> "
           f"{RESULTS / 'breakdown.json'}")
     return 0
 

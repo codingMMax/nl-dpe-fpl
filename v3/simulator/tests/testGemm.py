@@ -2,9 +2,13 @@
 """testGemm.py — gates of the `gemm_top` model (docs/simulator.md §4.4).
 
   corpus    the v2 GEMM corpora (default 16 cases, P29 144; GATE-2-certified on the RTL in v2), run through the FC
-            workload (source -> gemm_top -> sink): the output bytes and the wide probe S equal the expected files, the
-            run's cycles equal case.json, every row's events equal the v2 kernel `gemm_sim` timeline
-  closed    back-to-back rows reproduce `gemm_sim.cycle_model` (both extents) over K, N, R, C, M
+            workload (source -> gemm_top -> sink): the output bytes and the wide probe S equal the expected files;
+            where the case drains every column, the run's cycles equal case.json and every row's events equal the v2
+            kernel `gemm_sim` timeline; where it drains fewer (COLS_USED < C), the model drains every column since
+            2026-10-18 (the RTL still stops), so the witness is `pass_engine`'s schedule at cols = C plus L_w and the
+            COLS_USED output words (fullDrainTimeline)
+  closed    back-to-back rows reproduce `gemm_sim.cycle_model` (both extents) over K, N, R, C, M where every column
+            is drained, fullDrainTimeline elsewhere
   gated     rows offered late: each burst starts at max(offer, MSB_SA_Ready) and the events equal
             `pass_engine.schedule_pass_sequence` + L_w
   structure the model's parameters and port signals are the RTL's (ip/gemm/rtl/sim/gemm_top.v), derive() == the
@@ -66,17 +70,54 @@ def checkCase(d: Path, cj: dict, extentOverride=None) -> list:
     S = np.stack([s[:N] for s in model.math.probeS])                    # lane h = columns h*C ..; padding past N
     if not np.array_equal(S, np.load(d / "expected_psum.npz")["S"]):
         problems.append("S probe")
-    if rep.cycles != cj["used_cycles"]:
-        problems.append(f"cycles {rep.cycles} != {cj['used_cycles']}")
-    ref = gemm_sim.NldpeGemm(M, K, N, R, C, cj["BUF"], cj["P"], pass_extent=cj["pass_extent"])
-    ref.program_weights(W)
-    timeline = ref.run(X).timeline
-    for m, (s, t) in enumerate(zip(rep.steps["gemm"], timeline)):
-        bad = [e for e in EVENTS if s.events[e] != getattr(t, e)]
+    V = cj["V"]
+    ru, cu = extentOf(K, N, R, C, cj["pass_extent"])
+    if cu == C:
+        # the case drains every column: the kernel's timeline is the witness (GATE 2 on the RTL in v2)
+        if rep.cycles != cj["used_cycles"]:
+            problems.append(f"cycles {rep.cycles} != {cj['used_cycles']}")
+        ref = gemm_sim.NldpeGemm(M, K, N, R, C, cj["BUF"], cj["P"], pass_extent=cj["pass_extent"])
+        ref.program_weights(W)
+        timeline = ref.run(X).timeline
+        for m, (s, t) in enumerate(zip(rep.steps["gemm"], timeline)):
+            bad = [e for e in EVENTS if s.events[e] != getattr(t, e)]
+            if bad:
+                problems.append(f"row {m} events {bad}")
+                break
+        return problems
+    # the case drains fewer columns than C: since 2026-10-18 the model drains every column (the RTL still stops after
+    # COLS_USED), so the witness is the crossbar pass schedule at cols = C plus the tree and serializer latencies, and
+    # the output window keeps its COLS_USED bytes
+    want = fullDrainTimeline(M, R, C, cj["BUF"], cj["P"], ru, cu, V)
+    for m, (s, w) in enumerate(zip(rep.steps["gemm"], want)):
+        bad = [e for e in w if s.events[e] != w[e]]
         if bad:
             problems.append(f"row {m} events {bad}")
             break
+    if rep.cycles != want[-1]["done"]:
+        problems.append(f"cycles {rep.cycles} != {want[-1]['done']}")
     return problems
+
+
+def extentOf(K: int, N: int, R: int, C: int, passExtent: str) -> tuple:
+    """(ROWS_USED, COLS_USED) of gemm_top at an extent, as fc.extent derives them."""
+    V, H = -(-K // R), -(-N // C)
+    return ((K if V == 1 else R), (N if H == 1 else C)) if passExtent == "used" else (R, C)
+
+
+def fullDrainTimeline(M: int, R: int, C: int, BUF: int, P: int, ru: int, cu: int, V: int, offers=None) -> list:
+    """Row events of gemm_top with the drain over every column: pass_engine's schedule (load at ru rows, drain at C
+    columns), the first output word L_w later, COLS_USED bytes through the serializer, done after the last word.
+    L_w = TREE_PIPE + 1 is the charter's (gemm.md §5.2), written here and not read from the model, so a latency mutant
+    in the model is caught."""
+    lw = (V - 1).bit_length() + 1                     # clog2(V) registered tree levels + the serializer register
+    nWords = -(-cu // (BUF // 8))
+    out = []
+    for w in pass_engine.schedule_pass_sequence(offers if offers is not None else [0] * M, R, C, BUF, P, rows=ru,
+                                                cols=C):
+        t0 = w["drain_start"] + lw
+        out.append(dict(w, array_drain_start=t0, array_drain_end=t0 + nWords - 1, done=t0 + nWords))
+    return out
 
 
 def testCorpus(names=("gemm", "gemm_p29")) -> int:
@@ -97,11 +138,18 @@ def testClosed() -> int:
                 for ext in ("full", "used"):
                     for M in (1, 2, 5):
                         rep = run(fc(K, N, R, C, M=M, passExtent=ext, withValues=False))
-                        cm = gemm_sim.cycle_model(M, K, N, R, C, pass_extent=ext)
-                        assert rep.cycles == cm.total, (K, N, R, C, ext, M, rep.cycles, cm.total)
+                        ru, cu = extentOf(K, N, R, C, ext)
+                        if cu == C:                                  # every column drained: the kernel's closed form
+                            cm = gemm_sim.cycle_model(M, K, N, R, C, pass_extent=ext)
+                            total, steady = cm.total, cm.t_steady
+                        else:                                        # fewer columns in use: the schedule at cols = C
+                            want = fullDrainTimeline(M, R, C, 40, 8, ru, cu, -(-K // R))
+                            total = want[-1]["done"]
+                            steady = want[1]["done"] - want[0]["done"] if M > 1 else None
+                        assert rep.cycles == total, (K, N, R, C, ext, M, rep.cycles, total)
                         if M > 1:
                             steps = rep.steps["gemm"]
-                            assert steps[1].tDone - steps[0].tDone == cm.t_steady
+                            assert steps[1].tDone - steps[0].tDone == steady
                         n += 1
     return n
 
@@ -115,7 +163,7 @@ def testGated(rng) -> int:
             rep = run(fc(K, N, R, C, M=M, passExtent="used", withValues=False, availableAt=offers))
             V, H = -(-K // R), -(-N // C)
             ru, cu = (K if V == 1 else R), (N if H == 1 else C)
-            want = pass_engine.schedule_pass_sequence(offers, R, C, 40, 8, rows=ru, cols=cu)
+            want = pass_engine.schedule_pass_sequence(offers, R, C, 40, 8, rows=ru, cols=C)   # every column drained
             lw = (gemm.clog2(V) if V > 1 else 0) + gemm.SER_LAT
             for s, w in zip(rep.steps["gemm"], want):
                 assert s.events["load_start"] == w["load_start"] and s.events["drain_end"] == w["drain_end"]

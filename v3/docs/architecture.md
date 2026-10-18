@@ -1,7 +1,9 @@
 # v3 architecture: one attention head on NL-DPE
 
 Status: 2026-10-14, draft for review. User decisions of 2026-10-14:
-- every pass uses only the rows and columns in use, at most $I = \min(R, C)$ for a conversion (§1);
+- every pass uses only the rows and columns in use, at most $I = \min(R, C)$ for a conversion (§1); since 2026-10-18
+  the extent sets the load and the valid window only: the simulator drains every column of the array on every pass
+  (the RTL still stops after the columns in use);
 - the tiled DIMM's farm is cut into slices of $X_S = 16$ crossbars; $X_S$ is fixed, and the DSE searches the farm
   size $N_E$ analytically.
 Nothing here has been simulated or synthesized. Tags:
@@ -50,7 +52,11 @@ Its timing:
 A load burst starts only while `MSB_SA_Ready` is high, and once started neither the load nor the drain stops.
 
 **Extent rule** (P29, user 2026-10-14): every pass loads only the rows in use and drains only the columns in use, which
-saves load and drain cycles. A conversion pass never uses more than $I = \min(R, C)$.
+saves load and drain cycles. A conversion pass never uses more than $I = \min(R, C)$. **Amended 2026-10-18 (user):**
+the drain walks every column of the array, in the energy (the output buffer and the drain are charged for $C$
+columns) and in the simulator's timing (`OUTPUT_CYC` = $\lceil 8C/BUF \rceil$); the columns in use are the valid
+prefix of the drained window. The RTL keeps the early-stopping drain, so the simulator is not RTL-pinned for passes
+with fewer columns in use than $C$ (`LEDGER.md`, Needs you 24).
 
 | crossbars | extent (rows × columns) |
 |---|---|

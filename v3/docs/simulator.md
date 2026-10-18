@@ -168,7 +168,9 @@ LOG; a mode the platform's output stage does not have is rejected. One call, `pa
   compute_start = max(load_start + LOAD, acc_free)          LOAD   = ceil(8 rows / BUF)
   msb_fire      = compute_start + P - 1
   acam_done     = max(msb_fire + 2, out_free)
-  drain_start   = acam_done + 1                             OUTPUT = ceil(8 cols / BUF)
+  drain_start   = acam_done + 1                             OUTPUT = ceil(8 C / BUF): the drain walks every column
+                                                            (user 2026-10-18; the RTL still stops after the columns
+                                                            in use, so the model is not RTL-pinned where cols < C)
   drain_end     = acam_done + OUTPUT
   state:  msb_fire_prev = msb_fire;  acc_free = acam_done + 1;  out_free = drain_end + 1
   ```

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""checkEquivalence.py — the equivalence gate: the refactored simulator (v3/simulator/) against the frozen outputs of
-the old one (frozen into work/equivalence/ref/ from git 816807b by the since-removed freezeReference.py).
+"""checkEquivalence.py — the equivalence gate: the simulator (v3/simulator/) against its frozen outputs.
+
+The first reference, work/equivalence/ref/ (frozen from git 816807b), proved the 2026-10-17 refactor equal to the old
+simulator. Since the drain rule of 2026-10-18 (every pass drains all C columns) the model differs from it by design,
+and the default reference is work/equivalence/ref_2026-10-18/, frozen from the model by freezeReference.py: from then
+on the gate catches unintended changes. --ref selects either.
 
   reports   every FC and attention build of the DSE, timing-only: cycles, every event line, every step (times and
             named events), counts, resources, basis; attention also ctrl.t_s and ctrl.done
@@ -282,7 +286,8 @@ def checkCorpora(ref: Path, new: Path, logDir: Path, jobs: int, say) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--ref", default=str(V3 / "work" / "equivalence" / "ref"))
+    ap.add_argument("--ref", default=str(V3 / "work" / "equivalence" / "ref_2026-10-18"),
+                    help="the frozen reference (work/equivalence/ref = the pre-refactor simulator, git 816807b)")
     ap.add_argument("--only", default="reports,rows,corpus")
     ap.add_argument("--jobs", type=int, default=8)
     a = ap.parse_args()

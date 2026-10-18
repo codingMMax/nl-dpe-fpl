@@ -90,7 +90,9 @@ Framing (`architecture.md` §3.1):
  gates (registered): tile open = armed, rb < B, slot (block rb - 2 retired), lp credit, (rb >= 1) la credit
 ```
 
-Extents: the EXP passes $I \times I$; the carry-EXP and carry-LOG passes $S \times S$ (the rows and columns in use).
+Extents: the EXP passes $I \times I$; the carry-EXP and carry-LOG passes $S \times S$ (the rows and columns in use;
+since 2026-10-18 the simulator drains every column of the array on every pass, the extent setting the load and the
+valid window, while the RTL still stops after the columns in use: `architecture.md` §1).
 
 ## 5 Timing rules
 

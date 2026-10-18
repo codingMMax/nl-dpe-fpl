@@ -93,6 +93,7 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 | 2026-10-17 | **The pass price: the whole array fires every time, only the rows in use are read, outputs full.** The $R \times C$ cells, the ACAM on every column, the output buffer and the output drain are charged in full; the input-buffer bytes and the input port words follow `ROWS_USED` (P29). The earlier full-array price on both sides overcharged every conversion pass on $R > C$ arrays and every GEMM pass with $K < R$ (`simulator/platform/prices.py`). | user |
 | 2026-10-17 | **Area and energy splits per config** (the (b) and (c) panels): attention = the geometric mean of each share over its 6 shapes; FC = the share of the total summed over its 4 shapes (FC builds without a memory block or a CLB add would make a geometric mean 0). Energy parts: DPE passes, CLB adds + compares, the passes' block-RAM port traffic, memory bytes. | user (recommendation accepted) |
 | 2026-10-18 | **`dse/results/` holds both families, one VTR table and one priced table each:** `fc_vtr_results.csv` (the 48 FC rows of v2's VTR table, verbatim), `fc_priced_results.csv` (the v3 model on them, `dse/fc_rows.py`), `attn_vtr_results.csv` (`dse/vtr_dse.py`), `attn_priced_results.csv` (`dse/attn_rows.py`). `fc_snapshot/` is merged away; v2's own rows and ranking are the regression reference in `simulator/tests/ref/`. `rank.py` and `breakdown.py` read the two priced tables and never run the simulator. The FC shapes are `space.py FC_SHAPES`. | user |
+| 2026-10-18 | **The simulator drains all C columns on every pass (your own edit of `core/crossbar.py`: `OUTPUT_CYC` from C, `colsUsed` removed), the RTL keeps the early-stopping P29 drain.** Energy and timing now both charge the full output side. The model is therefore not RTL-pinned for passes with COLS_USED < C (3–8 % of the attention passes at C = 128 and the larger C = 256 arrays, all of them at 128×256). Earlier the same day you had kept the P29 drain; this supersedes it. | user |
 
 ## Needs you
 
@@ -150,6 +151,27 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
     `c73c4d8`.)
 21. (done 2026-10-17, by you: the cleanup script ran and the new layout is committed, `02b3cd9` and `1043cad`.)
 22. (done 2026-10-17: the old folders and `reorganize_cleanup.sh` are gone, committed.)
+24. (done 2026-10-18: the simulator drains all C columns, your edit, with `colsUsed` restored as the window's valid
+    width; the test references follow, your "fix it and update the test references"; the RTL stays. Log of
+    2026-10-18.) **The drain rule** Trial: one line in `core/crossbar.py`
+    (`OUTPUT_CYC` from C instead of COLS_USED; reverted), the tables in `work/tmp/fulldrain/`. Energy and pass counts
+    unchanged on every row (the price already charges the full output side). FC cycles unchanged on all 48 rows (one
+    pass per row; the serializer finishes with the useful words). Attention: 22 of 72 builds change, all at C ≥ 128:
+    none at C = 64; 4 of 24 at C = 128 (max +13.8 %, JetFormer-150P, a 13-cycle load against a 26-cycle drain); 18 of
+    24 at C = 256 (median +26 %; 128×256 +26 to +83 %, the other C = 256 configs up to +62 %). Rankings: both latency vs
+    area fronts unchanged; the ADP tie flips to 256×64 first (d 0.478 against 128×64 0.483), its front unchanged; EDAP:
+    512×64 and 128×128 swap places 3 and 4 in attention, FC unchanged. To adopt: (1) `dpe_nldpe.v` (sim twin): the drain
+    counter from NUM_COLS, `drain_valid` / `data_out` for the first ceil(8 COLS_USED / 40) words only, `dpe_done` after
+    the full drain; the VTR twin is a black box, so the 72 VTR builds stay valid; (2) the DIMM converter contract
+    (`ip/dimm/spec.md` CONV_IN_LAT row, `dimmTile.py`): a converter of extent K on C columns is paced by the full drain,
+    so the port's minimum row spacing grows; the standalone generator overruns today under the rule ("a row at 48 needs
+    its burst at 49, the crossbar is ready at 51"), the 72 heads do not (the GEMM row period grows alongside); (3) the
+    xbar and gemm case writers still import the v2 kernels, which encode the early-stopping drain: move them onto the v3
+    models, or compare pass events against the kernel run at cols_used = C; (4) GATE 2 on iverilog: the crossbar P29
+    corpus (162), the GEMM P29 corpus (144), the DIMM 64×64 corpus, the softmax R ≠ C case, the 64×64 head bring-up and
+    gate H; (5) re-freeze the equivalence reference (56 of 72 attention reports, 22 rows differ by design), re-price,
+    pages, `experiment.md` §8–§9.3. About a session. Order on a go: model + specs, tests, RTL, runs, re-price.
+
 19. **The simulator for sensitivity studies** (your idea, 2026-10-16; 2026-10-17: the refactor delivered S-a as
     `simulator/platform/breakdown.py` + `Report.countsByRole()` and S-d as `simulator/README.md`; S-b and S-c
     remain, on your go). Today the model gives cycles, energy per
@@ -920,3 +942,60 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   and memory.md name the new files. The old paths (`fc_snapshot/`, the two old CSVs, `att_rows.py`, and the earlier
   `vtr/vtr_dse.py`, `vtr/dse_watch.py`) leave with your `git rm` (`v3/work/tmp/finish_results_layout.sh`, one commit
   with the renames).
+- 2026-10-18 (your "so all results are now priced with fixed energy modeling?"): checked, not assumed.
+  `dse/check_energy.py` (new, 4 s, part of `run_all.sh`) restates the pass price from the raw price table and prices the
+  simulator's ledger of every row with it: the 48 FC rows equal `fc_priced_results.csv` to 1e-13 pJ, the 72 attention rows
+  equal `attn_priced_results.csv` within the stored 0.01 pJ, the pass counts and the five role columns agree, and the
+  pass price holds at its boundaries (84 cases: 1, 2, 5, 6, R/2, R-1, R rows on all 12 configs; 0 and R+1 rejected; an
+  empty ledger costs nothing). The rule moved 12 of 48 FC rows (7-39 % cheaper) and all 72 attention builds (to 41 %).
+  Downstream: the JSONs, figures and both pages regenerate byte-identically from the tables (`run_all.sh`); HEAD
+  (`bbe3360`) holds the re-priced attention table and everything derived; the FC priced table and the renames are staged
+  for `finish_results_layout.sh`. Sized, deliberate rules: outputs full (your decision) vs by the columns used would move
+  attention energy 0-4 % (128x256 3.3-4.2 %, 256x256 up to 2.1 %, the others under 1.1 %), because the projection GEMMs
+  drain N = d < C columns too (my earlier "only 128x256" was wrong); the zero-padded rows of a partial last row tile
+  are read and charged (9 builds, 0.02-0.22 % of their energy).
+- 2026-10-18 (the drain rule; your "ensure the latency modeling is correct: only load the used rows, but always drain the
+  full output column"): trial and measurements in Needs you 24; the model change is reverted until your go. Under the
+  rule F2 fails crossbar (126 P29 cases: `drain_end`, cycles), gemm (96) and dimm (the converter overrun above); softmax,
+  accumulator and head pass; the equivalence gate differs on 4 FC reports (`drain_end` only), 56 attention reports and
+  22 attention rows. Today's short drains are 0.3 % of the attention passes at C = 64, 3–8 % at C = 128 and the larger
+  C = 256 arrays, 100 % at 128×256, and in FC only the 1×512×128 shape on C = 256 (11–14 % of its passes).
+- 2026-10-18 (the drain rule, your decision): the trial is reverted (`core/crossbar.py` identical to HEAD, checked), the RTL
+  untouched; the timing keeps the early-stopping P29 drain and the energy the full output side (Decisions). Nothing in the
+  results changes.
+- 2026-10-18 (your edit, then "rerun the run_all.sh ... re-publish"): `core/crossbar.py` drains `ceil(8 C / BUF)` words on every
+  pass and no longer takes `colsUsed`; `gemm.py`, `dimmTile.py`, `softmaxOnline.py`, `softmaxAccumulator.py` call it without the
+  argument. My re-run of `run_all.sh` reproduces your tables, JSONs and page byte for byte, so the page is republished from them;
+  `check_energy.py` run on them: ALL PASS (its step is not in your `run_all.sh`: line 11 is not a command any more). Against the committed results: energy identical on all 72 builds; cycles up on 22 of 72
+  (none at C = 64; up to +13.8 % at C = 128; +26 to +83 % at 128×256, up to +62 % at the other C = 256); FC unchanged on all 48
+  rows; both latency vs area fronts unchanged; ADP across the families now 256×64 (d 0.478), 128×64 (0.483), 256×128 (0.523).
+  Open: with `colsUsed` gone the drained window is C bytes wide while the consumers still slice COLS_USED / K / I bytes, so the
+  values path breaks (F2: gemm `cannot reshape (64) into (1,1,9)`, dimm `(64,) into (16,)`, head; testCrossbar still passes
+  `colsUsed=`); the timing-only DSE path is unaffected. The fix is to keep `colsUsed` as the window's valid width with the drain
+  at C (the form of the 2026-10-18 trial); then the cycle references of the crossbar, GEMM and DIMM tests and the frozen
+  equivalence reports need the new drain (Needs you 24, steps 2–5 without the RTL).
+- 2026-10-18 (your "yes, fix it and update the test references"): `core/crossbar.py` keeps `colsUsed` as the drained
+  window's valid width and sizes the drain from C (`OUTPUT_CYC = ceil(8 C / BUF)`); the four models pass their extents
+  again, so the values path works. Test references: `testCrossbar` takes the v2 kernel run at `cols_used = C` as its
+  timing witness (values from the expected files; case.json's cycles too where a case drains every column);
+  `testGemm` the same where every column is drained, else `pass_engine`'s schedule at cols = C plus L_w (written as the
+  charter's TREE_PIPE + 1, not read from the model: a first version read `gemm.SER_LAT` and missed the latency mutant)
+  and the COLS_USED output words; the DIMM's converter period becomes `convPeriod(L, C)` = max(load + P, P + 2, the
+  drain of C columns + 1) in `ip/dimm/cases.py`, `gen_cases.py`, the tests and `spec.md` (the standalone generator no
+  longer overruns); `freezeReference.py` (new) froze the model into `work/equivalence/ref_2026-10-18/`, now
+  `checkEquivalence.py`'s default (the 816807b reference stays as the refactor's proof: against it 4 FC reports differ
+  in `drain_end` only, 56 attention reports and 22 attention rows). F2 ALL PASS (crossbar 258 cases, 216 sweeps, 5/5
+  mutants; GEMM 160, 900, 3/3; DIMM, softmax, accumulator, head), equivalence ALL EQUAL on the new reference,
+  `check_energy` ALL PASS. The projection-stream formula gains the drain term, $T_p = \max(\lceil \min(d_m, R)/5
+  \rceil + 8, \lceil 8C/40 \rceil + 1)$: within 28 cycles of the simulator on all 72 builds (4,852 without it); the
+  projections' median share is 56 % (was 50 %); attention cycles 12k–23k per config (was 12k–22k). `experiment.md`
+  §4.4, §9.3, `simulator.md` §4.2, `architecture.md` §1, the DIMM and softmax specs and the page's latency note say so;
+  the page is republished. The RTL twins are untouched: `dpe_nldpe.v` still drains COLS_USED words, so the model is
+  not RTL-pinned for passes with COLS_USED < C (0.3 % of the attention passes at C = 64, 3–8 % at C = 128 and the
+  larger C = 256 arrays, all of 128×256).
+- 2026-10-18: the results layout is committed (`ffe0ef2`, your run of `finish_results_layout.sh`; the first run stopped
+  at `git rm` of `att_rows.py`, whose staged edit `attn_rows.py` carries, so the script now uses `-f` for that file
+  only). Today's work follows as the next commit; gates on the tree before it: F2 ALL PASS, equivalence ALL EQUAL
+  (`ref_2026-10-18`, local in `work/`; `freezeReference.py` re-freezes it), check_energy ALL PASS, copies 48/48,
+  head params 72/72, rank self-test, `run_all.sh` reproduces every output. `run_all.sh` keeps your commented-out
+  `check_energy.py` line.

@@ -15,6 +15,7 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 | 0 | `vtr_dse.py` (hours; on your go only; not part of `run_all.sh`) | the 72 builds' circuits from the VTR twins (`top/`, `ip/*/rtl/vtr`), `vtr/arch/`, `vtr/run_vtr.py`, `vtr/smoke.py`, VTR | the run folders `work/vtr/dse/<build>_<hash>/` and `results/attn_vtr_results.csv`: per build Fmax per seed and the mean, CLB, memory, crossbars, I/O, DSP, the elaboration check. `--aggregate` rebuilds the CSV from the folders with no tool; `--self-test` runs it on fake tools; `dse_watch.py --pid PID` reports on a running driver. The FC table `results/fc_vtr_results.csv` is v2's run (below), not regenerated |
 | 1 | `fc_rows.py OUT.csv --vtr results/fc_vtr_results.csv` | the simulator (one GEMV per row, `simulator/platform/rows.py fcRow`; `space.py FC_SHAPES` × `CONFIGS`), the FC VTR table | `results/fc_priced_results.csv`: per row the cycles, the pass count, the energy per term, the crossbars, and with VTR the area, latency and EDAP |
 | 1 | `attn_rows.py OUT.csv --vtr results/attn_vtr_results.csv` | the simulator (one head per build, `attentionRow`), the attention VTR table | `results/attn_priced_results.csv`: the same per build, plus the energy per role and the memory inventory |
+| 1b | `check_energy.py` (4 s; part of `run_all.sh`) | both priced tables, the simulator's ledger of each row, the raw price table `simulator/platform/nl_dpe.json` | nothing: it prices every row from the ledger with the energy rule restated from the raw table (not from `prices.py`), compares the energy terms, the pass counts and the attention role columns with the row, and tries the pass price at its boundaries; exit 1 on any difference |
 | — | `data.py` | the two priced tables | `fcRows()`, `attentionRows()` for the scripts below |
 | 2 | `rank.py` | both tables | `results/adp/latency_area.json`: per family $G_A$, $G_D$, $G_E$ and the latency vs area front; $G_{ADP}$ and the cross-family front and distance. `results/edap/ranking_{fc,attention,cross}.json`: the EDAP view. `--self-test` checks the arithmetic |
 | 3 | `breakdown.py` | both tables; the simulator for the projections' end | `results/breakdown.json`: per config the area split (DPE tiles / CLBs / memory blocks, VPR counts), the energy split (DPE passes / CLB / port traffic / memory bytes, the simulator's ledger), the means (crossbars, CLBs, cycles, Fmax, passes, the price paid per pass); prints the split tables |
@@ -47,6 +48,7 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 ## Checks
 
 ```text
+python3 v3/dse/check_energy.py                   every priced row against an independent pricing of its ledger
 python3 v3/dse/rank.py --self-test               the score arithmetic on hand-made cases
 python3 v3/simulator/tests/testFcRows.py         the 48 FC rows against v2's snapshot
 python3 v3/tools/check_head_params.py            the simulator's head parameters == the RTL's, for the 72 builds

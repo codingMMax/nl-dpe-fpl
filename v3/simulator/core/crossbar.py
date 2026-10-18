@@ -6,7 +6,8 @@ the crossbar's own state (the pass grammar below), and adds the pass to the coun
 in lock-step from one leader (one timing state, the n crossbars' values in one numpy operation): a GEMM's tiles, a DIMM
 wave, an accumulator group.
 
-Pass grammar (the RTL's, spec dpe_nldpe.md §4–§5; LOAD and OUTPUT at the P29 extent ROWS_USED / COLS_USED):
+Pass grammar (spec dpe_nldpe.md §4–§5; LOAD at the P29 extent ROWS_USED; the drain walks every column, user 2026-10-18,
+where the RTL still stops after COLS_USED: the model is not RTL-pinned for passes with COLS_USED < C):
     load_start    = max(tReady, msb_fire_prev + RDY_LAT)           (the first pass: max(tReady, 0))
     compute_start = max(load_start + LOAD_CYC, acc_free)
     msb_fire      = compute_start + P - 1
@@ -14,8 +15,9 @@ Pass grammar (the RTL's, spec dpe_nldpe.md §4–§5; LOAD and OUTPUT at the P29
     drain_start   = acam_done + DRAIN_LAT
     drain_end     = acam_done + OUTPUT_CYC
     state:  msb_fire_prev = msb_fire;  acc_free = acam_done + 1;  out_free = drain_end + 1
-LOAD_CYC = ceil(8 ROWS_USED / BUF), OUTPUT_CYC = ceil(8 COLS_USED / BUF); COMPUTE_CYC = P + 2 emerges (acam_done -
-compute_start + 1). BUF, P and the output stage's modes come from the platform: on NL-DPE BUF = 40, P = 8, ACAM.
+LOAD_CYC = ceil(8 ROWS_USED / BUF), OUTPUT_CYC = ceil(8 C / BUF) (every column; until 2026-10-18 ceil(8 COLS_USED / BUF));
+COMPUTE_CYC = P + 2 emerges (acam_done - compute_start + 1). BUF, P and the output stage's modes come from the
+platform: on NL-DPE BUF = 40, P = 8, ACAM.
 
 Values (the certified integer math; the oracle stays independent):
     y        = x @ W exactly (int32), input rows >= ROWS_USED read as zero (P29)
@@ -66,13 +68,15 @@ class Geometry:
 
 def geometry(R: int, C: int, BUF: int = 40, P: int = 8, rowsUsed: int | None = None,
              colsUsed: int | None = None) -> Geometry:
-    """The localparams; the RTL's elaboration guard is 1 <= ROWS_USED <= R and 1 <= COLS_USED <= C."""
+    """The localparams; the RTL's elaboration guard is 1 <= ROWS_USED <= R and 1 <= COLS_USED <= C. ROWS_USED sets the
+    load; COLS_USED is the valid prefix of the drained window, while the drain itself walks every column (user,
+    2026-10-18)."""
     rowsUsed = R if rowsUsed is None else rowsUsed
     colsUsed = C if colsUsed is None else colsUsed
     if not (1 <= rowsUsed <= R and 1 <= colsUsed <= C):
         raise ValueError(f"pass extent rows={rowsUsed}, cols={colsUsed} outside 1..{R} / 1..{C}")
     return Geometry(R, C, BUF, P, rowsUsed, colsUsed, LOAD_CYC=ceilDiv(rowsUsed * 8, BUF), COMPUTE_CYC=P + 2,
-                    OUTPUT_CYC=ceilDiv(colsUsed * 8, BUF), WR_CYC=R * C, EPS=BUF // 8)
+                    OUTPUT_CYC=ceilDiv(C * 8, BUF), WR_CYC=R * C, EPS=BUF // 8)     # the drain walks every column
 
 
 def trunc8(z) -> np.ndarray:

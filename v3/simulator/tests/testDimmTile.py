@@ -73,11 +73,11 @@ def gate1Cases(rng) -> list:
                         for cls in ("random", "zeros", "extremes"):
                             out.append(randomCase(f"qk_{R}x{C}_d{d}_e{nE}_p{pp}_r{runs}b{blocks}_{cls}", p, runs,
                                                   blocks, jobsQk(runs, blocks), rng, cls=cls,
-                                                  aPeriod=convPeriod(d), bPeriod=convPeriod(d)))
+                                                  aPeriod=convPeriod(d, C), bPeriod=convPeriod(d, C)))
             p = pvParams(S, d, 16, R, C, 2 * d, nExp=2, pProj=1, blocks=2)
             for cls in ("random", "zeros", "extremes"):
                 out.append(randomCase(f"pv_{R}x{C}_d{d}_{cls}", p, 4, 2, jobsPv(2, 2), rng, cls=cls,
-                                      aPeriod=convPeriod(I), bPeriod=convPeriod(d)))
+                                      aPeriod=convPeriod(I, C), bPeriod=convPeriod(d, C)))
     return out
 
 
@@ -137,16 +137,16 @@ def testRules(rng) -> int:
     """Each decision term binds exactly as spec §5."""
     n = 0
     p = qkParams(64, 16, 16, 64, 64, 32, pProj=1, runs=2, blocks=2, cCap=1)
-    base = randomCase("rules", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16), bPeriod=convPeriod(16))
+    base = randomCase("rules", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16, 64), bPeriod=convPeriod(16, 64))
     rep = run(build(base, withValues=False)[0])
     # (a) late job offers: t_dec = t_in + 1 when the offer binds
-    late = randomCase("late_jobs", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16), bPeriod=convPeriod(16),
+    late = randomCase("late_jobs", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16, 64), bPeriod=convPeriod(16, 64),
                       jAvailableAt=[5000, 9000, 13000, 17000])
     for s in jobSteps(run(build(late, withValues=False)[0])):
         assert s.events["t_dec"] == s.events["t_in"] + 1, s.events
     n += 1
     # (b) output credit starvation (C_CAP 1, the sink credits 400 cycles after the job's last word)
-    starved = randomCase("starve", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16), bPeriod=convPeriod(16),
+    starved = randomCase("starve", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16, 64), bPeriod=convPeriod(16, 64),
                          cCreditLatency=400)
     g, dimm, sink = build(starved, withValues=False)
     js = jobSteps(run(g))
@@ -155,8 +155,8 @@ def testRules(rng) -> int:
         assert js[j].events["t_dec"] == max(last + 400 + 1, js[j].events["t_in"] + 1), (j, js[j].events)
     n += 1
     # (c) the A and B matrices: a job waits for its operands' valid time
-    lateOperands = randomCase("late_ops", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16),
-                              bPeriod=convPeriod(16), bAvailableAt=[0, 6000])
+    lateOperands = randomCase("late_ops", p, 2, 2, jobsQk(2, 2), rng, aPeriod=convPeriod(16, 64),
+                              bPeriod=convPeriod(16, 64), bAvailableAt=[0, 6000])
     g, dimm, sink = build(lateOperands, withValues=False)
     js = jobSteps(run(g))
     previousIdle = 0
@@ -180,7 +180,7 @@ def testStaging(rng) -> int:
     n = 0
     # transposer: write times and credits per group, the slot valid time (row frame, two channels)
     p = qkParams(64, 32, 16, 64, 64, 64, pProj=2, runs=1, blocks=1)
-    c = randomCase("tr", p, 1, 1, [(0, 0, 0)], rng, aPeriod=convPeriod(32), bPeriod=convPeriod(32))
+    c = randomCase("tr", p, 1, 1, [(0, 0, 0)], rng, aPeriod=convPeriod(32, 64), bPeriod=convPeriod(32, 64))
     g, dimm, sink = build(c, withValues=False)
     rep = run(g)
     d = dimm.d
@@ -193,7 +193,7 @@ def testStaging(rng) -> int:
     assert dimm.aValidAt[0] == dimm.aEmitAt[-1] + d.KS
     n += 1
     # converter overrun: int8 rows closer than the converter period raise
-    bad = randomCase("conv_over", p, 1, 1, [(0, 0, 0)], rng, aPeriod=convPeriod(32) - 1, bPeriod=convPeriod(32))
+    bad = randomCase("conv_over", p, 1, 1, [(0, 0, 0)], rng, aPeriod=convPeriod(32, 64) - 1, bPeriod=convPeriod(32, 64))
     try:
         run(build(bad, withValues=False)[0])
     except ContractError as e:
@@ -203,7 +203,7 @@ def testStaging(rng) -> int:
         raise AssertionError("converter overrun not detected")
     # window stager overrun: log P windows faster than the slice writer
     pv = pvParams(32, 16, 16, 64, 64, 16, nExp=2, blocks=2)      # N_E = d: E_w = 16, 2 lanes -> 32 > 21
-    bad = randomCase("win_over", pv, 4, 2, jobsPv(2, 2), rng, aPeriod=convPeriod(64), bPeriod=convPeriod(16))
+    bad = randomCase("win_over", pv, 4, 2, jobsPv(2, 2), rng, aPeriod=convPeriod(64, 64), bPeriod=convPeriod(16, 64))
     try:
         run(build(bad, withValues=False)[0])
     except ContractError as e:
@@ -213,7 +213,7 @@ def testStaging(rng) -> int:
         raise AssertionError("window staging overrun not detected")
     # row writer: one row per cycle in row order, credit one cycle after the write
     pv = pvParams(32, 16, 16, 64, 64, 32, nExp=2, pProj=2, blocks=2)
-    c = randomCase("rw", pv, 4, 2, jobsPv(2, 2), rng, aPeriod=convPeriod(64), bPeriod=convPeriod(16))
+    c = randomCase("rw", pv, 4, 2, jobsPv(2, 2), rng, aPeriod=convPeriod(64, 64), bPeriod=convPeriod(16, 64))
     g, dimm, sink = build(c, withValues=False)
     rep = run(g)
     for t, tWrite in enumerate(dimm.bWriteAt):
@@ -221,7 +221,7 @@ def testStaging(rng) -> int:
     assert creditTimes(rep, "dimm", "b") == [tWrite + 1 for tWrite in dimm.bWriteAt]
     n += 1
     # row order (spec §3): two channels, row 1 late -> row 2 reaches the port first and the model raises
-    late = randomCase("rw_late", pv, 4, 2, jobsPv(2, 2), rng, aPeriod=convPeriod(64), bPeriod=convPeriod(16),
+    late = randomCase("rw_late", pv, 4, 2, jobsPv(2, 2), rng, aPeriod=convPeriod(64, 64), bPeriod=convPeriod(16, 64),
                       bAvailableAt=[3000 if k == 1 else 0 for k in range(2 * 16)])
     try:
         run(build(late, withValues=False)[0])
@@ -259,7 +259,7 @@ def testDomain() -> tuple:
         for p in (qk, pv):
             DimmTile.checkDomain(DimmTileParams(**p))
         d = DimmTile.derive(DimmTileParams(**pv))
-        rate = pv["A_CH"] * d.EW / convPeriod(d.I)
+        rate = pv["A_CH"] * d.EW / convPeriod(d.I, pv["C"])
         worst = max(worst, rate)
         assert rate <= 1.0, (meta, rate)
     for bad in (dict(M=16, N=8, K=12), dict(M=16, N=8, K=16, N_E=8), dict(M=4, N=8, K=8), dict(M=16, N=128, K=8),
@@ -274,9 +274,9 @@ def testDomain() -> tuple:
 
 def testTimingAndOrder(rng) -> None:
     for c in (randomCase("t_qk", qkParams(64, 32, 16, 64, 64, 64, pProj=2, runs=2, blocks=2), 2, 2, jobsQk(2, 2),
-                         rng, aPeriod=convPeriod(32), bPeriod=convPeriod(32), cCreditLatency=37),
+                         rng, aPeriod=convPeriod(32, 64), bPeriod=convPeriod(32, 64), cCreditLatency=37),
               randomCase("t_pv", pvParams(32, 16, 16, 64, 64, 32, nExp=2, pProj=2, blocks=2), 4, 2,
-                         jobsPv(2, 2), rng, aPeriod=convPeriod(64), bPeriod=convPeriod(16))):
+                         jobsPv(2, 2), rng, aPeriod=convPeriod(64, 64), bPeriod=convPeriod(16, 64))):
         a = run(build(c, withValues=True)[0])
         b = run(build(c, withValues=False)[0])
         assert a.events == b.events and a.cycles == b.cycles and a.counts["dimm"] == b.counts["dimm"]
@@ -289,9 +289,9 @@ def testMutants(rng) -> int:
     """Each mutant must fail a check: the port events (latencies, an early release), a deadlock (a dropped credit),
     or GATE 1 (a value mutant)."""
     qk = randomCase("mut_qk", qkParams(64, 32, 16, 64, 64, 64, pProj=1, runs=2, blocks=2, cCap=1), 2, 2,
-                    jobsQk(2, 2), rng, aPeriod=convPeriod(32), bPeriod=convPeriod(32), cCreditLatency=50)
+                    jobsQk(2, 2), rng, aPeriod=convPeriod(32, 64), bPeriod=convPeriod(32, 64), cCreditLatency=50)
     pv = randomCase("mut_pv", pvParams(32, 16, 16, 64, 64, 32, nExp=2, blocks=2), 4, 2, jobsPv(2, 2), rng,
-                    aPeriod=convPeriod(64), bPeriod=convPeriod(16))
+                    aPeriod=convPeriod(64, 64), bPeriod=convPeriod(16, 64))
     ref = {c.name: run(build(c, withValues=False)[0]).events for c in (qk, pv)}
     caught, total = 0, 0
     for name, delta in (("DEC_LAT", 1), ("CR_LAT", 1), ("IDLE_LAT", 1), ("EMIT_LAT", 1), ("DIST_LAT", 1),

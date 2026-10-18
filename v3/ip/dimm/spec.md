@@ -78,8 +78,10 @@ cycles, word $c$ = elements $5c \ldots 5c+4$, slots past the window are 0.
 
 Port contract for the producers:
 - int8 ports: consecutive windows on one channel start at least one converter pass period apart,
-  $T_{cv} = \max(\lceil 8L/BUF \rceil + P, P + 2, \lceil 8L/BUF \rceil + 1)$ ($L$ = the row length); the model raises
-  on an overrun.
+  $T_{cv} = \max(\lceil 8L/BUF \rceil + P, P + 2, \lceil 8C/BUF \rceil + 1)$ ($L$ = the row length; the last term is
+  the converter's drain, which walks every column of the array since 2026-10-18, so on a wide array it paces the
+  port: until then the drain stopped after the $L$ columns in use and the term was $\lceil 8L/BUF \rceil + 1$); the
+  model raises on an overrun.
 - Window frame: the slice writer must keep up (`architecture.md` §4.4 rate guard); the model raises on an overrun.
 - Row-frame ports and the B port never wrap their slots: a port receives at most `X_SLOTS` matrices per reset.
 - `TRANS_B` = 0: rows reach the port in row order (row $t$'s first word no earlier than row $t - 1$'s; rows may share
