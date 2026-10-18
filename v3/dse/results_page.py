@@ -233,6 +233,7 @@ def main() -> int:
   <p class="lede">Which crossbar size, rows R × columns C, gives the lowest latency and area? Attention: 72 builds of one head (6 shapes × 12 configs), each placed and routed with three VTR seeds. FC: the 48 rows of the v2 snapshot. One notation throughout: on each workload, a config's value is divided by the worst config's value, so the worst config scores 1 and lower is better; G is the geometric mean of those scores over a family's workloads, G<sub>A</sub> for area, G<sub>D</sub> for latency, G<sub>E</sub> for energy and G<sub>ADP</sub> for area × latency. Per family the plot is G<sub>A</sub> against G<sub>D</sub>; across the families, each config's G<sub>ADP</sub> in FC is x and in attention y. The Pareto front is the set of configs that no other config beats on both axes. G<sub>E</sub> is shown beside the fronts and is not part of them.</p>
 </header>
 
+{edap_vs_adp_section(la)}
 {la_section("fc", "FC", "dse_la_fc.png",
             "FC latency score against area score for 12 crossbar configs, with the Pareto front",
             f"{nfc} workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. Pareto front, from the smallest area to the lowest latency: {front_text(la['fc']['configs'])}.",
@@ -246,7 +247,6 @@ def main() -> int:
         "Attention G_ADP against the FC G_ADP for 12 crossbar configs, with the Pareto front",
         f"x = G<sub>ADP</sub> in FC, y = G<sub>ADP</sub> in attention; each is area × latency ÷ the largest on each workload, geometric mean over the family's workloads. Pareto front, from the best in FC to the best in attention: {front_text(la['adp']['cross']['configs'], 'G_FC')}. The circles mark equal distance d from the origin; the table is sorted by d. {cx(la['adp']['cross']['configs'][0]['config'])} (d = {la['adp']['cross']['configs'][0]['d']:.3f}) and {cx(la['adp']['cross']['configs'][1]['config'])} (d = {la['adp']['cross']['configs'][1]['d']:.3f}) are {100 * (la['adp']['cross']['configs'][1]['d'] / la['adp']['cross']['configs'][0]['d'] - 1):.2f} % apart: a tie.")}  {adp_table(la["adp"]["cross"]["configs"])}
 </section>
-{edap_vs_adp_section(la)}
 <div class="notes muted">
   <p>Latency = cycles ÷ Fmax, with Fmax the mean of the three VTR seeds; area counts CLBs, crossbar tiles and memory blocks from VPR. The 16 attention builds of the d = 64 shapes at C = 64 use VPR's own memory count, 5–8 blocks above the simulator's prediction.</p>
   <p>The three panels side by side (for a paper): <code>v3/dse/results/adp/dse_la.pdf</code>. Scores: <code>v3/dse/results/adp/latency_area.json</code>. The earlier EDAP rankings stay in <code>v3/dse/results/edap/ranking_*.json</code>.</p>
