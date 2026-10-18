@@ -23,11 +23,12 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
     area-delay product cross score (`experiment.md` §8), and the analysis of why attention and FC differ (§9).
   - **Now:** the simulator refactor (2026-10-17, `v3/simulator/`), the folder reorganization and the removal of v2/
     (the same day, `afb1caf`) are done and committed. Every gate is green on the tree without v2/ (log; `README.md`
-    has the map and the commands). Open: the push to `main` (Needs you 23). Next: the sensitivity-study steps (Needs
+    has the map and the commands). `main` is pushed (Needs you 23). Next: the sensitivity-study steps (Needs
     you 19: S-b, S-c).
   - `experiment.md`, `architecture.md` and `PLAN.md` still **wait for your review** (`simulator.md` is done).
-  - Git: branch `att-kernel`; nothing is pushed (the remote `main` is still `86dc189`). Restore points: `816807b`
-    (the pre-refactor tree) and the tag `v2-final` = `db76d1b` (v2 as it was on disk).
+  - Git: work on `main` (pushed 2026-10-17 as `df0c4e3`, one v3-only commit on `86dc189`). The step-by-step history
+    is the local branch `att-kernel` (not pushed: it carries 1.7 GB of generated test corpora); the restore point
+    `816807b` and the tag `v2-final` = `db76d1b` (v2 as it was on disk) are on it, local only.
 - **Docs:**
   - `PLAN.md`: rules R1–R8, layout, reuse from v2 (with the F1 as-built notes), phases F0–F6, decisions;
   - `docs/experiment.md`: question, design space, workloads, mapping space, metrics, procedure, shape sources;
@@ -163,7 +164,8 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
     - S-d: a readability pass: one short page per module model (what it models, its parameters, its gates) and the
       map of the simulator's layout in `simulator.md`.
 
-23. **Push to `main` (2026-10-17, your request; open).** The remote `main` is still `86dc189` (4 Oct); no push has
+23. (done 2026-10-17: choice (b) with the generated files dropped; `main` = `df0c4e3`, pushed by you; log.)
+    **Push to `main` (2026-10-17, your request).** The remote `main` is still `86dc189` (4 Oct); no push has
     arrived. A plain push of `att-kernel` sends 128 commits, 8461 objects, 1.78 GB raw (a 545 MB pack, measured 2026-10-17; the
     largest file is 23 MB, so GitHub accepts it). The size is one commit: `e93ce0e`, the first of the 4 commits that
     local `main` has beyond `origin/main`, added 1.7 GB of generated test corpora under `v2/sim/smoke/` because
@@ -850,3 +852,12 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   needs update") is rewritten for v3 (`3bb2cc5`); the old text is `d44e71d`. Dropped from it, and in `d44e71d`: the
   Round 1/2 constants (the 120×120 grid, BRAM counts, replica formulas), the BERT-Tiny constants, the DPE cycle axioms
   and the v2 key-path tables.
+- 2026-10-17 (the push; your "drop the first four and junk, build main-v3", then "done"): `main-v3` = `df0c4e3`, one
+  commit on `86dc189` with att-kernel's files minus 61 generated files (13.9 MB: 33 auto-generated benchmark RTL files,
+  the softmax study's 18 smoke work files, 5 DSE-era run logs, two root logs, `sweep.csv`, the empty `.gitmodules`, a
+  `.DS_Store`). Kept after a closer look: the softmax study's 24 per-run VPR logs and `vtr_softmax.log` (its `.gitignore`
+  keeps them as evidence), `v1-v2/logs/` (the deliverable's evidence) and the two Azure-Lily CNN sources in
+  `benchmarks/rtl`. The push: one fast-forward commit, a 2.7 MB pack; 760 files, 22.7 MB, no `v2/`. You ran
+  `drop_generated.sh --go` (`c5c1bf0` on att-kernel, the same 61 files, so both branches hold the same files) and
+  `git push origin main-v3:main`. Local `main` now points at `df0c4e3` and is the working branch (its 4 old commits are
+  inside att-kernel). The tag `v2-final` and the history stay local, so `tools/copies.py` runs only in this clone.

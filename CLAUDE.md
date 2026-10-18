@@ -20,6 +20,10 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
   there), `archive/`, `softmax_study/` (complete), and the DSE-era `dse/`, `nl_dpe/`, `benchmarks/`, `gemv_dse.py`,
   `flexscore_dse.py` (Round 1/2: results as CSVs and plots; the raw VTR run folders were deleted).
 - This file's text from before the v3 rewrite (it described v2 as live) is in git: `git show d44e71d:CLAUDE.md`.
+- **Local only:** GitHub's `main` starts v3 as one commit (`df0c4e3`, on `86dc189`). The step-by-step history, the tag
+  `v2-final` and the commits cited here and in `v3/` (`816807b`, `afb1caf`, `d44e71d`, ...) are on the local branch
+  `att-kernel` in `/mnt/vault0/jiajunh5/nl-dpe-fpl`; they are not pushed (they carry 1.7 GB of generated test corpora).
+  `tools/copies.py` needs that tag. Work on `main`.
 
 ## Rules (user decisions; do not re-raise)
 - **Fix VTR problems by editing the RTL only** (hardline, 2026-10-05, repeated 2026-10-17). No Parmys / Yosys / ABC / VPR
