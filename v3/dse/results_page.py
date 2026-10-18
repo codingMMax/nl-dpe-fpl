@@ -219,12 +219,12 @@ def main() -> int:
 
 {edap_vs_adp_section(la)}
 {la_section("fc", "FC", "dse_la_fc.png",
-            "FC latency score against area score for 12 crossbar configs, with the Pareto front",
-            f"{nfc} workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. Pareto front, from the smallest area to the lowest latency: {front_text(la['fc']['configs'])}.",
+            "FC: G_D against G_A for 12 crossbar configs with the Pareto front, and each config's area split into DPE tiles, CLBs and memory as stacked bars",
+            f"{nfc} workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. (a) Pareto front, from the smallest area to the lowest latency: {front_text(la['fc']['configs'])}. (b) Each config's area split into DPE tiles, CLBs and memory, as the share of the area summed over the {nfc} shapes (several FC builds have no memory block, so a geometric mean of the memory share would be 0); front configs in bold.",
             la["fc"]["configs"])}
 {la_section("att", "Attention head", "dse_la_attention.png",
-            "Attention latency score against area score for 12 crossbar configs, with the Pareto front",
-            f"{nat} workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). Pareto front: {front_text(la['attention']['configs'])}, the smallest area and the lowest latency at once.",
+            "Attention: G_D against G_A for 12 crossbar configs with the Pareto front, and each config's area split into DPE tiles, CLBs and memory as stacked bars",
+            f"{nat} workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). (a) Pareto front: {front_text(la['attention']['configs'])}, the smallest area and the lowest latency at once. (b) Each config's area split into DPE tiles, CLBs and memory, the geometric mean of each share over the {nat} shapes; front config in bold.",
             la["attention"]["configs"])}
 {analysis_section()}
 {figure("cross", "Across the families: area-delay product", "dse_adp_cross.png",

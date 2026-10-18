@@ -11,7 +11,8 @@ workloads, X = A, D, E, ADP, EDAP. Two views, one folder each under dse/results/
 ADP view (the current one, user 2026-10-16: latency vs area per family, area-delay product across the families),
 from adp/latency_area.json, written to adp/:
   dse_la.{png,pdf}                              three panels side by side (for a paper)
-  dse_la_fc.png, dse_la_attention.png           G_D vs G_A per family, with the Pareto front
+  dse_la_fc.png, dse_la_attention.png           per family: (a) G_D vs G_A with the Pareto front, (b) the area split
+                                                per config (DPE tiles / CLBs / memory; dse/results/breakdown.json)
   dse_adp_cross.png                             G_ADP in FC (x) vs G_ADP in attention (y), circles of equal distance
 EDAP view (the earlier one: energy x delay x area product), from edap/ranking_*.json, written to edap/:
   dse_{fc,attention}.{png,pdf}   per family, four panels:
@@ -350,7 +351,37 @@ def adp_panel(ax, rows: list, n_fc: int, n_att: int, title: str) -> None:
                  Line2D([], [], color="#9a9a9a", lw=.7, ls=":", label="equal distance d from the origin")]
 
 
-def latency_area(la: dict) -> dict:
+SPLIT = (("dpe", "DPE tiles", "#0072B2", "white"), ("clb", "CLBs", "#E69F00", "black"),
+         ("mem", "memory", "#009E73", "white"))
+
+
+def split_panel(ax, split: dict, front: set, title: str) -> None:
+    """The area split per config (user, 2026-10-17; dse/breakdown.py's area_split): stacked bars of the DPE tiles, the
+    CLBs and the memory in % of the area; configs grouped by R, the front configs' labels in bold."""
+    cfgs = [f"{r}x{c}" for r in RS for c in CS]
+    x = np.arange(len(cfgs))
+    bottom = np.zeros(len(cfgs))
+    for k, lab, col, tcol in SPLIT:
+        v = np.array([100 * split[c][k] for c in cfgs])
+        ax.bar(x, v, bottom=bottom, color=col, width=0.72, label=lab, zorder=2)
+        for xi, (b, h) in enumerate(zip(bottom, v)):
+            if h >= 6:
+                ax.text(xi, b + h / 2, f"{h:.0f}", ha="center", va="center", fontsize=8, color=tcol, zorder=3)
+        bottom += v
+    for g in range(1, len(RS)):                                        # separators between the R groups
+        ax.axvline(g * len(CS) - 0.5, color="#bbbbbb", lw=0.8, zorder=1)
+    ax.set_xticks(x, [c.replace("x", "×") for c in cfgs], rotation=45, ha="right", fontsize=8.5)
+    for t, c in zip(ax.get_xticklabels(), cfgs):
+        if c in front:
+            t.set_fontweight("bold")
+    ax.set_xlim(-0.6, len(cfgs) - 0.4)
+    ax.set_ylim(0, 100)
+    ax.set_ylabel("share of the area (%)")
+    ax.set_title(title, fontsize=10.5)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=3, fontsize=9, frameon=False)
+
+
+def latency_area(la: dict, bd: dict) -> dict:
     """Latency vs area (user, 2026-10-16), from dse/rank.py's latency_area.json: per family, each config's G_A against
     its G_D; across the families, x = G_ADP in FC, y = G_ADP in attention. Lower-left is better everywhere. Writes
     dse_la.{png,pdf} (three panels) and dse_la_fc.png, dse_la_attention.png, dse_adp_cross.png (one panel each, for
@@ -377,9 +408,21 @@ def latency_area(la: dict) -> dict:
     for ext in ("png", "pdf"):
         fig.savefig(ADP / f"dse_la.{ext}", dpi=150)
     plt.close(fig)
-    for _, fn, stem, loc in draw:
-        fig, ax = plt.subplots(figsize=(6.8, 7.0), constrained_layout=True)
-        fn(ax)
+    fam_titles = {     # the per-family figures (user, 2026-10-17): (a) the Pareto front, (b) the area split
+        "fc": (f"(a) FC: latency vs area  ({nfc} workloads)",
+               f"(b) FC: area split per config\n(share of the area summed over the {nfc} shapes)"),
+        "attention": (f"(a) attention head: latency vs area  ({nat} workloads)",
+                      f"(b) attention head: area split per config\n(geometric mean of each share over the {nat} shapes)")}
+    for fam, fn, stem, loc in draw:
+        if fam == "cross":
+            fig, ax = plt.subplots(figsize=(6.8, 7.0), constrained_layout=True)
+            fn(ax)
+        else:
+            fig, (ax, bx) = plt.subplots(1, 2, figsize=(13.8, 7.0), constrained_layout=True,
+                                         gridspec_kw=dict(width_ratios=[1, 1.05]))
+            la_panel(ax, la[fam]["configs"], fam_titles[fam][0])
+            split_panel(bx, {c: v["area_split"] for c, v in bd[fam].items()},
+                        {c["config"] for c in la[fam]["configs"] if c["front"]}, fam_titles[fam][1])
         place_labels(fig, ax)
         ax.legend(handles=hs + getattr(ax, "_extra", []), loc=loc, fontsize=8.5, framealpha=.92)
         fig.savefig(ADP / f"{stem}.png", dpi=160)
@@ -390,7 +433,8 @@ def latency_area(la: dict) -> dict:
 
 
 def main() -> None:
-    fronts = latency_area(json.loads((ADP / "latency_area.json").read_text()))
+    fronts = latency_area(json.loads((ADP / "latency_area.json").read_text()),
+                          json.loads((RESULTS / "breakdown.json").read_text()))
     print(f"wrote {ADP / 'dse_la.png'} and .pdf, dse_la_fc.png, dse_la_attention.png, dse_adp_cross.png | fronts {fronts}")
     res = {name: json.loads((EDAP / f"ranking_{name}.json").read_text()) for name in ("fc", "attention")}
     cr = json.loads((EDAP / "ranking_cross.json").read_text())

@@ -12,7 +12,13 @@
    "e_pass": 0.7090084339258804,
    "e_adds": 0.19008974262339423,
    "passes": 30.0,
-   "pass_price_pj": 14.783150000000001
+   "pass_price_pj": 14.783150000000001,
+   "area_split": {
+    "dpe": 0.9569377990430622,
+    "clb": 0.030303030303030304,
+    "mem": 0.012759170653907496,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "128x128": {
    "crossbars": 15,
@@ -26,7 +32,13 @@
    "e_pass": 0.7184242577337605,
    "e_adds": 0.20571477004116268,
    "passes": 15.0,
-   "pass_price_pj": 27.6655
+   "pass_price_pj": 27.6655,
+   "area_split": {
+    "dpe": 0.9663250366032211,
+    "clb": 0.021961932650073207,
+    "mem": 0.01171303074670571,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "128x256": {
    "crossbars": 8,
@@ -40,7 +52,13 @@
    "e_pass": 0.7469428644300706,
    "e_adds": 0.19060682973309429,
    "passes": 8.0,
-   "pass_price_pj": 53.430200000000006
+   "pass_price_pj": 53.430200000000006,
+   "area_split": {
+    "dpe": 0.9696969696969697,
+    "clb": 0.01875901875901876,
+    "mem": 0.011544011544011544,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "256x64": {
    "crossbars": 15,
@@ -54,7 +72,13 @@
    "e_pass": 0.7495674486966604,
    "e_adds": 0.1017362240571613,
    "passes": 15.0,
-   "pass_price_pj": 17.99395
+   "pass_price_pj": 17.99395,
+   "area_split": {
+    "dpe": 0.8737864077669902,
+    "clb": 0.11165048543689321,
+    "mem": 0.014563106796116505,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "256x128": {
    "crossbars": 7.5,
@@ -68,7 +92,13 @@
    "e_pass": 0.7735934289996009,
    "e_adds": 0.11658934433338336,
    "passes": 7.5,
-   "pass_price_pj": 32.1863
+   "pass_price_pj": 32.1863,
+   "area_split": {
+    "dpe": 0.9326424870466321,
+    "clb": 0.05181347150259067,
+    "mem": 0.015544041450777202,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "256x256": {
    "crossbars": 4,
@@ -82,7 +112,13 @@
    "e_pass": 0.8051602639830084,
    "e_adds": 0.10979467263150211,
    "passes": 4.0,
-   "pass_price_pj": 60.571000000000005
+   "pass_price_pj": 60.571000000000005,
+   "area_split": {
+    "dpe": 0.9481481481481482,
+    "clb": 0.037037037037037035,
+    "mem": 0.014814814814814815,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "512x64": {
    "crossbars": 8.5,
@@ -96,7 +132,13 @@
    "e_pass": 0.7720455318072654,
    "e_adds": 0.029646370742727694,
    "passes": 8.5,
-   "pass_price_pj": 24.415550000000003
+   "pass_price_pj": 24.415550000000003,
+   "area_split": {
+    "dpe": 0.7727272727272727,
+    "clb": 0.2215909090909091,
+    "mem": 0.005681818181818182,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "512x128": {
    "crossbars": 4.25,
@@ -110,7 +152,13 @@
    "e_pass": 0.8161785075636896,
    "e_adds": 0.0363594679785778,
    "passes": 4.25,
-   "pass_price_pj": 41.227900000000005
+   "pass_price_pj": 41.227900000000005,
+   "area_split": {
+    "dpe": 0.901060070671378,
+    "clb": 0.09187279151943463,
+    "mem": 0.007067137809187279,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "512x256": {
    "crossbars": 2.25,
@@ -124,7 +172,13 @@
    "e_pass": 0.8513003172534327,
    "e_adds": 0.04100165693720324,
    "passes": 2.25,
-   "pass_price_pj": 74.85260000000001
+   "pass_price_pj": 74.85260000000001,
+   "area_split": {
+    "dpe": 0.9310344827586207,
+    "clb": 0.06206896551724138,
+    "mem": 0.006896551724137931,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "1024x64": {
    "crossbars": 6.5,
@@ -138,7 +192,13 @@
    "e_pass": 0.7562443376700283,
    "e_adds": 0.013306489653922442,
    "passes": 6.5,
-   "pass_price_pj": 37.258750000000006
+   "pass_price_pj": 37.258750000000006,
+   "area_split": {
+    "dpe": 0.7835616438356164,
+    "clb": 0.21095890410958903,
+    "mem": 0.005479452054794521,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "1024x128": {
    "crossbars": 3.25,
@@ -152,7 +212,13 @@
    "e_pass": 0.8106151631069893,
    "e_adds": 0.017697755838965625,
    "passes": 3.25,
-   "pass_price_pj": 59.3111
+   "pass_price_pj": 59.3111,
+   "area_split": {
+    "dpe": 0.9069767441860465,
+    "clb": 0.08637873754152824,
+    "mem": 0.006644518272425249,
+    "method": "share of the area summed over the shapes"
+   }
   },
   "1024x256": {
    "crossbars": 1.75,
@@ -166,7 +232,13 @@
    "e_pass": 0.8573521562440118,
    "e_adds": 0.021195036014320618,
    "passes": 1.75,
-   "pass_price_pj": 103.4158
+   "pass_price_pj": 103.4158,
+   "area_split": {
+    "dpe": 0.9333333333333333,
+    "clb": 0.06,
+    "mem": 0.006666666666666667,
+    "method": "share of the area summed over the shapes"
+   }
   }
  },
  "attention": {
@@ -183,6 +255,12 @@
    "e_adds": 0.36042851147605065,
    "passes": 62203.50004340527,
    "pass_price_pj": 14.783150000000001,
+   "area_split": {
+    "dpe": 0.09268304110511003,
+    "clb": 0.8602534746256875,
+    "mem": 0.045800728937693776,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.5
   },
   "128x128": {
@@ -198,6 +276,12 @@
    "e_adds": 0.3698141485537952,
    "passes": 32110.0,
    "pass_price_pj": 27.6655,
+   "area_split": {
+    "dpe": 0.1530280427447479,
+    "clb": 0.8119510283088217,
+    "mem": 0.033346554177667714,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 1.0
   },
   "128x256": {
@@ -213,6 +297,12 @@
    "e_adds": 0.23976257905577902,
    "passes": 32109.999993761325,
    "pass_price_pj": 53.430200000000006,
+   "area_split": {
+    "dpe": 0.25604432311571834,
+    "clb": 0.7127687147205042,
+    "mem": 0.02922593953702977,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.5
   },
   "256x64": {
@@ -228,6 +318,12 @@
    "e_adds": 0.3099294565107489,
    "passes": 61499.499924511656,
    "pass_price_pj": 17.99395,
+   "area_split": {
+    "dpe": 0.10811039280101231,
+    "clb": 0.8457003462753062,
+    "mem": 0.04494575121289365,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.25
   },
   "256x128": {
@@ -243,6 +339,12 @@
    "e_adds": 0.33384865553156046,
    "passes": 31406.00001657019,
    "pass_price_pj": 32.1863,
+   "area_split": {
+    "dpe": 0.16293183148246582,
+    "clb": 0.8025026289970015,
+    "mem": 0.03294508752209475,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.5
   },
   "256x256": {
@@ -258,6 +360,12 @@
    "e_adds": 0.3348143480803356,
    "passes": 16363.000005503183,
    "pass_price_pj": 60.571000000000005,
+   "area_split": {
+    "dpe": 0.2250738984397548,
+    "clb": 0.7482725763826434,
+    "mem": 0.025168642826387935,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 1.0
   },
   "512x64": {
@@ -273,6 +381,12 @@
    "e_adds": 0.2418219902073156,
    "passes": 61307.500001706554,
    "pass_price_pj": 24.415550000000003,
+   "area_split": {
+    "dpe": 0.13877522070641252,
+    "clb": 0.8165200482925843,
+    "mem": 0.04347665168946931,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.125
   },
   "512x128": {
@@ -288,6 +402,12 @@
    "e_adds": 0.2773876538552528,
    "passes": 31213.999985446746,
    "pass_price_pj": 41.227900000000005,
+   "area_split": {
+    "dpe": 0.19533990654997344,
+    "clb": 0.7712340526017485,
+    "mem": 0.031710495550013644,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.25
   },
   "512x256": {
@@ -303,6 +423,12 @@
    "e_adds": 0.28938080957001433,
    "passes": 16170.999983077852,
    "pass_price_pj": 74.85260000000001,
+   "area_split": {
+    "dpe": 0.26553751929370734,
+    "clb": 0.7090898970587973,
+    "mem": 0.023838695226670613,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.5
   },
   "1024x64": {
@@ -318,6 +444,12 @@
    "e_adds": 0.16801860334959262,
    "passes": 61115.50002795763,
    "pass_price_pj": 37.258750000000006,
+   "area_split": {
+    "dpe": 0.18084734006809497,
+    "clb": 0.7765294002143285,
+    "mem": 0.041385468000704216,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.0625
   },
   "1024x128": {
@@ -333,6 +465,12 @@
    "e_adds": 0.20730103053038282,
    "passes": 31022.000013488203,
    "pass_price_pj": 59.3111,
+   "area_split": {
+    "dpe": 0.25264804109649464,
+    "clb": 0.7161438831836029,
+    "mem": 0.029400437580031524,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.125
   },
   "1024x256": {
@@ -348,6 +486,12 @@
    "e_adds": 0.22752400711350274,
    "passes": 15979.000017405464,
    "pass_price_pj": 103.4158,
+   "area_split": {
+    "dpe": 0.32464859832829773,
+    "clb": 0.6517905405392109,
+    "mem": 0.021937124727990864,
+    "method": "geometric mean of the per-shape shares"
+   },
    "used_cells": 0.25
   }
  },

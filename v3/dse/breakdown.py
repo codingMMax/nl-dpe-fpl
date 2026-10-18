@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """breakdown.py — why attention and FC rank the crossbar configs differently (docs/experiment.md §9): per config, the
-mean over each family's workloads of the area split (CLB / crossbar tiles / memory, from the VPR counts), the cycles,
+area split of the per-family figure (area_split: the DPE tiles, CLBs and memory; see areaSplit), and the mean over
+each family's workloads of the area split (CLB / crossbar tiles / memory, from the VPR counts), the cycles,
 Fmax, the energy split (crossbar passes / CLB adds), the crossbar count and pass count, the full-array pass price; for
 attention also the cycle at which the projections end (simulator/platform/breakdown.py, from the Report's events) and
 the share of a conversion crossbar's cells in use (I x I of R x C, I = min(R, C)).
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import statistics as st
 import sys
 from pathlib import Path
@@ -46,6 +48,26 @@ def projectionsEnd(n: int, dm: int, d: int, R: int, C: int) -> tuple:
     return parts["ctrl"].done - parts["ctrl"].tStart, projectionEnd(rep)
 
 
+def areaSplit(rs: list, R: int, C: int, family: str) -> dict:
+    """The area split of one config for the per-family figure (user, 2026-10-17), from the VPR counts: the DPE tiles,
+    the CLBs and the memory blocks. Attention: the geometric mean over the shapes of each build's share. FC: the share
+    of the area summed over the shapes (several FC builds have no memory block, so a geometric mean of the memory
+    share would be 0)."""
+    comps = [areaByComponent(int(r["clb_count"]), int(r["wc_vtr"]), int(r["mem_blocks"]), R, C) for r in rs]
+    keys = (("dpe", "xbar"), ("clb", "clb"), ("mem", "mem"))
+    if family == "attention":
+        out = {}
+        for k, src in keys:
+            xs = [c["shares"][src] for c in comps]
+            if min(xs) <= 0:
+                raise ValueError(f"{R}x{C}: a {k} share of 0, no geometric mean")
+            out[k] = math.exp(sum(math.log(x) for x in xs) / len(xs))
+        return dict(out, method="geometric mean of the per-shape shares")
+    total = sum(c["total_cells"] for c in comps)
+    return dict({k: sum(c["cells"][src] for c in comps) / total for k, src in keys},
+                method="share of the area summed over the shapes")
+
+
 def perConfig(rows: list, family: str) -> dict:
     out = {}
     for R, C in CONFIGS:
@@ -66,7 +88,8 @@ def perConfig(rows: list, family: str) -> dict:
                  fmax_mhz=mean(lambda r: float(r["fmax_mhz"])),
                  e_pass=mean(lambda r: float(r["e_pass_pj"]) / float(r["e_total_pj"])),
                  e_adds=mean(lambda r: float(r["e_adds_pj"]) / float(r["e_total_pj"])),
-                 passes=mean(lambda r: float(r["e_pass_pj"]) / price), pass_price_pj=price)
+                 passes=mean(lambda r: float(r["e_pass_pj"]) / price), pass_price_pj=price,
+                 area_split=areaSplit(rs, R, C, family))
         if family == "attention":
             I = min(R, C)
             o["used_cells"] = I * I / (R * C)
