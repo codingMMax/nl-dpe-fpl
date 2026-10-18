@@ -1,0 +1,1060 @@
+<title>NL-DPE Attention Head</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a tabbed engineering reference. One view at a time: the overview map, one large annotated diagram per
+   module, the parameter sheet, the explorer, the source document. Copper = mapping parameters (pins), teal = data
+   edges and credits, slate = derived values and control. */
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1a212b; --ink-2: #4b5667; --rule: #d8dde5;
+  --block: #edf0f4; --block-2: #e2e7ee; --copper: #a3521b; --copper-soft: #f4e4d7; --teal: #19706c;
+  --teal-soft: #dbeeed; --slate: #697586; --hl: #ffeeb8; --hl-ink: #6b4a00; --bad: #a3282b; --good: #1f6b3a;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10141a; --panel: #161b22; --ink: #e2e7ee; --ink-2: #a7b1bf; --rule: #2c3440; --block: #1b212a;
+    --block-2: #232b36; --copper: #e3894a; --copper-soft: #3b2617; --teal: #4fb4ae; --teal-soft: #142f2d;
+    --slate: #8d98a8; --hl: #3d3416; --hl-ink: #ffd877; --bad: #ef7a7c; --good: #7fd19b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10141a; --panel: #161b22; --ink: #e2e7ee; --ink-2: #a7b1bf; --rule: #2c3440; --block: #1b212a;
+  --block-2: #232b36; --copper: #e3894a; --copper-soft: #3b2617; --teal: #4fb4ae; --teal-soft: #142f2d;
+  --slate: #8d98a8; --hl: #3d3416; --hl-ink: #ffd877; --bad: #ef7a7c; --good: #7fd19b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px; }
+.wrap { max-width: 1560px; margin: 0 auto; }
+h1, h2, h3, h4 { font-family: var(--f-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(28px, 3.6vw, 40px); font-weight: 700; }
+h2 { font-size: 27px; font-weight: 600; }
+h3 { font-size: 21px; font-weight: 600; }
+h4 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+a { color: var(--teal); }
+:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.note { font-size: 13.5px; color: var(--ink-2); }
+
+header.top { padding-block: 22px 12px; display: grid; gap: 8px; }
+header.top .lede { max-width: 88ch; color: var(--ink-2); }
+.facts { display: flex; flex-wrap: wrap; gap: 6px 22px; font-variant-numeric: tabular-nums; }
+.fact { display: grid; }
+.fact b { font-family: var(--f-display); font-size: 20px; font-weight: 600; }
+.fact span { font-size: 12px; color: var(--ink-2); }
+
+nav.tabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); border-bottom: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: 2px 4px; padding-block: 6px; }
+nav.tabs a { font-family: var(--f-display); font-size: 16px; font-weight: 600; text-decoration: none; color: var(--ink-2);
+  padding: 5px 10px; border-radius: 5px; }
+nav.tabs a:hover { color: var(--copper); }
+nav.tabs a[aria-current="page"] { background: var(--ink); color: var(--bg); }
+nav.tabs .sep { width: 1px; background: var(--rule); margin: 4px 6px; }
+
+.view { padding-block: 18px 8px; display: grid; gap: 14px; }
+.view > header { display: grid; gap: 5px; max-width: 96ch; }
+.view > header p { color: var(--ink-2); }
+
+.pill { display: inline-flex; align-items: center; font-family: var(--f-mono); font-size: 12px; line-height: 1; padding: 4px 7px;
+  border-radius: 4px; border: 1px solid var(--copper); color: var(--copper); white-space: nowrap; background: none; cursor: pointer; }
+.pill.searched { background: var(--copper); color: var(--panel); }
+.pill.fixed { background: var(--copper-soft); }
+.pill.derived { border-color: var(--slate); color: var(--slate); }
+.pill.credit { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.legend > span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* diagrams */
+.figbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+.zoom, .variant { display: inline-flex; gap: 0; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.zoom button, .variant button { font-family: var(--f-mono); font-size: 12.5px; background: var(--panel); color: var(--ink-2); border: none;
+  padding: 6px 10px; cursor: pointer; border-right: 1px solid var(--rule); }
+.zoom button:last-child, .variant button:last-child { border-right: none; }
+.zoom button[aria-pressed="true"], .variant button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.fig { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; overflow: auto; max-height: 86vh; }
+.fig svg { display: block; width: 100%; min-width: 960px; height: auto; }
+svg text { font-family: var(--f-body); fill: var(--ink); }
+svg .t-title { font-family: var(--f-display); font-weight: 600; font-size: 21px; }
+svg .t-h { font-family: var(--f-display); font-weight: 600; font-size: 17px; }
+svg .t-sub { font-family: var(--f-mono); font-size: 13px; fill: var(--ink-2); }
+svg .t-line { font-size: 14.5px; }
+svg .t-sm { font-size: 13.5px; fill: var(--ink-2); }
+svg .t-count { font-family: var(--f-mono); font-size: 13.5px; fill: var(--copper); }
+svg .t-loop { font-family: var(--f-mono); font-size: 13.5px; fill: var(--copper); }
+svg .t-link { font-size: 13.5px; fill: var(--teal); text-decoration: underline; }
+svg .t-edge { font-family: var(--f-mono); font-size: 13px; fill: var(--teal); }
+svg .t-ctl { font-family: var(--f-mono); font-size: 12.5px; fill: var(--slate); }
+svg .frame { fill: var(--block); stroke: var(--rule); stroke-width: 1.3; }
+svg .stack { fill: var(--block-2); stroke: var(--rule); stroke-width: 1; }
+svg .box { fill: var(--panel); stroke: var(--rule); stroke-width: 1.2; }
+svg .blk, svg .sub { cursor: pointer; }
+svg .blk:hover > .frame, svg .sub:hover > .box { stroke: var(--copper); }
+svg .blk.hl > .frame, svg .sub.hl > .box { fill: var(--hl); stroke: var(--copper); stroke-width: 2.2; }
+svg .xb { fill: var(--teal-soft); stroke: var(--teal); stroke-width: 1; }
+svg .edge { stroke: var(--teal); stroke-width: 2.2; fill: none; }
+svg .ctl { stroke: var(--slate); stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; }
+svg .ah { fill: var(--teal); }
+svg .ahc { fill: var(--slate); }
+svg .chip { cursor: pointer; }
+svg .chip rect { rx: 5; stroke-width: 1.2; }
+svg .chip text { font-family: var(--f-mono); font-size: 13px; }
+svg .chip.searched rect { fill: var(--copper); stroke: var(--copper); }
+svg .chip.searched text { fill: var(--panel); }
+svg .chip.fixed rect { fill: var(--copper-soft); stroke: var(--copper); }
+svg .chip.fixed text { fill: var(--copper); }
+svg .chip.derived rect { fill: var(--panel); stroke: var(--slate); }
+svg .chip.derived text { fill: var(--slate); }
+svg .chip.credit rect { fill: var(--teal-soft); stroke: var(--teal); }
+svg .chip.credit text { fill: var(--teal); }
+svg .chip.input rect { fill: var(--panel); stroke: var(--ink-2); }
+svg .chip.input text { fill: var(--ink-2); }
+svg .chip.hl rect { stroke-width: 2.6; stroke: var(--hl-ink); }
+.details { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 8px; min-height: 92px; }
+.details .k { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.details p { max-width: 100ch; }
+
+.trace { display: flex; flex-wrap: wrap; gap: 6px; }
+.trace button, .locbtn { font-family: var(--f-mono); font-size: 12px; background: var(--block); color: var(--ink); border: 1px solid var(--rule);
+  border-radius: 4px; padding: 3px 7px; cursor: copy; text-align: left; }
+.trace button:hover, .locbtn:hover { border-color: var(--copper); }
+.trace button i { font-style: normal; color: var(--ink-2); font-family: var(--f-body); }
+.trace button.copied, .locbtn.copied { border-color: var(--good); }
+.trace .pill { cursor: pointer; }
+
+/* sheets */
+.cols2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 980px) { .cols2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+ul.tree { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 7px; }
+.tree li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 14px; align-items: baseline; padding-left: 12px; border-left: 2px solid var(--rule); font-size: 14px; }
+.tree li.sub1 { margin-left: 16px; }
+.tree li.sub2 { margin-left: 32px; }
+.loopc { font-family: var(--f-mono); font-size: 12.5px; color: var(--copper); }
+@media (max-width: 640px) { .tree li { grid-template-columns: minmax(0, 1fr); } }
+table.dt { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+table.dt th, table.dt td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.dt th { font-family: var(--f-mono); font-weight: 500; font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+table.dt tr.hl td { background: var(--hl); }
+
+.group-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; border-bottom: 2px solid var(--ink); padding-bottom: 6px; margin-top: 8px; }
+.group-h p { color: var(--ink-2); font-size: 14px; }
+.param { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 4px 22px; padding-block: 16px; border-bottom: 1px solid var(--rule); scroll-margin-top: 64px; }
+.param.hl { background: linear-gradient(90deg, var(--hl), transparent 70%); }
+@media (max-width: 720px) { .param { grid-template-columns: minmax(0, 1fr); } }
+.param .pname { display: grid; gap: 6px; align-content: start; }
+.param .pname h4 { font-size: 22px; }
+.param .pname .val { font-family: var(--f-mono); font-size: 13px; }
+.param .pbody { display: grid; gap: 8px; min-width: 0; }
+.param .pbody p { max-width: 90ch; }
+.lbl { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 6px; }
+
+/* explorer */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px; }
+.controls label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; }
+.controls select { font-family: var(--f-mono); font-size: 13.5px; padding: 6px 8px; border: 1px solid var(--rule); border-radius: 5px; background: var(--bg); color: var(--ink); }
+.verdict { font-size: 15px; display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: baseline; }
+.verdict b { font-family: var(--f-display); font-size: 24px; font-weight: 600; }
+.verdict .bad { color: var(--bad); }
+.bars { display: grid; gap: 6px; }
+.bar { display: grid; grid-template-columns: 200px minmax(0, 1fr) 70px; gap: 10px; align-items: center; font-size: 13px; }
+.bar .track { height: 16px; background: var(--block); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--teal); }
+.bar .num { font-family: var(--f-mono); text-align: right; }
+@media (max-width: 560px) { .bar { grid-template-columns: 120px minmax(0, 1fr) 50px; } }
+.cards4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.mini { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.mini h4 { font-size: 16px; }
+.kv { display: grid; grid-template-columns: auto auto; justify-content: space-between; gap: 2px 12px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.kv span:nth-child(odd) { color: var(--ink-2); }
+.kv span:nth-child(even) { font-family: var(--f-mono); text-align: right; }
+
+/* document */
+.doc { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 20px clamp(16px, 3vw, 36px); min-width: 0; }
+.doc h1 { font-size: 30px; margin-block: 8px 12px; }
+.doc h2 { font-size: 25px; margin-block: 30px 10px; padding-top: 10px; border-top: 2px solid var(--ink); scroll-margin-top: 64px; }
+.doc h3 { font-size: 20px; margin-block: 22px 8px; scroll-margin-top: 64px; }
+.doc p, .doc li { max-width: 88ch; }
+.doc p { margin-block: 8px; }
+.doc ul, .doc ol { padding-left: 22px; }
+.doc table { border-collapse: collapse; font-size: 13.5px; margin-block: 10px; display: block; overflow-x: auto; max-width: 100%; }
+.doc th, .doc td { border: 1px solid var(--rule); padding: 5px 9px; text-align: left; vertical-align: top; }
+.doc th { background: var(--block); font-weight: 600; }
+.doc pre { background: var(--block); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.35; }
+.doc code { background: var(--block); padding: 1px 4px; border-radius: 3px; }
+.doc pre code { background: none; padding: 0; }
+.doc .anno { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 4px 10px; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.doc mjx-container { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
+.doc-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; }
+footer { margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--ink-2); }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">v3 · F4 closed 2026-10-15 · source <code>v3/docs/architecture.md</code></div>
+  <h1>NL-DPE Attention Head</h1>
+  <p class="lede">One head of textbook attention from four general crossbar modules and a small controller. Open a module
+    to see its micro-architecture at full size; every box and pin is clickable and names the Verilog lines that build it.</p>
+  <div class="facts" aria-label="The VTR smoke point">
+    <div class="fact"><b>278</b><span>crossbars, BERT-Tiny head at 128×128</span></div>
+    <div class="fact"><b>11,199</b><span>cycles (model, 4 PV B credits)</span></div>
+    <div class="fact"><b>116.5 MHz</b><span>Fmax (VTR smoke, seed 11; fix running)</span></div>
+    <div class="fact"><b>15,837</b><span>CLBs · 376 memories · 0 DSPs</span></div>
+  </div>
+</header>
+<nav class="tabs" aria-label="Views">
+  <a href="#overview" data-tab="overview">Overview</a><span class="sep"></span>
+  <a href="#gemm" data-tab="gemm">GEMM</a><a href="#dimm" data-tab="dimm">Tiled DIMM</a><a href="#softmax" data-tab="softmax">Online softmax</a><a href="#acc" data-tab="acc">Accumulator</a><a href="#ctrl" data-tab="ctrl">att_ctrl</a><span class="sep"></span>
+  <a href="#params" data-tab="params">Parameters</a><a href="#explorer" data-tab="explorer">Explorer</a><a href="#doc" data-tab="doc">Document</a>
+</nav>
+
+<!-- ================================================================================================ OVERVIEW -->
+<section class="view" id="v-overview" data-view="overview">
+  <header>
+    <h2>The head</h2>
+    <p>X enters the projection GEMMs; Q and K meet in the QK DIMM; the online softmax turns scores into log P; the PV DIMM
+      weights V; the accumulator rescales and normalizes into O<sub>8</sub>. E0–E9 are the module ports; dashed lines are
+      <code>att_ctrl</code>'s control. Click a block to open its module view, or a pin to read the parameter.</p>
+  </header>
+  <div class="figbar">
+    <div class="legend">
+      <span><span class="pill searched">P_proj</span> searched</span><span><span class="pill fixed">N_EXP</span> fixed with a rule</span>
+      <span><span class="pill derived">NG</span> derived</span><span><span class="pill credit">E3 cap</span> credit size</span>
+    </div>
+    <div class="zoom" data-zoom="overview"><button type="button" aria-pressed="true" data-z="1">Fit</button><button type="button" data-z="1.5">1.5×</button><button type="button" data-z="2">2×</button></div>
+  </div>
+  <div class="fig" id="fig-overview">
+<svg viewBox="0 0 1400 830" role="img" aria-label="The attention head: modules, edges and parameters">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ahc" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <text class="t-line" x="14" y="206">X</text><text class="t-sub" x="14" y="224">n × d_m</text>
+  <path class="edge" d="M14,240 L100,240" marker-end="url(#ah)"/><text class="t-edge" x="34" y="262">E0</text>
+
+  <g class="blk" data-goto="gemm" tabindex="0" role="button" aria-label="Open the GEMM view">
+    <rect class="frame" x="100" y="90" width="300" height="300" rx="10"/>
+    <text class="t-title" x="120" y="124">Projection GEMMs</text><text class="t-sub" x="120" y="148">gemm_top × 3·P_proj</text>
+    <text class="t-line" x="120" y="186">W_Q, W_K and W_V for every copy</text>
+    <text class="t-line" x="120" y="210">copy p takes tokens t ≡ p mod P_proj</text>
+    <text class="t-line" x="120" y="234">V crossbars per GEMM (REGULAR)</text>
+    <text class="t-line" x="120" y="258">a row every T_p = LOADX + 8 cycles</text>
+    <text class="t-count" x="120" y="292">crossbars: 3·P_proj·V</text>
+    <text class="t-link" x="120" y="372">open the GEMM view →</text>
+  </g>
+  <g class="chip searched" data-param="P_PROJ" tabindex="0" role="button"><rect x="120" y="310" width="72" height="26"/><text x="129" y="328">P_proj</text></g>
+  <g class="chip derived" data-param="V" tabindex="0" role="button"><rect x="200" y="310" width="32" height="26"/><text x="211" y="328">V</text></g>
+  <g class="chip derived" data-param="LOADX" tabindex="0" role="button"><rect x="240" y="310" width="68" height="26"/><text x="249" y="328">LOADX</text></g>
+
+  <path class="edge" d="M400,160 L480,160" marker-end="url(#ah)"/><text class="t-edge" x="408" y="150">E1 q8</text>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="406" y="168" width="66" height="22"/><text x="412" y="184">E1 cap</text></g>
+  <path class="edge" d="M400,250 L480,250" marker-end="url(#ah)"/><text class="t-edge" x="408" y="240">E2 k8</text>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="406" y="258" width="66" height="22"/><text x="412" y="274">E2 cap</text></g>
+  <path class="edge" d="M400,340 L440,340 L440,600 L480,600" marker-end="url(#ah)"/><text class="t-edge" x="448" y="414">E3 v8</text>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="448" y="422" width="66" height="22"/><text x="454" y="438">E3 cap</text></g>
+
+  <g class="blk" data-goto="dimm" data-variant="qk" tabindex="0" role="button" aria-label="Open the DIMM view, QK instance">
+    <rect class="frame" x="480" y="60" width="400" height="330" rx="10"/>
+    <text class="t-title" x="500" y="94">QK DIMM</text><text class="t-sub" x="500" y="118">dimm_tile_top · TRANS_B 1 · NARROW 5</text>
+    <text class="t-line" x="500" y="156">s8 = sat8(Q·Kᵀ ≫ 5), tiles of S × B_kv</text>
+    <text class="t-line" x="500" y="180">LOG converters: P_proj on A, P_proj on B</text>
+    <text class="t-line" x="500" y="204">farm: N_E EXP crossbars, I × I</text>
+    <text class="t-line" x="500" y="228">cut into n_s = N_E / 16 slices</text>
+    <text class="t-line" x="500" y="252">out: NG_QK = N_E / d channels</text>
+    <text class="t-count" x="500" y="286">crossbars: N_E + 2·P_proj</text>
+    <text class="t-link" x="500" y="372">open the DIMM view →</text>
+  </g>
+  <g class="chip searched" data-param="N_E" tabindex="0" role="button"><rect x="500" y="304" width="52" height="26"/><text x="509" y="322">N_E</text></g>
+  <g class="chip fixed" data-param="X_S" tabindex="0" role="button"><rect x="560" y="304" width="52" height="26"/><text x="569" y="322">X_S</text></g>
+  <g class="chip fixed" data-param="BKV" tabindex="0" role="button"><rect x="620" y="304" width="58" height="26"/><text x="629" y="322">B_kv</text></g>
+  <g class="chip derived" data-param="NG" tabindex="0" role="button"><rect x="686" y="304" width="42" height="26"/><text x="695" y="322">NG</text></g>
+  <g class="chip derived" data-param="NS" tabindex="0" role="button"><rect x="736" y="304" width="52" height="26"/><text x="745" y="322">n_s</text></g>
+  <g class="chip derived" data-param="AGRP" tabindex="0" role="button"><rect x="796" y="304" width="70" height="26"/><text x="805" y="322">A_GRP</text></g>
+
+  <path class="edge" d="M880,220 L980,220" marker-end="url(#ah)"/><text class="t-edge" x="888" y="210">E4 s8</text>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="888" y="228" width="66" height="22"/><text x="894" y="244">E4 cap</text></g>
+
+  <g class="blk" data-goto="softmax" tabindex="0" role="button" aria-label="Open the online softmax view">
+    <rect class="frame" x="980" y="60" width="330" height="330" rx="10"/>
+    <text class="t-title" x="1000" y="94">Online softmax</text><text class="t-sub" x="1000" y="118">softmax_online_top</text>
+    <text class="t-line" x="1000" y="156">per key block: max, log α, log P, sums</text>
+    <text class="t-line" x="1000" y="180">N_EXP EXP crossbars, I × I</text>
+    <text class="t-line" x="1000" y="204">carry EXP + carry LOG, S × S</text>
+    <text class="t-line" x="1000" y="228">keeps (m, log l) per query row</text>
+    <text class="t-line" x="1000" y="252">one run = S rows over n keys</text>
+    <text class="t-count" x="1000" y="286">crossbars: N_EXP + 2</text>
+    <text class="t-link" x="1000" y="372">open the softmax view →</text>
+  </g>
+  <g class="chip fixed" data-param="N_EXP" tabindex="0" role="button"><rect x="1000" y="304" width="66" height="26"/><text x="1009" y="322">N_EXP</text></g>
+  <g class="chip fixed" data-param="BQ" tabindex="0" role="button"><rect x="1074" y="304" width="84" height="26"/><text x="1083" y="322">B_q = S</text></g>
+  <g class="chip fixed" data-param="BKV" tabindex="0" role="button"><rect x="1166" y="304" width="58" height="26"/><text x="1175" y="322">B_kv</text></g>
+  <g class="chip derived" data-param="I" tabindex="0" role="button"><rect x="1232" y="304" width="30" height="26"/><text x="1243" y="322">I</text></g>
+
+  <path class="edge" d="M1010,390 L1010,425 L700,425 L700,460" marker-end="url(#ah)"/><text class="t-edge" x="720" y="417">E5 log P</text>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="900" y="400" width="66" height="22"/><text x="906" y="416">E5 cap</text></g>
+  <path class="edge" d="M1150,390 L1150,460" marker-end="url(#ah)"/><text class="t-edge" x="1158" y="430">E6 log α</text>
+  <path class="edge" d="M1250,390 L1250,460" marker-end="url(#ah)"/><text class="t-edge" x="1258" y="446">E7 log l</text>
+
+  <g class="blk" data-goto="dimm" data-variant="pv" tabindex="0" role="button" aria-label="Open the DIMM view, PV instance">
+    <rect class="frame" x="480" y="460" width="400" height="310" rx="10"/>
+    <text class="t-title" x="500" y="494">PV DIMM</text><text class="t-sub" x="500" y="518">dimm_tile_top · TRANS_B 0 · full width</text>
+    <text class="t-line" x="500" y="556">o_part = P·V, tiles of S × d, 13 bits</text>
+    <text class="t-line" x="500" y="580">LOG converter: P_proj on B (V rows)</text>
+    <text class="t-line" x="500" y="604">farm: N_EP EXP crossbars, I × I</text>
+    <text class="t-line" x="500" y="628">cut into n_s = N_EP / 16 slices</text>
+    <text class="t-line" x="500" y="652">out: NG_PV = N_EP / B_kv channels</text>
+    <text class="t-count" x="500" y="684">crossbars: N_EP + P_proj</text>
+    <text class="t-link" x="500" y="754">open the DIMM view →</text>
+  </g>
+  <g class="chip fixed" data-param="N_EP" tabindex="0" role="button"><rect x="500" y="700" width="60" height="26"/><text x="509" y="718">N_EP</text></g>
+  <g class="chip fixed" data-param="X_S" tabindex="0" role="button"><rect x="568" y="700" width="52" height="26"/><text x="577" y="718">X_S</text></g>
+  <g class="chip fixed" data-param="BKV" tabindex="0" role="button"><rect x="628" y="700" width="58" height="26"/><text x="637" y="718">B_kv</text></g>
+  <g class="chip derived" data-param="NG" tabindex="0" role="button"><rect x="694" y="700" width="42" height="26"/><text x="703" y="718">NG</text></g>
+  <g class="chip derived" data-param="NS" tabindex="0" role="button"><rect x="744" y="700" width="52" height="26"/><text x="753" y="718">n_s</text></g>
+
+  <path class="edge" d="M880,610 L980,610" marker-end="url(#ah)"/><text class="t-edge" x="888" y="600">E8 o_part</text>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="888" y="618" width="66" height="22"/><text x="894" y="634">E8 cap</text></g>
+
+  <g class="blk" data-goto="acc" tabindex="0" role="button" aria-label="Open the accumulator view">
+    <rect class="frame" x="980" y="460" width="330" height="310" rx="10"/>
+    <text class="t-title" x="1000" y="494">Accumulator</text><text class="t-sub" x="1000" y="518">softmax_online_acc</text>
+    <text class="t-line" x="1000" y="556">o ← α·o + o_part per block (log + sign)</text>
+    <text class="t-line" x="1000" y="580">O8 = o / l at the end of a run</text>
+    <text class="t-line" x="1000" y="604">LOG group + EXP group, N_OC each</text>
+    <text class="t-line" x="1000" y="628">O reader: token rows in order</text>
+    <text class="t-count" x="1000" y="662">crossbars: 2·N_OC</text>
+    <text class="t-link" x="1000" y="754">open the accumulator view →</text>
+  </g>
+  <g class="chip fixed" data-param="N_OC" tabindex="0" role="button"><rect x="1000" y="680" width="60" height="26"/><text x="1009" y="698">N_OC</text></g>
+  <g class="chip derived" data-param="PCH" tabindex="0" role="button"><rect x="1068" y="680" width="60" height="26"/><text x="1077" y="698">P_CH</text></g>
+  <g class="chip derived" data-param="W" tabindex="0" role="button"><rect x="1136" y="680" width="32" height="26"/><text x="1146" y="698">W</text></g>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="1176" y="681" width="110" height="24"/><text x="1182" y="698">E6, E7 caps</text></g>
+
+  <path class="edge" d="M1310,610 L1370,610" marker-end="url(#ah)"/><text class="t-edge" x="1318" y="600">E9</text>
+  <text class="t-line" x="1318" y="640">O8</text><text class="t-sub" x="1318" y="658">n × d</text>
+
+  <g class="blk" data-goto="ctrl" tabindex="0" role="button" aria-label="Open the att_ctrl view">
+    <rect class="frame" x="100" y="470" width="300" height="270" rx="10"/>
+    <text class="t-title" x="120" y="504">att_ctrl</text><text class="t-sub" x="120" y="528">counters only, no crossbar</text>
+    <text class="t-line" x="120" y="566">token admission per copy (x_rdy)</text>
+    <text class="t-line" x="120" y="590">QK and PV job lists, R_b·B each</text>
+    <text class="t-line" x="120" y="614">softmax runs, R_b</text>
+    <text class="t-line" x="120" y="638">done after the last run</text>
+    <text class="t-link" x="120" y="722">open the att_ctrl view →</text>
+  </g>
+  <g class="chip derived" data-param="S" tabindex="0" role="button"><rect x="120" y="660" width="30" height="26"/><text x="131" y="678">S</text></g>
+  <g class="chip derived" data-param="RB" tabindex="0" role="button"><rect x="158" y="660" width="48" height="26"/><text x="167" y="678">R_b</text></g>
+  <g class="chip derived" data-param="B" tabindex="0" role="button"><rect x="214" y="660" width="30" height="26"/><text x="225" y="678">B</text></g>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="252" y="661" width="132" height="24"/><text x="258" y="678">qa qb pb caps</text></g>
+
+  <path class="ctl" d="M250,470 L250,392" marker-end="url(#ahc)"/><text class="t-ctl" x="258" y="438">x_rdy[p]</text>
+  <path class="ctl" d="M400,520 L462,520 L462,380 L480,380" marker-end="url(#ahc)"/><text class="t-ctl" x="404" y="512">QK jobs</text>
+  <path class="ctl" d="M400,700 L480,700" marker-end="url(#ahc)"/><text class="t-ctl" x="404" y="692">PV jobs</text>
+  <path class="ctl" d="M245,740 L245,792 L1350,792 L1350,300 L1312,300" marker-end="url(#ahc)"/><text class="t-ctl" x="1318" y="290">runs</text>
+  <path class="ctl" d="M1150,770 L1150,792"/><text class="t-ctl" x="1158" y="786">run_done</text>
+  <text class="t-ctl" x="480" y="818">credits qa_cr, qb_cr (QK), pb_cr (PV) and run_done (accumulator) return to att_ctrl</text>
+</svg>
+  </div>
+  <div class="details" id="det-overview"><div class="k">Selected</div><p class="note">Click a block to open its module view, or a pin to read the parameter here.</p></div>
+</section>
+
+<!-- ================================================================================================ GEMM -->
+<section class="view" id="v-gemm" data-view="gemm" hidden>
+  <header>
+    <div class="eyebrow">module · ip/gemm/rtl/sim/gemm_top.v · 389 lines · certified v2, unchanged except the out_valid port</div>
+    <h2>Projection GEMM: gemm_top</h2>
+    <p>Y = trunc8(X·W) for one token row per pass. In the head K = d<sub>m</sub>, N = d and H = 1 (d ≤ C), so a GEMM is
+      V crossbars stacked over d<sub>m</sub>. A copy holds three (W<sub>Q</sub>, W<sub>K</sub>, W<sub>V</sub>) that run
+      in lock-step on the same X burst; the head has P<sub>proj</sub> copies.</p>
+  </header>
+  <div class="figbar"><span class="note">Click a box for its Verilog lines.</span>
+    <div class="zoom" data-zoom="gemm"><button type="button" aria-pressed="true" data-z="1">Fit</button><button type="button" data-z="1.5">1.5×</button><button type="button" data-z="2">2×</button></div></div>
+  <div class="fig" id="fig-gemm">
+<svg viewBox="0 0 1400 640" role="img" aria-label="gemm_top internals">
+  <text class="t-line" x="40" y="34">One copy holds three of these (W_Q, W_K, W_V); the head has P_proj copies, so 3·P_proj GEMMs.</text>
+  <g class="chip searched" data-param="P_PROJ" tabindex="0" role="button"><rect x="1180" y="16" width="72" height="26"/><text x="1189" y="34">P_proj</text></g>
+  <rect class="frame" x="30" y="56" width="1340" height="560" rx="10"/>
+  <text class="t-title" x="50" y="88">gemm_top</text><text class="t-sub" x="50" y="110">K = d_m, N = d, H = 1, REGULAR mode, no ACAM after the reduction</text>
+  <g class="sub" data-sub="g_in" tabindex="0" role="button">
+    <rect class="box" x="60" y="150" width="270" height="160" rx="6"/>
+    <text class="t-h" x="76" y="176">Token burst (E0)</text>
+    <text class="t-line" x="76" y="202">LOADX words, 5 bytes each</text>
+    <text class="t-line" x="76" y="226">V lanes: lane v = rows vR … vR+R−1</text>
+    <text class="t-line" x="76" y="250">starts on x_rdy, never stops</text>
+    <text class="t-sm" x="76" y="282">act_in [V·40], act_en</text>
+  </g>
+  <g class="chip derived" data-param="LOADX" tabindex="0" role="button"><rect x="60" y="322" width="68" height="26"/><text x="69" y="340">LOADX</text></g>
+  <path class="edge" d="M330,205 L400,205" marker-end="url(#ah)"/><path class="edge" d="M330,230 L360,230 L360,307 L400,307" marker-end="url(#ah)"/><path class="edge" d="M330,255 L350,255 L350,443 L400,443" marker-end="url(#ah)"/>
+  <text class="t-loop" x="400" y="140">for gv &lt; V</text>
+  <g class="chip derived" data-param="V" tabindex="0" role="button"><rect x="500" y="122" width="32" height="26"/><text x="511" y="140">V</text></g>
+  <g class="sub" data-sub="g_tiles" tabindex="0" role="button">
+    <rect class="box" x="400" y="160" width="300" height="90" rx="6"/>
+    <rect class="xb" x="414" y="176" width="40" height="40" rx="3"/>
+    <text class="t-h" x="468" y="190">tile 0 · dpe REGULAR</text><text class="t-sm" x="468" y="214">extent ROWS_X × d</text>
+    <rect class="box" x="400" y="262" width="300" height="90" rx="6"/>
+    <rect class="xb" x="414" y="278" width="40" height="40" rx="3"/>
+    <text class="t-h" x="468" y="292">tile 1</text><text class="t-sm" x="468" y="316">rows R … 2R−1 of X and W</text>
+    <text class="t-line" x="544" y="378">⋮</text>
+    <rect class="box" x="400" y="398" width="300" height="90" rx="6"/>
+    <rect class="xb" x="414" y="414" width="40" height="40" rx="3"/>
+    <text class="t-h" x="468" y="428">tile V − 1</text><text class="t-sm" x="468" y="452">ROWS_X = min(d_m, R) rows in use</text>
+  </g>
+  <path class="ctl" d="M550,488 L550,512" marker-end="url(#ahc)"/>
+  <g class="sub" data-sub="g_ready" tabindex="0" role="button">
+    <rect class="box" x="400" y="512" width="300" height="84" rx="6"/>
+    <text class="t-h" x="416" y="538">Readiness</text>
+    <text class="t-line" x="416" y="562">MSB_SA_Ready = AND of the V tiles</text>
+    <text class="t-sm" x="416" y="584">→ att_ctrl → x_rdy[p]</text>
+  </g>
+  <path class="edge" d="M700,205 L780,225" marker-end="url(#ah)"/><path class="edge" d="M700,307 L780,265" marker-end="url(#ah)"/><path class="edge" d="M700,443 L780,315" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="g_tree" tabindex="0" role="button">
+    <rect class="box" x="780" y="160" width="250" height="190" rx="6"/>
+    <text class="t-h" x="796" y="186">Byte tree</text>
+    <text class="t-line" x="796" y="212">sign-extend each tile's bytes</text>
+    <text class="t-line" x="796" y="236">TREE_PIPE = log₂V registered</text>
+    <text class="t-line" x="796" y="260">pairwise folds</text>
+    <text class="t-sm" x="796" y="292">no stage when V = 1</text>
+  </g>
+  <path class="edge" d="M1030,255 L1090,255" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="g_ser" tabindex="0" role="button">
+    <rect class="box" x="1090" y="160" width="250" height="190" rx="6"/>
+    <text class="t-h" x="1106" y="186">Serializer</text>
+    <text class="t-line" x="1106" y="212">low byte of each column sum</text>
+    <text class="t-line" x="1106" y="236">data_out: 5 bytes per cycle</text>
+    <text class="t-line" x="1106" y="260">out_valid marks each word</text>
+    <text class="t-sm" x="1106" y="292">⌈d/5⌉ words per row</text>
+  </g>
+  <path class="edge" d="M1340,255 L1394,255" marker-end="url(#ah)"/><text class="t-edge" x="1240" y="378">→ E1 / E2 / E3</text>
+  <g class="chip input" data-param="SHAPE" tabindex="0" role="button"><rect x="1090" y="392" width="140" height="26"/><text x="1099" y="410">d_m, d, R, C</text></g>
+  <g class="sub" data-sub="g_drain" tabindex="0" role="button">
+    <rect class="box" x="780" y="440" width="560" height="90" rx="6"/>
+    <text class="t-h" x="796" y="466">Drain markers</text>
+    <text class="t-line" x="796" y="492">reg_full and dpe_done pass through a marker pipeline as deep as the data path,</text>
+    <text class="t-line" x="796" y="514">so out_valid lines up with the words</text>
+  </g>
+  <text class="t-sm" x="780" y="574">Row period T_p = LOADX + 8 cycles: a pass per token (load LOADX words, compute 10, drain ⌈d/5⌉), overlapped.</text>
+  <text class="t-sm" x="780" y="598">Example BERT-Tiny at 128×128: V = 1, LOADX = 26, T_p = 34.</text>
+</svg>
+  </div>
+  <div class="details" id="det-gemm"><div class="k">Selected</div><p class="note">Click a box or a pin.</p></div>
+  <div class="cols2">
+    <div class="card"><h3>Build sheet</h3><ul class="tree">
+      <li><span><span class="loopc">for gc &lt; P_PROJ</span> three <code>gemm_top</code> (Q, K, V) per copy in the head netlist.</span><span data-loc="top/rtl/sim/att_head.v:69"></span></li>
+      <li><span><b>Derived</b>: V = ⌈K/R⌉, H = ⌈N/C⌉, TREE_PIPE = log₂V.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:89"></span></li>
+      <li><span><span class="loopc">for gv &lt; V, gh &lt; H</span> one <code>dpe</code> per tile, REGULAR, extent ROWS_USED × COLS_USED.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:166"></span></li>
+      <li><span><b>Readiness</b>: MSB_SA_Ready = AND of all tiles.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:198"></span></li>
+      <li><span><b>Drain phase</b>: handshakes → marker pipeline.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:206"></span></li>
+      <li><span><b>Reduction tree</b>: TREE_PIPE registered folds.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:254"></span></li>
+      <li><span><b>Serializer and lanes</b>: data_out, out_valid.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:321"></span></li>
+      <li><span><b>Pass end</b>: dpe_done, the reg_full busy flag.</span><span data-loc="ip/gemm/rtl/sim/gemm_top.v:370"></span></li>
+    </ul></div>
+    <div class="card"><h3>Parameters here</h3><div class="trace" data-pins="P_PROJ V LOADX SHAPE CREDITS"></div>
+      <p class="note">P<sub>proj</sub> multiplies the whole module (3 per copy). V is the number of crossbars per GEMM; it grows when d<sub>m</sub> &gt; R, which is when more copies pay most.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================================================ DIMM -->
+<section class="view" id="v-dimm" data-view="dimm" hidden>
+  <header>
+    <div class="eyebrow">module · ip/dimm/rtl/sim/dimm_tile_top.v · 1,200 lines · 7 modules · two instances</div>
+    <h2>Tiled DIMM: dimm_tile_top</h2>
+    <p>One job computes one tile C = A·B (or A·B<sup>⊤</sup>) in the log domain: every crossbar sums ±EXP(L<sub>A</sub> +
+      L<sub>B</sub>) over its column k. The same module is the QK DIMM and the PV DIMM; switch the instance to see how the
+      ports, loaders and output change. The farm is cut into slices of X<sub>S</sub> = 16 crossbars that run in lock-step.</p>
+  </header>
+  <div class="figbar">
+    <div class="variant" id="dimm-variant" role="group" aria-label="Instance"><button type="button" aria-pressed="true" data-v="qk">QK instance</button><button type="button" data-v="pv">PV instance</button></div>
+    <div class="zoom" data-zoom="dimm"><button type="button" aria-pressed="true" data-z="1">Fit</button><button type="button" data-z="1.5">1.5×</button><button type="button" data-z="2">2×</button></div>
+  </div>
+  <div class="fig" id="fig-dimm">
+<svg viewBox="0 0 1400 950" role="img" aria-label="dimm_tile_top internals">
+  <rect class="frame" x="20" y="20" width="1360" height="910" rx="10"/>
+  <text class="t-title" x="40" y="52">dimm_tile_top</text>
+  <text class="t-sub" x="210" y="52" data-qk="QK: M × N × K = S × B_kv × d · TRANS_B 1 · NARROW 5" data-pv="PV: M × N × K = S × d × B_kv · TRANS_B 0 · full width">QK: M × N × K = S × B_kv × d · TRANS_B 1 · NARROW 5</text>
+
+  <g class="sub" data-sub="d_aport" tabindex="0" role="button">
+    <rect class="box" x="40" y="80" width="250" height="100" rx="6"/>
+    <text class="t-h" x="56" y="106">A port</text>
+    <text class="t-line" x="56" y="132" data-qk="E1: q8 rows, int8, row frame" data-pv="E5: log P windows, log bytes">E1: q8 rows, int8, row frame</text>
+    <text class="t-line" x="56" y="156" data-qk="A_CH = P_proj channels" data-pv="A_CH = N_EXP channels">A_CH = P_proj channels</text>
+  </g>
+  <g class="sub" data-sub="d_bport" tabindex="0" role="button">
+    <rect class="box" x="40" y="200" width="250" height="100" rx="6"/>
+    <text class="t-h" x="56" y="226">B port</text>
+    <text class="t-line" x="56" y="252" data-qk="E2: k8 rows, int8, TRANS_B 1" data-pv="E3: v8 rows, int8, TRANS_B 0">E2: k8 rows, int8, TRANS_B 1</text>
+    <text class="t-line" x="56" y="276">B_CH = P_proj channels</text>
+  </g>
+  <path class="edge" d="M290,130 L330,130" marker-end="url(#ah)"/><path class="edge" d="M290,250 L330,250" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_aconv" tabindex="0" role="button">
+    <rect class="box" x="330" y="80" width="250" height="100" rx="6"/>
+    <text class="t-h" x="346" y="106" data-qk="LOG converter × A_CH" data-pv="No A converter">LOG converter × A_CH</text>
+    <text class="t-line" x="346" y="132" data-qk="dpe LOG, d × d, a row per pass" data-pv="log bytes are used as given">dpe LOG, d × d, a row per pass</text>
+    <text class="t-sm" x="346" y="156" data-qk="L = trunc8(x − 1), sign from L" data-pv="A_DOM = 1, sign + (A_SIGNED 0)">L = trunc8(x − 1), sign from L</text>
+  </g>
+  <g class="sub" data-sub="d_bconv" tabindex="0" role="button">
+    <rect class="box" x="330" y="200" width="250" height="100" rx="6"/>
+    <text class="t-h" x="346" y="226">LOG converter × B_CH</text>
+    <text class="t-line" x="346" y="252">dpe LOG, row length × itself</text>
+    <text class="t-sm" x="346" y="276">one per GEMM copy</text>
+  </g>
+  <path class="edge" d="M580,130 L620,130" marker-end="url(#ah)"/><path class="edge" d="M580,250 L620,250" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_dist" tabindex="0" role="button">
+    <rect class="box" x="620" y="80" width="200" height="220" rx="6"/>
+    <text class="t-h" x="636" y="106">Distribution</text>
+    <text class="t-line" x="636" y="134">register, 1 cycle</text>
+    <text class="t-line" x="636" y="158">each 40-bit word goes</text>
+    <text class="t-line" x="636" y="182">to the slice(s) that</text>
+    <text class="t-line" x="636" y="206">own its columns</text>
+  </g>
+  <path class="edge" d="M820,130 L860,130" marker-end="url(#ah)"/><path class="edge" d="M820,250 L860,250" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_aload" tabindex="0" role="button">
+    <rect class="box" x="860" y="80" width="250" height="100" rx="6"/>
+    <text class="t-h" x="876" y="106" data-qk="A transposer" data-pv="A window stager">A transposer</text>
+    <text class="t-line" x="876" y="132" data-qk="NB-row groups, 2 deep" data-pv="2 windows per channel">NB-row groups, 2 deep</text>
+    <text class="t-sm" x="876" y="156" data-qk="credit E1: 2 groups" data-pv="no staging credit (slots credit)">credit E1: 2 groups</text>
+  </g>
+  <g class="sub" data-sub="d_bload" tabindex="0" role="button">
+    <rect class="box" x="860" y="200" width="250" height="100" rx="6"/>
+    <text class="t-h" x="876" y="226" data-qk="B transposer" data-pv="B row writer">B transposer</text>
+    <text class="t-line" x="876" y="252" data-qk="one B matrix = B_kv rows" data-pv="2 registers per copy, row order">one B matrix = B_kv rows</text>
+    <text class="t-sm" x="876" y="276" data-qk="credit E2: 2 matrices" data-pv="credit E3: 4 rows per copy">credit E2: 2 matrices</text>
+  </g>
+  <g class="sub" data-sub="d_job" tabindex="0" role="button">
+    <rect class="box" x="1150" y="80" width="210" height="220" rx="6"/>
+    <text class="t-h" x="1166" y="106">Job logic</text>
+    <text class="t-line" x="1166" y="134">job register ja_q, jb_q</text>
+    <text class="t-line" x="1166" y="158">decide: slots valid</text>
+    <text class="t-line" x="1166" y="182">∧ every slice idle</text>
+    <text class="t-line" x="1166" y="206">∧ an output credit</text>
+    <text class="t-line" x="1166" y="230">→ go_q to every slice</text>
+    <text class="t-sm" x="1166" y="262">slots load while idle</text>
+    <text class="t-sm" x="1166" y="284">(Fmax fix, 2026-10-15)</text>
+  </g>
+  <text class="t-ctl" x="1166" y="74">j_v · j_rdy (jobs)</text>
+  <g class="chip searched" data-param="P_PROJ" tabindex="0" role="button"><rect x="40" y="312" width="72" height="26"/><text x="49" y="330">P_proj</text></g>
+  <g class="chip fixed" data-param="N_EXP" tabindex="0" role="button"><rect x="120" y="312" width="66" height="26"/><text x="129" y="330">N_EXP</text></g>
+  <g class="chip fixed" data-param="BKV" tabindex="0" role="button"><rect x="194" y="312" width="58" height="26"/><text x="203" y="330">B_kv</text></g>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="860" y="312" width="140" height="26"/><text x="869" y="330">staging credits</text></g>
+
+  <path class="edge" d="M985,300 L985,372" marker-end="url(#ah)"/><text class="t-edge" x="993" y="352">A and B writes, one word per cycle per slice port</text>
+  <path class="ctl" d="M1255,300 L1255,350 L1105,350 L1105,500 L1084,500" marker-end="url(#ahc)"/><text class="t-ctl" x="1114" y="440">go_q</text>
+
+  <rect class="stack" x="64" y="396" width="1020" height="444" rx="8"/>
+  <rect class="stack" x="52" y="384" width="1020" height="444" rx="8"/>
+  <rect class="frame" x="40" y="372" width="1040" height="444" rx="8" style="fill:var(--panel)"/>
+  <text class="t-h" x="60" y="400">slice s</text>
+  <text class="t-loop" x="130" y="400">for gs &lt; NS: n_s slices of X_S crossbars (dimm_slice)</text>
+  <g class="sub" data-sub="d_astage" tabindex="0" role="button">
+    <rect class="box" x="60" y="420" width="240" height="104" rx="6"/>
+    <text class="t-h" x="76" y="446" data-qk="A staging (transposer)" data-pv="A staging (windows)">A staging (transposer)</text>
+    <text class="t-line" x="76" y="472" data-qk="G = NB row banks × K_s cols" data-pv="2 entries × A_ROWS × K_s keys">G = NB row banks × K_s cols</text>
+    <text class="t-sm" x="76" y="496" data-qk="two buffers" data-pv="per channel, flip-flops">two buffers</text>
+  </g>
+  <g class="sub" data-sub="d_bstage" tabindex="0" role="button">
+    <rect class="box" x="60" y="540" width="240" height="104" rx="6"/>
+    <text class="t-h" x="76" y="566" data-qk="B staging (transposer)" data-pv="B: no staging">B staging (transposer)</text>
+    <text class="t-line" x="76" y="592" data-qk="G = B_kv rows × K_s cols" data-pv="the row writer writes the">G = B_kv rows × K_s cols</text>
+    <text class="t-sm" x="76" y="616" data-qk="two buffers" data-pv="B memory directly">two buffers</text>
+  </g>
+  <path class="edge" d="M300,470 L330,470" marker-end="url(#ah)"/><path class="edge" d="M300,590 L330,590" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_amem" tabindex="0" role="button">
+    <rect class="box" x="330" y="420" width="230" height="104" rx="6"/>
+    <text class="t-h" x="346" y="446">A memories</text>
+    <text class="t-line" x="346" y="472">X_S / A_GRP banks</text>
+    <text class="t-sm" x="346" y="496">A_SLOTS · T_W · A_GRP words</text>
+  </g>
+  <g class="sub" data-sub="d_bmem" tabindex="0" role="button">
+    <rect class="box" x="330" y="540" width="230" height="104" rx="6"/>
+    <text class="t-h" x="346" y="566">B memories</text>
+    <text class="t-line" x="346" y="592">K_s / B_GRP memories</text>
+    <text class="t-sm" x="346" y="616">B_SLOTS · B_GRP words</text>
+  </g>
+  <g class="sub" data-sub="d_engine" tabindex="0" role="button">
+    <rect class="box" x="60" y="664" width="500" height="132" rx="6"/>
+    <text class="t-h" x="76" y="690">Window engine copy (dimm_tile_ctrl)</text>
+    <text class="t-line" x="76" y="716">T_W waves per job; take-now: a window starts the cycle</text>
+    <text class="t-line" x="76" y="740">the leader crossbar is ready; depth-2 drain queue</text>
+    <text class="t-sm" x="76" y="768">led by this slice's crossbar 0; lock-step with the other slices</text>
+  </g>
+  <path class="edge" d="M560,470 L600,470" marker-end="url(#ah)"/><path class="edge" d="M560,590 L600,590" marker-end="url(#ah)"/><path class="ctl" d="M560,730 L600,730" marker-end="url(#ahc)"/>
+  <g class="sub" data-sub="d_xbars" tabindex="0" role="button">
+    <rect class="box" x="600" y="420" width="300" height="376" rx="6"/>
+    <text class="t-h" x="616" y="446">X_S crossbars, EXP, I × I</text>
+    <text class="t-sm" x="616" y="468">column k = f / NG, group f mod NG</text>
+    <g>
+      <rect class="xb" x="626" y="484" width="52" height="52" rx="3"/><rect class="xb" x="688" y="484" width="52" height="52" rx="3"/><rect class="xb" x="750" y="484" width="52" height="52" rx="3"/><rect class="xb" x="812" y="484" width="52" height="52" rx="3"/>
+      <rect class="xb" x="626" y="546" width="52" height="52" rx="3"/><rect class="xb" x="688" y="546" width="52" height="52" rx="3"/><rect class="xb" x="750" y="546" width="52" height="52" rx="3"/><rect class="xb" x="812" y="546" width="52" height="52" rx="3"/>
+      <rect class="xb" x="626" y="608" width="52" height="52" rx="3"/><rect class="xb" x="688" y="608" width="52" height="52" rx="3"/><rect class="xb" x="750" y="608" width="52" height="52" rx="3"/><rect class="xb" x="812" y="608" width="52" height="52" rx="3"/>
+      <rect class="xb" x="626" y="670" width="52" height="52" rx="3"/><rect class="xb" x="688" y="670" width="52" height="52" rx="3"/><rect class="xb" x="750" y="670" width="52" height="52" rx="3"/><rect class="xb" x="812" y="670" width="52" height="52" rx="3"/>
+    </g>
+    <text class="t-line" x="616" y="752">u = trunc8(L_A + L_B) → EXP</text>
+    <text class="t-sm" x="616" y="776">sign s_A ⊕ s_B → ±e, registered</text>
+  </g>
+  <path class="edge" d="M900,600 L920,600" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_ptree" tabindex="0" role="button">
+    <rect class="box" x="920" y="420" width="145" height="376" rx="6"/>
+    <text class="t-h" x="934" y="446">Partial trees</text>
+    <text class="t-line" x="934" y="474">per group:</text>
+    <text class="t-line" x="934" y="498">log₂ K_s</text>
+    <text class="t-line" x="934" y="522">registered</text>
+    <text class="t-line" x="934" y="546">levels</text>
+  </g>
+  <path class="edge" d="M1065,470 L1120,470" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_ttree" tabindex="0" role="button">
+    <rect class="box" x="1120" y="420" width="240" height="110" rx="6"/>
+    <text class="t-h" x="1136" y="446">Top tree</text>
+    <text class="t-line" x="1136" y="472">last log₂ n_s levels</text>
+    <text class="t-sm" x="1136" y="496">across slices, registered</text>
+  </g>
+  <path class="edge" d="M1240,530 L1240,560" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_narrow" tabindex="0" role="button">
+    <rect class="box" x="1120" y="560" width="240" height="96" rx="6"/>
+    <text class="t-h" x="1136" y="586" data-qk="NARROW 5" data-pv="Full width">NARROW 5</text>
+    <text class="t-line" x="1136" y="612" data-qk="s8 = sat8(acc ≫ 5)" data-pv="13-bit o_part">s8 = sat8(acc ≫ 5)</text>
+  </g>
+  <path class="edge" d="M1240,656 L1240,686" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="d_cout" tabindex="0" role="button">
+    <rect class="box" x="1120" y="686" width="240" height="110" rx="6"/>
+    <text class="t-h" x="1136" y="712" data-qk="C out → E4 (softmax)" data-pv="C out → E8 (accumulator)">C out → E4 (softmax)</text>
+    <text class="t-line" x="1136" y="738" data-qk="NG_QK = N_E / d channels" data-pv="NG_PV = N_EP / B_kv ch">NG_QK = N_E / d channels</text>
+    <text class="t-sm" x="1136" y="762">credit C_CAP: 2 tiles</text>
+  </g>
+  <path class="edge" d="M1360,740 L1394,740" marker-end="url(#ah)"/>
+  <text class="t-sm" x="40" y="850">Farm and slice:</text>
+  <g class="chip searched" data-param="N_E" tabindex="0" role="button"><rect x="160" y="834" width="52" height="26"/><text x="169" y="852">N_E</text></g>
+  <g class="chip fixed" data-param="N_EP" tabindex="0" role="button"><rect x="220" y="834" width="60" height="26"/><text x="229" y="852">N_EP</text></g>
+  <g class="chip fixed" data-param="X_S" tabindex="0" role="button"><rect x="288" y="834" width="52" height="26"/><text x="297" y="852">X_S</text></g>
+  <g class="chip derived" data-param="NS" tabindex="0" role="button"><rect x="348" y="834" width="88" height="26"/><text x="357" y="852">n_s, K_s</text></g>
+  <g class="chip derived" data-param="NG" tabindex="0" role="button"><rect x="444" y="834" width="42" height="26"/><text x="453" y="852">NG</text></g>
+  <g class="chip derived" data-param="AGRP" tabindex="0" role="button"><rect x="494" y="834" width="70" height="26"/><text x="503" y="852">A_GRP</text></g>
+  <g class="chip derived" data-param="WK" tabindex="0" role="button"><rect x="572" y="834" width="128" height="26"/><text x="581" y="852">NB, W_K, T_W</text></g>
+  <g class="chip derived" data-param="I" tabindex="0" role="button"><rect x="708" y="834" width="30" height="26"/><text x="719" y="852">I</text></g>
+  <text class="t-sm" x="40" y="896" data-qk="Example QK, BERT-Tiny at 128×128: NB 8, W_K 16, NG 2, T_W 8 waves, 8 slices of 8 columns, A_GRP 16, B_GRP 8; 128 EXP + 2 LOG crossbars." data-pv="Example PV, BERT-Tiny at 128×128: NB 2, W_K 64, NG 8, T_W 8 waves, 8 slices of 2 keys, A_GRP 16, B_GRP 2; 128 EXP + 1 LOG crossbars.">Example QK, BERT-Tiny at 128×128: NB 8, W_K 16, NG 2, T_W 8 waves, 8 slices of 8 columns, A_GRP 16, B_GRP 8; 128 EXP + 2 LOG crossbars.</text>
+</svg>
+  </div>
+  <div class="details" id="det-dimm"><div class="k">Selected</div><p class="note">Click a box or a pin. The text follows the selected instance.</p></div>
+  <div class="cols2">
+    <div class="card"><h3>Build sheet</h3><ul class="tree">
+      <li><span><b>Derived</b>: I, NB, W<sub>K</sub>, NG, T<sub>W</sub>, LW, XS, NS, KS, A<sub>GRP</sub>, B<sub>GRP</sub>, widths.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:80"></span></li>
+      <li><span><b>Guards</b>: powers of two, N ≤ I, M·N ≥ I, 2 ≤ K ≤ N_E, NG ≤ W<sub>K</sub>, NG ≤ XS, frame shapes.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:122"></span></li>
+      <li><span><b>§1 Streams</b>: <span class="loopc">for gch &lt; A_CH</span> / <span class="loopc">B_CH</span> a <code>dimm_conv</code> per int8 channel, then the distribution register.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:139"></span></li>
+      <li><span><b>§2 A loader control</b>: transposer (row frame) or window stager (window frame).</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:227"></span></li>
+      <li><span><b>§3 B loader control</b>: transposer (TRANS_B 1) or row writer (TRANS_B 0).</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:360"></span></li>
+      <li><span><b>§4 Slots, credits, jobs</b>: the job register and the registered decision.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:484"></span></li>
+      <li><span><b>§5 Slices</b>: <span class="loopc">for gs &lt; NS</span> A staging, B staging, <code>dimm_slice</code>.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:543"></span></li>
+      <li class="sub1"><span><code>dimm_slice</code>: run state, engine, B and A memories, crossbars, slice tree.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:755"></span></li>
+      <li class="sub2"><span><span class="loopc">for gf &lt; XS</span> per crossbar: feed, <code>dpe</code> EXP, sign ring, signed drain.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:945"></span></li>
+      <li><span><b>§6 Top tree</b>, NARROW, <span class="loopc">for gi &lt; NG</span> output channels, done.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:585"></span></li>
+      <li><span><code>dimm_tile_ctrl</code>, the window engine (v2 verbatim).</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:1038"></span></li>
+      <li><span><code>dimm_tree</code>, the registered adder trees.</span><span data-loc="ip/dimm/rtl/sim/dimm_tile_top.v:1146"></span></li>
+    </ul></div>
+    <div class="card"><h3>Parameters here</h3><div class="trace" data-pins="N_E N_EP X_S NS NG AGRP WK BKV P_PROJ N_EXP CREDITS I"></div>
+      <p class="note">The farm size (N<sub>E</sub>, N<sub>EP</sub>) sets the slice count and the output channels; X<sub>S</sub> fixes what one slice is; the ports' channel counts come from P<sub>proj</sub> (int8 operands) and N<sub>EXP</sub> (log P).</p></div>
+  </div>
+</section>
+
+<!-- ================================================================================================ SOFTMAX -->
+<section class="view" id="v-softmax" data-view="softmax" hidden>
+  <header>
+    <div class="eyebrow">module · ip/softmax/rtl/sim/softmax_online_top.v · 1,597 lines · 10 modules</div>
+    <h2>Online softmax: softmax_online_top</h2>
+    <p>One run per <code>start</code>: S query rows over n keys in blocks of B<sub>kv</sub>. Per block it finds the row max,
+      emits log α and log P, sums the P values, and carries (m, log l) per row; at the end of the run it sends log l.</p>
+  </header>
+  <div class="figbar"><span class="note">Click a box for its Verilog lines.</span>
+    <div class="zoom" data-zoom="softmax"><button type="button" aria-pressed="true" data-z="1">Fit</button><button type="button" data-z="1.5">1.5×</button><button type="button" data-z="2">2×</button></div></div>
+  <div class="fig" id="fig-softmax">
+<svg viewBox="0 0 1400 780" role="img" aria-label="softmax_online_top internals">
+  <rect class="frame" x="20" y="20" width="1360" height="740" rx="10"/>
+  <text class="t-title" x="40" y="52">softmax_online_top</text>
+  <text class="t-sub" x="260" y="52">one run = S query rows over n keys, B = n / B_kv blocks, F4 per block</text>
+  <path class="edge" d="M24,175 L60,175" marker-end="url(#ah)"/><text class="t-edge" x="40" y="100">E4 s8 in</text>
+  <g class="sub" data-sub="s_in" tabindex="0" role="button">
+    <rect class="box" x="60" y="110" width="310" height="186" rx="6"/>
+    <text class="t-h" x="76" y="136">Input stage</text>
+    <text class="t-line" x="76" y="162">FIFO per channel, 2 tiles deep</text>
+    <text class="t-line" x="76" y="186">S_CH = NG_QK channels</text>
+    <text class="t-line" x="76" y="210">reader: window w from FIFO w mod S_CH</text>
+    <text class="t-line" x="76" y="234">packer: 20 bytes → block stream</text>
+    <text class="t-sm" x="76" y="262">s_cr after a tile's last read</text>
+  </g>
+  <g class="sub" data-sub="s_gate" tabindex="0" role="button">
+    <rect class="box" x="60" y="320" width="310" height="150" rx="6"/>
+    <text class="t-h" x="76" y="346">Block gate</text>
+    <text class="t-line" x="76" y="372">a block streams in when the run is armed,</text>
+    <text class="t-line" x="76" y="396">the store has a slot (b − 2 retired),</text>
+    <text class="t-line" x="76" y="420">a log P credit is free, and for b ≥ 1</text>
+    <text class="t-line" x="76" y="444">an α credit is free</text>
+  </g>
+  <path class="edge" d="M370,165 L420,165" marker-end="url(#ah)"/><path class="edge" d="M370,230 L395,230 L395,330 L420,330" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="s_store" tabindex="0" role="button">
+    <rect class="box" x="420" y="110" width="290" height="120" rx="6"/>
+    <text class="t-h" x="436" y="136">Score store</text>
+    <text class="t-line" x="436" y="162">2-block ring</text>
+    <text class="t-line" x="436" y="186">max(2, N_EXP) banks × 5 byte lanes</text>
+    <text class="t-sm" x="436" y="210">window-local layout</text>
+  </g>
+  <g class="sub" data-sub="s_max" tabindex="0" role="button">
+    <rect class="box" x="420" y="260" width="290" height="140" rx="6"/>
+    <text class="t-h" x="436" y="286">Row max</text>
+    <text class="t-line" x="436" y="312">block max per row, during the stream</text>
+    <text class="t-line" x="436" y="336">m_new and log α tables, ping-pong</text>
+    <text class="t-sm" x="436" y="364">log α of blocks b ≥ 1 → E6</text>
+  </g>
+  <path class="edge" d="M710,165 L760,165" marker-end="url(#ah)"/><path class="ctl" d="M710,300 L760,300" marker-end="url(#ahc)"/><text class="t-ctl" x="716" y="292">m_new</text>
+  <text class="t-loop" x="760" y="98">for gc &lt; N_EXP</text>
+  <g class="sub" data-sub="s_exp" tabindex="0" role="button">
+    <rect class="box" x="760" y="110" width="350" height="300" rx="6"/>
+    <text class="t-h" x="776" y="136">EXP feeds and crossbars</text>
+    <rect class="box" x="776" y="150" width="318" height="110" rx="5" style="fill:var(--block)"/>
+    <rect class="xb" x="790" y="166" width="46" height="46" rx="3"/>
+    <text class="t-line" x="850" y="176">feed 0: window − m_new,</text>
+    <text class="t-line" x="850" y="200">clamp −128, 4-deep FIFO</text>
+    <text class="t-sm" x="850" y="224">→ EXP crossbar, I × I</text>
+    <text class="t-sm" x="790" y="248">its pops are log P, E5 lane 0</text>
+    <rect class="box" x="776" y="276" width="318" height="110" rx="5" style="fill:var(--block)"/>
+    <rect class="xb" x="790" y="292" width="46" height="46" rx="3"/>
+    <text class="t-line" x="850" y="302">feed N_EXP − 1</text>
+    <text class="t-line" x="850" y="326">the same, on its windows</text>
+    <text class="t-sm" x="850" y="350">window g → lane g mod N_EXP</text>
+    <text class="t-sm" x="790" y="374">E5 cannot stall: it needs the credit</text>
+  </g>
+  <path class="edge" d="M1110,200 L1394,200" marker-end="url(#ah)"/><text class="t-edge" x="1124" y="190">E5 log P → PV DIMM</text>
+  <path class="edge" d="M710,360 L736,360 L736,432 L1394,432" marker-end="url(#ah)"/><text class="t-edge" x="1124" y="424">E6 log α → accumulator</text>
+  <path class="edge" d="M935,410 L935,460" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="s_sum" tabindex="0" role="button">
+    <rect class="box" x="760" y="460" width="350" height="96" rx="6"/>
+    <text class="t-h" x="776" y="486">Row sums</text>
+    <text class="t-line" x="776" y="512">sp per row from the EXP drains</text>
+    <text class="t-sm" x="776" y="536">2-stage lane-sum tree, ping-pong</text>
+  </g>
+  <path class="edge" d="M935,556 L935,586" marker-end="url(#ah)"/>
+  <path class="ctl" d="M565,400 L565,650 L760,650" marker-end="url(#ahc)"/><text class="t-ctl" x="575" y="640">log α</text>
+  <g class="sub" data-sub="s_carry" tabindex="0" role="button">
+    <rect class="box" x="760" y="586" width="350" height="150" rx="6"/>
+    <rect class="xb" x="1046" y="600" width="46" height="46" rx="3"/><rect class="xb" x="1046" y="656" width="46" height="46" rx="3"/>
+    <text class="t-h" x="776" y="612">Carry</text>
+    <text class="t-line" x="776" y="638">b = 0: lq = min(sp ≫ LN, 127)</text>
+    <text class="t-line" x="776" y="662">b ≥ 1: EXP(clamp8(log α + log l))</text>
+    <text class="t-line" x="776" y="686">  ≪ LN, plus sp</text>
+    <text class="t-sm" x="776" y="712">carry-LOG → log l; crossbars S × S</text>
+  </g>
+  <path class="edge" d="M1110,660 L1150,660" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="s_ll" tabindex="0" role="button">
+    <rect class="box" x="1150" y="600" width="210" height="120" rx="6"/>
+    <text class="t-h" x="1166" y="626">log l out (E7)</text>
+    <text class="t-line" x="1166" y="652">final log l, row by row,</text>
+    <text class="t-line" x="1166" y="676">after the run</text>
+    <text class="t-sm" x="1166" y="700">done after the last word</text>
+  </g>
+  <path class="edge" d="M1360,660 L1394,660" marker-end="url(#ah)"/>
+  <text class="t-sm" x="60" y="510">Parameters:</text>
+  <g class="chip fixed" data-param="N_EXP" tabindex="0" role="button"><rect x="60" y="522" width="66" height="26"/><text x="69" y="540">N_EXP</text></g>
+  <g class="chip derived" data-param="NG" tabindex="0" role="button"><rect x="134" y="522" width="104" height="26"/><text x="143" y="540">S_CH = NG</text></g>
+  <g class="chip fixed" data-param="BQ" tabindex="0" role="button"><rect x="246" y="522" width="84" height="26"/><text x="255" y="540">B_q = S</text></g>
+  <g class="chip fixed" data-param="BKV" tabindex="0" role="button"><rect x="60" y="556" width="58" height="26"/><text x="69" y="574">B_kv</text></g>
+  <g class="chip derived" data-param="LN" tabindex="0" role="button"><rect x="126" y="556" width="92" height="26"/><text x="135" y="574">LN = SO</text></g>
+  <g class="chip derived" data-param="I" tabindex="0" role="button"><rect x="226" y="556" width="30" height="26"/><text x="237" y="574">I</text></g>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="264" y="557" width="96" height="24"/><text x="270" y="574">E4–E7 caps</text></g>
+  <text class="t-sm" x="60" y="626">Example BERT-Tiny at 128×128:</text>
+  <text class="t-sm" x="60" y="648">S 128, 8 blocks, 16 windows per block,</text>
+  <text class="t-sm" x="60" y="670">S_CH 2, N_EXP 2: 4 crossbars.</text>
+</svg>
+  </div>
+  <div class="details" id="det-softmax"><div class="k">Selected</div><p class="note">Click a box or a pin.</p></div>
+  <div class="cols2">
+    <div class="card"><h3>Build sheet</h3><ul class="tree">
+      <li><span><b>Derived</b>: NWEL, NWB, store banks NB = max(2, N_EXP), LW, FIFO depth.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:1358"></span></li>
+      <li><span><b>Input stage</b> <code>softmax_online_instage</code>.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:1442"></span></li>
+      <li><span><b>Store</b> <code>softmax_online_store</code>.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:131"></span></li>
+      <li><span><b>Row max</b> <code>softmax_online_loadmax</code>.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:260"></span></li>
+      <li><span><span class="loopc">for gc &lt; N_EXP</span> <code>softmax_online_xfeed</code>.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:1478"></span></li>
+      <li class="sub1"><span>the EXP crossbar inside a feed (I × I).</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:530"></span></li>
+      <li><span><b>Row sums</b> <code>softmax_online_row_acc</code>.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:1503"></span></li>
+      <li><span><b>Carry</b> <code>softmax_online_carry</code> (carry EXP, lq walker, carry LOG).</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:1550"></span></li>
+      <li class="sub1"><span><code>softmax_online_wfeed</code>: a carry crossbar's feed, S × S.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_top.v:870"></span></li>
+    </ul></div>
+    <div class="card"><h3>Parameters here</h3><div class="trace" data-pins="N_EXP NG BQ BKV LN I CREDITS"></div>
+      <p class="note">N<sub>EXP</sub> is the only crossbar count here besides the two carry crossbars. S_CH follows the QK DIMM's output groups; B<sub>kv</sub> sets the block, and so the number of blocks per run.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================================================ ACCUMULATOR -->
+<section class="view" id="v-acc" data-view="acc" hidden>
+  <header>
+    <div class="eyebrow">module · ip/softmax/rtl/sim/softmax_online_acc.v · 597 lines · 2 modules</div>
+    <h2>Accumulator: softmax_online_acc</h2>
+    <p>The output half of the online softmax. Per block it rescales the running o by α and adds o_part (F6); per run it
+      divides by l (F7). It holds (lo, so) per element as log magnitude plus sign, and reads the run's O<sub>8</sub> rows
+      out in token order.</p>
+  </header>
+  <div class="figbar"><span class="note">Click a box for its Verilog lines.</span>
+    <div class="zoom" data-zoom="acc"><button type="button" aria-pressed="true" data-z="1">Fit</button><button type="button" data-z="1.5">1.5×</button><button type="button" data-z="2">2×</button></div></div>
+  <div class="fig" id="fig-acc">
+<svg viewBox="0 0 1400 760" role="img" aria-label="softmax_online_acc internals">
+  <rect class="frame" x="20" y="20" width="1360" height="720" rx="10"/>
+  <text class="t-title" x="40" y="52">softmax_online_acc</text>
+  <text class="t-sub" x="250" y="52">per block: o ← α·o + o_part (F6) · per run: O8 = o / l (F7) · state (lo, so) per element</text>
+  <path class="edge" d="M24,190 L60,190" marker-end="url(#ah)"/><text class="t-edge" x="40" y="96">E8 o_part in</text>
+  <g class="sub" data-sub="a_fifo" tabindex="0" role="button">
+    <rect class="box" x="60" y="110" width="310" height="170" rx="6"/>
+    <text class="t-h" x="76" y="136">o_part FIFOs</text>
+    <text class="t-line" x="76" y="162">for gf &lt; P_CH, P_CH = NG_PV</text>
+    <text class="t-line" x="76" y="186">2 tiles deep, 5 × 13-bit words</text>
+    <text class="t-line" x="76" y="210">window p in FIFO p mod P_CH</text>
+    <text class="t-sm" x="76" y="240">p_cr after a tile's last read</text>
+  </g>
+  <path class="edge" d="M24,345 L60,345" marker-end="url(#ah)"/><text class="t-edge" x="40" y="302">E6</text>
+  <g class="sub" data-sub="a_ring" tabindex="0" role="button">
+    <rect class="box" x="60" y="310" width="310" height="104" rx="6"/>
+    <text class="t-h" x="76" y="336">log α ring</text>
+    <text class="t-line" x="76" y="362">2 slots × S rows, 9 bits</text>
+    <text class="t-sm" x="76" y="388">la_cr after a slot's last use</text>
+  </g>
+  <path class="edge" d="M24,480 L60,480" marker-end="url(#ah)"/><text class="t-edge" x="40" y="438">E7</text>
+  <g class="sub" data-sub="a_ll" tabindex="0" role="button">
+    <rect class="box" x="60" y="446" width="310" height="104" rx="6"/>
+    <text class="t-h" x="76" y="472">log l table</text>
+    <text class="t-line" x="76" y="498">S rows, 8 bits</text>
+    <text class="t-sm" x="76" y="524">ll_cr after the last normalize</text>
+  </g>
+  <path class="edge" d="M370,195 L420,195" marker-end="url(#ah)"/>
+  <path class="ctl" d="M370,362 L396,362 L396,470 L420,470" marker-end="url(#ahc)"/>
+  <path class="ctl" d="M370,498 L408,498 L408,560 L420,560" marker-end="url(#ahc)"/>
+  <g class="sub" data-sub="a_log" tabindex="0" role="button">
+    <rect class="box" x="420" y="110" width="440" height="250" rx="6"/>
+    <text class="t-h" x="436" y="136">LOG group: N_OC crossbars, LOG, I × I</text>
+    <text class="t-line" x="436" y="162">job (b, w), lock-step from crossbar 0</text>
+    <text class="t-line" x="436" y="186">feed o' = (b ? ±e ≪ SO : 0) + o_part</text>
+    <text class="t-line" x="436" y="210">oq = min(|o'| ≫ SO, 127), so = [o' &lt; 0]</text>
+    <text class="t-line" x="436" y="234">drain lo → lo_mem; so → so_mem</text>
+    <text class="t-sm" x="436" y="260">a job reads N_OC windows from N_OC FIFOs, so N_OC ≤ P_CH</text>
+    <rect class="xb" x="436" y="282" width="44" height="44" rx="3"/><rect class="xb" x="488" y="282" width="44" height="44" rx="3"/><rect class="xb" x="540" y="282" width="44" height="44" rx="3"/><rect class="xb" x="592" y="282" width="44" height="44" rx="3"/><rect class="xb" x="644" y="282" width="44" height="44" rx="3"/><rect class="xb" x="696" y="282" width="44" height="44" rx="3"/>
+    <text class="t-sm" x="752" y="310">× N_OC</text>
+  </g>
+  <g class="sub" data-sub="a_exp" tabindex="0" role="button">
+    <rect class="box" x="420" y="400" width="440" height="250" rx="6"/>
+    <text class="t-h" x="436" y="426">EXP group: N_OC crossbars, EXP, I × I</text>
+    <text class="t-line" x="436" y="452">rescale job (b ≥ 1, w):</text>
+    <text class="t-line" x="436" y="476">  t = clamp8(log α + lo) → e → e_mem</text>
+    <text class="t-line" x="436" y="500">normalize job (w), at the run's end:</text>
+    <text class="t-line" x="436" y="524">  tE = clamp8(lo − log l) → O8 → e_mem</text>
+    <rect class="xb" x="436" y="572" width="44" height="44" rx="3"/><rect class="xb" x="488" y="572" width="44" height="44" rx="3"/><rect class="xb" x="540" y="572" width="44" height="44" rx="3"/><rect class="xb" x="592" y="572" width="44" height="44" rx="3"/><rect class="xb" x="644" y="572" width="44" height="44" rx="3"/><rect class="xb" x="696" y="572" width="44" height="44" rx="3"/>
+    <text class="t-sm" x="752" y="600">× N_OC</text>
+  </g>
+  <path class="edge" d="M860,235 L900,235" marker-end="url(#ah)"/><path class="edge" d="M900,265 L860,265" marker-end="url(#ah)"/>
+  <path class="edge" d="M860,525 L900,525" marker-end="url(#ah)"/><path class="edge" d="M900,555 L860,555" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="a_mem" tabindex="0" role="button">
+    <rect class="box" x="900" y="110" width="220" height="540" rx="6"/>
+    <text class="t-h" x="916" y="136">Slot memories</text>
+    <text class="t-line" x="916" y="164">for gi &lt; N_OC,</text>
+    <text class="t-line" x="916" y="188">per crossbar index:</text>
+    <text class="t-line" x="916" y="220">lo_mem, e_mem</text>
+    <text class="t-sm" x="916" y="244">W · 2^⌈log₂ LW⌉ words</text>
+    <text class="t-sm" x="916" y="266">of 40 bits</text>
+    <text class="t-line" x="916" y="298">so_mem: sign bits</text>
+    <text class="t-line" x="916" y="340">window p = w·N_OC + i</text>
+    <text class="t-line" x="916" y="364">→ crossbar i, wave w</text>
+    <text class="t-sm" x="916" y="400">W = ⌈P_oc / N_OC⌉ waves</text>
+    <text class="t-sm" x="916" y="422">P_oc = S·d / I windows</text>
+    <text class="t-sm" x="916" y="444">RPW = I / d rows each</text>
+  </g>
+  <path class="edge" d="M1120,540 L1160,540" marker-end="url(#ah)"/>
+  <g class="sub" data-sub="a_ord" tabindex="0" role="button">
+    <rect class="box" x="1160" y="400" width="200" height="250" rx="6"/>
+    <text class="t-h" x="1176" y="426">O reader (E9)</text>
+    <text class="t-line" x="1176" y="454">token t in window</text>
+    <text class="t-line" x="1176" y="478">⌊t / RPW⌋</text>
+    <text class="t-line" x="1176" y="502">reads ⌈d/5⌉ + 1 words,</text>
+    <text class="t-line" x="1176" y="526">realigns, sends ⌈d/5⌉</text>
+    <text class="t-line" x="1176" y="550">rows in token order</text>
+    <text class="t-sm" x="1176" y="580">run_done after the run's</text>
+    <text class="t-sm" x="1176" y="600">last row</text>
+  </g>
+  <path class="edge" d="M1360,525 L1394,525" marker-end="url(#ah)"/><text class="t-edge" x="1240" y="680">E9 O8 rows out</text>
+  <text class="t-sm" x="60" y="596">Parameters:</text>
+  <g class="chip fixed" data-param="N_OC" tabindex="0" role="button"><rect x="60" y="608" width="60" height="26"/><text x="69" y="626">N_OC</text></g>
+  <g class="chip derived" data-param="PCH" tabindex="0" role="button"><rect x="128" y="608" width="110" height="26"/><text x="137" y="626">P_CH, P_oc</text></g>
+  <g class="chip derived" data-param="W" tabindex="0" role="button"><rect x="246" y="608" width="32" height="26"/><text x="256" y="626">W</text></g>
+  <g class="chip fixed" data-param="N_EP" tabindex="0" role="button"><rect x="60" y="642" width="60" height="26"/><text x="69" y="660">N_EP</text></g>
+  <g class="chip derived" data-param="LN" tabindex="0" role="button"><rect x="128" y="642" width="92" height="26"/><text x="137" y="660">LN = SO</text></g>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="228" y="643" width="96" height="24"/><text x="234" y="660">E6–E8 caps</text></g>
+  <text class="t-sm" x="60" y="702">Example BERT-Tiny at 128×128: P_oc 64, N_OC 6, W 11 waves, P_CH 8, RPW 2: 12 crossbars.</text>
+</svg>
+  </div>
+  <div class="details" id="det-acc"><div class="k">Selected</div><p class="note">Click a box or a pin.</p></div>
+  <div class="cols2">
+    <div class="card"><h3>Build sheet</h3><ul class="tree">
+      <li><span><b>Derived</b>: P<sub>oc</sub>, W, LW, RPW, the FIFO rotation, FIFO depth FD.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:74"></span></li>
+      <li><span><b>Guards</b> (incl. N_OC ≤ P_CH).</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:110"></span></li>
+      <li><span><b>E6 / E7</b>: <span class="loopc">for ga &lt; 2·S</span> the α ring, <span class="loopc">for ga &lt; S</span> the log l table.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:117"></span></li>
+      <li><span><b>Engines</b>: one <code>softmax_online_acc_engine</code> per group.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:172"></span></li>
+      <li><span><span class="loopc">for gf &lt; P_CH</span> the o_part FIFOs (<code>att_fifo</code>).</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:187"></span></li>
+      <li><span><b>EXP drain pipeline</b> → e_mem; the run end.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:206"></span></li>
+      <li><span><b>O reader</b>, run_done.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:272"></span></li>
+      <li><span><span class="loopc">for gi &lt; N_OC</span> memories, feed lanes, LOG and EXP crossbars.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:340"></span></li>
+      <li class="sub1"><span>the LOG crossbar · the EXP crossbar.</span><span data-loc="ip/softmax/rtl/sim/softmax_online_acc.v:434"></span></li>
+    </ul></div>
+    <div class="card"><h3>Parameters here</h3><div class="trace" data-pins="N_OC PCH W N_EP LN CREDITS"></div>
+      <p class="note">N<sub>OC</sub> sets both groups (2·N<sub>OC</sub> crossbars) and the waves W. P_CH comes from the PV DIMM (NG<sub>PV</sub> = N<sub>EP</sub>/B<sub>kv</sub>), which is why N<sub>EP</sub> = d collides with the floor-rule N<sub>OC</sub>.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================================================ ATT_CTRL -->
+<section class="view" id="v-ctrl" data-view="ctrl" hidden>
+  <header>
+    <div class="eyebrow">module · top/rtl/sim/att_ctrl.v · 153 lines · the same file in both twins</div>
+    <h2>Tiling controller: att_ctrl</h2>
+    <p>The only attention-specific logic, and it is counters only: when each GEMM copy may take its next token, which jobs
+      the two DIMMs run and in which order, when the softmax starts a run, and when the head is done.</p>
+  </header>
+  <div class="figbar"><span class="note">Click a box for its Verilog lines.</span>
+    <div class="zoom" data-zoom="ctrl"><button type="button" aria-pressed="true" data-z="1">Fit</button><button type="button" data-z="1.5">1.5×</button><button type="button" data-z="2">2×</button></div></div>
+  <div class="fig" id="fig-ctrl">
+<svg viewBox="0 0 1400 620" role="img" aria-label="att_ctrl internals">
+  <rect class="frame" x="20" y="20" width="1360" height="580" rx="10"/>
+  <text class="t-title" x="40" y="52">att_ctrl</text><text class="t-sub" x="140" y="52">counters only · no crossbar · no memory</text>
+  <g class="sub" data-sub="c_run" tabindex="0" role="button">
+    <rect class="box" x="60" y="90" width="300" height="130" rx="6"/>
+    <text class="t-h" x="76" y="116">Run control</text>
+    <text class="t-line" x="76" y="142">start, once per reset</text>
+    <text class="t-line" x="76" y="166">runs from t_s + 1 until done</text>
+    <text class="t-sm" x="76" y="192">busy falls one cycle after done</text>
+  </g>
+  <path class="edge" d="M24,300 L60,300" marker-end="url(#ah)"/><text class="t-edge" x="34" y="250">credits in</text>
+  <g class="sub" data-sub="c_cr" tabindex="0" role="button">
+    <rect class="box" x="60" y="260" width="300" height="180" rx="6"/>
+    <text class="t-h" x="76" y="286">Credit counters</text>
+    <text class="t-line" x="76" y="312">qa_n: QK A groups (qa_cr)</text>
+    <text class="t-line" x="76" y="336">qb_n: QK B matrices (qb_cr)</text>
+    <text class="t-line" x="76" y="360">pb_n: PV B rows (pb_cr)</text>
+    <text class="t-sm" x="76" y="390">a pulse at t counts from t + 1</text>
+  </g>
+  <path class="edge" d="M360,350 L410,350" marker-end="url(#ah)"/>
+  <text class="t-loop" x="410" y="82">for gc &lt; P_PROJ</text>
+  <g class="sub" data-sub="c_adm" tabindex="0" role="button">
+    <rect class="box" x="410" y="90" width="560" height="350" rx="6"/>
+    <text class="t-h" x="426" y="116">Admission per copy</text>
+    <text class="t-line" x="426" y="146">next token tok = c, c + P_proj, c + 2·P_proj, …</text>
+    <text class="t-line" x="426" y="170">burst word counter wc: a burst is LOADX words</text>
+    <text class="t-line" x="426" y="204">x_rdy[c] = running ∧ wc = 0 ∧ gq, gk, gv ready ∧ tok &lt; n</text>
+    <text class="t-line" x="446" y="232">∧ qa_n + 2 &gt; ⌊tok / NB_A⌋</text><text class="t-sm" x="740" y="232">E1: 2 groups</text>
+    <text class="t-line" x="446" y="258">∧ qb_n + 2 &gt; ⌊tok / B_kv⌋</text><text class="t-sm" x="740" y="258">E2: 2 matrices</text>
+    <text class="t-line" x="446" y="284">∧ pb_n + 4·P_proj &gt; tok</text><text class="t-sm" x="740" y="284">E3: 4 rows per copy</text>
+    <text class="t-line" x="426" y="318">a burst starts when x_v rises; x_rdy stays low</text>
+    <text class="t-line" x="426" y="342">until the burst's last word</text>
+    <text class="t-sm" x="426" y="376">X bursts must start in token order across copies (E0 rule)</text>
+    <text class="t-sm" x="426" y="400">NB_A = I / B_kv rows per QK A staging group</text>
+  </g>
+  <path class="ctl" d="M690,440 L690,500" marker-end="url(#ahc)"/><text class="t-ctl" x="700" y="488">x_rdy[p] → the GEMM copies</text>
+  <g class="sub" data-sub="c_jobs" tabindex="0" role="button">
+    <rect class="box" x="1010" y="90" width="350" height="210" rx="6"/>
+    <text class="t-h" x="1026" y="116">Job lists</text>
+    <text class="t-line" x="1026" y="142">QK job j: A slot ⌊j / B⌋, B slot j mod B</text>
+    <text class="t-line" x="1026" y="166">PV job j: A slot j mod 2 (released),</text>
+    <text class="t-line" x="1046" y="190">B slot j mod B</text>
+    <text class="t-line" x="1026" y="214">j = r·B + b, R_b·B jobs each</text>
+    <text class="t-sm" x="1026" y="244">offered from the run start,</text>
+    <text class="t-sm" x="1026" y="266">taken on j_rdy</text>
+  </g>
+  <path class="ctl" d="M1360,195 L1394,195" marker-end="url(#ahc)"/>
+  <g class="sub" data-sub="c_runs" tabindex="0" role="button">
+    <rect class="box" x="1010" y="330" width="350" height="110" rx="6"/>
+    <text class="t-h" x="1026" y="356">Softmax runs and done</text>
+    <text class="t-line" x="1026" y="382">run r &lt; R_b starts when sm_busy is low</text>
+    <text class="t-sm" x="1026" y="408">done one cycle after the last run_done</text>
+  </g>
+  <path class="ctl" d="M1360,385 L1394,385" marker-end="url(#ahc)"/>
+  <text class="t-sm" x="60" y="490">Parameters:</text>
+  <g class="chip searched" data-param="P_PROJ" tabindex="0" role="button"><rect x="60" y="502" width="72" height="26"/><text x="69" y="520">P_proj</text></g>
+  <g class="chip derived" data-param="S" tabindex="0" role="button"><rect x="140" y="502" width="30" height="26"/><text x="151" y="520">S</text></g>
+  <g class="chip derived" data-param="RB" tabindex="0" role="button"><rect x="178" y="502" width="48" height="26"/><text x="187" y="520">R_b</text></g>
+  <g class="chip derived" data-param="B" tabindex="0" role="button"><rect x="234" y="502" width="30" height="26"/><text x="245" y="520">B</text></g>
+  <g class="chip derived" data-param="LOADX" tabindex="0" role="button"><rect x="60" y="536" width="68" height="26"/><text x="69" y="554">LOADX</text></g>
+  <g class="chip fixed" data-param="BKV" tabindex="0" role="button"><rect x="136" y="536" width="58" height="26"/><text x="145" y="554">B_kv</text></g>
+  <g class="chip credit" data-param="CREDITS" tabindex="0" role="button"><rect x="202" y="537" width="110" height="24"/><text x="208" y="554">E1–E3 caps</text></g>
+  <text class="t-sm" x="410" y="570">Example BERT-Tiny at 128×128: 1 copy, 128 tokens, 8 QK jobs, 8 PV jobs, 1 softmax run.</text>
+</svg>
+  </div>
+  <div class="details" id="det-ctrl"><div class="k">Selected</div><p class="note">Click a box or a pin.</p></div>
+  <div class="cols2">
+    <div class="card"><h3>Build sheet</h3><ul class="tree">
+      <li><span><b>Run control</b>.</span><span data-loc="top/rtl/sim/att_ctrl.v:71"></span></li>
+      <li><span><b>Credit counters</b> qa_n, qb_n, pb_n.</span><span data-loc="top/rtl/sim/att_ctrl.v:80"></span></li>
+      <li><span><span class="loopc">for gc &lt; P_PROJ</span> admission: tok, wc, x_rdy.</span><span data-loc="top/rtl/sim/att_ctrl.v:91"></span></li>
+      <li class="sub1"><span>qa_ok, qb_ok, pb_ok.</span><span data-loc="top/rtl/sim/att_ctrl.v:105"></span></li>
+      <li><span><b>Job lists</b>.</span><span data-loc="top/rtl/sim/att_ctrl.v:113"></span></li>
+      <li><span><b>Softmax runs and done</b>.</span><span data-loc="top/rtl/sim/att_ctrl.v:142"></span></li>
+    </ul></div>
+    <div class="card"><h3>Parameters here</h3><div class="trace" data-pins="P_PROJ S RB B LOADX BKV CREDITS"></div>
+      <p class="note">att_ctrl has no area to speak of; its parameters only size counters. Its rules (the three staging credits) decide when the X stream may run.</p></div>
+  </div>
+</section>
+
+<!-- ================================================================================================ PARAMETERS -->
+<section class="view" id="v-params" data-view="params" hidden>
+  <header>
+    <h2>The mapping space</h2>
+    <p>A build is fixed by its <em>shape</em> (n, d<sub>m</sub>, d), its crossbar <em>config</em> (R, C) and its
+      <em>mapping</em>; everything else is derived by formula inside the RTL. Measured effects come from the head model on
+      the 432 DSE builds (4 PV B credits, 2026-10-15). Line numbers point into the simulation twins.</p>
+  </header>
+{{PARAMS}}
+</section>
+
+<!-- ================================================================================================ EXPLORER -->
+<section class="view" id="v-explorer" data-view="explorer" hidden>
+  <header>
+    <h2>Change a parameter, see what the hardware becomes</h2>
+    <p>Each choice is one build of <code>att_head</code>. The values are the head model's own (derived values, resources,
+      cycle count), exported for all 432 DSE builds plus the 432 with N<sub>EP</sub> = d (N<sub>OC</sub> capped at P_CH).
+      The comparison is against the reference mapping P<sub>proj</sub> 1, N<sub>E</sub> = N<sub>EP</sub> = 2d. Cycles are
+      model results; Fmax exists only for the one VTR point.</p>
+  </header>
+  <div class="controls">
+    <label for="x-shape">shape<select id="x-shape"></select></label>
+    <label for="x-cfg">config R×C<select id="x-cfg"></select></label>
+    <label for="x-pp">P_proj<select id="x-pp"><option>1</option><option>2</option><option>4</option></select></label>
+    <label for="x-ne">N_E<select id="x-ne"><option value="2">2d</option><option value="1">d</option></select></label>
+    <label for="x-nep">N_EP<select id="x-nep"><option value="2">2d</option><option value="1">d (N_OC capped)</option></select></label>
+  </div>
+  <div class="verdict" id="x-verdict"><span class="note">Needs JavaScript.</span></div>
+  <div class="bars" id="x-bars"></div>
+  <div class="cards4" id="x-cards"></div>
+</section>
+
+<!-- ================================================================================================ DOCUMENT -->
+<section class="view" id="v-doc" data-view="doc" hidden>
+  <header>
+    <h2>architecture.md, as of 2026-10-15</h2>
+    <p>The full text of <code>v3/docs/architecture.md</code>, rendered. Pins under a heading mark the parameters that
+      section defines.</p>
+    <nav class="doc-toc" id="doc-toc" aria-label="Document sections"></nav>
+  </header>
+  <div class="doc" id="doc-body"><pre id="doc-fallback" style="white-space:pre-wrap"></pre></div>
+</section>
+
+<footer>Sources: <code>v3/docs/architecture.md</code>; the RTL simulation twins (line numbers as of 2026-10-15); the head
+  model (<code>v3/docs/architecture_page/page_data.py</code>, 864 builds); the VTR smoke of 2026-10-15. Model numbers are cycles of
+  the RTL-pinned model; the only measured Fmax is the one VTR point.</footer>
+</div>
+
+<script type="text/markdown" id="md-src">{{MD}}</script>
+<script type="application/json" id="builds">{{DATA}}</script>
+<script>
+window.MathJax = { tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]] },
+                   svg: { fontCache: "global" }, startup: { typeset: false } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" defer></script>
+<script>
+{{JS}}
+</script>

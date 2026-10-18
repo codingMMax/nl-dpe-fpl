@@ -1,0 +1,365 @@
+{
+ "metric": "per family, per workload: area / largest area and latency / highest latency (the worst config is 1, lower is better), geometric mean over the family's workloads; across the families: x = the FC area-delay product score, y = the attention one (ADP / the largest ADP per workload, geometric mean)",
+ "fc": {
+  "workloads": [
+   "1x512x128",
+   "1x2048x256",
+   "1x256x512",
+   "1x512x512"
+  ],
+  "configs": [
+   {
+    "config": "512x128",
+    "area_score": 0.35307399456517913,
+    "latency_score": 0.7102340263347188,
+    "energy_score": 0.3056995724817222,
+    "front": true
+   },
+   {
+    "config": "512x256",
+    "area_score": 0.3989321499503486,
+    "latency_score": 0.8129245395544658,
+    "energy_score": 0.3166142903083207,
+    "front": false
+   },
+   {
+    "config": "1024x128",
+    "area_score": 0.4038641655865315,
+    "latency_score": 0.9089160430678231,
+    "energy_score": 0.3718514747048585,
+    "front": false
+   },
+   {
+    "config": "1024x256",
+    "area_score": 0.44181672538951144,
+    "latency_score": 0.9144525878549842,
+    "energy_score": 0.36459126437773953,
+    "front": false
+   },
+   {
+    "config": "512x64",
+    "area_score": 0.446957252986122,
+    "latency_score": 0.7279554457833634,
+    "energy_score": 0.38254276272734006,
+    "front": false
+   },
+   {
+    "config": "256x128",
+    "area_score": 0.4666316803712151,
+    "latency_score": 0.5162666959179663,
+    "energy_score": 0.42385697331965794,
+    "front": true
+   },
+   {
+    "config": "1024x64",
+    "area_score": 0.48346077271246707,
+    "latency_score": 0.9415727768088459,
+    "energy_score": 0.5006914170977397,
+    "front": false
+   },
+   {
+    "config": "256x64",
+    "area_score": 0.5107252811111229,
+    "latency_score": 0.4890214538035857,
+    "energy_score": 0.4887841865574157,
+    "front": true
+   },
+   {
+    "config": "256x256",
+    "area_score": 0.5322741668940811,
+    "latency_score": 0.6092703701200508,
+    "energy_score": 0.4560596579250098,
+    "front": false
+   },
+   {
+    "config": "128x64",
+    "area_score": 0.7399066234993938,
+    "latency_score": 0.35359204319075316,
+    "energy_score": 0.847946319520486,
+    "front": true
+   },
+   {
+    "config": "128x128",
+    "area_score": 0.8048821532162168,
+    "latency_score": 0.4152059860064696,
+    "energy_score": 0.7831220789581689,
+    "front": false
+   },
+   {
+    "config": "128x256",
+    "area_score": 0.9015382078106111,
+    "latency_score": 0.482386395803571,
+    "energy_score": 0.8660864359191531,
+    "front": false
+   }
+  ]
+ },
+ "attention": {
+  "workloads": [
+   "ViT-B/16",
+   "DeiT-T",
+   "BERT-base",
+   "BERT-Tiny",
+   "JetFormer-150P",
+   "JetFormer-JetClass"
+  ],
+  "configs": [
+   {
+    "config": "128x64",
+    "area_score": 0.44945935454776303,
+    "latency_score": 0.5223576631177851,
+    "energy_score": 0.46950528452864465,
+    "front": true
+   },
+   {
+    "config": "256x64",
+    "area_score": 0.45686069797656165,
+    "latency_score": 0.5891597257898893,
+    "energy_score": 0.543509267728677,
+    "front": false
+   },
+   {
+    "config": "512x64",
+    "area_score": 0.4728921083965454,
+    "latency_score": 0.6783308031640561,
+    "energy_score": 0.6956856562293116,
+    "front": false
+   },
+   {
+    "config": "1024x64",
+    "area_score": 0.4972023289027847,
+    "latency_score": 0.7474687170560855,
+    "energy_score": 1.0,
+    "front": false
+   },
+   {
+    "config": "128x128",
+    "area_score": 0.5933651691715939,
+    "latency_score": 0.5885829906552779,
+    "energy_score": 0.4581797019958362,
+    "front": false
+   },
+   {
+    "config": "256x128",
+    "area_score": 0.6005962071650872,
+    "latency_score": 0.6324126832735004,
+    "energy_score": 0.5053759290081371,
+    "front": false
+   },
+   {
+    "config": "512x128",
+    "area_score": 0.6239793043102423,
+    "latency_score": 0.7609445345556396,
+    "energy_score": 0.6076487618900024,
+    "front": false
+   },
+   {
+    "config": "1024x128",
+    "area_score": 0.6730065731217009,
+    "latency_score": 0.8061440168090832,
+    "energy_score": 0.8124249440229069,
+    "front": false
+   },
+   {
+    "config": "128x256",
+    "area_score": 0.6770243275007228,
+    "latency_score": 0.5969553582518043,
+    "energy_score": 0.7072052330437693,
+    "front": false
+   },
+   {
+    "config": "256x256",
+    "area_score": 0.8716062329548819,
+    "latency_score": 0.7629717973734265,
+    "energy_score": 0.50619951700681,
+    "front": false
+   },
+   {
+    "config": "512x256",
+    "area_score": 0.9202318809548923,
+    "latency_score": 0.8735897159058034,
+    "energy_score": 0.5855486991094437,
+    "front": false
+   },
+   {
+    "config": "1024x256",
+    "area_score": 1.0,
+    "latency_score": 0.9880564043067216,
+    "energy_score": 0.7450051671101163,
+    "front": false
+   }
+  ]
+ },
+ "adp": {
+  "fc": {
+   "workloads": [
+    "1x512x128",
+    "1x2048x256",
+    "1x256x512",
+    "1x512x512"
+   ],
+   "scores": {
+    "128x64": 0.43909021959532524,
+    "128x128": 0.5608804065059134,
+    "128x256": 0.7298835126848666,
+    "256x64": 0.41916946036922964,
+    "256x128": 0.4043176452208106,
+    "256x256": 0.5442767864929438,
+    "512x64": 0.5460660210906666,
+    "512x128": 0.42086379884183667,
+    "512x256": 0.54428157917117,
+    "1024x64": 0.7639932126342763,
+    "1024x128": 0.6160748138716763,
+    "1024x256": 0.678074965777325
+   }
+  },
+  "attention": {
+   "workloads": [
+    "ViT-B/16",
+    "DeiT-T",
+    "BERT-base",
+    "BERT-Tiny",
+    "JetFormer-150P",
+    "JetFormer-JetClass"
+   ],
+   "scores": {
+    "128x64": 0.2376165339191662,
+    "128x128": 0.35346630445327887,
+    "128x256": 0.40903869273734295,
+    "256x64": 0.27241756884609203,
+    "256x128": 0.38441596783502185,
+    "256x256": 0.6730496065415198,
+    "512x64": 0.32465482972467424,
+    "512x128": 0.48055317411141746,
+    "512x256": 0.8136226878817859,
+    "1024x64": 0.37613559841558747,
+    "1024x128": 0.5490984318612073,
+    "1024x256": 1.0
+   }
+  },
+  "cross": {
+   "configs": [
+    {
+     "config": "128x64",
+     "rank": 1,
+     "adp_fc": 0.43909021959532524,
+     "adp_att": 0.2376165339191662,
+     "d": 0.4992612924471806,
+     "front": true,
+     "energy_fc": 0.847946319520486,
+     "energy_att": 0.46950528452864465
+    },
+    {
+     "config": "256x64",
+     "rank": 2,
+     "adp_fc": 0.41916946036922964,
+     "adp_att": 0.27241756884609203,
+     "d": 0.49991436098820613,
+     "front": true,
+     "energy_fc": 0.4887841865574157,
+     "energy_att": 0.543509267728677
+    },
+    {
+     "config": "256x128",
+     "rank": 3,
+     "adp_fc": 0.4043176452208106,
+     "adp_att": 0.38441596783502185,
+     "d": 0.5578964012820282,
+     "front": true,
+     "energy_fc": 0.42385697331965794,
+     "energy_att": 0.5053759290081371
+    },
+    {
+     "config": "512x64",
+     "rank": 4,
+     "adp_fc": 0.5460660210906666,
+     "adp_att": 0.32465482972467424,
+     "d": 0.6352864376431702,
+     "front": false,
+     "energy_fc": 0.38254276272734006,
+     "energy_att": 0.6956856562293116
+    },
+    {
+     "config": "512x128",
+     "rank": 5,
+     "adp_fc": 0.42086379884183667,
+     "adp_att": 0.48055317411141746,
+     "d": 0.6387939341635456,
+     "front": false,
+     "energy_fc": 0.3056995724817222,
+     "energy_att": 0.6076487618900024
+    },
+    {
+     "config": "128x128",
+     "rank": 6,
+     "adp_fc": 0.5608804065059134,
+     "adp_att": 0.35346630445327887,
+     "d": 0.6629670118385202,
+     "front": false,
+     "energy_fc": 0.7831220789581689,
+     "energy_att": 0.4581797019958362
+    },
+    {
+     "config": "1024x128",
+     "rank": 7,
+     "adp_fc": 0.6160748138716763,
+     "adp_att": 0.5490984318612073,
+     "d": 0.8252619366961362,
+     "front": false,
+     "energy_fc": 0.3718514747048585,
+     "energy_att": 0.8124249440229069
+    },
+    {
+     "config": "128x256",
+     "rank": 8,
+     "adp_fc": 0.7298835126848666,
+     "adp_att": 0.40903869273734295,
+     "d": 0.836685481077253,
+     "front": false,
+     "energy_fc": 0.8660864359191531,
+     "energy_att": 0.7072052330437693
+    },
+    {
+     "config": "1024x64",
+     "rank": 9,
+     "adp_fc": 0.7639932126342763,
+     "adp_att": 0.37613559841558747,
+     "d": 0.8515653922903952,
+     "front": false,
+     "energy_fc": 0.5006914170977397,
+     "energy_att": 1.0
+    },
+    {
+     "config": "256x256",
+     "rank": 10,
+     "adp_fc": 0.5442767864929438,
+     "adp_att": 0.6730496065415198,
+     "d": 0.8655824589146779,
+     "front": false,
+     "energy_fc": 0.4560596579250098,
+     "energy_att": 0.50619951700681
+    },
+    {
+     "config": "512x256",
+     "rank": 11,
+     "adp_fc": 0.54428157917117,
+     "adp_att": 0.8136226878817859,
+     "d": 0.9788893275856289,
+     "front": false,
+     "energy_fc": 0.3166142903083207,
+     "energy_att": 0.5855486991094437
+    },
+    {
+     "config": "1024x256",
+     "rank": 12,
+     "adp_fc": 0.678074965777325,
+     "adp_att": 1.0,
+     "d": 1.2082158992555596,
+     "front": false,
+     "energy_fc": 0.36459126437773953,
+     "energy_att": 0.7450051671101163
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,622 @@
+{
+ "family": "attention",
+ "workloads": [
+  "ViT-B/16",
+  "DeiT-T",
+  "BERT-base",
+  "BERT-Tiny",
+  "JetFormer-150P",
+  "JetFormer-JetClass"
+ ],
+ "metric": "EDAP = pJ * ns * mm^2; score = best/EDAP per workload; G = geometric mean over workloads; Fmax = the mean of the 3 VTR seeds",
+ "best_per_workload": {
+  "ViT-B/16": "128x64",
+  "DeiT-T": "128x64",
+  "BERT-base": "128x64",
+  "BERT-Tiny": "128x64",
+  "JetFormer-150P": "128x64",
+  "JetFormer-JetClass": "128x64"
+ },
+ "configs": [
+  {
+   "config": "128x64",
+   "R": 128,
+   "C": 64,
+   "rank": 1,
+   "G": 1.0,
+   "scores": {
+    "ViT-B/16": 1.0,
+    "DeiT-T": 1.0,
+    "BERT-base": 1.0,
+    "BERT-Tiny": 1.0,
+    "JetFormer-150P": 1.0,
+    "JetFormer-JetClass": 1.0
+   },
+   "factor_E": 1.0290843993699341,
+   "factor_D": 1.0479977490674122,
+   "factor_A": 1.0,
+   "edap": {
+    "ViT-B/16": 27292582111664.844,
+    "DeiT-T": 25519407211628.656,
+    "BERT-base": 2170247573937.816,
+    "BERT-Tiny": 1942333804821.2615,
+    "JetFormer-150P": 5480714836.610436,
+    "JetFormer-JetClass": 159865556394.17792
+   },
+   "energy_pj": {
+    "ViT-B/16": 3976023.18,
+    "DeiT-T": 3907971.1,
+    "BERT-base": 1021834.35,
+    "BERT-Tiny": 979301.8,
+    "JetFormer-150P": 33978.34,
+    "JetFormer-JetClass": 266646.82
+   },
+   "latency_ns": {
+    "ViT-B/16": 202229.959,
+    "DeiT-T": 193455.52,
+    "BERT-base": 62239.165,
+    "BERT-Tiny": 58676.597,
+    "JetFormer-150P": 9272.954,
+    "JetFormer-JetClass": 54972.947
+   },
+   "area_mm2": {
+    "ViT-B/16": 33.943,
+    "DeiT-T": 33.755,
+    "BERT-base": 34.1244,
+    "BERT-Tiny": 33.802,
+    "JetFormer-150P": 17.3947,
+    "JetFormer-JetClass": 10.9061
+   }
+  },
+  {
+   "config": "256x64",
+   "R": 256,
+   "C": 64,
+   "rank": 2,
+   "G": 0.7534858044752754,
+   "scores": {
+    "ViT-B/16": 0.6620404677259208,
+    "DeiT-T": 0.8101235951686062,
+    "BERT-base": 0.5871550348766061,
+    "BERT-Tiny": 0.8169920168906512,
+    "JetFormer-150P": 0.876610659943279,
+    "JetFormer-JetClass": 0.8114042539653604
+   },
+   "factor_E": 1.1912899103874395,
+   "factor_D": 1.1820216492731976,
+   "factor_A": 1.0164672141182725,
+   "edap": {
+    "ViT-B/16": 41224945365369.63,
+    "DeiT-T": 31500634426426.566,
+    "BERT-base": 3696208743903.3975,
+    "BERT-Tiny": 2377420788288.106,
+    "JetFormer-150P": 6252165399.135194,
+    "JetFormer-JetClass": 197023315582.71906
+   },
+   "energy_pj": {
+    "ViT-B/16": 4570346.46,
+    "DeiT-T": 4529411.8,
+    "BERT-base": 1161105.21,
+    "BERT-Tiny": 1140637.88,
+    "JetFormer-150P": 39820.98,
+    "JetFormer-JetClass": 310536.35
+   },
+   "latency_ns": {
+    "ViT-B/16": 262093.881,
+    "DeiT-T": 202422.941,
+    "BERT-base": 92281.558,
+    "BERT-Tiny": 60633.555,
+    "JetFormer-150P": 8846.252,
+    "JetFormer-JetClass": 57096.441
+   },
+   "area_mm2": {
+    "ViT-B/16": 34.4155,
+    "DeiT-T": 34.3572,
+    "BERT-base": 34.4961,
+    "BERT-Tiny": 34.3752,
+    "JetFormer-150P": 17.7484,
+    "JetFormer-JetClass": 11.1121
+   }
+  },
+  {
+   "config": "128x128",
+   "R": 128,
+   "C": 128,
+   "rank": 3,
+   "G": 0.6888636630623933,
+   "scores": {
+    "ViT-B/16": 0.8997578272128783,
+    "DeiT-T": 0.859321200027908,
+    "BERT-base": 0.6130811155938564,
+    "BERT-Tiny": 0.595681593572272,
+    "JetFormer-150P": 0.6719008919950297,
+    "JetFormer-JetClass": 0.5632240138704241
+   },
+   "factor_E": 1.0042604395928023,
+   "factor_D": 1.1808645548806829,
+   "factor_A": 1.32017536884648,
+   "edap": {
+    "ViT-B/16": 30333253333518.99,
+    "DeiT-T": 29697169359722.38,
+    "BERT-base": 3539902826456.5317,
+    "BERT-Tiny": 3260691325332.356,
+    "JetFormer-150P": 8157028665.845229,
+    "JetFormer-JetClass": 283840092853.2794
+   },
+   "energy_pj": {
+    "ViT-B/16": 3824286.67,
+    "DeiT-T": 3714683.18,
+    "BERT-base": 1002080.59,
+    "BERT-Tiny": 933578.41,
+    "JetFormer-150P": 34856.22,
+    "JetFormer-JetClass": 262664.92
+   },
+   "latency_ns": {
+    "ViT-B/16": 178484.442,
+    "DeiT-T": 181988.082,
+    "BERT-base": 79563.618,
+    "BERT-Tiny": 79604.896,
+    "JetFormer-150P": 10512.997,
+    "JetFormer-JetClass": 68918.638
+   },
+   "area_mm2": {
+    "ViT-B/16": 44.4394,
+    "DeiT-T": 43.9289,
+    "BERT-base": 44.3991,
+    "BERT-Tiny": 43.8752,
+    "JetFormer-150P": 22.26,
+    "JetFormer-JetClass": 15.6796
+   }
+  },
+  {
+   "config": "256x128",
+   "R": 256,
+   "C": 128,
+   "rank": 4,
+   "G": 0.574250219270708,
+   "scores": {
+    "ViT-B/16": 0.6795284216015222,
+    "DeiT-T": 0.7024364947003021,
+    "BERT-base": 0.43569567799387793,
+    "BERT-Tiny": 0.5086447248349472,
+    "JetFormer-150P": 0.6290844983362359,
+    "JetFormer-JetClass": 0.5388719092353013
+   },
+   "factor_E": 1.1077074135203506,
+   "factor_D": 1.2687993598035243,
+   "factor_A": 1.3362636712042517,
+   "edap": {
+    "ViT-B/16": 40164003806259.2,
+    "DeiT-T": 36329842489913.1,
+    "BERT-base": 4981108795778.118,
+    "BERT-Tiny": 3818645333344.487,
+    "JetFormer-150P": 8712207741.735004,
+    "JetFormer-JetClass": 296667081089.8992
+   },
+   "energy_pj": {
+    "ViT-B/16": 4167668.02,
+    "DeiT-T": 4103945.49,
+    "BERT-base": 1071832.76,
+    "BERT-Tiny": 1039971.5,
+    "JetFormer-150P": 39194.64,
+    "JetFormer-JetClass": 293231.37
+   },
+   "latency_ns": {
+    "ViT-B/16": 215457.919,
+    "DeiT-T": 199202.023,
+    "BERT-base": 103791.423,
+    "BERT-Tiny": 82043.722,
+    "JetFormer-150P": 9834.293,
+    "JetFormer-JetClass": 63813.396
+   },
+   "area_mm2": {
+    "ViT-B/16": 44.7282,
+    "DeiT-T": 44.4394,
+    "BERT-base": 44.7752,
+    "BERT-Tiny": 44.7551,
+    "JetFormer-150P": 22.6026,
+    "JetFormer-JetClass": 15.8543
+   }
+  },
+  {
+   "config": "512x64",
+   "R": 512,
+   "C": 64,
+   "rank": 5,
+   "G": 0.4939491294028338,
+   "scores": {
+    "ViT-B/16": 0.35289755077246077,
+    "DeiT-T": 0.5891078225706019,
+    "BERT-base": 0.3204092994695669,
+    "BERT-Tiny": 0.5706414760023207,
+    "JetFormer-150P": 0.6465672855037009,
+    "JetFormer-JetClass": 0.5909731346375079
+   },
+   "factor_E": 1.524837481669157,
+   "factor_D": 1.3609241426572585,
+   "factor_A": 1.0521354236188052,
+   "edap": {
+    "ViT-B/16": 77338542168750.83,
+    "DeiT-T": 43318737646825.71,
+    "BERT-base": 6773360128843.421,
+    "BERT-Tiny": 3403772572629.057,
+    "JetFormer-150P": 8476634929.558411,
+    "JetFormer-JetClass": 270512392229.53262
+   },
+   "energy_pj": {
+    "ViT-B/16": 5826630.74,
+    "DeiT-T": 5799292.8,
+    "BERT-base": 1475203.46,
+    "BERT-Tiny": 1461534.49,
+    "JetFormer-150P": 51441.97,
+    "JetFormer-JetClass": 397832.39
+   },
+   "latency_ns": {
+    "ViT-B/16": 371770.557,
+    "DeiT-T": 210020.684,
+    "BERT-base": 128449.401,
+    "BERT-Tiny": 65283.299,
+    "JetFormer-150P": 8956.583,
+    "JetFormer-JetClass": 59559.39
+   },
+   "area_mm2": {
+    "ViT-B/16": 35.7029,
+    "DeiT-T": 35.5663,
+    "BERT-base": 35.7454,
+    "BERT-Tiny": 35.6738,
+    "JetFormer-150P": 18.3977,
+    "JetFormer-JetClass": 11.4166
+   }
+  },
+  {
+   "config": "128x256",
+   "R": 128,
+   "C": 256,
+   "rank": 6,
+   "G": 0.38566238623891175,
+   "scores": {
+    "ViT-B/16": 0.4882837038457534,
+    "DeiT-T": 0.4531565990963262,
+    "BERT-base": 0.3500108025676319,
+    "BERT-Tiny": 0.3713075169880802,
+    "JetFormer-150P": 0.37736762315926126,
+    "JetFormer-JetClass": 0.3032098733835897
+   },
+   "factor_E": 1.5500866474991082,
+   "factor_D": 1.1976619008661022,
+   "factor_A": 1.506308235995958,
+   "edap": {
+    "ViT-B/16": 55894927266068.34,
+    "DeiT-T": 56314764614525.82,
+    "BERT-base": 6200515978413.161,
+    "BERT-Tiny": 5231065130533.339,
+    "JetFormer-150P": 14523542827.354319,
+    "JetFormer-JetClass": 527243900768.14087
+   },
+   "energy_pj": {
+    "ViT-B/16": 5868908.26,
+    "DeiT-T": 5676201.95,
+    "BERT-base": 1549579.95,
+    "BERT-Tiny": 1429138.5,
+    "JetFormer-150P": 55063.84,
+    "JetFormer-JetClass": 405038.02
+   },
+   "latency_ns": {
+    "ViT-B/16": 187015.7,
+    "DeiT-T": 197491.55,
+    "BERT-base": 78168.101,
+    "BERT-Tiny": 72767.646,
+    "JetFormer-150P": 10331.752,
+    "JetFormer-JetClass": 74747.605
+   },
+   "area_mm2": {
+    "ViT-B/16": 50.9257,
+    "DeiT-T": 50.2361,
+    "BERT-base": 51.1899,
+    "BERT-Tiny": 50.3011,
+    "JetFormer-150P": 25.5289,
+    "JetFormer-JetClass": 17.4148
+   }
+  },
+  {
+   "config": "512x128",
+   "R": 512,
+   "C": 128,
+   "rank": 7,
+   "G": 0.3820525246738366,
+   "scores": {
+    "ViT-B/16": 0.37990385206283794,
+    "DeiT-T": 0.5424703953930937,
+    "BERT-base": 0.20803545935496331,
+    "BERT-Tiny": 0.41564938984746874,
+    "JetFormer-150P": 0.44829552915472304,
+    "JetFormer-JetClass": 0.389277930840734
+   },
+   "factor_E": 1.3318739570423435,
+   "factor_D": 1.5266707386269185,
+   "factor_A": 1.3882886138571477,
+   "edap": {
+    "ViT-B/16": 71840761717653.02,
+    "DeiT-T": 47042949123769.914,
+    "BERT-base": 10432104126223.99,
+    "BERT-Tiny": 4673010119259.508,
+    "JetFormer-150P": 12225673646.454866,
+    "JetFormer-JetClass": 410672025637.08655
+   },
+   "energy_pj": {
+    "ViT-B/16": 4974464.67,
+    "DeiT-T": 4933720.64,
+    "BERT-base": 1272222.9,
+    "BERT-Tiny": 1251850.89,
+    "JetFormer-150P": 47834.52,
+    "JetFormer-JetClass": 354103.75
+   },
+   "latency_ns": {
+    "ViT-B/16": 311498.427,
+    "DeiT-T": 205899.608,
+    "BERT-base": 175668.035,
+    "BERT-Tiny": 80417.607,
+    "JetFormer-150P": 10859.13,
+    "JetFormer-JetClass": 70742.811
+   },
+   "area_mm2": {
+    "ViT-B/16": 46.3627,
+    "DeiT-T": 46.3089,
+    "BERT-base": 46.6784,
+    "BERT-Tiny": 46.4187,
+    "JetFormer-150P": 23.5362,
+    "JetFormer-JetClass": 16.3939
+   }
+  },
+  {
+   "config": "256x256",
+   "R": 256,
+   "C": 256,
+   "rank": 8,
+   "G": 0.3274525224779055,
+   "scores": {
+    "ViT-B/16": 0.36073580743807104,
+    "DeiT-T": 0.3602276355221513,
+    "BERT-base": 0.3041881221183391,
+    "BERT-Tiny": 0.3565236992598495,
+    "JetFormer-150P": 0.29172581943199083,
+    "JetFormer-JetClass": 0.29985979278082464
+   },
+   "factor_E": 1.109512593544668,
+   "factor_D": 1.5307380032998013,
+   "factor_A": 1.939232600535981,
+   "edap": {
+    "ViT-B/16": 75658089795674.83,
+    "DeiT-T": 70842447094982.53,
+    "BERT-base": 7134557256293.915,
+    "BERT-Tiny": 5447979499970.37,
+    "JetFormer-150P": 18787212072.21817,
+    "JetFormer-JetClass": 533134352263.8523
+   },
+   "energy_pj": {
+    "ViT-B/16": 4034692.42,
+    "DeiT-T": 3925394.16,
+    "BERT-base": 1061952.31,
+    "BERT-Tiny": 1007303.18,
+    "JetFormer-150P": 43220.96,
+    "JetFormer-JetClass": 302182.97
+   },
+   "latency_ns": {
+    "ViT-B/16": 279993.391,
+    "DeiT-T": 270911.736,
+    "BERT-base": 104788.399,
+    "BERT-Tiny": 84766.574,
+    "JetFormer-150P": 13321.022,
+    "JetFormer-JetClass": 78797.879
+   },
+   "area_mm2": {
+    "ViT-B/16": 66.9726,
+    "DeiT-T": 66.6166,
+    "BERT-base": 64.1134,
+    "BERT-Tiny": 63.8044,
+    "JetFormer-150P": 32.631,
+    "JetFormer-JetClass": 22.3899
+   }
+  },
+  {
+   "config": "1024x64",
+   "R": 1024,
+   "C": 64,
+   "rank": 9,
+   "G": 0.296601063117575,
+   "scores": {
+    "ViT-B/16": 0.18433010048894666,
+    "DeiT-T": 0.3263990008830696,
+    "BERT-base": 0.15156112708911523,
+    "BERT-Tiny": 0.4053447739050849,
+    "JetFormer-150P": 0.4126455961718449,
+    "JetFormer-JetClass": 0.44637670356948844
+   },
+   "factor_E": 2.1918483844182366,
+   "factor_D": 1.4996344234667607,
+   "factor_A": 1.1062231186690057,
+   "edap": {
+    "ViT-B/16": 148063620858826.8,
+    "DeiT-T": 78184697693884.25,
+    "BERT-base": 14319288960300.15,
+    "BERT-Tiny": 4791806703485.651,
+    "JetFormer-150P": 13281893439.444368,
+    "JetFormer-JetClass": 358140456515.31476
+   },
+   "energy_pj": {
+    "ViT-B/16": 8339054.81,
+    "DeiT-T": 8339054.81,
+    "BERT-base": 2103327.7,
+    "BERT-Tiny": 2103327.7,
+    "JetFormer-150P": 74683.94,
+    "JetFormer-JetClass": 572424.48
+   },
+   "latency_ns": {
+    "ViT-B/16": 473751.388,
+    "DeiT-T": 249864.792,
+    "BERT-base": 181227.052,
+    "BERT-Tiny": 60758.065,
+    "JetFormer-150P": 9157.168,
+    "JetFormer-JetClass": 52387.663
+   },
+   "area_mm2": {
+    "ViT-B/16": 37.4784,
+    "DeiT-T": 37.5232,
+    "BERT-base": 37.5657,
+    "BERT-Tiny": 37.4963,
+    "JetFormer-150P": 19.421,
+    "JetFormer-JetClass": 11.9428
+   }
+  },
+  {
+   "config": "1024x128",
+   "R": 1024,
+   "C": 128,
+   "rank": 10,
+   "G": 0.2500827226406459,
+   "scores": {
+    "ViT-B/16": 0.198975779593463,
+    "DeiT-T": 0.40633750431502186,
+    "BERT-base": 0.12779705165759056,
+    "BERT-Tiny": 0.290450473117482,
+    "JetFormer-150P": 0.2994856124755565,
+    "JetFormer-JetClass": 0.2721736785916673
+   },
+   "factor_E": 1.7807123010176844,
+   "factor_D": 1.6173537303875662,
+   "factor_A": 1.4973691532104534,
+   "edap": {
+    "ViT-B/16": 137165348302329.23,
+    "DeiT-T": 62803474797748.89,
+    "BERT-base": 16981984684221.102,
+    "BERT-Tiny": 6687314997196.174,
+    "JetFormer-150P": 18300427827.923664,
+    "JetFormer-JetClass": 587365968749.7506
+   },
+   "energy_pj": {
+    "ViT-B/16": 6593270.93,
+    "DeiT-T": 6593270.93,
+    "BERT-base": 1675609.66,
+    "BERT-Tiny": 1675609.66,
+    "JetFormer-150P": 65114.27,
+    "JetFormer-JetClass": 475848.52
+   },
+   "latency_ns": {
+    "ViT-B/16": 415769.946,
+    "DeiT-T": 190307.97,
+    "BERT-base": 201572.624,
+    "BERT-Tiny": 79518.745,
+    "JetFormer-150P": 10962.965,
+    "JetFormer-JetClass": 70770.334
+   },
+   "area_mm2": {
+    "ViT-B/16": 50.0369,
+    "DeiT-T": 50.0525,
+    "BERT-base": 50.2787,
+    "BERT-Tiny": 50.1891,
+    "JetFormer-150P": 25.6364,
+    "JetFormer-JetClass": 17.4417
+   }
+  },
+  {
+   "config": "512x256",
+   "R": 512,
+   "C": 256,
+   "rank": 11,
+   "G": 0.23416990005752608,
+   "scores": {
+    "ViT-B/16": 0.21037499776700752,
+    "DeiT-T": 0.29092981885822755,
+    "BERT-base": 0.15468849168960896,
+    "BERT-Tiny": 0.28078351666577706,
+    "JetFormer-150P": 0.25109414438304306,
+    "JetFormer-JetClass": 0.2470232685015156
+   },
+   "factor_E": 1.2834339701412343,
+   "factor_D": 1.752668947964268,
+   "factor_A": 2.0474195756384046,
+   "edap": {
+    "ViT-B/16": 129733012008830.34,
+    "DeiT-T": 87716712270269.11,
+    "BERT-base": 14029793362343.58,
+    "BERT-Tiny": 6917549248922.846,
+    "JetFormer-150P": 21827330342.875813,
+    "JetFormer-JetClass": 647168007143.4124
+   },
+   "energy_pj": {
+    "ViT-B/16": 4608709.08,
+    "DeiT-T": 4541152.86,
+    "BERT-base": 1201596.35,
+    "BERT-Tiny": 1167818.24,
+    "JetFormer-150P": 51136.63,
+    "JetFormer-JetClass": 352987.81
+   },
+   "latency_ns": {
+    "ViT-B/16": 398998.36,
+    "DeiT-T": 273841.484,
+    "BERT-base": 172363.092,
+    "BERT-Tiny": 87687.204,
+    "JetFormer-150P": 12316.934,
+    "JetFormer-JetClass": 78344.085
+   },
+   "area_mm2": {
+    "ViT-B/16": 70.5505,
+    "DeiT-T": 70.537,
+    "BERT-base": 67.7405,
+    "BERT-Tiny": 67.5524,
+    "JetFormer-150P": 34.655,
+    "JetFormer-JetClass": 23.4019
+   }
+  },
+  {
+   "config": "1024x256",
+   "R": 1024,
+   "C": 256,
+   "rank": 12,
+   "G": 0.1497469055136619,
+   "scores": {
+    "ViT-B/16": 0.09865182694656464,
+    "DeiT-T": 0.1991770002907925,
+    "BERT-base": 0.092259359977489,
+    "BERT-Tiny": 0.2012713953819594,
+    "JetFormer-150P": 0.17018819997079893,
+    "JetFormer-JetClass": 0.18158538017989836
+   },
+   "factor_E": 1.6329383719135466,
+   "factor_D": 1.982321617499842,
+   "factor_A": 2.2248952878201407,
+   "edap": {
+    "ViT-B/16": 276655617604000.75,
+    "DeiT-T": 128124267231513.08,
+    "BERT-base": 23523332206806.438,
+    "BERT-Tiny": 9650322149032.803,
+    "JetFormer-150P": 32203847490.90021,
+    "JetFormer-JetClass": 880387816661.2179
+   },
+   "energy_pj": {
+    "ViT-B/16": 5772670.26,
+    "DeiT-T": 5772670.26,
+    "BERT-base": 1488848.36,
+    "BERT-Tiny": 1488848.36,
+    "JetFormer-150P": 66967.98,
+    "JetFormer-JetClass": 454597.49
+   },
+   "latency_ns": {
+    "ViT-B/16": 626054.932,
+    "DeiT-T": 290047.727,
+    "BERT-base": 214083.495,
+    "BERT-Tiny": 87861.261,
+    "JetFormer-150P": 12686.967,
+    "JetFormer-JetClass": 76981.202
+   },
+   "area_mm2": {
+    "ViT-B/16": 76.5509,
+    "DeiT-T": 76.5218,
+    "BERT-base": 73.8015,
+    "BERT-Tiny": 73.7724,
+    "JetFormer-150P": 37.9038,
+    "JetFormer-JetClass": 25.1572
+   }
+  }
+ ]
+}

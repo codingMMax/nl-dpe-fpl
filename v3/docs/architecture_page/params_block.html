@@ -1,0 +1,126 @@
+<div class="group-h"><h3>Searched by the DSE</h3><p>6 candidates per (shape, config): P_proj {1, 2, 4} × N_E {d, 2d}.</p></div>
+
+  <article class="param" id="p-P_PROJ" data-param="P_PROJ" data-blocks="gemm qk pv ctrl">
+    <div class="pname"><h4>P<sub>proj</sub></h4><span class="pill searched">searched</span><span class="val">{1, 2, 4}</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>Copies of the three projection GEMMs (W<sub>Q</sub>, W<sub>K</sub>, W<sub>V</sub>). Token t goes to copy t mod P<sub>proj</sub>, so P<sub>proj</sub> tokens are projected at the same time and the X stream is P<sub>proj</sub> times wider.</p>
+      <p><span class="lbl">In hardware</span>3·P<sub>proj</sub> <code>gemm_top</code> instances of V crossbars each. Each copy is one input channel of the DIMMs it feeds: the QK DIMM gets P<sub>proj</sub> A channels and P<sub>proj</sub> B channels, the PV DIMM P<sub>proj</sub> B channels, each with its own LOG converter crossbar. <code>att_ctrl</code> keeps one admission counter per copy. The X port is P<sub>proj</sub>·V·40 bits wide.</p>
+      <p class="measure"><span class="lbl">Cost and effect</span>+3·V GEMM crossbars and +3 converters per copy. Cycles: 2 copies ×0.59–0.92, 4 copies ×0.39–0.91 of 1 copy (model). It pays most where the projections set the pace: large d<sub>m</sub>, small R.</p>
+      <p><span class="lbl">Guards</span>Row frame: A_CH = P<sub>proj</sub> ≤ NB = I/B<sub>kv</sub>. Write rate per slice port ≤ 1 word/cycle (worst 0.76, the Q port at P<sub>proj</sub> 4).</p>
+      <div class="trace" data-trace="top/rtl/sim/att_head.v:69|g_cp: one copy per iteration;top/rtl/sim/att_head.v:72|gq, gk, gv instances;ip/dimm/rtl/sim/dimm_tile_top.v:152|A converters, one per channel;ip/dimm/rtl/sim/dimm_tile_top.v:164|B converters;top/rtl/sim/att_ctrl.v:94|per-copy admission;top/rtl/sim/att_ctrl.v:107|PV B window 4·P_proj"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-N_E" data-param="N_E" data-blocks="qk sm">
+    <div class="pname"><h4>N<sub>E</sub></h4><span class="pill searched">searched</span><span class="val">{d, 2d}</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>The QK DIMM's farm: EXP crossbars computing Q·K<sup>⊤</sup> in the log domain. Crossbar f works on feature column k = f / NG of output group f mod NG, so the farm finishes NG = N<sub>E</sub>/d score windows per wave.</p>
+      <p><span class="lbl">In hardware</span>The farm is cut into n<sub>s</sub> = N<sub>E</sub>/16 slices of X<sub>S</sub> = 16 crossbars; each slice has its own A and B memories, its own copy of the window engine and its part of the adder trees. NG is also the number of output channels (E4), so it sets how many input FIFOs the online softmax builds (S_CH).</p>
+      <p class="measure"><span class="lbl">Cost and effect</span>N<sub>E</sub> crossbars (EXP, I×I). Halving the farm doubles the waves T<sub>W</sub> = W<sub>K</sub>/NG. N<sub>E</sub> = d instead of 2d: cycles ×1.005–1.17, d fewer crossbars (model).</p>
+      <p><span class="lbl">Guards</span>K = d ≤ N<sub>E</sub>; NG ≤ W<sub>K</sub> (whole windows per wave); NG ≤ X<sub>S</sub>.</p>
+      <div class="trace" data-trace="top/rtl/sim/att_head.v:97|u_qk: N_E(N_E);ip/dimm/rtl/sim/dimm_tile_top.v:84|XS, NS, KS derived;ip/dimm/rtl/sim/dimm_tile_top.v:548|g_sl: the slices;ip/dimm/rtl/sim/dimm_tile_top.v:945|g_x: crossbars of a slice;ip/dimm/rtl/sim/dimm_tile_top.v:598|g_out: NG output channels;top/rtl/sim/att_head.v:112|softmax S_CH = NG_QK"></div>
+    </div>
+  </article>
+
+  <div class="group-h"><h3>Fixed, each with its reason</h3><p>One value per build; the DSE does not search them.</p></div>
+
+  <article class="param" id="p-N_EP" data-param="N_EP" data-blocks="pv acc">
+    <div class="pname"><h4>N<sub>EP</sub></h4><span class="pill fixed">fixed · open</span><span class="val">2d</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>The PV DIMM's farm: EXP crossbars computing P·V. NG<sub>PV</sub> = N<sub>EP</sub>/B<sub>kv</sub> output groups, which are the accumulator's input channels P_CH (E8).</p>
+      <p><span class="lbl">In hardware</span>Same slice structure as the QK DIMM, with n<sub>s</sub> = N<sub>EP</sub>/16 slices of K<sub>s</sub> = 16/NG keys. Each output group feeds one o_part FIFO in the accumulator.</p>
+      <p class="measure"><span class="lbl">Why fixed</span>N<sub>EP</sub> = d fails the RTL guards on every build as specified: the accumulator needs N<sub>OC</sub> ≤ P_CH = N<sub>EP</sub>/16, because each crossbar of a wave reads its window from its own FIFO, and the floor rule asks N<sub>OC</sub> = 6 at d 64 while P_CH = 4. With N<sub>OC</sub> capped at P_CH it fits on the 288 builds with I ≥ 128 (at I = 64 the PV log P staging overruns): cycles ×1.02–1.21, crossbars −68 / −36 / −18 (×0.68–0.81). Your decision (LEDGER Needs you 2).</p>
+      <div class="trace" data-trace="top/rtl/sim/att_head.v:122|u_pv: N_E(N_EP);top/rtl/sim/att_head.v:51|NGP = N_EP / BKV;top/rtl/sim/att_head.v:134|accumulator P_CH(NGP);ip/softmax/rtl/sim/softmax_online_acc.v:110|guard N_OC <= P_CH;ip/softmax/rtl/sim/softmax_online_acc.v:187|g_f: one FIFO per channel"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-N_EXP" data-param="N_EXP" data-blocks="sm pv">
+    <div class="pname"><h4>N<sub>EXP</sub></h4><span class="pill fixed">fixed · rule</span><span class="val">2</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>EXP crossbars in the online softmax. Each reads one window of scores, subtracts the row max, clamps to −128 and turns it into P; the words it pops are the log P stream (E5).</p>
+      <p><span class="lbl">In hardware</span>N<sub>EXP</sub> feed units, each with a 4-deep FIFO and one crossbar (extent I×I); the score store gets max(2, N<sub>EXP</sub>) banks. E5 has N<sub>EXP</sub> lanes, so the PV DIMM's A port has N<sub>EXP</sub> channels, each with its own window stager pair.</p>
+      <p class="measure"><span class="lbl">Why fixed</span>The rule: the smallest power of two whose EXP stage keeps up with the score stream. It gives 2 on all 72 rows. More crossbars gave at most 12 % fewer cycles for twice the crossbars (earlier model).</p>
+      <div class="trace" data-trace="ip/softmax/rtl/sim/softmax_online_top.v:1478|gen_exp: one feed per crossbar;ip/softmax/rtl/sim/softmax_online_top.v:530|the EXP crossbar, extent I x I;ip/softmax/rtl/sim/softmax_online_top.v:1371|store banks NB = max(2, N_EXP);top/rtl/sim/att_head.v:123|PV A_CH = N_EXP;ip/dimm/rtl/sim/dimm_tile_top.v:723|window stager per channel"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-N_OC" data-param="N_OC" data-blocks="acc">
+    <div class="pname"><h4>N<sub>OC</sub></h4><span class="pill fixed">fixed · floor rule</span><span class="val">6–8 at d 64 · 4 · 2</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>Crossbars per accumulator group. There are two groups, LOG and EXP, so 2·N<sub>OC</sub> crossbars. A run's S×d result is P<sub>oc</sub> = S·d/I windows; window p runs on crossbar p mod N<sub>OC</sub> in wave p / N<sub>OC</sub>.</p>
+      <p><span class="lbl">In hardware</span>Per crossbar index: one LOG crossbar, one EXP crossbar and three memories (lo, e, so). Both groups run lock-step from their crossbar 0. W = ⌈P<sub>oc</sub>/N<sub>OC</sub>⌉ waves per block.</p>
+      <p class="measure"><span class="lbl">Rule</span>The smallest N<sub>OC</sub> whose pass time T(⌈P<sub>oc</sub>/N<sub>OC</sub>⌉) reaches the stream floor max(⌈S·B<sub>kv</sub>/5⌉, T(1)). BERT-Tiny at 128×128: P<sub>oc</sub> = 64, N<sub>OC</sub> = 6, W = 11.</p>
+      <p><span class="lbl">Guards</span>1 ≤ N<sub>OC</sub> ≤ P<sub>oc</sub>; N<sub>OC</sub> ≤ P_CH (this is what blocks N<sub>EP</sub> = d).</p>
+      <div class="trace" data-trace="ip/softmax/rtl/sim/softmax_online_acc.v:340|g_x: one index per crossbar;ip/softmax/rtl/sim/softmax_online_acc.v:346|lo_mem, e_mem, so_mem;ip/softmax/rtl/sim/softmax_online_acc.v:434|LOG crossbar;ip/softmax/rtl/sim/softmax_online_acc.v:450|EXP crossbar;ip/softmax/rtl/sim/softmax_online_acc.v:76|W waves;sim/workloads/attention_head.py:30|n_oc_floor (the rule)"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-BKV" data-param="BKV" data-blocks="qk sm pv acc ctrl">
+    <div class="pname"><h4>B<sub>kv</sub></h4><span class="pill fixed">fixed</span><span class="val">16</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>Keys per block, the step of the online softmax. A tile is S query rows × B<sub>kv</sub> keys; B = n/B<sub>kv</sub> blocks per run.</p>
+      <p><span class="lbl">In hardware</span>The QK DIMM's output width N = B<sub>kv</sub>; the PV DIMM's reduction length K = B<sub>kv</sub>, so its trees have log<sub>2</sub>B<sub>kv</sub> levels and o_part is 9 + log<sub>2</sub>B<sub>kv</sub> = 13 bits. The K and V slots hold B matrices. The QK B staging credits per B<sub>kv</sub>-row matrix.</p>
+      <p class="measure"><span class="lbl">Why 16</span>The only value legal on every candidate: B<sub>kv</sub> ≤ d excludes 32 and 64 at d = 16; NG ≤ W<sub>K</sub> excludes 8 at one point. Earlier model: ×0.99–1.07 cycles over {8, 32, 64}.</p>
+      <div class="trace" data-trace="top/rtl/sim/att_head.v:46|NBLK = NSEQ / BKV;top/rtl/sim/att_head.v:54|VWP = 9 + log2 BKV;top/rtl/sim/att_head.v:97|QK: N(BKV), B_SLOTS(NBLK);top/rtl/sim/att_head.v:122|PV: K(BKV);top/rtl/sim/att_ctrl.v:106|QK B staging per BKV rows;top/rtl/sim/att_ctrl.v:113|job lists"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-X_S" data-param="X_S" data-blocks="qk pv">
+    <div class="pname"><h4>X<sub>S</sub></h4><span class="pill fixed">fixed</span><span class="val">16 crossbars per slice</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>The slice size of both DIMMs. A slice is a self-contained piece of the farm: K<sub>s</sub> = X<sub>S</sub>/NG columns of all NG groups.</p>
+      <p><span class="lbl">In hardware</span>Per slice: its operand memories, one A and one B write port, its own window-engine copy led by its crossbar 0, and the first log<sub>2</sub>K<sub>s</sub> tree levels. All slices start a job in the same cycle and stay in lock-step without signals between them.</p>
+      <p class="measure"><span class="lbl">Why fixed</span>Your decision (2026-10-14). It bounds the fan-out of every control bit (at most 2,688 sinks instead of 16,384 for a one-engine 128-crossbar farm) and splits the operand write traffic. It changes cycles only through the start latency at I = 256.</p>
+      <div class="trace" data-trace="ip/dimm/rtl/sim/dimm_tile_top.v:84|XS = min(X_S, N_E), NS, KS;ip/dimm/rtl/sim/dimm_tile_top.v:548|g_sl;ip/dimm/rtl/sim/dimm_tile_top.v:755|dimm_slice;ip/dimm/rtl/sim/dimm_tile_top.v:823|engine copy per slice"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-BQ" data-param="BQ" data-blocks="qk sm pv acc ctrl">
+    <div class="pname"><h4>B<sub>q</sub> = S</h4><span class="pill fixed">fixed</span><span class="val">S = min(n, I)</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What it is</span>Query rows per run: one run takes S rows of Q against all n keys, and R<sub>b</sub> = n/S runs cover the head. S is as large as one crossbar window allows.</p>
+      <p><span class="lbl">In hardware</span>S is the M of both DIMM jobs, the row count of the softmax and of the accumulator, and the size of their per-row tables (m, log α, log l). S &lt; I is outside the space (not implemented; each run would re-stream K and V).</p>
+      <div class="trace" data-trace="top/rtl/sim/att_head.v:44|S = min(NSEQ, I);top/rtl/sim/att_head.v:45|RB = NSEQ / S;top/rtl/sim/att_ctrl.v:142|softmax runs"></div>
+    </div>
+  </article>
+
+  <article class="param" id="p-CREDITS" data-param="CREDITS" data-blocks="qk sm pv acc ctrl">
+    <div class="pname"><h4>Credit sizes</h4><span class="pill credit">fixed</span><span class="val">E1–E8 CAP</span></div>
+    <div class="pbody">
+      <p><span class="lbl">What they are</span>Every module-to-module edge is push + credit: the consumer's buffer holds CAP units, and the producer starts a unit only with a credit in hand. A crossbar's drain cannot stall, so this is the only flow control. A credit limits throughput when its loop is longer than CAP unit periods; E3 did (fixed 2026-10-15), the others were never checked.</p>
+      <div class="tablewrap"><table class="dt">
+        <thead><tr><th>edge</th><th>buffer</th><th>CAP</th><th>Verilog</th></tr></thead>
+        <tbody>
+          <tr><td>E1 q8</td><td>QK A staging (transposer)</td><td>2 groups of I/B<sub>kv</sub> rows</td><td class="trace" data-trace="top/rtl/sim/att_ctrl.v:105|qa_ok;ip/dimm/rtl/sim/dimm_tile_top.v:658|dimm_xpose_stage"></td></tr>
+          <tr><td>E2 k8</td><td>QK B staging (transposer)</td><td>2 matrices of B<sub>kv</sub> rows</td><td class="trace" data-trace="top/rtl/sim/att_ctrl.v:106|qb_ok"></td></tr>
+          <tr><td>E3 v8</td><td>PV B row writer (2 registers per copy)</td><td>4·P<sub>proj</sub> rows, X in token order</td><td class="trace" data-trace="top/rtl/sim/att_ctrl.v:107|pb_ok;ip/dimm/rtl/sim/dimm_tile_top.v:423|row writer"></td></tr>
+          <tr><td>E4 s8</td><td>softmax input FIFOs</td><td>2 tiles</td><td class="trace" data-trace="top/rtl/sim/att_head.v:99|QK C_CAP(2);ip/softmax/rtl/sim/softmax_online_top.v:1380|FIFO depth"></td></tr>
+          <tr><td>E5 log P</td><td>PV A slots</td><td>2 blocks</td><td class="trace" data-trace="top/rtl/sim/att_head.v:113|LP_CAP(2);top/rtl/sim/att_head.v:123|PV A_SLOTS(2)"></td></tr>
+          <tr><td>E6 log α</td><td>accumulator α ring</td><td>2 blocks</td><td class="trace" data-trace="ip/softmax/rtl/sim/softmax_online_acc.v:127|g_la"></td></tr>
+          <tr><td>E7 log l</td><td>accumulator log l table</td><td>1 run</td><td class="trace" data-trace="ip/softmax/rtl/sim/softmax_online_acc.v:132|g_ll"></td></tr>
+          <tr><td>E8 o_part</td><td>accumulator input FIFOs</td><td>2 tiles</td><td class="trace" data-trace="top/rtl/sim/att_head.v:124|PV C_CAP(2);ip/softmax/rtl/sim/softmax_online_acc.v:98|FD"></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </article>
+
+  <div class="group-h"><h3>Derived</h3><p>Computed from shape, config and mapping by the RTL's localparams. Example: BERT-Tiny at 128×128, P<sub>proj</sub> 1, N<sub>E</sub> = N<sub>EP</sub> = 128.</p></div>
+  <div class="tablewrap"><table class="dt" id="derived">
+    <thead><tr><th>symbol</th><th>formula</th><th>meaning in hardware</th><th>example</th><th>Verilog</th></tr></thead>
+    <tbody>
+      <tr id="p-I" data-param="I" data-blocks="gemm qk sm pv acc"><td>I</td><td>min(R, C)</td><td>window size: every farm, softmax and accumulator pass is I×I; I/5 words per window</td><td>128</td><td class="trace" data-trace="top/rtl/sim/att_head.v:43|I"></td></tr>
+      <tr id="p-S" data-param="S" data-blocks="qk sm pv acc ctrl"><td>S</td><td>min(n, I)</td><td>query rows per run</td><td>128</td><td class="trace" data-trace="top/rtl/sim/att_head.v:44|S"></td></tr>
+      <tr id="p-RB" data-param="RB" data-blocks="ctrl qk"><td>R<sub>b</sub></td><td>n / S</td><td>runs; the Q slots of the QK DIMM</td><td>1</td><td class="trace" data-trace="top/rtl/sim/att_head.v:45|RB"></td></tr>
+      <tr id="p-B" data-param="B" data-blocks="ctrl qk pv acc"><td>B</td><td>n / B<sub>kv</sub></td><td>key blocks per run; the K and V slots</td><td>8</td><td class="trace" data-trace="top/rtl/sim/att_head.v:46|NBLK"></td></tr>
+      <tr id="p-V" data-param="V" data-blocks="gemm"><td>V</td><td>⌈d<sub>m</sub>/R⌉</td><td>row tiles (crossbars) per GEMM, folded by a log<sub>2</sub>V byte tree</td><td>1</td><td class="trace" data-trace="top/rtl/sim/att_head.v:30|V;ip/gemm/rtl/sim/gemm_top.v:89|V, H"></td></tr>
+      <tr id="p-LOADX" data-param="LOADX" data-blocks="gemm ctrl"><td>LOADX</td><td>⌈8·min(d<sub>m</sub>, R)/40⌉</td><td>words per token burst; the GEMM row period is LOADX + 8</td><td>26</td><td class="trace" data-trace="top/rtl/sim/att_head.v:48|LOADX"></td></tr>
+      <tr id="p-NG" data-param="NG" data-blocks="qk pv sm acc"><td>NG</td><td>N<sub>E</sub>/d (QK) · N<sub>EP</sub>/B<sub>kv</sub> (PV)</td><td>output groups = output channels of a DIMM</td><td>2 · 8</td><td class="trace" data-trace="top/rtl/sim/att_head.v:50|NGQ;top/rtl/sim/att_head.v:51|NGP"></td></tr>
+      <tr id="p-NS" data-param="NS" data-blocks="qk pv"><td>n<sub>s</sub>, K<sub>s</sub></td><td>N<sub>E</sub>/X<sub>S</sub>; X<sub>S</sub>/NG</td><td>slices; columns (QK) or keys (PV) per slice</td><td>8, 8 · 8, 2</td><td class="trace" data-trace="ip/dimm/rtl/sim/dimm_tile_top.v:84|XS, NS, KS"></td></tr>
+      <tr data-param="WK" data-blocks="qk pv"><td>NB, W<sub>K</sub>, T<sub>W</sub></td><td>I/N; M·N/I; W<sub>K</sub>/NG</td><td>rows per farm window; windows per column; waves per job</td><td>8, 16, 8 · 2, 64, 8</td><td class="trace" data-trace="ip/dimm/rtl/sim/dimm_tile_top.v:80|NB, W_K, T_W"></td></tr>
+      <tr id="p-AGRP" data-param="AGRP" data-blocks="qk pv"><td>A<sub>GRP</sub>, B<sub>GRP</sub></td><td>largest 2<sup>k</sup> ≤ min(⌈I/5⌉, X<sub>S</sub>); min(A<sub>GRP</sub>, K<sub>s</sub>)</td><td>crossbars per A memory; columns per B memory; start latency A<sub>GRP</sub> + 2</td><td>16, 8 · 16, 2</td><td class="trace" data-trace="ip/dimm/rtl/sim/dimm_tile_top.v:87|A_GRP, B_GRP"></td></tr>
+      <tr id="p-PCH" data-param="PCH" data-blocks="acc pv"><td>P_CH, P<sub>oc</sub></td><td>NG<sub>PV</sub>; S·d/I</td><td>accumulator input FIFOs; windows per run</td><td>8, 64</td><td class="trace" data-trace="ip/softmax/rtl/sim/softmax_online_acc.v:75|P_OC"></td></tr>
+      <tr id="p-W" data-param="W" data-blocks="acc"><td>W</td><td>⌈P<sub>oc</sub>/N<sub>OC</sub>⌉</td><td>accumulator waves per block</td><td>11</td><td class="trace" data-trace="ip/softmax/rtl/sim/softmax_online_acc.v:76|W"></td></tr>
+      <tr data-param="LN" data-blocks="sm acc"><td>LN = SO</td><td>log<sub>2</sub>n</td><td>the mean shift of l and of o</td><td>7</td><td class="trace" data-trace="top/rtl/sim/att_head.v:49|LN"></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" id="p-SHAPE" data-param="SHAPE" data-blocks="gemm qk sm pv acc ctrl">Shape and config are inputs, not mapping: n (<code>NSEQ</code>), d<sub>m</sub> (<code>DM</code>), d (<code>D</code>), R, C, plus the platform's BUF = 40 bits (5 bytes per cycle per port) and P = 8. The crossbar count is N<sub>xbar</sub> = 3·P<sub>proj</sub>·V + 3·P<sub>proj</sub> + N<sub>E</sub> + N<sub>EP</sub> + (N<sub>EXP</sub> + 2) + 2·N<sub>OC</sub>; the example gives 3 + 3 + 128 + 128 + 4 + 12 = 278, as VTR counted.</p>

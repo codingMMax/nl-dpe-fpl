@@ -1,0 +1,12 @@
+@@
+- .weight_in(8'd0), .weight_en(1'b0),
+@@
+- .weight_in(8'd0), .weight_en(1'b0),
+@@
+- .weight_in(8'd0), .weight_en(1'b0),
+@@
+- .weight_in(8'd0), .weight_en(1'b0),
+@@
+- .weight_in(8'd0), .weight_en(1'b0),
+@@
+- .weight_in(8'd0), .weight_en(1'b0),

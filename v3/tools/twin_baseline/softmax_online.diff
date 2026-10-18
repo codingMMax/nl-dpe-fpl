@@ -1,0 +1,23 @@
+@@
+- dpe #(.KERNEL_WIDTH(R), .NUM_COLS(C), .DPE_BUF_WIDTH(BUF), .PRECISION(P), .ROWS_USED(RU), .COLS_USED(CU)) u_dpe (
++ dpe u_dpe (
+@@
+- reg signed [7:0] bmax_q [0:(1 << MCW) * S - 1];
+- always @(posedge clk) if (w3_v) bmax_q[cb3 * S + w3_row] <= w3_val;
+@@
+- reg [7:0] e_q [0:B*S-1];
+- reg [7:0] lq_all [0:B*S-1];
+- integer pr;
+- always @(posedge clk)
+- if (wv)
+- for (pr = 0; pr < S; pr = pr + 1)
+- if (woh[pr / EPS]) begin
+- e_q[wcb*S + pr] <= e_w[(pr % EPS)*8 +: 8];
+- lq_all[wcb*S + pr] <= lq_lane[(pr % EPS)*8 +: 8];
+- end
+@@
+- reg [31:0] sp_q [0:B*S-1];
+- integer qp;
+- always @(posedge clk)
+- for (qp = 0; qp < N_EXP; qp = qp + 1)
+- if (acc_we[qp]) sp_q[acc_row[qp*AW +: AW]] <= acc_sum[qp*32 +: 32];

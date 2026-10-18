@@ -1,0 +1,111 @@
+<title>NL-DPE Crossbar DSE</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column for text; figures run full width on white plot-paper mats; the two family summaries sit side by side and stack on phones */
+:root {
+  --bg: #f3f6f6; --surface: #ffffff; --fg: #1b2525; --muted: #586a69; --rule: #d3dcdb;
+  --accent: #0a6a65; --accent-soft: #dfefed; --paper: #ffffff;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1717; --surface: #162121; --fg: #e2eaea; --muted: #9db0ae; --rule: #2a3a39;
+  --accent: #5ec7be; --accent-soft: #1b3533; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1717; --surface: #162121; --fg: #e2eaea; --muted: #9db0ae; --rule: #2a3a39;
+  --accent: #5ec7be; --accent-soft: #1b3533; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 40px; padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { max-width: 70ch; }
+.muted { color: var(--muted); }
+.families { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.family { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 18px 14px; display: grid; gap: 12px; min-width: 0; }
+.winner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.winner .cfg { font-family: var(--mono); font-weight: 500; font-size: 30px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.winner .g { font-family: var(--mono); font-size: 15px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; color: var(--muted); text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+tr.top td { background: var(--accent-soft); color: var(--fg); font-weight: 500; }
+.legend { font-size: 13px; }
+section { display: grid; gap: 14px; min-width: 0; }
+.fighead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.mat { background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px; overflow-x: auto; }
+.mat img { display: block; width: 100%; height: auto; }
+.mat.full img { width: auto; max-width: none; }
+figcaption { font-size: 14px; max-width: 80ch; }
+button.zoom { font: 500 13px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+button.zoom:hover { border-color: var(--accent); }
+button.zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notes { display: grid; gap: 6px; font-size: 14px; max-width: 80ch; }
+code { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+</style>
+<div class="wrap">
+<header>
+  <p class="eyebrow">v3 DSE · VTR seeds 11, 13, 17 · 2026-10-16</p>
+  <h1>NL-DPE Crossbar DSE</h1>
+  <p class="lede">Which crossbar size, rows R × columns C, gives the lowest latency and area? Attention: 72 builds of one head (6 shapes × 12 configs), each placed and routed with three VTR seeds. FC: the 48 rows of the v2 snapshot. On each workload a config's area score is its area ÷ the largest area of any config, and its latency score is its latency ÷ the highest latency, so the worst config is 1.0 and lower is better. A family's score is the geometric mean over its workloads. Across the families, each config gets one area-delay product (ADP) score per family, its area × latency ÷ the largest on each workload, and the plot puts FC on x and attention on y. The Pareto front is the set of configs that no other config beats on both axes. The tables also give each config's energy score, energy ÷ the highest energy, scored the same way; it is shown beside the fronts and is not part of them.</p>
+</header>
+
+<section aria-labelledby="h_fc">
+  <div class="fighead"><h2 id="h_fc">FC</h2><button class="zoom" id="z_fc" type="button" aria-controls="m_fc" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_fc"><img src="dse_la_fc.png" alt="FC latency score against area score for 12 crossbar configs, with the Pareto front" width="1088" height="1120"></div>
+  <figcaption class="muted">4 workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. Pareto front, from the smallest area to the lowest latency: 512 × 128, 256 × 128, 256 × 64, 128 × 64.</figcaption></figure>
+  <div class="tablewrap"><table id="t_fc"><thead><tr><th>R × C</th><th>area score</th><th>latency score</th><th>energy score</th><th>front</th></tr></thead><tbody><tr class="top"><td>512 × 128</td><td>0.353</td><td>0.710</td><td>0.306</td><td>yes</td></tr><tr><td>512 × 256</td><td>0.399</td><td>0.813</td><td>0.317</td><td></td></tr><tr><td>1024 × 128</td><td>0.404</td><td>0.909</td><td>0.372</td><td></td></tr><tr><td>1024 × 256</td><td>0.442</td><td>0.914</td><td>0.365</td><td></td></tr><tr><td>512 × 64</td><td>0.447</td><td>0.728</td><td>0.383</td><td></td></tr><tr class="top"><td>256 × 128</td><td>0.467</td><td>0.516</td><td>0.424</td><td>yes</td></tr><tr><td>1024 × 64</td><td>0.483</td><td>0.942</td><td>0.501</td><td></td></tr><tr class="top"><td>256 × 64</td><td>0.511</td><td>0.489</td><td>0.489</td><td>yes</td></tr><tr><td>256 × 256</td><td>0.532</td><td>0.609</td><td>0.456</td><td></td></tr><tr class="top"><td>128 × 64</td><td>0.740</td><td>0.354</td><td>0.848</td><td>yes</td></tr><tr><td>128 × 128</td><td>0.805</td><td>0.415</td><td>0.783</td><td></td></tr><tr><td>128 × 256</td><td>0.902</td><td>0.482</td><td>0.866</td><td></td></tr></tbody></table></div>
+</section>
+
+<section aria-labelledby="h_att">
+  <div class="fighead"><h2 id="h_att">Attention head</h2><button class="zoom" id="z_att" type="button" aria-controls="m_att" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_att"><img src="dse_la_attention.png" alt="Attention latency score against area score for 12 crossbar configs, with the Pareto front" width="1088" height="1120"></div>
+  <figcaption class="muted">6 workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). Pareto front: 128 × 64, the smallest area and the lowest latency at once.</figcaption></figure>
+  <div class="tablewrap"><table id="t_att"><thead><tr><th>R × C</th><th>area score</th><th>latency score</th><th>energy score</th><th>front</th></tr></thead><tbody><tr class="top"><td>128 × 64</td><td>0.449</td><td>0.522</td><td>0.470</td><td>yes</td></tr><tr><td>256 × 64</td><td>0.457</td><td>0.589</td><td>0.544</td><td></td></tr><tr><td>512 × 64</td><td>0.473</td><td>0.678</td><td>0.696</td><td></td></tr><tr><td>1024 × 64</td><td>0.497</td><td>0.747</td><td>1.000</td><td></td></tr><tr><td>128 × 128</td><td>0.593</td><td>0.589</td><td>0.458</td><td></td></tr><tr><td>256 × 128</td><td>0.601</td><td>0.632</td><td>0.505</td><td></td></tr><tr><td>512 × 128</td><td>0.624</td><td>0.761</td><td>0.608</td><td></td></tr><tr><td>1024 × 128</td><td>0.673</td><td>0.806</td><td>0.812</td><td></td></tr><tr><td>128 × 256</td><td>0.677</td><td>0.597</td><td>0.707</td><td></td></tr><tr><td>256 × 256</td><td>0.872</td><td>0.763</td><td>0.506</td><td></td></tr><tr><td>512 × 256</td><td>0.920</td><td>0.874</td><td>0.586</td><td></td></tr><tr><td>1024 × 256</td><td>1.000</td><td>0.988</td><td>0.745</td><td></td></tr></tbody></table></div>
+</section>
+
+<section aria-labelledby="h_why">
+  <h2 id="h_why">Why attention and FC differ</h2>
+  <p class="lede">FC rewards large crossbars: a larger array holds more weights per tile, so a layer needs fewer tiles and less area, at the cost of longer passes. Attention rewards small crossbars: its crossbar count is set by the mapping, not by the array size, and each crossbar works on an I × I window (I = min(R, C)). A larger array adds area, energy per pass and soft logic, but no useful work.</p>
+  <div class="tablewrap"><table id="t_why"><thead><tr><th>R × C</th><th>FC crossbars</th><th>FC tile area</th><th>FC cycles</th><th>FC MHz</th><th>attention crossbars</th><th>attention CLB area</th><th>attention cycles</th><th>attention MHz</th></tr></thead><tbody><tr><td>128 × 64</td><td>30</td><td>94 %</td><td>52</td><td>379</td><td>231</td><td>86 %</td><td>12,218</td><td>130</td></tr><tr><td>256 × 64</td><td>15</td><td>83 %</td><td>77</td><td>401</td><td>227</td><td>85 %</td><td>14,436</td><td>131</td></tr><tr><td>256 × 128</td><td>8</td><td>89 %</td><td>90</td><td>440</td><td>225</td><td>80 %</td><td>13,696</td><td>126</td></tr><tr><td>512 × 128</td><td>4</td><td>88 %</td><td>128</td><td>445</td><td>224</td><td>77 %</td><td>16,960</td><td>120</td></tr><tr><td>1024 × 256</td><td>2</td><td>93 %</td><td>172</td><td>451</td><td>223</td><td>65 %</td><td>22,136</td><td>110</td></tr></tbody></table></div>
+  <p class="legend muted">Means over each family's workloads; area shares from the VPR counts.</p>
+  <div class="notes">
+    <p><b>Architecture.</b> FC is a weight-stationary GEMV: the crossbars store the weights, 1 to 64 tiles per build. Attention multiplies activations by activations, so its crossbars act as EXP and LOG converters with identity weights on one I-wide window per pass. Their number follows the head dimension (78, 146 or 278–297 crossbars for d = 16, 32, 64) and hardly changes with the array size; at 1024 × 64 only 6 % of a converter's cells are in use.</p>
+    <p><b>Area.</b> FC area is crossbar tiles (75–96 %), and a larger tile stores a weight in less area (8× the grid area for 32× the cells), so FC area falls as the array grows. Attention area is soft logic (65–86 % CLB: about 10.4k CLBs at C = 64, 12.9k at 128, 17.5k at 256), plus crossbar tiles that grow with R × C.</p>
+    <p><b>Latency.</b> FC is one pass per tile, 52–172 cycles at 358–451 MHz. Attention takes 12k–22k cycles at 110–131 MHz. Its projections stream every token through one GEMM copy and end at n × (⌈min(d<sub>model</sub>, R)/5⌉ + 8) cycles, a median 50 % of the total (36–86 %); that part grows with R only while d<sub>model</sub> &gt; R. The rest is bound by the score stream into the softmax (one 40-bit port, about n²/5 cycles), whatever the array size.</p>
+    <p><b>Energy.</b> A crossbar pass is priced as the full array (14.8 pJ at 128 × 64 up to 103.4 pJ at 1024 × 256). FC needs fewer passes as the array grows (30 to 2), so its energy falls with size. Attention's pass count depends on I only (about 62k, 31k, 16k at I = 64, 128, 256), so at a fixed I its energy rises with R.</p>
+    <p><b>Assumptions behind it.</b> The fixed attention mapping (the crossbar count does not follow the array size), the full-array pass price, one projection copy, the 40-bit ports, and FC as a single GEMV. Changing any of them could move the attention ranking.</p>
+  </div>
+</section>
+
+<section aria-labelledby="h_cross">
+  <div class="fighead"><h2 id="h_cross">Across the families: area-delay product</h2><button class="zoom" id="z_cross" type="button" aria-controls="m_cross" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_cross"><img src="dse_adp_cross.png" alt="Attention area-delay product score against the FC one for 12 crossbar configs, with the Pareto front" width="1088" height="1120"></div>
+  <figcaption class="muted">x = the FC ADP score, y = the attention ADP score; each is area × latency ÷ the largest on each workload, geometric mean over the family's workloads. Pareto front, from the best in FC to the best in attention: 256 × 128, 256 × 64, 128 × 64. The circles mark equal distance d from the origin; the table is sorted by d. 128 × 64 (d = 0.499) and 256 × 64 (d = 0.500) are 0.13 % apart: a tie.</figcaption></figure>
+  <div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>FC ADP</th><th>attention ADP</th><th>d</th><th>FC energy</th><th>attention energy</th><th>front</th></tr></thead><tbody><tr class="top"><td>1</td><td>128 × 64</td><td>0.439</td><td>0.238</td><td>0.499</td><td>0.848</td><td>0.470</td><td>yes</td></tr><tr class="top"><td>2</td><td>256 × 64</td><td>0.419</td><td>0.272</td><td>0.500</td><td>0.489</td><td>0.544</td><td>yes</td></tr><tr class="top"><td>3</td><td>256 × 128</td><td>0.404</td><td>0.384</td><td>0.558</td><td>0.424</td><td>0.505</td><td>yes</td></tr><tr><td>4</td><td>512 × 64</td><td>0.546</td><td>0.325</td><td>0.635</td><td>0.383</td><td>0.696</td><td></td></tr><tr><td>5</td><td>512 × 128</td><td>0.421</td><td>0.481</td><td>0.639</td><td>0.306</td><td>0.608</td><td></td></tr><tr><td>6</td><td>128 × 128</td><td>0.561</td><td>0.353</td><td>0.663</td><td>0.783</td><td>0.458</td><td></td></tr><tr><td>7</td><td>1024 × 128</td><td>0.616</td><td>0.549</td><td>0.825</td><td>0.372</td><td>0.812</td><td></td></tr><tr><td>8</td><td>128 × 256</td><td>0.730</td><td>0.409</td><td>0.837</td><td>0.866</td><td>0.707</td><td></td></tr><tr><td>9</td><td>1024 × 64</td><td>0.764</td><td>0.376</td><td>0.852</td><td>0.501</td><td>1.000</td><td></td></tr><tr><td>10</td><td>256 × 256</td><td>0.544</td><td>0.673</td><td>0.866</td><td>0.456</td><td>0.506</td><td></td></tr><tr><td>11</td><td>512 × 256</td><td>0.544</td><td>0.814</td><td>0.979</td><td>0.317</td><td>0.586</td><td></td></tr><tr><td>12</td><td>1024 × 256</td><td>0.678</td><td>1.000</td><td>1.208</td><td>0.365</td><td>0.745</td><td></td></tr></tbody></table></div>
+</section>
+<div class="notes muted">
+  <p>Latency = cycles ÷ Fmax, with Fmax the mean of the three VTR seeds; area counts CLBs, crossbar tiles and memory blocks from VPR. The 16 attention builds of the d = 64 shapes at C = 64 use VPR's own memory count, 5–8 blocks above the simulator's prediction.</p>
+  <p>The three panels side by side (for a paper): <code>v3/dse/results/adp/dse_la.pdf</code>. Scores: <code>v3/dse/results/adp/latency_area.json</code>. The earlier EDAP rankings stay in <code>v3/dse/results/edap/ranking_*.json</code>.</p>
+</div>
+</div>
+<script>
+document.querySelectorAll("button.zoom").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var mat = document.getElementById(b.getAttribute("aria-controls"));
+    var on = mat.classList.toggle("full");
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.textContent = on ? "Fit to width" : "Zoom in";
+  });
+});
+</script>
