@@ -90,6 +90,7 @@ table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-s
 th { font-weight: 500; color: var(--muted); text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
 th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+table.ranks th:nth-child(n+2), table.ranks td:nth-child(n+2) { text-align: right; }
 tr.top td { background: var(--accent-soft); color: var(--fg); font-weight: 500; }
 .legend { font-size: 13px; }
 section { display: grid; gap: 14px; min-width: 0; }
@@ -146,41 +147,27 @@ def adp_table(rows: list) -> str:
             f'<th>front</th></tr></thead><tbody>{body}</tbody></table></div>')
 
 
-def compare_table(fam: str, la: dict, tid: str) -> tuple:
-    """EDAP against ADP for one family: the configs in ADP order, each with both ranks, both G values and G_E (EDAP =
-    E x ADP, so energy alone moves a config between the two orders). Returns (table, ADP #1, EDAP #1)."""
+def compare_table(fam: str, la: dict, tid: str) -> str:
+    """EDAP against ADP for one family (user, 2026-10-17: R x C, the ADP rank, the EDAP rank, nothing else), rows in
+    ADP order."""
     ed = {c["config"]: c for c in json.loads((EDAP / f"ranking_{fam}.json").read_text())["configs"]}
     g = la["adp"][fam]["G_ADP"]
     if set(g) != set(ed):
         raise ValueError(f"{fam}: the EDAP and ADP results cover different configs")
     adp_order = sorted(g, key=lambda c: (g[c], c))
-    r_adp = {c: k + 1 for k, c in enumerate(adp_order)}
-
-    def delta(c: str) -> str:
-        d = ed[c]["rank"] - r_adp[c]
-        return "0" if d == 0 else f"+{d}" if d > 0 else f"−{-d}"
-    body = "".join(f'<tr{" class=\"top\"" if 1 in (r_adp[c], ed[c]["rank"]) else ""}><td>{r_adp[c]}</td><td>{cx(c)}</td>'
-                   f'<td>{g[c]:.3f}</td><td>{ed[c]["rank"]}</td><td>{ed[c]["G_EDAP"]:.3f}</td><td>{delta(c)}</td>'
-                   f'<td>{ed[c]["G_E"]:.3f}</td></tr>' for c in adp_order)
-    table = (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>ADP #</th><th>R × C</th><th>G<sub>ADP</sub></th>'
-             f'<th>EDAP #</th><th>G<sub>EDAP</sub></th><th>Δ #</th><th>G<sub>E</sub></th></tr></thead><tbody>{body}'
-             f'</tbody></table></div>')
-    edap1 = min(ed, key=lambda c: ed[c]["rank"])
-    return table, adp_order[0], edap1
+    body = "".join(f'<tr><td>{cx(c)}</td><td>{k + 1}</td><td>{ed[c]["rank"]}</td></tr>' for k, c in enumerate(adp_order))
+    return (f'<div class="tablewrap"><table class="ranks" id="{tid}"><thead><tr><th>R × C</th><th>ADP rank</th>'
+            f'<th>EDAP rank</th></tr></thead><tbody>{body}</tbody></table></div>')
 
 
 def edap_vs_adp_section(la: dict) -> str:
-    """The two metrics side by side per family (user, 2026-10-17)."""
-    cards = []
-    for fam, title, tid in (("fc", "FC", "t_cmp_fc"), ("attention", "Attention head", "t_cmp_att")):
-        table, a1, e1 = compare_table(fam, la, tid)
-        top = f"#1 under both: {cx(a1)}" if a1 == e1 else f"#1 by ADP: {cx(a1)}; by EDAP: {cx(e1)}"
-        cards.append(f'  <div class="family">\n    <h2>{title}</h2>\n    <p class="muted">{top}.</p>\n    {table}\n'
-                     f'  </div>')
+    """The two rankings side by side per family (user, 2026-10-17)."""
+    cards = [f'  <div class="family">\n    <h2>{title}</h2>\n    {compare_table(fam, la, tid)}\n  </div>'
+             for fam, title, tid in (("fc", "FC", "t_cmp_fc"), ("attention", "Attention head", "t_cmp_att"))]
     cards_html = "\n".join(cards)
     return f"""<section aria-labelledby="h_cmp">
   <h2 id="h_cmp">EDAP against ADP, per family</h2>
-  <p class="lede">EDAP is energy × ADP, so the two orders differ only through energy: a config with a low G<sub>E</sub> moves up under EDAP, one with a high G<sub>E</sub> moves down. Rows in ADP order; # is the rank (1 = best); Δ # = the EDAP rank − the ADP rank, so + means worse under EDAP. Shaded: #1 under either metric.</p>
+  <p class="lede">Each config's rank by ADP and by EDAP (1 = best), rows in ADP order. EDAP is energy × ADP, so energy alone moves a config between the two.</p>
   <div class="families">
 {cards_html}
   </div>
