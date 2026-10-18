@@ -89,6 +89,7 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 | 2026-10-15 | **No O read-out in the cycles, in the simulator and in the RTL:** the read-out is set by the 40-bit port, not by the crossbar size or the mapping. Implementation (you, the same day, after the first version's extra memory): **no O reader**; the head outputs the final $O_8$ values, `o_v` (1 bit) + `o_d` ($N_{OC}$ × 40 bits), as the normalize jobs drain them, and the O projection reads them (`acc_spec.md` §10 item 7). `run_done` pulses at the run's end, so the head's `done` = the last run's $t_{o8} + 2$, and $T = t_{done} - t_{start}$ (`experiment.md` §5). | user |
 | 2026-10-17 | **v2/ is untracked and removed from the tree** ("now we are fully committed to v3"). Its last state is the tag `v2-final`; the copy lock (`tools/copies.py`) reads its sources from the tag; the F1 gate no longer runs v2. | user |
 | 2026-10-17 | **`CLAUDE.md` is rewritten for v3** (112 lines; the v2-era text is commit `d44e71d`). | user |
+| 2026-10-17 | **One ranking notation for both views:** per workload, score = value ÷ the worst config's value (1 = the worst, lower is better); $G_X$ = their geometric mean over a family's workloads, $X$ = A, D, E, ADP, EDAP. The EDAP view changes from best ÷ EDAP (higher is better) to this; its ranks and every Pareto front stay; its cross-family distance is now from the origin of $(G_{EDAP}^{FC}, G_{EDAP}^{ATT})$ (`experiment.md` §5). | user |
 
 ## Needs you
 
@@ -861,3 +862,16 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   `drop_generated.sh --go` (`c5c1bf0` on att-kernel, the same 61 files, so both branches hold the same files) and
   `git push origin main-v3:main`. Local `main` now points at `df0c4e3` and is the working branch (its 4 old commits are
   inside att-kernel). The tag `v2-final` and the history stay local, so `tools/copies.py` runs only in this clone.
+- 2026-10-17 (one notation; your words: "lets do 1 is the worst, the smaller the better. so parato front remains the same,
+  only the ranking needs regenerating but the actual rank does not change"): `dse/rank.py` has one normalizer (value ÷ the
+  largest on the workload, geometric mean) for EDAP, its E / D / A factors, latency vs area and ADP; the result files name
+  every family figure $G_X$ (`G_EDAP`, `G_E`, `G_D`, `G_A`, `G_ADP`; the cross rows `G_FC`, `G_ATT`, `d`); `plot_dse.py`
+  and `results_page.py` use the same names (the EDAP heatmaps use the reversed colormap, so the best cells stay bright).
+  Checks against the previous files: the per-family EDAP rank orders are identical; old $G$ × new $G_{EDAP}$ is one
+  constant per family (spread at most 7e-16), and so are the new $G_E$, $G_D$, $G_A$ against the old factors; the
+  latency vs area and ADP numbers are bit-identical; every Pareto front is unchanged (FC: 128×64, 256×64, 256×128,
+  512×128, plus 128×128 on the 3-cost front; attention: 128×64, plus 128×128 on the 3-cost front). Only the EDAP
+  cross-family order moved, as expected (the distance depends on the normalizer): 256×64 (d 0.313) and 256×128 (0.330)
+  stay first and second, 512×64 and 512×128 swap places 3 and 4, 128×64 stays 5th; its front is unchanged.
+  `rank.py --self-test` ALL PASS (26 checks, rewritten for the new direction). `experiment.md` §5 has a notation row,
+  §6 and §8 use the names. The published results page is not republished.

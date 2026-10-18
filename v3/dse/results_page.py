@@ -31,19 +31,19 @@ def png_size(name: str) -> tuple:
 
 def family_table(res: dict, tid: str) -> str:
     rows = "".join(f'<tr{" class=\"top\"" if c["rank"] == 1 else ""}><td>{c["rank"]}</td><td>{cx(c["config"])}</td>'
-                   f'<td>{c["G"]:.3f}</td><td>{c["factor_E"]:.2f}</td><td>{c["factor_D"]:.2f}</td>'
-                   f'<td>{c["factor_A"]:.2f}</td></tr>' for c in res["configs"])
-    return (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>#</th><th>R × C</th><th>G</th>'
-            f'<th title="energy ÷ best">E</th><th title="latency ÷ best">D</th><th title="area ÷ best">A</th></tr>'
-            f'</thead><tbody>{rows}</tbody></table></div>')
+                   f'<td>{c["G_EDAP"]:.3f}</td><td>{c["G_E"]:.2f}</td><td>{c["G_D"]:.2f}</td>'
+                   f'<td>{c["G_A"]:.2f}</td></tr>' for c in res["configs"])
+    return (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>#</th><th>R × C</th><th>G<sub>EDAP</sub></th>'
+            f'<th title="energy ÷ the worst">G<sub>E</sub></th><th title="latency ÷ the worst">G<sub>D</sub></th>'
+            f'<th title="area ÷ the worst">G<sub>A</sub></th></tr></thead><tbody>{rows}</tbody></table></div>')
 
 
 def cross_table(cr: dict) -> str:
     rows = "".join(f'<tr{" class=\"top\"" if c["rank"] == 1 else ""}><td>{c["rank"]}</td><td>{cx(c["config"])}</td>'
-                   f'<td>{c["G_FC"]:.3f}</td><td>{c["G_ATT"]:.3f}</td><td>{c["x"]:.3f}</td><td>{c["y"]:.3f}</td>'
+                   f'<td>{c["G_FC"]:.3f}</td><td>{c["G_ATT"]:.3f}</td>'
                    f'<td>{c["d"]:.3f}</td><td>{"yes" if c["front"] else ""}</td></tr>' for c in cr["configs"])
-    return ('<div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>G<sub>FC</sub></th>'
-            '<th>G<sub>ATT</sub></th><th>1 − G<sub>FC</sub></th><th>1 − G<sub>ATT</sub></th><th>d</th><th>front</th>'
+    return ('<div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>EDAP</sub></th>'
+            '<th>attention G<sub>EDAP</sub></th><th>d</th><th>front</th>'
             f'</tr></thead><tbody>{rows}</tbody></table></div>')
 
 
@@ -119,30 +119,31 @@ document.querySelectorAll("button.zoom").forEach(function (b) {
 
 
 def la_table(rows: list, tid: str) -> str:
-    body = "".join(f'<tr{" class=\"top\"" if c["front"] else ""}><td>{cx(c["config"])}</td><td>{c["area_score"]:.3f}</td>'
-                   f'<td>{c["latency_score"]:.3f}</td><td>{c["energy_score"]:.3f}</td>'
+    body = "".join(f'<tr{" class=\"top\"" if c["front"] else ""}><td>{cx(c["config"])}</td><td>{c["G_A"]:.3f}</td>'
+                   f'<td>{c["G_D"]:.3f}</td><td>{c["G_E"]:.3f}</td>'
                    f'<td>{"yes" if c["front"] else ""}</td></tr>' for c in rows)
-    return (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>R × C</th><th>area score</th>'
-            f'<th>latency score</th><th>energy score</th><th>front</th></tr></thead><tbody>{body}</tbody></table></div>')
+    return (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>R × C</th><th>G<sub>A</sub> area</th>'
+            f'<th>G<sub>D</sub> latency</th><th>G<sub>E</sub> energy</th><th>front</th></tr></thead><tbody>{body}'
+            f'</tbody></table></div>')
 
 
 def la_section(fid: str, title: str, img: str, alt: str, caption: str, rows: list) -> str:
     return figure(fid, title, img, alt, caption) + "  " + la_table(rows, f"t_{fid}") + "\n</section>\n"
 
 
-def front_text(rows: list, key: str = "area_score") -> str:
+def front_text(rows: list, key: str = "G_A") -> str:
     fr = [c for c in rows if c["front"]]
     return ", ".join(cx(c["config"]) for c in sorted(fr, key=lambda c: c[key]))
 
 
 def adp_table(rows: list) -> str:
     body = "".join(f'<tr{" class=\"top\"" if c["front"] else ""}><td>{c["rank"]}</td><td>{cx(c["config"])}</td>'
-                   f'<td>{c["adp_fc"]:.3f}</td><td>{c["adp_att"]:.3f}</td><td>{c["d"]:.3f}</td>'
-                   f'<td>{c["energy_fc"]:.3f}</td><td>{c["energy_att"]:.3f}</td>'
+                   f'<td>{c["G_FC"]:.3f}</td><td>{c["G_ATT"]:.3f}</td><td>{c["d"]:.3f}</td>'
+                   f'<td>{c["G_E_FC"]:.3f}</td><td>{c["G_E_ATT"]:.3f}</td>'
                    f'<td>{"yes" if c["front"] else ""}</td></tr>' for c in rows)
-    return ('<div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>FC ADP</th>'
-            '<th>attention ADP</th><th>d</th><th>FC energy</th><th>attention energy</th><th>front</th></tr></thead>'
-            f'<tbody>{body}</tbody></table></div>')
+    return ('<div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>ADP</sub></th>'
+            '<th>attention G<sub>ADP</sub></th><th>d</th><th>FC G<sub>E</sub></th><th>attention G<sub>E</sub></th>'
+            f'<th>front</th></tr></thead><tbody>{body}</tbody></table></div>')
 
 
 def analysis_section() -> str:
@@ -184,7 +185,7 @@ def main() -> int:
 <header>
   <p class="eyebrow">v3 DSE · VTR seeds 11, 13, 17 · 2026-10-16</p>
   <h1>NL-DPE Crossbar DSE</h1>
-  <p class="lede">Which crossbar size, rows R × columns C, gives the lowest latency and area? Attention: 72 builds of one head (6 shapes × 12 configs), each placed and routed with three VTR seeds. FC: the 48 rows of the v2 snapshot. On each workload a config's area score is its area ÷ the largest area of any config, and its latency score is its latency ÷ the highest latency, so the worst config is 1.0 and lower is better. A family's score is the geometric mean over its workloads. Across the families, each config gets one area-delay product (ADP) score per family, its area × latency ÷ the largest on each workload, and the plot puts FC on x and attention on y. The Pareto front is the set of configs that no other config beats on both axes. The tables also give each config's energy score, energy ÷ the highest energy, scored the same way; it is shown beside the fronts and is not part of them.</p>
+  <p class="lede">Which crossbar size, rows R × columns C, gives the lowest latency and area? Attention: 72 builds of one head (6 shapes × 12 configs), each placed and routed with three VTR seeds. FC: the 48 rows of the v2 snapshot. One notation throughout: on each workload, a config's value is divided by the worst config's value, so the worst config scores 1 and lower is better; G is the geometric mean of those scores over a family's workloads, G<sub>A</sub> for area, G<sub>D</sub> for latency, G<sub>E</sub> for energy and G<sub>ADP</sub> for area × latency. Per family the plot is G<sub>A</sub> against G<sub>D</sub>; across the families, each config's G<sub>ADP</sub> in FC is x and in attention y. The Pareto front is the set of configs that no other config beats on both axes. G<sub>E</sub> is shown beside the fronts and is not part of them.</p>
 </header>
 
 {la_section("fc", "FC", "dse_la_fc.png",
@@ -197,8 +198,8 @@ def main() -> int:
             la["attention"]["configs"])}
 {analysis_section()}
 {figure("cross", "Across the families: area-delay product", "dse_adp_cross.png",
-        "Attention area-delay product score against the FC one for 12 crossbar configs, with the Pareto front",
-        f"x = the FC ADP score, y = the attention ADP score; each is area × latency ÷ the largest on each workload, geometric mean over the family's workloads. Pareto front, from the best in FC to the best in attention: {front_text(la['adp']['cross']['configs'], 'adp_fc')}. The circles mark equal distance d from the origin; the table is sorted by d. {cx(la['adp']['cross']['configs'][0]['config'])} (d = {la['adp']['cross']['configs'][0]['d']:.3f}) and {cx(la['adp']['cross']['configs'][1]['config'])} (d = {la['adp']['cross']['configs'][1]['d']:.3f}) are {100 * (la['adp']['cross']['configs'][1]['d'] / la['adp']['cross']['configs'][0]['d'] - 1):.2f} % apart: a tie.")}  {adp_table(la["adp"]["cross"]["configs"])}
+        "Attention G_ADP against the FC G_ADP for 12 crossbar configs, with the Pareto front",
+        f"x = G<sub>ADP</sub> in FC, y = G<sub>ADP</sub> in attention; each is area × latency ÷ the largest on each workload, geometric mean over the family's workloads. Pareto front, from the best in FC to the best in attention: {front_text(la['adp']['cross']['configs'], 'G_FC')}. The circles mark equal distance d from the origin; the table is sorted by d. {cx(la['adp']['cross']['configs'][0]['config'])} (d = {la['adp']['cross']['configs'][0]['d']:.3f}) and {cx(la['adp']['cross']['configs'][1]['config'])} (d = {la['adp']['cross']['configs'][1]['d']:.3f}) are {100 * (la['adp']['cross']['configs'][1]['d'] / la['adp']['cross']['configs'][0]['d'] - 1):.2f} % apart: a tie.")}  {adp_table(la["adp"]["cross"]["configs"])}
 </section>
 <div class="notes muted">
   <p>Latency = cycles ÷ Fmax, with Fmax the mean of the three VTR seeds; area counts CLBs, crossbar tiles and memory blocks from VPR. The 16 attention builds of the d = 64 shapes at C = 64 use VPR's own memory count, 5–8 blocks above the simulator's prediction.</p>
@@ -220,7 +221,7 @@ def main_edap() -> int:
     cr = json.loads((EDAP / "ranking_cross.json").read_text())
     a1, f1, c1 = at["configs"][0], fc["configs"][0], cr["configs"][0]
     c2 = cr["configs"][1]
-    front = ", ".join(cx(c["config"]) for c in sorted((c for c in cr["configs"] if c["front"]), key=lambda c: c["x"]))
+    front = ", ".join(cx(c["config"]) for c in sorted((c for c in cr["configs"] if c["front"]), key=lambda c: c["G_FC"]))
     best_all = all(v == a1["config"] for v in at["best_per_workload"].values())
     page = f"""<title>NL-DPE Crossbar DSE</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -232,41 +233,41 @@ def main_edap() -> int:
 <header>
   <p class="eyebrow">v3 DSE · VTR seeds 11, 13, 17 · 2026-10-16</p>
   <h1>NL-DPE Crossbar DSE</h1>
-  <p class="lede">Which crossbar size, rows R × columns C, gives the lowest EDAP (energy × latency × area)? Attention: 72 builds of one head (6 shapes × 12 configs), each placed and routed with three VTR seeds. FC: the 48 rows of the v2 snapshot. For each workload, a config's score is best EDAP ÷ its EDAP; its G is the geometric mean of its scores, so 1.000 means best on every workload. Fmax is the mean of the three seeds.</p>
+  <p class="lede">Which crossbar size, rows R × columns C, gives the lowest EDAP (energy × latency × area)? Attention: 72 builds of one head (6 shapes × 12 configs), each placed and routed with three VTR seeds. FC: the 48 rows of the v2 snapshot. The notation of the latency vs area page: on each workload, a config's score is its EDAP ÷ the worst config's EDAP, so the worst scores 1 and lower is better; G<sub>EDAP</sub> is the geometric mean of its scores, and G<sub>E</sub>, G<sub>D</sub>, G<sub>A</sub> the same for energy, latency and area. Fmax is the mean of the three seeds.</p>
 </header>
 
 <div class="families">
   <div class="family">
     <h2>Attention head</h2>
-    <div class="winner"><span class="cfg">{cx(a1["config"])}</span><span class="g">G {a1["G"]:.3f}</span></div>
+    <div class="winner"><span class="cfg">{cx(a1["config"])}</span><span class="g">G<sub>EDAP</sub> {a1["G_EDAP"]:.3f}</span></div>
     <p class="muted">{"Best on all " + str(len(at["workloads"])) + " workloads. " if best_all else ""}Workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16).</p>
     {family_table(at, "t_att")}
   </div>
   <div class="family">
     <h2>FC</h2>
-    <div class="winner"><span class="cfg">{cx(f1["config"])}</span><span class="g">G {f1["G"]:.3f}</span></div>
+    <div class="winner"><span class="cfg">{cx(f1["config"])}</span><span class="g">G<sub>EDAP</sub> {f1["G_EDAP"]:.3f}</span></div>
     <p class="muted">The same ranking as v2. Workloads M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512.</p>
     {family_table(fc, "t_fc")}
   </div>
 </div>
-<p class="legend muted">E, D, A: energy, latency and area, each ÷ the best on the workload, geometric mean over the workloads (1.00 = best).</p>
+<p class="legend muted">G<sub>E</sub>, G<sub>D</sub>, G<sub>A</sub>: energy, latency and area, each ÷ the worst on the workload, geometric mean over the workloads (1.00 = the worst, lower is better).</p>
 
-{figure("cross", "FC × attention cross score", "dse_cross.png",
-        f"Cross score: 1 minus the FC EDAP score on x, 1 minus the attention EDAP score on y, one dot per crossbar config; the origin is the ideal and {cx(c1['config'])} is the closest",
-        f"x = 1 − the FC EDAP score G<sub>FC</sub>, y = 1 − the attention EDAP score G<sub>ATT</sub>, one dot per crossbar config. The origin is a config that is best on every workload of both families, so the closer a point is to it, the better; d is that distance. Closest: {cx(c1['config'])}, d = {c1['d']:.3f}; next {cx(c2['config'])}, d = {c2['d']:.3f}. Pareto front: {front}.")}  {cross_table(cr)}
+{figure("cross", "EDAP across the families", "dse_cross.png",
+        f"G_EDAP in FC on x, G_EDAP in attention on y, one dot per crossbar config; closer to the origin is better and {cx(c1['config'])} is the closest",
+        f"x = G<sub>EDAP</sub> in FC, y = G<sub>EDAP</sub> in attention, one dot per crossbar config; the closer a point is to the origin, the better, and d is that distance. Closest: {cx(c1['config'])}, d = {c1['d']:.3f}; next {cx(c2['config'])}, d = {c2['d']:.3f}. Pareto front: {front}.")}  {cross_table(cr)}
 </section>
 
 {figure("att", "Attention head ranking", "dse_attention.png",
-        "Attention head ranking: G map over R and C, per-workload scores, G per config, and E, D, A factors for 12 crossbar configs",
-        "(a) G on the R × C grid. (b) Each workload's score, configs in rank order. (c) G per config. (d) The E, D and A factors on a log scale.")}</section>
+        "Attention head ranking: G_EDAP map over R and C, per-workload scores, G_EDAP per config, and G_E, G_D, G_A for 12 crossbar configs",
+        "(a) G<sub>EDAP</sub> on the R × C grid. (b) Each workload's EDAP score, configs in rank order. (c) G<sub>EDAP</sub> per config. (d) G<sub>E</sub>, G<sub>D</sub> and G<sub>A</sub>.")}</section>
 
 {figure("fc", "FC ranking", "dse_fc.png",
-        "FC ranking: G map over R and C, per-workload scores, G per config, and E, D, A factors for 12 crossbar configs",
+        "FC ranking: G_EDAP map over R and C, per-workload scores, G_EDAP per config, and G_E, G_D, G_A for 12 crossbar configs",
         "The same four panels for the FC family.")}</section>
 
 {figure("par", "Pareto fronts per family", "dse_pareto.png",
-        "Pareto fronts: latency versus energy times area, each relative to the best, for FC and the attention head",
-        f"x = latency ÷ best, y = energy × area ÷ best (geometric means over the workloads). The diagonal lines are equal-EDAP lines, so their order is the ranking. Attention: {cx(a1['config'])} beats every other config on both axes.")}</section>
+        "Pareto fronts: G_D against G_E times G_A, for FC and the attention head",
+        f"x = G<sub>D</sub>, y = G<sub>E</sub> × G<sub>A</sub> (each value ÷ the worst on the workload, geometric means over the workloads). The diagonal lines are equal-EDAP lines, so their order is the ranking. Attention: {cx(a1['config'])} beats every other config on both axes.")}</section>
 
 <div class="notes muted">
   <p>The 16 attention builds of the d = 64 shapes at C = 64 are priced from VPR's own memory count, which is 5–8 blocks above the simulator's prediction (397–400 against 392). Every other count matches the prediction.</p>

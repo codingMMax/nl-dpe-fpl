@@ -174,8 +174,9 @@ $$
 | Fmax | VTR, the mean over seeds {11, 13, 17}. Route channel width 300. SDC = `clock.sdc` (I/O-excluding). |
 | latency | $D[\mathrm{ns}] = T \cdot 1000 / F_{max}[\mathrm{MHz}]$ |
 | EDAP | $E[\mathrm{pJ}] \cdot D[\mathrm{ns}] \cdot A[\mathrm{mm}^2]$ per row |
-| ranking | **Latency vs area (user, 2026-10-16), replacing the EDAP ranking:** on each workload a config's area score = its area ÷ the largest area of any config and its latency score = its latency ÷ the highest latency (the worst config is 1, lower is better); a family's score is the geometric mean over its workloads; result = the latency vs area Pareto front per family (no other config lower on both). Across the families (user, the same day): each config's area-delay product score per family, ADP ÷ the largest ADP on each workload, geometric mean over the family's workloads; x = FC, y = attention, and the Pareto front of that plane, with circles of equal distance $d = \sqrt{ADP_{FC}^2 + ADP_{ATT}^2}$ from the origin (`dse/rank.py`, `latency_area.json`). The EDAP ranking and its cross score stay in `ranking_*.json` as the earlier view. |
-| reported beside | The energy score (energy ÷ the highest energy, scored the same way; beside the fronts, not part of them); the crossbars; the share of the cycles spent streaming the projections (§9). |
+| notation | One for every metric (user, 2026-10-17): per workload, $s_X(c) = X(c) / \max_{c'} X(c')$, so the worst config scores 1 and lower is better; $G_X$ = the geometric mean of $s_X$ over the family's workloads, for $X \in \{A, D, E, ADP = A \cdot D, EDAP = E \cdot D \cdot A\}$. Every config of a workload is divided by the same number, so the ranks and the Pareto fronts do not depend on the normalizer; the cross-family distance $d$ does. Until 2026-10-17 the EDAP view used best ÷ EDAP (higher is better) and measured $d$ from $(1 - G_{FC}, 1 - G_{ATT})$. |
+| ranking | **Latency vs area (user, 2026-10-16), replacing the EDAP ranking:** per family, each config's point $(G_A, G_D)$ and the Pareto front (no other config lower on both). Across the families (user, the same day): the point $(G_{ADP}^{FC}, G_{ADP}^{ATT})$, the Pareto front of that plane and circles of equal distance $d = \sqrt{(G_{ADP}^{FC})^2 + (G_{ADP}^{ATT})^2}$ from the origin (`dse/rank.py`, `adp/latency_area.json`). The EDAP view stays beside it (`edap/ranking_*.json`): rank by $G_{EDAP}$; across the families the point $(G_{EDAP}^{FC}, G_{EDAP}^{ATT})$ and its $d$. |
+| reported beside | $G_E$ (beside the fronts, not part of them); the crossbars; the share of the cycles spent streaming the projections (§9). |
 
 ## 6 Procedure
 
@@ -194,16 +195,16 @@ The module work and its gates are in `architecture.md` §7–§8. The experiment
    - pricing: area, latency and EDAP per build from the VTR counts (`dse/att_rows.py --vtr`).
 4. **Figures**, per family (FC: the 48 snapshot rows; attention: the 72 builds), as v2's `rank_dse.py`, `plot_dse.py`
    and `plot_pareto_family.py` (matplotlib, the miniconda Python):
-   - **geomean ranking:** per workload, score = best EDAP / EDAP (best = 1.0); per config, $G$ = the geometric mean of
-     its scores. One figure with four panels: the R × C map of $G$; the per-workload scores in rank order with $G$;
-     $G$ per config; the E, D and A factors (value / best on the workload, geometric mean). The raw data only (you,
-     2026-10-16): each build's Fmax is the mean of its three seeds; no seed resampling;
-   - **Pareto front:** x = latency ÷ best, y = energy × area ÷ best (geometric means over the workloads), with iso-EDAP
-     lines (slope −1 in log-log, so their order is the ranking), the 2-cost front and the 3-cost (E, D, A) front.
+   - **geomean ranking** (§5 notation, since 2026-10-17): rank by $G_{EDAP}$, lower is better. One figure with four
+     panels: the R × C map of $G_{EDAP}$; the per-workload EDAP scores in rank order with $G_{EDAP}$; $G_{EDAP}$ per
+     config; $G_E$, $G_D$ and $G_A$. The raw data only (you, 2026-10-16): each build's Fmax is the mean of its three
+     seeds; no seed resampling;
+   - **Pareto front:** x = $G_D$, y = $G_E \cdot G_A$, with iso-EDAP lines (slope −1 in log-log, so their order is
+     the ranking), the 2-cost front and the 3-cost (E, D, A) front.
    - **Done 2026-10-16** (your go). First as the EDAP ranking above: `dse/rank.py` (ported from v2's `rank_dse.py`;
      the FC ranking reproduces v2's to $4 \times 10^{-16}$), `ranking_{fc,attention,cross}.json`,
-     `figures/dse_{fc,attention,pareto,cross}.{png,pdf}` (attention #1 128×64 with $G = 1.000$, FC #1 512×128 with
-     $G = 0.829$). Then, after your decisions the same day, as latency vs area (§5 ranking row): `latency_area.json`,
+     `figures/dse_{fc,attention,pareto,cross}.{png,pdf}` (attention #1 128×64, FC #1 512×128; $G_{EDAP}$ = 0.150 and
+     0.152 in the §5 notation, $G$ = 1.000 and 0.829 in the old best ÷ EDAP one). Then, after your decisions the same day, as latency vs area (§5 ranking row): `latency_area.json`,
      `figures/dse_la.{png,pdf}` (three panels), `dse_la_{fc,attention}.png`, `dse_adp_cross.png`, and the results page
      (`dse/results_page.py`). The final results are in §8; why the two families differ, in §9 (`dse/breakdown.py`,
      `breakdown.json`). The 16 builds of the $d = 64$ shapes at $C = 64$ are priced from VPR's memory count (5–8
@@ -241,9 +242,9 @@ The module work and its gates are in `architecture.md` §7–§8. The experiment
 the config's value ÷ the worst config's value on the workload, geometric mean over the family's workloads: lower is
 better and the worst config is 1. Fmax is the mean of the three seeds.
 
-**Latency vs area per family** (the Pareto fronts; energy score beside):
+**Latency vs area per family** (the Pareto fronts; $G_E$ beside):
 
-| family | front config | area score | latency score | energy score |
+| family | front config | $G_A$ | $G_D$ | $G_E$ |
 |---|---|---|---|---|
 | FC | 512×128 | 0.353 | 0.710 | 0.306 |
 | FC | 256×128 | 0.467 | 0.516 | 0.424 |
@@ -256,7 +257,7 @@ area and the lowest latency, so it alone is the front.
 
 **Across the families: area-delay product** ($x$ = FC, $y$ = attention), ordered by the distance $d$ from the origin:
 
-| # | config | FC ADP | attention ADP | $d$ | FC energy | attention energy | front |
+| # | config | FC $G_{ADP}$ | attention $G_{ADP}$ | $d$ | FC $G_E$ | attention $G_E$ | front |
 |---|---|---|---|---|---|---|---|
 | 1 | 128×64 | 0.439 | 0.238 | 0.499 | 0.848 | 0.470 | yes |
 | 2 | 256×64 | 0.419 | 0.272 | 0.500 | 0.489 | 0.544 | yes |
@@ -267,7 +268,7 @@ area and the lowest latency, so it alone is the front.
 - The front is 256×128 (the best in FC), 256×64 and 128×64 (the best in attention). Every other config is beaten in
   both families.
 - 128×64 and 256×64 are 0.13 % apart in $d$: a tie. The energy separates them: in FC, 128×64 uses 1.7× the energy of
-  256×64 (energy score 0.848 against 0.489); in attention they are close (0.470 against 0.544). **256×64 is the
+  256×64 ($G_E$ 0.848 against 0.489); in attention they are close (0.470 against 0.544). **256×64 is the
   balanced choice.**
 - The large configs (1024 rows, or 256 columns with at least 256 rows) are never competitive.
 
