@@ -30,6 +30,15 @@ from simulator.core.errors import Deadlock, EdgeError
 from simulator.core.graph import Graph
 from simulator.core.module import Module, Need
 from simulator.core.records import CREDITED, Credit, PortEvent, PortSpec, Report, Window
+from simulator.core.trace import Time, enabled, label
+
+
+def traced(time, where: str):
+    """The time as a Time; a plain int (a model that lost the chain) becomes an untraced origin, which the
+    critical-path breakdown reports. With the trace off, the time as given."""
+    if isinstance(time, Time) or not enabled():
+        return time
+    return Time(int(time), origin=where, kind="untraced")
 
 
 def givesCredits(s: PortSpec) -> bool:
@@ -65,12 +74,12 @@ class StepIO:
 
     def emit(self, port: str, channel: int, unit: int, window: int, time: int, values=None) -> Window:
         keep = self._module.withValues or self._engine.spec[f"{self._module.instance}.{port}"].control
-        w = Window(port, channel, unit, window, int(time), values if keep else None)
+        w = Window(port, channel, unit, window, traced(time, f"{self._module.instance}.{port}"), values if keep else None)
         self._engine.deliver(self._module, w)
         return w
 
     def giveCredit(self, port: str, unit: int, time: int) -> Credit:
-        c = Credit(port, unit, int(time))
+        c = Credit(port, unit, traced(time, f"{self._module.instance}.{port}"))
         self._engine.returnCredit(self._module, c)
         return c
 
@@ -200,7 +209,8 @@ class Engine:
         if previous is not None and ((w.unit, w.window) <= previous[:2] or w.time <= previous[2]):
             raise EdgeError(f"{key} ch{w.channel}: window (u{w.unit}, w{w.window}) at {w.time} breaks order or "
                             f"overlaps the previous window (u{previous[0]}, w{previous[1]}, last word {previous[2]})")
-        end = w.time + s.words - 1
+        with label("stream"):                                    # the window's words on the port
+            end = w.time + s.words - 1
         self.lastWindow[key][w.channel] = (w.unit, w.window, end)
         if s.discipline in CREDITED and w.unit >= s.CAP:
             got = self.creditsIn[(module.instance, w.port)]
@@ -272,7 +282,8 @@ class Engine:
                 need = module.need(process, unit)
                 if self._missing(module, need):
                     continue
-                st = module.step(process, unit, StepIO(self, module, need))
+                with label("logic", role=module.role):          # the step's segments carry its module's role
+                    st = module.step(process, unit, StepIO(self, module, need))
                 if st.process != process or st.unit != unit:
                     raise RuntimeError(f"{instance}.{process}: step returned ({st.process}, {st.unit}), "
                                        f"expected ({process}, {unit})")
@@ -289,7 +300,9 @@ class Engine:
         if left:
             raise RuntimeError(f"windows never consumed: {left}")
         ends = [end for channels in self.lastWindow.values() for (_, _, end) in channels.values()]
-        return Report(cycles=(max(ends) + 1) if ends else 0,
+        with label("stream", role="sink"):                     # cycles = the last output word's cycle + 1
+            cycles = (max(ends) + 1) if ends else 0
+        return Report(cycles=cycles,
                       steps={i: sorted(s, key=lambda x: (x.process, x.unit)) for i, s in self.steps.items()},
                       events=sorted(self.events, key=lambda e: (e.time, e.text)),
                       counts={m.instance: m.counts for m in self.leaves},

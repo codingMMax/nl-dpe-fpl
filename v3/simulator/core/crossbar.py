@@ -34,6 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from simulator.core.cycleMath import ceilDiv
+from simulator.core.trace import label
 
 NAME = "dpe"
 # RTL parameter -> model name (dpe_nldpe.v: KERNEL_WIDTH = R, NUM_COLS = C, DPE_BUF_WIDTH = BUF, PRECISION = P)
@@ -128,6 +129,7 @@ class CrossbarGroup:
         if withValues:
             self.weights64 = self._weights(weights)
         self.msbFirePrev, self.accumulatorFreeAt, self.outputFreeAt = None, 0, 0
+        self.nextReady = 0                                        # msb_fire_prev + RDY_LAT (a traced Time)
         self.passes = Counter()                                   # (mode, rows, cols) -> passes since last cleared
 
     @classmethod
@@ -152,19 +154,25 @@ class CrossbarGroup:
 
     def readyAt(self) -> int:
         """The first cycle the next burst may start."""
-        return 0 if self.msbFirePrev is None else self.msbFirePrev + RDY_LAT
+        return self.nextReady
 
     def run(self, x, tReady: int) -> Pass:
         """One lock-step pass: x [n, R] int8 (one input per crossbar; [R] when n == 1), ready at `tReady`."""
         g = self.geometry
-        loadStart = max(int(tReady), self.readyAt())
-        computeStart = max(loadStart + g.LOAD_CYC, self.accumulatorFreeAt)
-        msbFire = computeStart + self.P - 1
-        shiftAccDone = msbFire + SHIFT_ACC_LAT
-        acamDone = max(shiftAccDone + ACAM_LAT, self.outputFreeAt)
-        drainStart = acamDone + DRAIN_LAT
-        drainEnd = acamDone + g.OUTPUT_CYC
-        self.msbFirePrev, self.accumulatorFreeAt, self.outputFreeAt = msbFire, acamDone + 1, drainEnd + 1
+        loadStart = max(tReady, self.readyAt())                   # a traced Time keeps its chain (trace.py)
+        with label("dpe_load"):
+            computeStart = max(loadStart + g.LOAD_CYC, self.accumulatorFreeAt)
+        with label("dpe_compute"):
+            msbFire = computeStart + self.P - 1
+            shiftAccDone = msbFire + SHIFT_ACC_LAT
+            acamDone = max(shiftAccDone + ACAM_LAT, self.outputFreeAt)
+            nextReady, accumulatorFree = msbFire + RDY_LAT, acamDone + 1
+        with label("dpe_drain"):
+            drainStart = acamDone + DRAIN_LAT
+            drainEnd = acamDone + g.OUTPUT_CYC
+            outputFree = drainEnd + 1
+        self.msbFirePrev, self.accumulatorFreeAt, self.outputFreeAt = msbFire, accumulatorFree, outputFree
+        self.nextReady = nextReady
         self.passes[(self.mode, self.rowsUsed, self.colsUsed)] += self.count
         events = dict(load_start=loadStart, load_end=loadStart + g.LOAD_CYC - 1, compute_start=computeStart,
                       msb_fire=msbFire, shift_acc_done=shiftAccDone, acam_done=acamDone, drain_start=drainStart,
@@ -172,7 +180,7 @@ class CrossbarGroup:
         y = out = window = None
         if self.withValues:
             y, out, window = self._values(x)
-        return Pass(y=y, out=out, window=window, time=drainStart, events=events, nextReadyAt=msbFire + RDY_LAT)
+        return Pass(y=y, out=out, window=window, time=drainStart, events=events, nextReadyAt=nextReady)
 
     def _values(self, x) -> tuple:
         xa = np.asarray(x)

@@ -97,7 +97,7 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
 ## Commands (from the repo root; the full table is in `v3/README.md`)
 ```
 export PYTHONDONTWRITEBYTECODE=1 TMPDIR=$PWD/v3/work/tmp
-python3 v3/tools/f2_check.py                        # the 8 simulator tests, ~25 s
+python3 v3/tools/f2_check.py                        # the 9 simulator tests, ~30 s
 python3 v3/simulator/tests/checkEquivalence.py      # the simulator against the frozen pre-refactor outputs
 python3 v3/tools/copies.py; python3 v3/tools/check_twins.py; python3 v3/tools/lint_rtl.py; python3 v3/tools/check_head_params.py
 python3 v3/dse/vtr_dse.py --self-test               # the VTR driver with fake tools; the real run takes hours: user's go only

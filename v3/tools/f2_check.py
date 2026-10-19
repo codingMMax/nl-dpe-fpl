@@ -25,7 +25,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from tools.f1_check import PY, V3, Ctx, isolation  # noqa: E402
 
-TESTS = (("core", "simulator/tests/testCore.py"), ("crossbar", "simulator/tests/testCrossbar.py"),
+TESTS = (("core", "simulator/tests/testCore.py"), ("trace", "simulator/tests/testTrace.py"),
+         ("crossbar", "simulator/tests/testCrossbar.py"),
          ("gemm", "simulator/tests/testGemm.py"), ("fc", "simulator/tests/testFcRows.py"),
          ("dimm", "simulator/tests/testDimmTile.py"), ("softmax", "simulator/tests/testSoftmaxOnline.py"),
          ("accumulator", "simulator/tests/testSoftmaxAccumulator.py"), ("head", "simulator/tests/testAttentionHead.py"))

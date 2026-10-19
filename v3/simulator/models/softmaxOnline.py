@@ -24,6 +24,7 @@ from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
 from simulator.core.records import PortSpec, Step
 from simulator.core.stages import Repack, Serial
+from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, Crossbar
 
 # named latencies (spec §5)
@@ -305,12 +306,14 @@ class SoftmaxOnline(Module):
                           None if lp is None else lp + CR_IN_LAT, None if la is None else la + CR_IN_LAT)
         # the reads: from the cycle after the decision, one word per cycle once the word is in its FIFO
         reads = []
-        for i in range(d.NWORDS):
-            w, c = divmod(i, d.LW)
-            reads.append(self.reader.take(readyAt(arrivals[w] + c + FIFO_LAT, tDecide + OPEN_LAT if i == 0 else None)))
+        tOpen = tDecide + OPEN_LAT
+        with label("stream"):                   # the score words: word c of window w in its FIFO, read one per cycle
+            for i in range(d.NWORDS):
+                w, c = divmod(i, d.LW)
+                reads.append(self.reader.take(readyAt(arrivals[w] + c + FIFO_LAT, tOpen if i == 0 else None)))
+            stream = self.packer.times(reads)                          # the core's stream words, one per cycle
         self.readTimes[tile] = reads
         io.giveCredit("s", tile, reads[-1] + SCR_LAT)
-        stream = self.packer.times(reads)                              # the core's stream words
         self.streamTimes[tile], self.lastStreamWord[tile] = stream, stream[-1]
         if self.math:
             self.math.storeTile(tile, windows)
@@ -340,7 +343,9 @@ class SoftmaxOnline(Module):
                 math.collectExp(w, xbarPass.out)
         # the row sums are complete with the block's last drain word (+ SP_LAT); the carry waits for them, the row
         # maxima and the previous block's retire
-        sumsDone = readyAt(*(e["drain_start"] + d.LW - 1 for e in passes)) + SP_LAT
+        with label("dpe_drain"):                                     # each pass's last drain word
+            lastDrain = [e["drain_start"] + d.LW - 1 for e in passes]
+        sumsDone = readyAt(*lastDrain) + SP_LAT
         wait = readyAt(sumsDone, lastStreamWord + MAX_LAT, self.retireAt[block - 1] if b else None) + WAIT_LAT
         walk = d.WL                          # the walk's words; the carry drain word with row S - 1 is word WL - 1
         carryExpLast = None
@@ -348,12 +353,14 @@ class SoftmaxOnline(Module):
             logReady = wait + walk + GO_LAT
         else:
             xbarPass = self.carryExp.run(math.carryExpInput(run) if math else None, wait + GO_LAT)
-            carryExpLast = xbarPass.events["drain_start"] + walk - 1
+            with label("dpe_drain"):                                 # the carry-EXP drain walk
+                carryExpLast = xbarPass.events["drain_start"] + walk - 1
             logReady = carryExpLast + GO_LAT
             if math:
                 math.collectCarryExp(xbarPass.out)
         xbarPass = self.carryLog.run(math.carryLogInput(b) if math else None, logReady)
-        retire = xbarPass.events["drain_start"] + walk - 1
+        with label("dpe_drain"):                                     # the carry-LOG drain walk
+            retire = xbarPass.events["drain_start"] + walk - 1
         self.retireAt[block] = retire
         if math:
             math.finishBlock(run, xbarPass.window)
@@ -370,7 +377,7 @@ class SoftmaxOnline(Module):
         if unit is not None:
             logAlpha = self.math.blockLogAlpha() if self.math else None
             for m in range(p.S):
-                io.emit("la", 0, unit, m, int(self.streamTimes[block][d.RK[m]]) + LA_EV_LAT,
+                io.emit("la", 0, unit, m, self.streamTimes[block][d.RK[m]] + LA_EV_LAT,
                         None if logAlpha is None else np.array([logAlpha[m]], dtype=np.int64))
         for crossbar in self.exp + [self.carryExp, self.carryLog]:
             self.counts.passes.update(crossbar.passes)
@@ -391,7 +398,9 @@ class SoftmaxOnline(Module):
         tD7 = readyAt(coreDone, None if credit is None else credit + CR_IN_LAT)   # the log l read-out: an ll credit
         tE7 = tD7 + E7_LAT
         io.emit("ll", 0, run, 0, tE7, self.math.logL[run].copy() if self.math else None)
-        done = tE7 + p.S - 1 + DONE_LAT
+        with label("stream"):                                        # the ll window's S words
+            lastLl = tE7 + p.S - 1
+        done = lastLl + DONE_LAT
         self.coreDoneAt[run], self.doneAt[run] = coreDone, done
         io.giveCredit("go", run, done + GO_CR_LAT)
         if self.math:

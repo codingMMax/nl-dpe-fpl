@@ -84,6 +84,16 @@ that changes on purpose updates the module's closed-form test in the same step.
 - A credit's time is the cycle the consumer's pulse is high.
 - Every latency between a producer's output and a consumer's decision is a named constant of the module that has it
   (for example a registered hand-off). Nothing is implicit.
+- **Traced times (2026-10-18).** A time in a model is a `Time` (`simulator/core/trace.py`): an `int` that remembers
+  how it was reached, as a chain of (label, cycles) segments from an origin (a source's availability, the start).
+  `max` keeps the winner's chain; `t + n` appends a segment labeled by the current context: the engine labels every
+  step with its module's role, the crossbar labels its load, compute and drain, the models label the words of a port
+  and the drain words a consumer takes (`stream`, `dpe_drain`); every other named latency is `logic`. Segments of one
+  label merge. So the time of a run's last event carries the critical path that set it, and its segments' cycles add
+  up to that time exactly (`dse/config_table.py`, `experiment.md` §9.3). Values never change: a `Time` compares,
+  prints and serializes as its int. A tie in a `max` keeps the first argument: one of two equally critical paths.
+  The chains cost about three times the run time (a head 47 → 140 ms; F2 27 → 40 s); `trace.enable(False)` turns
+  them off for a run that needs no breakdown.
 
 ### 3.2 Records
 

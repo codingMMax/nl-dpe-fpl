@@ -13,7 +13,7 @@ equal to the pre-refactor one. `LEDGER.md` has the status, the decisions, what w
 | `oracle/` | what the simulator is checked against: the numpy oracles and `v2_kernels/` (never imported by the models) |
 | `simulator/` | the behavior models (`core` engine + crossbar, `models` module models + workloads, `platform` prices, area, DSE rows, `tests`); `README.md` = layout, rules, how to call it |
 | `vtr/` | the generic VTR flow: `arch/` (12 arch XMLs), `clock.sdc`, `run_vtr.py`, `smoke.py` (one module's or the head's VTR smoke) |
-| `dse/` | `README.md` (the pipeline, step by step, and `run_all.sh`), `space.py` (the 6 shapes x 12 configs, defined once), `fc_rows.py` and `attn_rows.py` (the priced tables), `data.py` (their loader), `vtr_dse.py` (the VTR run of the 72 builds and its CSV; `dse_watch.py` watches a run) and the scripts that turn results into tables and figures; `results/` (tracked): per family the VTR table and the priced table (`fc_vtr_results.csv`, `fc_priced_results.csv`, `attn_vtr_results.csv`, `attn_priced_results.csv`) and `breakdown.json`, then one folder per view: `adp/` (the current one: latency vs area, area-delay product) and `edap/` (the earlier energy-delay-area ranking), each with its JSON, figures and page |
+| `dse/` | `README.md` (the pipeline, step by step, and `run_all.sh`), `space.py` (the 6 shapes x 12 configs, defined once), `fc_rows.py` and `attn_rows.py` (the priced tables), `data.py` (their loader), `vtr_dse.py` (the VTR run of the 72 builds and its CSV; `dse_watch.py` watches a run) and the scripts that turn results into tables and figures, among them `config_table.py` (the attention configs side by side: the chain area × latency = ADP, energy × ADP = EDAP relative to the best, what is inside, and where every build's cycles go on its critical path: DPE load / compute / drain, stream, logic, by module); `results/` (tracked): per family the VTR table and the priced table (`fc_vtr_results.csv`, `fc_priced_results.csv`, `attn_vtr_results.csv`, `attn_priced_results.csv`), `breakdown.json`, `attn_config_table.md`, `critical_path.json`, then one folder per view: `adp/` (the current one: latency vs area, area-delay product) and `edap/` (the earlier energy-delay-area ranking), each with its JSON, figures and page |
 | `tools/` | static checks and gates: copy lock, RTL twins, lint, head params, the F1 / F2 gates, the GATE-2 runner |
 | `work/` | scratch, gitignored: `vtr/{dse,smoke}` (the VTR runs, 276 GB), `corpus`, `equivalence`, `dse` (logs), `tmp`, per-module RTL runs |
 
@@ -26,7 +26,7 @@ go in `work/`.
 
 | to do | command |
 |---|---|
-| simulator tests (8 tests, 25 s) | `python3 v3/tools/f2_check.py` (or one: `python3 v3/simulator/tests/testGemm.py`) |
+| simulator tests (9 tests, 30 s) | `python3 v3/tools/f2_check.py` (or one: `python3 v3/simulator/tests/testGemm.py`) |
 | refactor equivalence | `python3 v3/simulator/tests/checkEquivalence.py` |
 | static gates | `python3 v3/tools/copies.py` · `check_twins.py` · `lint_rtl.py` · `check_head_params.py` |
 | F1 gate (copies, twins, self-tests, corpora) | `python3 v3/tools/f1_check.py --steps probe,lock,twins,selftests,regen`; its `rtl` step simulates (needs approval) |

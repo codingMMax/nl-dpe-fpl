@@ -26,6 +26,7 @@ from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
 from simulator.core.records import PortSpec, Step
 from simulator.core.stages import Delay, Tree
+from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, CrossbarGroup
 
 SER_LAT = 1        # the lane serializer register (charter §5.2: L_w = TREE_PIPE + 1)
@@ -162,10 +163,12 @@ class GemmTop(Module):
         for h in range(d.H):
             io.emit("out", h, row, h, tOut, self.math.outputBytes(S, h) if self.math else None)
         nWords = ceilDiv(p.COLS_USED, d.EPS)
-        done = tOut + nWords
+        with label("stream"):                                        # the serializer's words on the port
+            lastWord = tOut + nWords - 1
+            done = lastWord + 1
         self.counts.passes.update(self.tiles.passes)
         self.tiles.passes.clear()
         self.counts.clbAdd += p.N * (d.V - 1)
         self.counts.memWriteBytes += p.N
-        events = dict(xbarPass.events, array_drain_start=tOut, array_drain_end=tOut + nWords - 1, done=done)
+        events = dict(xbarPass.events, array_drain_start=tOut, array_drain_end=lastWord, done=done)
         return Step("rows", row, tBurst, tBurst, done, events)

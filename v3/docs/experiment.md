@@ -339,6 +339,30 @@ its shapes; FC: the share of the total summed over its shapes), all in `dse/resu
   Fmax is 110–131 MHz, set by the 10k–18k-CLB soft logic; it falls as $C$ grows (about 130 MHz at $C = 64$, 124 at
   128, 115 at 256).
 
+- **The config tables and the critical path** (`dse/config_table.py`, user 2026-10-18; output
+  `dse/results/attn_config_table.md` and, per build, `dse/results/critical_path.json`). Every number is the
+  geometric mean over the six heads unless said otherwise.
+  1. *The chain:* each config relative to a reference (default the table's best ADP): area, cycles, Fmax, latency
+     $=$ cycles $/$ Fmax, ADP $=$ area $\times$ latency, energy and EDAP $=$ energy $\times$ ADP. The columns multiply
+     exactly, because the geometric mean of a product is the product of the geometric means; the ADP and EDAP columns
+     are the ratios of the configs' $G_{ADP}$ / $G_{EDAP}$, so they order the configs as the rankings do.
+  2. *What is inside:* per head the crossbar, CLB and BRAM area and their total (mm², VPR counts as in §9.2), the
+     energy (nJ, the priced ledger), the cycles on the head's critical path by kind, the head's cycles $T$ and Fmax
+     (MHz). The parts are geometric means too, so they come close to their total but do not add up to it exactly.
+  3. *The critical path* (`simulator.md` §3.1, traced times): the simulator's times carry their history, every `max`
+     keeps the winning input's chain and every added latency is a labeled segment, so a head's `done` carries the
+     one chain of waits that set it, from the start to the last output word, and the segments' cycles add up to
+     $T$ exactly. A segment is labeled by the module it is in (its role: gemm, qk, sm, pv, acc, ctrl) and by its
+     kind: *DPE load* (a pass's input burst, $\lceil 8\,ROWS\_USED / BUF \rceil$ words into a crossbar), *DPE compute*
+     (the $P$ bit-slices, the shift-accumulate, the ACAM and the hand-overs), *DPE drain* (the first output word, and
+     the drain words a consumer takes), *stream* (the words of a port, or a FIFO read one word per cycle: the 40-bit
+     paths between modules), *logic* (every other named latency: trees, registers, decisions, the writers, and the
+     start's cycle). Table 3 gives the shares of $T$ by kind and by module (the mean over the heads of each share),
+     the per-head tables the same for one config, and the FC table the one-pass rows. A cycle that two inputs set
+     together is charged to the first the model names (a tie): the breakdown is exact for the path it follows. Where
+     a stream feeds a crossbar directly (the GEMM's output into a DIMM converter), the chain records the crossbar's
+     load, not the producer's words; the X bus's words are the projection crossbar's load.
+
 ### 9.4 Energy breakdown
 
 - **The pass price (§5; 2026-10-17):** the whole array fires on every pass (the cells and the ACAM at the full

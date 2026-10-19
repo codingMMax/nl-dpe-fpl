@@ -999,3 +999,43 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   (`ref_2026-10-18`, local in `work/`; `freezeReference.py` re-freezes it), check_energy ALL PASS, copies 48/48,
   head params 72/72, rank self-test, `run_all.sh` reproduces every output. `run_all.sh` keeps your commented-out
   `check_energy.py` line.
+- 2026-10-18 (your "crossbar area, CLB area, bram area, energy and load cycles, compute cycles, drain cycles (0 if
+  hide), Fmax (% to the lowest), geomean across 6 heads for 128x64, 128x128, 256x128, 256x64"): new
+  `dse/config_table.py` (definitions first in `experiment.md` §9.3) -> `results/attn_config_table.md`; rows grouped
+  by C with R inside; the drain column is the arithmetic mean with the count of heads where it is not hidden (a
+  geomean of a column that is 0 on most heads is 0). `--self-test` ALL PASS (38 checks: the drain boundary, four
+  hand-computed heads, the three cycle counts == n T_p on 24 builds, the area parts == area_total_mwta on every row).
+- 2026-10-18 (your "add 2 more columns: ADP and EDAP ... for 12 configs", then "build both tables into
+  config_table.py"): `config_table.py` writes two tables over the 12 configs: (1) the chain relative to the best ADP
+  (128×64), whose columns multiply exactly (latency = cycles ÷ Fmax, ADP = area × latency, EDAP = energy × ADP),
+  and (2) what is inside (the area parts and total, the energy, the cycles as load / compute / drain not hidden /
+  rest and total, Fmax). `--self-test` ALL PASS (149 checks; the chain against rank.py's G ratios at 1e-6 relative,
+  since the priced table rounds latency_ns to 0.001 ns; the four cycle parts == the head's cycles on all 72 builds).
+  Reading: the rest of the head is the same at every R for C = 64 (4,244 cycles), so rows only add load and
+  crossbar area; columns add CLB area (I wide), the rest (longer query runs) and, at C = 256, the drain.
+- 2026-10-18 (your "drop the share column, build the critical-path trace"): the share column is gone from
+  `config_table.py`. **Traced times** (`simulator/core/trace.py`, `simulator.md` §3.1): a `Time` is an int that
+  carries the chain of (label, cycles) segments that reached it; `max` keeps the winner's chain, `+ n` appends a
+  segment labeled by the context (the engine: the module's role per step; the crossbar: dpe_load / dpe_compute /
+  dpe_drain; the models: the port words and FIFO reads as `stream`, the drain words a consumer takes as
+  `dpe_drain`; the rest `logic`). The run's last event therefore holds its critical path, and the segments add up
+  to T exactly. Values unchanged (a Time compares, prints and serializes as its int): F2 ALL PASS (9 tests, the new
+  `testTrace.py`: 63 checks), equivalence ALL EQUAL, `run_all.sh` byte-identical, `check_energy` ALL PASS.
+  `dse/critical_path.py` → `results/critical_path.{json,md}` (self-test 265 checks on the 120 builds: the chain ==
+  T, none untraced or negative, the FC closed form per kind, T == the priced tables). **Reading (attention, mean
+  share of T over the 6 heads):** DPE compute is 2–23 % everywhere; at C = 64 the path is DPE load 51–62 % +
+  stream 15–20 % (the score words into the softmax, one per cycle); at C = 256 the projections are drain-bound
+  (128×256: DPE drain 77 %, the loads hidden under the previous token's drain); by module the projections hold
+  39–63 % and the softmax 21–37 %. FC: load 50–80 %, the serializer's words 11–53 %, compute 6–17 %. A tie keeps
+  the first input the model names. **Cost, measured A/B against HEAD on the same machine:** the chains make every
+  run about 3× longer (72 heads 3.4 → 10.1 s; the gate's corpus part 14.6 → 41.9 s; the generators alone
+  +10–60 %), so `trace.enable(False)` turns them off for a run that needs no breakdown (then `t + n` is a plain
+  int and `breakdown` refuses); on by default, used by `critical_path.py` and `testTrace.py`. The first gate run
+  (751 s equivalence, 68 s F2) had external load on top. Scratch of the A/B: `work/tmp/ab_*`, `time_builds.py`.
+- 2026-10-18 (your "merge it into dse/config_table.py"): `critical_path.py` is folded into `config_table.py`, which
+  now runs every build (timing only, ~15 s) and writes `attn_config_table.md` (table 2's cycle columns are the
+  critical path by kind, replacing the projection-formula split; table 3 the shares by kind and by module; per-head
+  tables at 128×64 and 128×128; the FC rows by kind) plus `critical_path.json` (every build). The origin's cycle
+  (the start) counts as logic / ctrl, so the shares sum to 1. `--self-test` 301 checks on the 120 builds. The two
+  leftovers are untracked and yours to remove: `bash v3/work/tmp/drop_critical_path.sh --go` (`critical_path.py`,
+  `results/critical_path.md`). Docs: `experiment.md` §9.3 (one block), `simulator.md` §3.1, both READMEs.

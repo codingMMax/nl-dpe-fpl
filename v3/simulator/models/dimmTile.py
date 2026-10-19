@@ -27,6 +27,7 @@ from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
 from simulator.core.records import PortSpec, Step
 from simulator.core.stages import Buffer, Serial
+from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, Crossbar, CrossbarGroup, trunc8
 
 # named latencies (spec §5)
@@ -383,7 +384,8 @@ class DimmTile(Module):
         if self.converterA:
             self.counts.passes[("LOG", p.K, p.K)] += 1
         first = tStream + DIST_LAT                                     # the window's first and last word at the slices
-        last = first + ceilDiv(d.A_W, EPS) - 1
+        with label("dpe_drain" if self.converterA else "stream"):    # the converter's drain words, or the port's
+            last = first + ceilDiv(d.A_W, EPS) - 1
         self.aLastWord[k] = last
         if p.A_FRAME == 0:
             self._stageRowFrame(k, first, logBytes, io)
@@ -431,7 +433,8 @@ class DimmTile(Module):
         if self.converterB:
             self.counts.passes[("LOG", d.LB, d.LB)] += 1
         first = tStream + DIST_LAT
-        last = first + ceilDiv(d.LB, EPS) - 1
+        with label("dpe_drain" if self.converterB else "stream"):
+            last = first + ceilDiv(d.LB, EPS) - 1
         self.bLastWord[k] = last
         if p.TRANS_B:
             self._stageTransposed(k, first, logBytes, io)
@@ -512,7 +515,9 @@ class DimmTile(Module):
             for g in range(d.NG):
                 io.emit("c", g, job, g + d.NG * wave, tOut, None if sums is None else self.math.narrowed(sums[g]))
         last = waves[-1]
-        done = last["drain_start"] + d.OUT_LAT + d.LW - 1 + DONE_LAT
+        with label("dpe_drain"):                                     # the last wave's drain words
+            lastWord = last["drain_start"] + d.LW - 1
+        done = lastWord + d.OUT_LAT + DONE_LAT
         self.slicesIdleFrom = last["drain_end"] + IDLE_LAT
         if self.math:
             self.math.finishJob(job)

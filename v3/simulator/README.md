@@ -13,15 +13,18 @@ simulator/
   core/      cycleMath (ceilDiv, clog2, isPowerOfTwo, readyAt) · errors · records (Window, Credit, PortSpec,
              PortEvent, Step, Counts, Resources, Report) · module (Module, Need, checkRules) · graph · engine ·
              stages (Serial, Buffer, Repack, Delay, Tree, Map, Fifo, Memory) · environment (Source, Sink) ·
-             crossbar (Geometry, Crossbar, CrossbarGroup, outputStage: the `dpe` primitive and the pass grammar)
+             crossbar (Geometry, Crossbar, CrossbarGroup, outputStage: the `dpe` primitive and the pass grammar) ·
+             trace (Time, label, segments, breakdown: every time carries the chain of waits that set it, so a run's
+             last event holds its critical path; docs/simulator.md §3.1)
   models/    the module models: gemm (gemm_top) · dimmTile (dimm_tile_top) · softmaxOnline (softmax_online_top) ·
              softmaxAccumulator (softmax_online_acc) · attentionController (att_ctrl);
              the workloads that wire them: fc · attentionHead
   platform/  platform (Platform; nl_dpe.json, azure_lily.json) · prices (energy = counts x prices) ·
              area (crossbars, memory blocks, VTR) · rows (a run priced into a DSE row) ·
              breakdown (latency by phase, energy by role, area by component)
-  tests/     testCore, testCrossbar, testGemm, testFcRows, testDimmTile, testSoftmaxOnline,
-             testSoftmaxAccumulator, testAttentionHead · checkEquivalence · corpus (the v2 corpora helpers)
+  tests/     testCore, testTrace, testCrossbar, testGemm, testFcRows, testDimmTile, testSoftmaxOnline,
+             testSoftmaxAccumulator, testAttentionHead · checkEquivalence · freezeReference · corpus (the v2 corpora
+             helpers)
 ```
 
 The RTL-facing files stay beside the RTL: `ip/<module>/{spec.md, rtl/, tb/, cases.py, gen_cases.py}` and
@@ -97,7 +100,7 @@ turns cycles + a VTR row into area (mm²) and latency (ns).
 ## Tests
 
 ```text
-python3 v3/tools/f2_check.py                              the eight tests below under the isolation probe (25 s)
+python3 v3/tools/f2_check.py                              the nine tests below under the isolation probe (30 s)
 python3 v3/simulator/tests/test<Name>.py                  one of them
 python3 v3/simulator/tests/checkEquivalence.py            the refactored simulator against the frozen old outputs
 ```
@@ -113,7 +116,7 @@ byte-identical files).
 | step | content | gate |
 |---|---|---|
 | 0 | restore point git `816807b`; reference frozen (666 files: 120 Reports, 8 corpora with 75 cases, 2 row tables) | `work/equivalence/ref/manifest.json` |
-| 1 | core, crossbar, platform, prices, area | testCore; testCrossbar (258 v2 corpus cases, 216 closed, 200 gated, 5/5 mutants) |
+| 1 | core, trace, crossbar, platform, prices, area | testCore; testTrace (traced times: arithmetic, the stages, the pass grammar's load / compute / drain, the FC closed form per kind, two heads); testCrossbar (258 v2 corpus cases, 216 closed, 200 gated, 5/5 mutants) |
 | 2 | gemm, fc workload, rows.fcRow | testGemm (160 corpus, 900 closed, 3/3 mutants); testFcRows 48/48 (max float difference 2.2e-16); 48 FC Reports and rows equal |
 | 3 | dimmTile, its case writer and generator | testDimmTile (243 GATE 1, 30 closed, 9/9 mutants, 8 Yosys memory lists); corpus 16/16 files equal; random differential 150 cases: 276 runs equal, 24 rejected by both, 0 differ |
 | 4 | softmaxOnline, softmaxAccumulator, their case writers and generators | testSoftmaxOnline (210 GATE 1, 466 closed, 17/17); testSoftmaxAccumulator (290 GATE 1, 35 closed, 14/14); 6 corpora (48 cases) equal; differential 300 cases: 600 runs equal, 0 differ |

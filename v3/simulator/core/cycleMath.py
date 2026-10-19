@@ -20,5 +20,5 @@ def isPowerOfTwo(x) -> bool:
 def readyAt(*times) -> int:
     """A decision: the first cycle at which every condition holds, i.e. the latest of the given times. None is no
     condition (for example a credit not needed yet); with no condition at all, cycle 0."""
-    known = [int(t) for t in times if t is not None]
+    known = [t for t in times if t is not None]                  # the chosen object is kept (a traced Time)
     return max(known) if known else 0

@@ -31,7 +31,7 @@ class Serial:
 
     def take(self, tReady: int, n: int = 1) -> int:
         """The start cycle of a unit ready at tReady that needs n cycles."""
-        t = max(int(tReady), self.freeAt)
+        t = max(tReady, self.freeAt)                   # the chosen Time keeps its chain
         self.freeAt = t + int(n)
         return t
 
@@ -61,7 +61,7 @@ class Buffer:
         """Unit `unit`'s entry can take a new unit from cycle t."""
         if unit != len(self.freeFrom):
             raise ValueError(f"{self.name}: unit {unit} released out of order (expected unit {len(self.freeFrom)})")
-        self.freeFrom.append(int(t))
+        self.freeFrom.append(t)
 
 
 class Repack:
@@ -84,7 +84,7 @@ class Repack:
         """The output words' cycles, from the input words' read cycles."""
         if len(readTimes) != self.nInputs:
             raise ValueError(f"Repack: {len(readTimes)} read times for {self.nInputs} input words")
-        return [self.output.take(int(readTimes[i]) + self.latency) for i in self.sourceWord]
+        return [self.output.take(readTimes[i] + self.latency) for i in self.sourceWord]
 
 
 class Delay:
@@ -142,13 +142,13 @@ class Fifo:
             raise OverflowError(f"FIFO write at {t}: {self.depth} entries busy")
         if self.queue and t <= self.queue[-1][1]:
             raise ValueError(f"FIFO write at {t} not after the previous write at {self.queue[-1][1]}")
-        self.queue.append((values, int(t)))
+        self.queue.append((values, t))
 
     def read(self, tDecide: int):
         if not self.queue:
             raise IndexError("FIFO read while empty")
         values, tWrite = self.queue.pop(0)
-        tRead = max(tWrite + 1, int(tDecide))
+        tRead = max(tWrite + 1, tDecide)
         self.readTimes.append(tRead)
         return values, tRead
 
@@ -166,7 +166,7 @@ class Memory:
     def write(self, slot: int, values, tLastWrite: int) -> int:
         if not 0 <= slot < self.slots:
             raise IndexError(f"slot {slot} outside 0..{self.slots - 1}")
-        self.data[slot], self.validAt[slot] = values, int(tLastWrite) + 1
+        self.data[slot], self.validAt[slot] = values, tLastWrite + 1
         return self.validAt[slot]
 
     def read(self, slot: int, tAddress: int):
@@ -174,4 +174,4 @@ class Memory:
             raise IndexError(f"slot {slot} outside 0..{self.slots - 1}")
         if self.validAt[slot] is None or tAddress < self.validAt[slot]:
             raise ValueError(f"read of slot {slot} at {tAddress} before it is valid ({self.validAt[slot]})")
-        return self.data[slot], int(tAddress) + 1
+        return self.data[slot], tAddress + 1

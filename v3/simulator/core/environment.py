@@ -21,6 +21,7 @@ import numpy as np
 
 from simulator.core.module import Module, Need
 from simulator.core.records import PortSpec, Step
+from simulator.core.trace import Time, label
 
 SRC_CR_LAT = 0     # source: a credit (or x_rdy) at t lets the next unit start at t
 SINK_CR_LAT = 1    # sink: the credit pulses the cycle after the unit's last word
@@ -69,19 +70,25 @@ class Source(Module):
     def stepUnit(self, unit: int, io) -> Step:
         s = self.spec
         tCredit = io.creditTime(s.name)
-        tUnit = max(self._availableAt(unit), -1 if tCredit is None else tCredit + SRC_CR_LAT)
+        available = Time(self._availableAt(unit), origin=self.instance)       # an origin of the trace
+        tUnit = max(available, -1 if tCredit is None else tCredit + SRC_CR_LAT)
         starts = []
         for w in range(self.windowsPerUnit):
             channel = (unit * self.windowsPerUnit + w) % s.L
-            t = max(tUnit, self.channelEnd[channel] + 1)
+            with label("stream"):                                    # back to back on the channel
+                t = max(tUnit, self.channelEnd[channel] + 1)
             if self.period is not None and self.channelStart[channel] is not None:
-                t = max(t, self.channelStart[channel] + self.period)
+                with label("stream"):                                # the producer's row period
+                    t = max(t, self.channelStart[channel] + self.period)
             carried = self.payload is not None and (self.withValues or s.control)
             values = self.payload(unit, w) if carried else None
             io.emit(s.name, channel, unit, w, t, values)
-            self.channelStart[channel], self.channelEnd[channel] = t, t + s.words - 1
+            with label("stream"):                                    # the window's words
+                self.channelStart[channel], self.channelEnd[channel] = t, t + s.words - 1
             starts.append(t)
-        return Step("units", unit, tUnit, min(starts), max(starts) + s.words)
+        with label("stream"):
+            done = max(starts) + s.words
+        return Step("units", unit, tUnit, min(starts), done)
 
 
 class Sink(Module):
@@ -114,7 +121,8 @@ class Sink(Module):
             raise RuntimeError(f"{self.instance}: unit {unit} expected, got units {sorted({w.unit for w in windows})}")
         self.received += windows
         tFirst = min(w.time for w in windows)
-        tLast = max(w.time for w in windows) + s.words - 1
+        with label("stream"):                                        # the unit's words
+            tLast = max(w.time for w in windows) + s.words - 1
         if s.discipline != "push":
             io.giveCredit(s.name, unit, tLast + self.creditLatency)
         return Step("units", unit, tFirst, tFirst, tLast + 1)

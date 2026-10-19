@@ -21,6 +21,7 @@ import numpy as np
 from simulator.core.cycleMath import ceilDiv, clog2, isPowerOfTwo, readyAt
 from simulator.core.module import Module, Need, checkRules
 from simulator.core.records import PortSpec, Step
+from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, CrossbarGroup
 
 # named latencies (spec §5)
@@ -314,9 +315,14 @@ class SoftmaxOnlineAcc(Module):
         group.passes.clear()
         I = self.d.I
         self.counts.passes[(group.mode, I, I)] += active                 # the active crossbars of the wave
-        events = dict(xbarPass.events, ready=int(ready), decide=decide)
+        events = dict(xbarPass.events, ready=ready, decide=decide)
         self.jobs[key] = events
         return events, xbarPass
+
+    def lastRead(self, decide):
+        """The last of a job's LW FIFO words, read one per cycle from its decision."""
+        with label("stream"):
+            return decide + self.d.LW - 1
 
     def block(self, j: int, tLast: list, tAlpha: int | None = None) -> dict:
         """Block j's jobs (spec §5), wave by wave: rescale (b, w) for b >= 1, then LOG (b, w). tLast[q] = the last
@@ -336,7 +342,7 @@ class SoftmaxOnlineAcc(Module):
                 if math:
                     math.collectRescale(run, wave, xbarPass.out)
                 if w == d.W - 1:
-                    out["la_cr"] = events["decide"] + d.LW - 1 + LA_CR_LAT
+                    out["la_cr"] = self.lastRead(events["decide"]) + LA_CR_LAT
             # LOG (b, w): o' = (b ? (so ? -e : e) << SO : 0) + o_part -> oq, so -> lo
             ready = readyAt(max(tLast[q] for q in wave) + FIFO_LAT,
                             self.jobs[(run, "rescale", b, w)]["drain_end"] + JOB_DONE_LAT if b else None,
@@ -346,7 +352,7 @@ class SoftmaxOnlineAcc(Module):
             if math:
                 math.collectLog(run, wave, xbarPass.window)
             if w == d.W - 1:
-                out["p_cr"] = events["decide"] + d.LW - 1 + P_CR_LAT
+                out["p_cr"] = self.lastRead(events["decide"]) + P_CR_LAT
         if math:
             math.finishBlock(run)
         # counts (spec §7)
@@ -377,7 +383,7 @@ class SoftmaxOnlineAcc(Module):
             if math:
                 math.collectEpilogue(run, wave, xbarPass.out)
             if w == d.W - 1:
-                out["ll_cr"] = events["decide"] + d.LW - 1 + LL_CR_LAT
+                out["ll_cr"] = self.lastRead(events["decide"]) + LL_CR_LAT
         self.runEndAt[run] = out["t_o8"] = events["drain_end"] + O8_LAT
         self.runDoneAt[run] = self.runEndAt[run] + RUN_DONE_LAT
         if math:
@@ -409,7 +415,9 @@ class SoftmaxOnlineAcc(Module):
             tAlpha = max(w.time for w in alphaWindows)
         if self.math:
             self.math.storeBlock(j, windows, alphaWindows)
-        credits = self.block(j, [w.time + d.LW - 1 for w in windows], tAlpha)
+        with label("stream"):                                        # each o_part window's last word
+            tLast = [w.time + d.LW - 1 for w in windows]
+        credits = self.block(j, tLast, tAlpha)
         io.giveCredit("p", j, credits["p_cr"])
         if b:
             io.giveCredit("la", alphaUnit, credits["la_cr"])
@@ -423,7 +431,9 @@ class SoftmaxOnlineAcc(Module):
         (w,) = io.windows("ll")
         if self.math:
             self.math.storeLogL(run, w.values)
-        o = self.epilogue(run, w.time + p.S - 1)
+        with label("stream"):                                        # the log l window's S words
+            tLogL = w.time + p.S - 1
+        o = self.epilogue(run, tLogL)
         io.giveCredit("ll", run, o["ll_cr"])
         windows = self.e9Windows(run)
         for (wave, t, values) in windows:
