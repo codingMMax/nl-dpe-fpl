@@ -1,0 +1,11 @@
+# Generated COFFE artifacts (regenerable by run_dpe.sh / run_tensorslice.sh).
+# Keep only the per-run evidence summaries + run metadata in git.
+work/*/*
+!work/*/report.txt
+!work/*/sizing_results_final.txt
+!work/*/config.yaml
+!work/*/README.md
+!work/*/launch.log
+
+# Historical logs (pre-rename paths); kept on disk, not shipped.
+logs/

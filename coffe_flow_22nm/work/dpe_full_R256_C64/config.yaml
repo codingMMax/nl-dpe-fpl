@@ -1,0 +1,131 @@
+asic_hardblock_params:
+  hardblocks:
+  - area_cost_exp: 1.0
+    area_scale_factor: 0.21
+    best_case_libs:
+    - /mnt/vault0/PDKs/freepdk-45nm/stdcells-bc.lib
+    buf_footprint: buf
+    clock_period:
+    - 3.0
+    clock_pin_name: clk
+    coffe_repo_path: /mnt/vault0/jiajunh5/coffe_pristine
+    core_site_name: FreePDK45_38x28_10R_NP_162NW_34O
+    core_utilization:
+    - '0.80'
+    crossbar_modelling: optimistic
+    crossbar_population: 0.5
+    delay_cost_exp: 1.0
+    delay_footprint: buf
+    design_folder: /mnt/vault0/jiajunh5/coffe_pristine/input_files/simple_dsp_slice_45nm/dsp_slice_hdl
+    design_language: verilog
+    filler_cell_names:
+    - FILLCELL_X32
+    - FILLCELL_X16
+    - FILLCELL_X8
+    - FILLCELL_X4
+    - FILLCELL_X2
+    - FILLCELL_X1
+    freq_scale_factor: 1.33
+    generate_activity_file: false
+    gnd_net: VSS
+    gnd_pin: VSS
+    height: 16
+    height_to_width_ratio: 1.0
+    input_usage: 0.8
+    inv_footprint: inv
+    lef_files:
+    - /mnt/vault0/PDKs/freepdk-45nm/rtk-tech.lef
+    - /mnt/vault0/PDKs/freepdk-45nm/stdcells.lef
+    map_file: streamOut.map
+    metal_layer_names:
+    - metal1
+    - metal2
+    - metal3
+    - metal4
+    - metal5
+    - metal6
+    - metal7
+    - metal8
+    - metal9
+    - metal10
+    metal_layers:
+    - 10
+    name: dpe_full_r256
+    num_crossbars: 1
+    num_dedicated_outputs: 0
+    num_gen_inputs: 263
+    num_gen_outputs: 69
+    partition_flag: false
+    pnr_tool: innovus
+    power_ring_metal_layer_names:
+    - metal8
+    - metal8
+    - metal9
+    - metal9
+    power_ring_spacing: 1.8
+    power_ring_width: 1.8
+    power_scale_factor: 0.22
+    pr_folder: /mnt/vault0/jiajunh5/nl-dpe-fpl/coffe_flow_22nm/work/dpe_full_R256_C64/pr
+    primetime_folder: /mnt/vault0/jiajunh5/nl-dpe-fpl/coffe_flow_22nm/work/dpe_full_R256_C64/pt
+    primetime_libs:
+    - stdcells.db
+    process_lib_paths:
+    - /mnt/vault0/PDKs/freepdk-45nm
+    process_size: 45
+    pwr_net: VDD
+    pwr_pin: VDD
+    read_saif_file: false
+    show_warnings: true
+    soft_logic_per_block: 4
+    space_around_core: 10
+    standard_libs:
+    - /mnt/vault0/PDKs/freepdk-45nm/stdcells.lib
+    static_probability: 0.5
+    synth_folder: /mnt/vault0/jiajunh5/nl-dpe-fpl/coffe_flow_22nm/work/dpe_full_R256_C64/synth
+    synthesis_only: false
+    target_libraries:
+    - /mnt/vault0/PDKs/freepdk-45nm/stdcells.db
+    tilehi_tielo_cells_between_power_gnd: true
+    toggle_rate: 25
+    top_level: dsp_slice
+    wire_selection:
+    - None
+    worst_case_libs:
+    - /mnt/vault0/PDKs/freepdk-45nm/stdcells-wc.lib
+fpga_arch_params:
+  Fcin: 0.15
+  Fclocal: 0.5
+  Fcout: 0.1
+  Fs: 3
+  I: 60
+  K: 6
+  L: 4
+  N: 10
+  Ofb: 2
+  Or: 2
+  Rfb: c
+  Rsel: c
+  W: 320
+  arch_out_folder: /mnt/vault0/jiajunh5/nl-dpe-fpl/coffe_flow_22nm/work/dpe_full_R256_C64
+  gate_length: 22
+  metal:
+  - - 0.054825
+    - 0.000175
+  - - 0.007862
+    - 0.000215
+  - - 0.02924
+    - 0.000139
+  - - 0.227273
+    - 0.0
+  min_tran_width: 45
+  min_width_tran_area: 33864
+  model_library: 22NM_BULK_HP
+  model_path: spice_models/ptm_22nm_bulk_hp.l
+  rest_length_factor: 1
+  sram_cell_area: 4
+  switch_type: pass_transistor
+  trans_diffusion_length: 52
+  transistor_type: bulk
+  vdd: 0.8
+  vsram: 1.0
+  vsram_n: 0.0

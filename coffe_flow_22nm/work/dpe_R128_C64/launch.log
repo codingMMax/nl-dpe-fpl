@@ -1,0 +1,2154 @@
+=== command: python2 coffe.py -a 1 -d 2 -hi 100 /mnt/vault0/jiajunh5/nl-dpe-fpl/coffe_flow_22nm/work/dpe/config.yaml
+=== cwd: /mnt/vault0/jiajunh5/coffe_pristine
+=== coffe_commit: ecde3effd352e5b2ba89d17c1e4cbd620b369eca
+=== erf_line: ERF_MAX_ITERATIONS = 4
+=== start_utc: 2026-09-30T19:25:38Z
+
+COFFE 2.0
+
+Man is a tool-using animal.
+Without tools he is nothing, with tools he is all.
+                           - Thomas Carlyle
+
+
+----------------------------------------------
+  RUN OPTIONS:
+----------------------------------------------
+
+  Transistor sizing: on
+  Optimization type: global
+  Number of top combos to re-ERF: 1
+  Area optimization weight: 1
+  Delay optimization weight: 2
+  Maximum number of sizing iterations: 6
+
+
+-------------------------------------------------
+  ARCHITECTURE PARAMETERS:
+-------------------------------------------------
+
+  Number of BLEs per cluster (N): 10
+  LUT size (K): 6
+  Channel width (W): 320
+  Wire segment length (L): 4
+  Number of cluster inputs (I): 60
+  Number of BLE outputs to general routing (Or): 2
+  Number of BLE outputs to local routing (Ofb): 2
+  Total number of cluster outputs (N*Or): 20
+  Switch block flexibility (Fs): 3
+  Cluster input flexibility (Fcin): 0.15
+  Cluster output flexibility (Fcout): 0.1
+  Local MUX population (Fclocal): 0.5
+  LUT input for register selection MUX (Rsel): c
+  LUT input(s) for register feedback MUX(es) (Rfb): c
+
+-------------------------------------------------
+  PROCESS TECHNOLOGY PARAMETERS:
+-------------------------------------------------
+
+  transistor_type = bulk
+  switch_type = pass_transistor
+  vdd = 0.8
+  vsram = 1.0
+  vsram_n = 0.0
+  gate_length = 22
+  min_tran_width = 45
+  min_width_tran_area = 33864
+  sram_cell_area = 4.0
+  model_path = /mnt/vault0/jiajunh5/coffe_pristine/spice_models/ptm_22nm_bulk_hp.l
+  model_library = 22NM_BULK_HP
+  metal = [(0.054825, 0.000175), (0.007862, 0.000215), (0.02924, 0.000139), (0.227273, 0.0)]
+
+
+Generating basic subcircuits
+Generating switch block mux
+Generating connection block mux
+Generating logic cluster
+Generating BLE
+Generating 6-LUT
+Generating lut a-input driver (default)
+Generating lut b-input driver (default)
+Generating lut c-input driver (reg_fb_rsel)
+Generating lut d-input driver (default)
+Generating lut e-input driver (default)
+Generating lut f-input driver (default)
+Generating LUT a-input driver load
+Generating LUT b-input driver load
+Generating LUT c-input driver load
+Generating LUT d-input driver load
+Generating LUT e-input driver load
+Generating LUT f-input driver load
+Generating FF with register select on BLE input c
+Generating local BLE output
+Generating general BLE output
+Generating LUT output load
+Generating local mux
+Generating local routing wire load
+Generating routing wire load
+Generating hard block dpe
+Generating HB local mux
+Generating local routing wire load
+Generating process data file
+Generating includes file
+Generating top-level switch block mux
+Generating top-level connection block mux
+Generating top-level local mux
+Generating top-level lut
+Generating top-level lut a-input
+Generating top-level lut c-input
+Generating top-level lut b-input
+Generating top-level lut e-input
+Generating top-level lut d-input
+Generating top-level lut f-input
+Generating top-level local_ble_output
+Generating top-level general_ble_output
+Generating top-level submodules
+Generating top-level HB local mux
+Calculating area...
+Calculating wire lengths...
+Calculating wire resistance and capacitance...
+
+|------------------------------------------------------------------------------|
+|   FPGA Implementation Details                                                |
+|------------------------------------------------------------------------------|
+
+  SWITCH BLOCK DETAILS:
+  Style: two-level MUX
+  Required MUX size: 13:1
+  Implemented MUX size: 15:1
+  Level 1 size = 5
+  Level 2 size = 3
+  Number of unused inputs = 2
+  Number of MUXes per tile: 160
+  Number of SRAM cells per MUX: 8
+
+  CONNECTION BLOCK DETAILS:
+  Style: two-level MUX
+  Required MUX size: 48:1
+  Implemented MUX size: 48:1
+  Level 1 size = 8
+  Level 2 size = 6
+  Number of unused inputs = 0
+  Number of MUXes per tile: 60
+  Number of SRAM cells per MUX: 14
+
+  LOCAL MUX DETAILS:
+  Style: two-level MUX
+  Required MUX size: 40:1
+  Implemented MUX size: 42:1
+  Level 1 size = 7
+  Level 2 size = 6
+  Number of unused inputs = 2
+  Number of MUXes per tile: 60
+  Number of SRAM cells per MUX: 13
+
+  LUT DETAILS:
+  Style: Fully encoded MUX tree
+  Size: 6-LUT
+  Internal buffering: 2-stage buffer betweens levels 3 and 4
+  Isolation inverters between SRAM and LUT inputs
+
+  LUT INPUT DRIVER DETAILS:
+  LUT input a type: default
+  LUT input c type: reg_fb_rsel
+  LUT input b type: default
+  LUT input e type: default
+  LUT input d type: default
+  LUT input f type: default
+
+  CLUSTER OUTPUT LOAD DETAILS:
+  Total number of SB inputs connected to cluster output: 32
+  Number of 'on' SB MUXes (assumed): 1
+  Number of 'partial' SB MUXes: 3
+  Number of 'off' SB MUXes: 28
+
+  ROUTING WIRE LOAD DETAILS:
+  Number of SB inputs connected to routing wire = 9
+  Wire: SB (on = 1, partial = 1, off = 7)
+  Number of CB inputs connected to routing wire = 16
+  Wire: CB (on = 1, partial = 1, off = 14)
+  Tile 1: SB (on = 1, partial = 1, off = 1); CB (on = 1, partial = 1, off = 2)
+  Tile 2: SB (on = 0, partial = 0, off = 2); CB (on = 0, partial = 0, off = 4)
+  Tile 3: SB (on = 0, partial = 0, off = 2); CB (on = 0, partial = 0, off = 4)
+  Tile 4: SB (on = 0, partial = 0, off = 2); CB (on = 0, partial = 0, off = 4)
+
+  DETAILS OF HARD BLOCK: dpe
+  Localmux:
+  Style: two-level MUX
+  Required MUX size: 24:1
+  Implemented MUX size: 24:1
+  Level 1 size = 6
+  Level 2 size = 4
+  Number of unused inputs = 0
+  Number of MUXes per tile: 47
+  Number of SRAM cells per MUX: 10
+
+|------------------------------------------------------------------------------|
+
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Starting transistor sizing...
+
+FPGA TRANSISTOR SIZING ITERATION #1
+
+determining a floorplan for this sizing iteration
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Sizing will begin now.
+Current Cost: 5.24971168849e-11
+|------------------------------------------------------------------------------|
+|    Transistor sizing on subcircuit: dpe_local_mux                            |
+|------------------------------------------------------------------------------|
+
+Found 4 elements to size
+ptran_dpe_local_mux_L1
+ptran_dpe_local_mux_L2
+inv_dpe_local_mux_1
+inv_dpe_local_mux_2
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   
+inv_dpe_local_mux_2     : [3 -> 9]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.084e-11 trise=1.263e-11 diff=8.21e-12
+NMOS=270.0  PMOS=135.0: tfall=2.244e-11 trise=1.454e-11 diff=7.9e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=270.0  PMOS=270.0: tfall=4.328e-11 trise=3.319e-11 diff=1.009e-11
+NMOS=540.0  PMOS=270.0: tfall=4.238e-11 trise=3.703e-11 diff=5.35e-12
+NMOS=810.0  PMOS=270.0: tfall=4.338e-11 trise=4.054e-11 diff=2.84e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=810.0
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.229e-11, trise=1.442e-11, erf_err=35.3%)
+inv_dpe_local_mux_2 (N=810 P=270, tfall=4.338e-11, trise=4.054e-11, erf_err=6.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.077e-11 trise=1.223e-11 diff=8.54e-12
+NMOS=270.0  PMOS=135.0: tfall=2.229e-11 trise=1.442e-11 diff=7.87e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=270.0  PMOS=270.0: tfall=4.328e-11 trise=3.319e-11 diff=1.009e-11
+NMOS=540.0  PMOS=270.0: tfall=4.238e-11 trise=3.703e-11 diff=5.35e-12
+NMOS=810.0  PMOS=270.0: tfall=4.338e-11 trise=4.054e-11 diff=2.84e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=810.0
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.229e-11, trise=1.442e-11, erf_err=35.3%)
+inv_dpe_local_mux_2 (N=810 P=270, tfall=4.338e-11, trise=4.054e-11, erf_err=6.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.077e-11 trise=1.223e-11 diff=8.54e-12
+NMOS=270.0  PMOS=135.0: tfall=2.229e-11 trise=1.442e-11 diff=7.87e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=270.0  PMOS=270.0: tfall=4.328e-11 trise=3.319e-11 diff=1.009e-11
+NMOS=540.0  PMOS=270.0: tfall=4.238e-11 trise=3.703e-11 diff=5.35e-12
+NMOS=810.0  PMOS=270.0: tfall=4.338e-11 trise=4.054e-11 diff=2.84e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=810.0
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.229e-11, trise=1.442e-11, erf_err=35.3%)
+inv_dpe_local_mux_2 (N=810 P=270, tfall=4.338e-11, trise=4.054e-11, erf_err=6.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.077e-11 trise=1.223e-11 diff=8.54e-12
+NMOS=270.0  PMOS=135.0: tfall=2.229e-11 trise=1.442e-11 diff=7.87e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=270.0  PMOS=270.0: tfall=4.328e-11 trise=3.319e-11 diff=1.009e-11
+NMOS=540.0  PMOS=270.0: tfall=4.238e-11 trise=3.703e-11 diff=5.35e-12
+NMOS=810.0  PMOS=270.0: tfall=4.338e-11 trise=4.054e-11 diff=2.84e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=810.0
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.229e-11, trise=1.442e-11, erf_err=35.3%)
+inv_dpe_local_mux_2 (N=810 P=270, tfall=4.338e-11, trise=4.054e-11, erf_err=6.5%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1512 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=8.37e-11  trise=6.86e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.21e-11  trise=6.52e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.12e-11  trise=6.58e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.16e-11  trise=6.74e-11  
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.35e-11  trise=6.88e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.51e-11  trise=7.08e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.8e-11   trise=6.09e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.85e-11  trise=5.6e-11   
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.71e-11  trise=5.54e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.7e-11   trise=5.58e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.613e-11 trise=2.342e-11 diff=1.271e-11
+NMOS=90  PMOS=45: tfall=3.774e-11 trise=2.508e-11 diff=1.266e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135  PMOS=135: tfall=7.336e-11 trise=5.207e-11 diff=2.129e-11
+NMOS=270  PMOS=135: tfall=7.237e-11 trise=5.766e-11 diff=1.471e-11
+NMOS=405  PMOS=135: tfall=7.456e-11 trise=6.228e-11 diff=1.228e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=405
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.787e-11, trise=2.489e-11, erf_err=34.3%)
+inv_dpe_local_mux_2 (N=405 P=135, tfall=7.456e-11, trise=6.228e-11, erf_err=16.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.659e-11 trise=2.314e-11 diff=1.345e-11
+NMOS=90  PMOS=45: tfall=3.787e-11 trise=2.489e-11 diff=1.298e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135  PMOS=135: tfall=7.336e-11 trise=5.207e-11 diff=2.129e-11
+NMOS=270  PMOS=135: tfall=7.237e-11 trise=5.766e-11 diff=1.471e-11
+NMOS=405  PMOS=135: tfall=7.456e-11 trise=6.228e-11 diff=1.228e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=405
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.787e-11, trise=2.489e-11, erf_err=34.3%)
+inv_dpe_local_mux_2 (N=405 P=135, tfall=7.456e-11, trise=6.228e-11, erf_err=16.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.659e-11 trise=2.314e-11 diff=1.345e-11
+NMOS=90  PMOS=45: tfall=3.787e-11 trise=2.489e-11 diff=1.298e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135  PMOS=135: tfall=7.336e-11 trise=5.207e-11 diff=2.129e-11
+NMOS=270  PMOS=135: tfall=7.237e-11 trise=5.766e-11 diff=1.471e-11
+NMOS=405  PMOS=135: tfall=7.456e-11 trise=6.228e-11 diff=1.228e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=405
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.787e-11, trise=2.489e-11, erf_err=34.3%)
+inv_dpe_local_mux_2 (N=405 P=135, tfall=7.456e-11, trise=6.228e-11, erf_err=16.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.659e-11 trise=2.314e-11 diff=1.345e-11
+NMOS=90  PMOS=45: tfall=3.787e-11 trise=2.489e-11 diff=1.298e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135  PMOS=135: tfall=7.336e-11 trise=5.207e-11 diff=2.129e-11
+NMOS=270  PMOS=135: tfall=7.237e-11 trise=5.766e-11 diff=1.471e-11
+NMOS=405  PMOS=135: tfall=7.456e-11 trise=6.228e-11 diff=1.228e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=405
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.787e-11, trise=2.489e-11, erf_err=34.3%)
+inv_dpe_local_mux_2 (N=405 P=135, tfall=7.456e-11, trise=6.228e-11, erf_err=16.5%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.24e-11  trise=7.52e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 
+inv_dpe_local_mux_2_nmos    : 9.0 
+inv_dpe_local_mux_2_pmos    : 3.0 
+rest_dpe_local_mux_pmos     : 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 
+
+Validating transistor sizes
+inv_dpe_local_mux_2 is on lower bound
+Sizing results not valid, computing new sizing ranges
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   [1 -> 6]   
+inv_dpe_local_mux_2     : [3 -> 9]   [1 -> 8]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.069e-11 trise=1.303e-11 diff=7.66e-12
+NMOS=270.0  PMOS=135.0: tfall=2.217e-11 trise=1.455e-11 diff=7.62e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=180.0  PMOS=180.0: tfall=4.296e-11 trise=3.462e-11 diff=8.34e-12
+NMOS=360.0  PMOS=180.0: tfall=4.116e-11 trise=3.744e-11 diff=3.72e-12
+NMOS=540.0  PMOS=180.0: tfall=4.122e-11 trise=4.020e-11 diff=1.02e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=540.0
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.221e-11, trise=1.447e-11, erf_err=34.8%)
+inv_dpe_local_mux_2 (N=540 P=180, tfall=4.122e-11, trise=4.02e-11, erf_err=2.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.075e-11 trise=1.243e-11 diff=8.32e-12
+NMOS=270.0  PMOS=135.0: tfall=2.221e-11 trise=1.447e-11 diff=7.74e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=180.0  PMOS=180.0: tfall=4.296e-11 trise=3.462e-11 diff=8.34e-12
+NMOS=360.0  PMOS=180.0: tfall=4.116e-11 trise=3.744e-11 diff=3.72e-12
+NMOS=540.0  PMOS=180.0: tfall=4.122e-11 trise=4.020e-11 diff=1.02e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=540.0
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.221e-11, trise=1.447e-11, erf_err=34.8%)
+inv_dpe_local_mux_2 (N=540 P=180, tfall=4.122e-11, trise=4.02e-11, erf_err=2.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.075e-11 trise=1.243e-11 diff=8.32e-12
+NMOS=270.0  PMOS=135.0: tfall=2.221e-11 trise=1.447e-11 diff=7.74e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=180.0  PMOS=180.0: tfall=4.296e-11 trise=3.462e-11 diff=8.34e-12
+NMOS=360.0  PMOS=180.0: tfall=4.116e-11 trise=3.744e-11 diff=3.72e-12
+NMOS=540.0  PMOS=180.0: tfall=4.122e-11 trise=4.020e-11 diff=1.02e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=540.0
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.221e-11, trise=1.447e-11, erf_err=34.8%)
+inv_dpe_local_mux_2 (N=540 P=180, tfall=4.122e-11, trise=4.02e-11, erf_err=2.5%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.075e-11 trise=1.243e-11 diff=8.32e-12
+NMOS=270.0  PMOS=135.0: tfall=2.221e-11 trise=1.447e-11 diff=7.74e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=180.0  PMOS=180.0: tfall=4.296e-11 trise=3.462e-11 diff=8.34e-12
+NMOS=360.0  PMOS=180.0: tfall=4.116e-11 trise=3.744e-11 diff=3.72e-12
+NMOS=540.0  PMOS=180.0: tfall=4.122e-11 trise=4.020e-11 diff=1.02e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=540.0
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.221e-11, trise=1.447e-11, erf_err=34.8%)
+inv_dpe_local_mux_2 (N=540 P=180, tfall=4.122e-11, trise=4.02e-11, erf_err=2.5%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1728 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.69e-11  trise=8.69e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.75e-11  trise=8.42e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.68e-11  trise=8.49e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.78e-11  trise=8.61e-11  
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.9e-11   trise=8.77e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.08e-11  trise=8.93e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.34e-11  trise=7.94e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.52e-11  trise=7.56e-11  
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.36e-11  trise=7.53e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.34e-11  trise=7.56e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.506e-11 trise=2.370e-11 diff=1.136e-11
+NMOS=90  PMOS=45: tfall=3.723e-11 trise=2.463e-11 diff=1.26e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.04e-11  trise=7.97e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 2.0 
+inv_dpe_local_mux_2_nmos    : 9.0 1.0 
+inv_dpe_local_mux_2_pmos    : 3.0 1.0 
+rest_dpe_local_mux_pmos     : 1.0 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 1.0 
+
+Validating transistor sizes
+Sizing results are valid
+
+FPGA transistor sizing iteration complete!
+
+FPGA TRANSISTOR SIZING RESULTS
+------------------------------
+dpe_local_mux:
+ptran_dpe_local_mux_L1 : 1   
+inv_dpe_local_mux_1    : 1   
+inv_dpe_local_mux_2    : 1   
+ptran_dpe_local_mux_L2 : 1   
+rest_dpe_local_mux     : 1   
+
+
+TOTALS:
+Area		Delay		Cost
+1211.281	1.8895e-10	0.22887
+
+Evaluating termination conditions...
+Cannot terminate based on cost: at least one more FPGA sizing iteration required
+FPGA TRANSISTOR SIZING ITERATION #2
+
+determining a floorplan for this sizing iteration
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Sizing will begin now.
+Current Cost: 5.24971168849e-11
+|------------------------------------------------------------------------------|
+|    Transistor sizing on subcircuit: dpe_local_mux                            |
+|------------------------------------------------------------------------------|
+
+Found 4 elements to size
+ptran_dpe_local_mux_L1
+ptran_dpe_local_mux_L2
+inv_dpe_local_mux_1
+inv_dpe_local_mux_2
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   
+inv_dpe_local_mux_2     : [1 -> 6]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.066e-11 trise=1.287e-11 diff=7.79e-12
+NMOS=270.0  PMOS=135.0: tfall=2.231e-11 trise=1.461e-11 diff=7.7e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1296 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.84e-11  trise=8.58e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.85e-11  trise=8.31e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.73e-11  trise=8.38e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.84e-11  trise=8.5e-11   
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=7e-11     trise=8.66e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.16e-11  trise=8.83e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.4e-11   trise=7.82e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.63e-11  trise=7.46e-11  
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.41e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.43e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.506e-11 trise=2.370e-11 diff=1.136e-11
+NMOS=90  PMOS=45: tfall=3.723e-11 trise=2.463e-11 diff=1.26e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.04e-11  trise=7.97e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 
+inv_dpe_local_mux_2_nmos    : 1.0 
+inv_dpe_local_mux_2_pmos    : 1.0 
+rest_dpe_local_mux_pmos     : 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 
+
+Validating transistor sizes
+Sizing results are valid
+
+FPGA transistor sizing iteration complete!
+
+FPGA TRANSISTOR SIZING RESULTS
+------------------------------
+dpe_local_mux:
+ptran_dpe_local_mux_L1 : 1   1   
+inv_dpe_local_mux_1    : 1   1   
+inv_dpe_local_mux_2    : 1   1   
+ptran_dpe_local_mux_L2 : 1   1   
+rest_dpe_local_mux     : 1   1   
+
+
+TOTALS:
+Area		Delay		Cost
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+
+Evaluating termination conditions...
+FPGA TRANSISTOR SIZING ITERATION #3
+
+determining a floorplan for this sizing iteration
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Sizing will begin now.
+Current Cost: 5.24971168849e-11
+|------------------------------------------------------------------------------|
+|    Transistor sizing on subcircuit: dpe_local_mux                            |
+|------------------------------------------------------------------------------|
+
+Found 4 elements to size
+ptran_dpe_local_mux_L1
+ptran_dpe_local_mux_L2
+inv_dpe_local_mux_1
+inv_dpe_local_mux_2
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   
+inv_dpe_local_mux_2     : [1 -> 6]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.066e-11 trise=1.287e-11 diff=7.79e-12
+NMOS=270.0  PMOS=135.0: tfall=2.231e-11 trise=1.461e-11 diff=7.7e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1296 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.84e-11  trise=8.58e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.85e-11  trise=8.31e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.73e-11  trise=8.38e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.84e-11  trise=8.5e-11   
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=7e-11     trise=8.66e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.16e-11  trise=8.83e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.4e-11   trise=7.82e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.63e-11  trise=7.46e-11  
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.41e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.43e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.506e-11 trise=2.370e-11 diff=1.136e-11
+NMOS=90  PMOS=45: tfall=3.723e-11 trise=2.463e-11 diff=1.26e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.04e-11  trise=7.97e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 
+inv_dpe_local_mux_2_nmos    : 1.0 
+inv_dpe_local_mux_2_pmos    : 1.0 
+rest_dpe_local_mux_pmos     : 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 
+
+Validating transistor sizes
+Sizing results are valid
+
+FPGA transistor sizing iteration complete!
+
+FPGA TRANSISTOR SIZING RESULTS
+------------------------------
+dpe_local_mux:
+ptran_dpe_local_mux_L1 : 1   1   1   
+inv_dpe_local_mux_1    : 1   1   1   
+inv_dpe_local_mux_2    : 1   1   1   
+ptran_dpe_local_mux_L2 : 1   1   1   
+rest_dpe_local_mux     : 1   1   1   
+
+
+TOTALS:
+Area		Delay		Cost
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+
+Evaluating termination conditions...
+FPGA TRANSISTOR SIZING ITERATION #4
+
+determining a floorplan for this sizing iteration
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Sizing will begin now.
+Current Cost: 5.24971168849e-11
+|------------------------------------------------------------------------------|
+|    Transistor sizing on subcircuit: dpe_local_mux                            |
+|------------------------------------------------------------------------------|
+
+Found 4 elements to size
+ptran_dpe_local_mux_L1
+ptran_dpe_local_mux_L2
+inv_dpe_local_mux_1
+inv_dpe_local_mux_2
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   
+inv_dpe_local_mux_2     : [1 -> 6]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.066e-11 trise=1.287e-11 diff=7.79e-12
+NMOS=270.0  PMOS=135.0: tfall=2.231e-11 trise=1.461e-11 diff=7.7e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1296 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.84e-11  trise=8.58e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.85e-11  trise=8.31e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.73e-11  trise=8.38e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.84e-11  trise=8.5e-11   
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=7e-11     trise=8.66e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.16e-11  trise=8.83e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.4e-11   trise=7.82e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.63e-11  trise=7.46e-11  
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.41e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.43e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.506e-11 trise=2.370e-11 diff=1.136e-11
+NMOS=90  PMOS=45: tfall=3.723e-11 trise=2.463e-11 diff=1.26e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.04e-11  trise=7.97e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 
+inv_dpe_local_mux_2_nmos    : 1.0 
+inv_dpe_local_mux_2_pmos    : 1.0 
+rest_dpe_local_mux_pmos     : 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 
+
+Validating transistor sizes
+Sizing results are valid
+
+FPGA transistor sizing iteration complete!
+
+FPGA TRANSISTOR SIZING RESULTS
+------------------------------
+dpe_local_mux:
+ptran_dpe_local_mux_L1 : 1   1   1   1   
+inv_dpe_local_mux_1    : 1   1   1   1   
+inv_dpe_local_mux_2    : 1   1   1   1   
+ptran_dpe_local_mux_L2 : 1   1   1   1   
+rest_dpe_local_mux     : 1   1   1   1   
+
+
+TOTALS:
+Area		Delay		Cost
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+
+Evaluating termination conditions...
+FPGA TRANSISTOR SIZING ITERATION #5
+
+determining a floorplan for this sizing iteration
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Sizing will begin now.
+Current Cost: 5.24971168849e-11
+|------------------------------------------------------------------------------|
+|    Transistor sizing on subcircuit: dpe_local_mux                            |
+|------------------------------------------------------------------------------|
+
+Found 4 elements to size
+ptran_dpe_local_mux_L1
+ptran_dpe_local_mux_L2
+inv_dpe_local_mux_1
+inv_dpe_local_mux_2
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   
+inv_dpe_local_mux_2     : [1 -> 6]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.066e-11 trise=1.287e-11 diff=7.79e-12
+NMOS=270.0  PMOS=135.0: tfall=2.231e-11 trise=1.461e-11 diff=7.7e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1296 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.84e-11  trise=8.58e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.85e-11  trise=8.31e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.73e-11  trise=8.38e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.84e-11  trise=8.5e-11   
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=7e-11     trise=8.66e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.16e-11  trise=8.83e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.4e-11   trise=7.82e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.63e-11  trise=7.46e-11  
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.41e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.43e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.506e-11 trise=2.370e-11 diff=1.136e-11
+NMOS=90  PMOS=45: tfall=3.723e-11 trise=2.463e-11 diff=1.26e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.04e-11  trise=7.97e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 
+inv_dpe_local_mux_2_nmos    : 1.0 
+inv_dpe_local_mux_2_pmos    : 1.0 
+rest_dpe_local_mux_pmos     : 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 
+
+Validating transistor sizes
+Sizing results are valid
+
+FPGA transistor sizing iteration complete!
+
+FPGA TRANSISTOR SIZING RESULTS
+------------------------------
+dpe_local_mux:
+ptran_dpe_local_mux_L1 : 1   1   1   1   1   
+inv_dpe_local_mux_1    : 1   1   1   1   1   
+inv_dpe_local_mux_2    : 1   1   1   1   1   
+ptran_dpe_local_mux_L2 : 1   1   1   1   1   
+rest_dpe_local_mux     : 1   1   1   1   1   
+
+
+TOTALS:
+Area		Delay		Cost
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+
+Evaluating termination conditions...
+FPGA TRANSISTOR SIZING ITERATION #6
+
+determining a floorplan for this sizing iteration
+*** UPDATING DELAYS ***
+  Updating delay for sb_mux
+  Updating delay for cb_mux
+  Updating delay for local_mux
+  Updating delay for local_ble_output
+  Updating delay for general_ble_output
+  Updating delay for lut
+  Updating delay for lut_a
+  Updating delay for lut_a_driver
+  Updating delay for lut_a_driver_not
+  Updating delay for lut_c
+  Updating delay for lut_c_driver
+  Updating delay for lut_c_driver_not
+  Updating delay for lut_b
+  Updating delay for lut_b_driver
+  Updating delay for lut_b_driver_not
+  Updating delay for lut_e
+  Updating delay for lut_e_driver
+  Updating delay for lut_e_driver_not
+  Updating delay for lut_d
+  Updating delay for lut_d_driver
+  Updating delay for lut_d_driver_not
+  Updating delay for lut_f
+  Updating delay for lut_f_driver
+  Updating delay for lut_f_driver_not
+Sizing will begin now.
+Current Cost: 5.24971168849e-11
+|------------------------------------------------------------------------------|
+|    Transistor sizing on subcircuit: dpe_local_mux                            |
+|------------------------------------------------------------------------------|
+
+Found 4 elements to size
+ptran_dpe_local_mux_L1
+ptran_dpe_local_mux_L2
+inv_dpe_local_mux_1
+inv_dpe_local_mux_2
+
+Transistor size ranges for dpe_local_mux:
+ptran_dpe_local_mux_L1  : [1 -> 6]   
+inv_dpe_local_mux_1     : [1 -> 6]   
+inv_dpe_local_mux_2     : [1 -> 6]   
+ptran_dpe_local_mux_L2  : [1 -> 6]   
+rest_dpe_local_mux      : [1 -> 1]   
+
+Determining initial inverter P/N ratios...
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.066e-11 trise=1.287e-11 diff=7.79e-12
+NMOS=270.0  PMOS=135.0: tfall=2.231e-11 trise=1.461e-11 diff=7.7e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=2.071e-11 trise=1.268e-11 diff=8.03e-12
+NMOS=270.0  PMOS=135.0: tfall=2.196e-11 trise=1.455e-11 diff=7.41e-12
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=270.0
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=135.0  PMOS=135.0: tfall=4.383e-11 trise=3.679e-11 diff=7.04e-12
+NMOS=270.0  PMOS=135.0: tfall=4.153e-11 trise=3.917e-11 diff=2.36e-12
+NMOS=405.0  PMOS=135.0: tfall=4.046e-11 trise=4.126e-11 diff=-8e-13
+Upper bound found, NMOS=405.0
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [315, 360]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 347.0
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=270 P=135, tfall=2.196e-11, trise=1.455e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=347 P=135, tfall=4.042e-11, trise=4.042e-11, erf_err=0.0%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+Calculating area and wire data for all transistor sizing combinations...
+Running HSPICE for 1296 transistor sizing combinations...
+Calculating cost for each transistor sizing combinations...
+
+TOP 10 BEST COST RESULTS
+------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.84e-11  trise=8.58e-11  
+Combo #1     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.85e-11  trise=8.31e-11  
+Combo #2     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.73e-11  trise=8.38e-11  
+Combo #3     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.84e-11  trise=8.5e-11   
+Combo #4     cost=0.0      area=1211.281delay=2.082e-10 tfall=7e-11     trise=8.66e-11  
+Combo #5     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.16e-11  trise=8.83e-11  
+Combo #6     cost=0.0      area=1211.281delay=2.082e-10 tfall=6.4e-11   trise=7.82e-11  
+Combo #7     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.63e-11  trise=7.46e-11  
+Combo #8     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.41e-11  
+Combo #9     cost=0.0      area=1211.281delay=2.082e-10 tfall=5.5e-11   trise=7.43e-11  
+
+Re-equalizing rise and fall times on combo #0 (ranked #1)
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.506e-11 trise=2.370e-11 diff=1.136e-11
+NMOS=90  PMOS=45: tfall=3.723e-11 trise=2.463e-11 diff=1.26e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 1):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 2):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 3):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+
+ERF MONITOR: inv_dpe_local_mux_1
+Looking for inv_dpe_local_mux_1_nmos size upper bound
+NMOS=45  PMOS=45: tfall=3.518e-11 trise=2.365e-11 diff=1.153e-11
+NMOS=90  PMOS=45: tfall=3.737e-11 trise=2.478e-11 diff=1.259e-11
+Increasing NMOS is no longer decreasing tfall 
+or the ratio is too large, using NMOS=90
+ERF MONITOR: inv_dpe_local_mux_2
+Looking for inv_dpe_local_mux_2_nmos size upper bound
+NMOS=45  PMOS=45: tfall=7.958e-11 trise=7.026e-11 diff=9.32e-12
+NMOS=90  PMOS=45: tfall=7.014e-11 trise=7.274e-11 diff=-2.6e-12
+Upper bound found, NMOS=90
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF NMOS size in range: [45, 90]
+Running HSPICE sweep on: dpe_local_mux/dpe_local_mux.sp
+ERF PMOS size is 74
+
+ERF SUMMARY (iteration 4):
+inv_dpe_local_mux_1 (N=90 P=45, tfall=3.737e-11, trise=2.478e-11, erf_err=33.7%)
+inv_dpe_local_mux_2 (N=74 P=45, tfall=7.192e-11, trise=7.188e-11, erf_err=0.1%)
+One or more inverter(s) failed to meet ERF tolerance
+Stopping ERF because max iterations reached
+()
+BEST COST RESULTS AFTER RE-BALANCING
+------------------------------------
+Combo #0     cost=0.0      area=1211.281delay=2.082e-10 tfall=7.04e-11  trise=7.97e-11  
+
+Sizing results for dpe_local_mux:
+inv_dpe_local_mux_1_pmos    : 1.0 
+ptran_dpe_local_mux_L2_nmos : 1.0 
+inv_dpe_local_mux_1_nmos    : 2.0 
+inv_dpe_local_mux_2_nmos    : 1.0 
+inv_dpe_local_mux_2_pmos    : 1.0 
+rest_dpe_local_mux_pmos     : 1.0 
+ptran_dpe_local_mux_L1_nmos : 1.0 
+
+Validating transistor sizes
+Sizing results are valid
+
+FPGA transistor sizing iteration complete!
+
+FPGA TRANSISTOR SIZING RESULTS
+------------------------------
+dpe_local_mux:
+ptran_dpe_local_mux_L1 : 1   1   1   1   1   1   
+inv_dpe_local_mux_1    : 1   1   1   1   1   1   
+inv_dpe_local_mux_2    : 1   1   1   1   1   1   
+ptran_dpe_local_mux_L2 : 1   1   1   1   1   1   
+rest_dpe_local_mux     : 1   1   1   1   1   1   
+
+
+TOTALS:
+Area		Delay		Cost
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+1211.281	1.8895e-10	0.22887
+
+Evaluating termination conditions...
+Algorithm is terminating: maximum number of iterations has been reached (6)
+
+FPGA transistor sizing complete!
+
+|--------------------------------------------------------------------------------------------------|
+|    Area and Delay Report                                                                         |
+|--------------------------------------------------------------------------------------------------|
+
+  SUBCIRCUIT AREA, DELAY & POWER
+  ------------------------------
+  Subcircuit                    Area (um^2)  Delay (ps)   tfall (ps)   trise (ps)   Power at 250MHz (uW)  
+  sb_mux                        1.407        181.6        181.6        116.5        15.49                 
+  sb_mux(with sram)             2.491        181.6        181.6        116.5        15.49                 
+  cb_mux                        2.621        145.1        145.1        91.1         3.422
+  cb_mux(with sram)             4.517        145.1        145.1        91.1         3.422
+  local_mux                     2.168        55.9         32.65        55.9         0.3863
+  local_mux(with sram)          3.928        55.9         32.65        55.9         0.3863
+  local_ble_output(with sram)   0.453        135.5        135.5        121.3        2.826
+  general_ble_output(with sram) 0.469        59.02        52.97        59.02        2.132
+  ff                            1.228        n/a          n/a          n/a          n/a
+  lut (with sram)               25.69        454.2        140.8        454.2        n/a                   
+  lut_a                         n/a          453.3        453.3        133.7        2.709                 
+  lut_a_driver                  0.093        40.41        27.94        40.41        0.8381                
+  lut_a_driver_not              0.166        42.97        37.71        42.97        0.8334                
+  lut_b                         n/a          454.0        454.0        131.9        2.698                 
+  lut_b_driver                  0.093        33.71        22.55        33.71        0.6304                
+  lut_b_driver_not              0.166        34.85        34.29        34.85        0.6651                
+  lut_c                         n/a          438.6        438.6        121.1        2.643                 
+  lut_c_driver                  0.377        72.08        63.37        72.08        1.182                 
+  lut_c_driver_not              0.166        74.78        74.78        74.2         0.5735                
+  lut_d                         n/a          288.7        288.7        79.06        1.91                  
+  lut_d_driver                  0.093        29.61        19.19        29.61        0.5032                
+  lut_d_driver_not              0.166        32.07        32.07        30.16        0.563                 
+  lut_e                         n/a          288.0        288.0        73.95        1.833                 
+  lut_e_driver                  0.093        28.29        18.12        28.29        0.4625                
+  lut_e_driver_not              0.166        31.33        31.33        28.64        0.5306                
+  lut_f                         n/a          275.1        275.1        60.04        1.723                 
+  lut_f_driver                  0.093        27.69        17.64        27.69        0.4421                
+  lut_f_driver_not              0.166        31.01        31.01        27.89        0.5145                
+  dpe mux                     2.386        79.75        70.4         79.75        0.6546                
+
+
+  General routing metal pitch  = 0.0 nm
+  General routing metal layers  = 0
+  
+  TILE AREA CONTRIBUTIONS
+  -----------------------
+  Block             Total Area (um^2)   Fraction of total tile area
+  Tile              1211.281            100%
+  LUT               275.292             22.727%
+  FF                12.275              1.013%
+  BLE output        18.444              1.523%
+  Local mux         235.707             19.459%
+  Connection block  271.038             22.376%
+  Switch block      398.525             32.901%
+  Non-active        0.0                 0.0%
+
+  HARDBLOCK INFORMATION
+  ---------------------
+  Name: dpe
+  Core area: 0.0
+  Local mux area: 48.4871971812
+  Local mux area with sram: 112.151517181
+  Total area: 112.151517181
+
+  VPR DELAYS
+  ----------
+  Path                                            Delay (ps)
+  Tdel (routing switch)                           1.816e-10
+  T_ipin_cblock (connection block mux)            1.451e-10
+  CLB input -> BLE input (local CLB routing)      5.59e-11
+  LUT output -> BLE input (local feedback)        1.355e-10
+  LUT output -> CLB output (logic block output)   5.902e-11
+  lut_a                                           4.9627e-10
+  lut_b                                           4.8885e-10
+  lut_c                                           5.1338e-10
+  lut_d                                           3.2077e-10
+  lut_e                                           3.1933e-10
+  lut_f                                           3.0611e-10
+
+  VPR AREAS
+  ----------
+  grid_logic_tile_area                            15996.8652351
+  ipin_mux_trans_size (connection block mux)      1.25595750289
+  mux_trans_size (routing switch)                 1.50823186576
+  buf_size (routing switch)                       13.7060958367
+
+  SUMMARY
+  -------
+  Tile Area                            1211.28 um^2
+  Representative Critical Path Delay   188.95 ps
+  Cost (area^1 x delay^2)              0.22887
+
+|--------------------------------------------------------------------------------------------------|
+
+Number of HSPICE simulations performed: 12478
+Total time elapsed: 0 hours 15 minutes 0 seconds
+
+=== exit_code: 0 | end_utc: 2026-09-30T19:40:38Z
