@@ -22,6 +22,7 @@ sys.path.insert(0, str(V3 / "oracle"))
 import attention_ref as aref  # noqa: E402  (the oracle: used here only, never by the model)
 
 from simulator.core.engine import portWords, run  # noqa: E402
+from simulator.core.records import planeWords  # noqa: E402
 from simulator.models.attentionHead import AttentionHeadParams, attentionHead, headParams  # noqa: E402
 
 
@@ -84,18 +85,6 @@ def runCase(case: Case) -> dict:
     return dict(report=rep, parts=parts, oracle=oracle)
 
 
-def hexWord(values, bits: int = 8) -> str:
-    v = 0
-    for j, x in enumerate(values):
-        v |= (int(x) & ((1 << bits) - 1)) << (bits * j)
-    return f"{v:x}"
-
-
-def words(values, nWords: int) -> list:
-    v = [int(x) for x in np.asarray(values).reshape(-1)] + [0] * (5 * nWords - np.size(values))
-    return [hexWord(v[5 * k:5 * k + 5]) for k in range(nWords)]
-
-
 def defines(case: Case) -> dict:
     hp = case.params
     keys = dict(NSEQ="NSEQ", DM="DM", D="D", BKV="BKV", R="R", C="C", NEXP="N_EXP", NE="N_E", NEP="N_EP", NOC="N_OC",
@@ -108,7 +97,7 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
     r = runCase(case)
     rep, parts = r["report"], r["parts"]
     hp = case.params
-    n, P_PROJ, V, R, LOADX, LW = hp.NSEQ, hp.P_PROJ, hp.V, hp.R, hp.LOADX, parts["acc"].d.LW
+    n, P_PROJ, V, R = hp.NSEQ, hp.P_PROJ, hp.V, hp.R
     creditTimes = {}
     for e in rep.events:
         if e.kind == "cr":
@@ -126,17 +115,18 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
             burst[(int(e.instance[1:]), e.unit)] = e.time
     padded = np.zeros((n, V * R), dtype=np.int64)
     padded[:, :hp.DM] = np.asarray(case.X, dtype=np.int64)
-    with open(out / "x_win.txt", "w") as f:          # sorted by copy, then token: t copy token, then V x LOADX words
+    with open(out / "x_win.txt", "w") as f:          # sorted by copy, then token: t copy token, then V x 8 plane words
         for copy in range(P_PROJ):
             for k in range(hp.T_X):
                 t = copy + k * P_PROJ
-                lanes = [w for v in range(V) for w in words(padded[t, v * R:v * R + hp.ROWS_X], LOADX)]
+                lanes = [f"{x:x}" for v in range(V)
+                         for x in planeWords(padded[t, v * R:v * R + hp.ROWS_X], 8, hp.ROWS_X, hp.P)]
                 f.write(f"{burst[(copy, k)]} {copy} {k} " + " ".join(lanes) + "\n")
-    nOc = hp.N_OC
-    with open(out / "o_win.txt", "w") as f:          # E9 (values == the oracle's O8, GATE 1): t run wave, LW words
+    width = hp.N_OC * hp.I
+    with open(out / "o_win.txt", "w") as f:          # E9 (values == the oracle's O8, GATE 1): t run wave, 8 plane words
         for w in sorted(parts["sink"].received, key=lambda w: (w.unit, w.window)):
-            v = np.asarray(w.values).reshape(LW, 5 * nOc)
-            f.write(f"{w.time} {w.unit} {w.window} " + " ".join(hexWord(v[k]) for k in range(LW)) + "\n")
+            f.write(f"{w.time} {w.unit} {w.window} " + " ".join(f"{x:x}" for x in planeWords(w.values, 8, width, hp.P))
+                    + "\n")
     (out / "start.txt").write_text(f"{case.tStart} {parts['ctrl'].done}\n")
     (out / "events.txt").write_text("".join(line + "\n" for line in rep.eventLines()))
     plusargs = dict(NBUR=n, TMAX=rep.cycles + 5000, NOWIN=len(parts["sink"].received))     # NOWIN: E9 windows

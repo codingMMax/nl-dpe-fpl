@@ -1,16 +1,18 @@
-"""softmaxOnline.py — behavior model of `softmax_online_top` (the online softmax), contract `ip/softmax/spec.md`.
+"""softmaxOnline.py — behavior model of `softmax_online_top` (the online softmax), contract `ip/softmax/spec.md` (the
+bit-plane pass, 2026-10-22: plane words on every port, a double corner-turn instead of the packer, one EXP burst per
+E5 window, E6 and E7 as plane windows).
 
 One execution gives the values, the cycle of every port event and the counts (docs/simulator.md §1). The model is the
 blocks of spec §4, each a stage (simulator/core/stages.py) or a crossbar (simulator/core/crossbar.py):
-  reader              the tile reader (Serial): one FIFO word per cycle, a word readable FIFO_LAT after it arrived
-  packer              window words -> the core's stream words (Repack)
+  reader              the tile reader (Serial): one FIFO plane per cycle, a plane readable FIFO_LAT after it arrived;
+                      a window's P core words (Q_W bytes each) leave the corner-turn from CT_LAT after its last plane
   exp                 the N_EXP EXP crossbars (I x I); carryExp, carryLog: the carry crossbars (S x S)
-The core's timing is the v2 recurrence (v2 `softmax_online_sim.softmax_online_cycle_model`, RTL-pinned) driven by the
-stream word times instead of a fixed start; its values go through the crossbars (`SoftmaxMath`).
+The core's timing is v2's recurrence on the bit-plane pass (spec §5), driven by the stream word times; its values go
+through the crossbars (`SoftmaxMath`).
 Processes (one step per unit):
   arm    a run's start pulse -> the arm time
-  tile   an input tile: the gate, the reads, the packer, s_cr
-  blk    a block: the EXP passes (the lp windows), the row sums, the carry passes, the la rows, the retire
+  tile   an input tile: the gate, the reads, the corner-turn, s_cr
+  blk    a block: the EXP passes (the lp windows), the row sums, the carry passes, the la window, the retire
   run    a run's end: the log l read-out (the ll window), done, the start port's credit (busy falling)
 """
 from __future__ import annotations
@@ -19,28 +21,32 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from simulator.core.cycleMath import ceilDiv, clog2, isPowerOfTwo, readyAt
+from simulator.core.cycleMath import clog2, isPowerOfTwo, readyAt
 from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
-from simulator.core.records import PortSpec, Step
-from simulator.core.stages import Repack, Serial
+from simulator.core.records import PortSpec, Step, planePort
+from simulator.core.stages import Serial
 from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, Crossbar
 
 # named latencies (spec §5)
-FIFO_LAT = 1        # an input word valid at t can be read from t + 1
+FIFO_LAT = 1        # an input plane valid at t can be read from t + 1
 CR_IN_LAT = 1       # a credit pulse at t counts for the gates from t + 1
 RET_LAT = 1         # a block retired at t counts for the store-slot gate from t + 1
 ARM_LAT = 2         # start taken at t: the run is armed from t + 2
 OPEN_LAT = 1        # the reader opens a tile one cycle after its decision
-PACK_LAT = 2        # a read at r -> its completed stream word at the core at r + 2
+CT_LAT = 2          # a window's last plane read at r -> its first core word at r + 2 (registered read, corner-turn)
 SCR_LAT = 1         # s_cr one cycle after a tile's last read
-MAX_LAT, FEED_LAT, SP_LAT, WAIT_LAT, GO_LAT = 4, 9, 2, 1, 4     # the v2 core
-LA_EV_LAT = 5       # the stream word completing a row -> the row's log a on la_v
-E7_LAT = 3          # the log l read-out decided at t -> its first word at t + 3
-DONE_LAT = 1        # the last log l word -> done
+MAX_REG = 2         # MAX_LAT = log2 min(Q_W, BKV) + MAX_REG: the input register, the running max with m
+FEED_REG = 2        # FEED_LAT = MAX_LAT + P + FEED_REG: the registered read, the registered s - m_new and clamp
+SP_LAT = 3          # the last EXP drain plane -> the row sums (count register, weighted add, sum register)
+WAIT_LAT = 1        # the registered carry decision
+GO_LAT = 2          # a carry input from the tables (registered), then its plane register
+E_LAT = 1           # the carry-EXP's last drain plane -> e whole
+LA_LAT = 1          # m_new -> the E6 window's first plane (the registered m - m_new)
+E7_LAT = 2          # the log l read-out decided at t -> its first plane at t + 2
+DONE_LAT = 1        # the last log l plane -> done
 GO_CR_LAT = 1       # done -> busy falls (the start port's credit)
-EPS = 5             # int8 elements per 40-bit port word
 LP_FLOOR = -128     # log P = max(s - m_new, LP_FLOOR) (spec §1)
 
 
@@ -52,7 +58,6 @@ class SoftmaxOnlineParams:
     N: int | None = None
     R: int = 64
     C: int = 64
-    BUF: int = 40
     P: int = 8
     N_EXP: int = 2
     S_CH: int = 1
@@ -74,18 +79,16 @@ class SoftmaxOnlineDerived:
     BLKEL: int        # elements of a block, S BKV
     NWB: int          # windows per block, BLKEL / I
     PW: int           # windows per run, B NWB
-    LW: int           # words per window, ceil(8 I / BUF)
-    L_LAST: int       # elements of a window's last word
-    STREAM: int       # stream words per block, ceil(BLKEL / EPS)
+    Q_W: int          # bytes per core stream word, I / 8 (a window is P words)
+    STREAM: int       # core stream words per block, P NWB
     T_W: int          # tile windows per channel, NWB / S_CH
-    DF: int           # the input FIFO's depth (a power of two >= 2 T_W LW)
-    WL: int           # words of the carry walk, ceil(S / EPS)
+    DF: int           # the input FIFO's depth in plane words (a power of two >= 2 T_W P)
     NB: int           # banks of the log P store, max(2, N_EXP)
-    WPW: int          # words per window (LW)
     DW: int           # bank depth in windows
-    BDEPTH: int       # bank depth in words, DW LW
-    NWORDS: int       # words per tile, NWB LW
-    RK: tuple         # the stream word that completes row m, per row
+    BDEPTH: int       # bank depth in words of Q_W bytes, DW P
+    NWORDS: int       # plane words per tile, NWB P
+    MAX_LAT: int      # the block's last core word -> every m_new, log2 min(Q_W, BKV) + MAX_REG
+    FEED_LAT: int     # the block's last core word -> its EXP windows ready, MAX_LAT + P + FEED_REG
 
 
 class SoftmaxMath:
@@ -178,7 +181,7 @@ class SoftmaxMath:
 class SoftmaxOnline(Module):
     NAME = "softmax_online_top"
     PARAMS_CLASS = SoftmaxOnlineParams
-    BASIS = "rtl-pinned"           # GATE 2 2026-10-14: 18/18 corpus + 5/5 bring-up on 64x64, every event equal
+    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was GATE 2-pinned 2026-10-14
     STEP_METHODS = {"arm": "stepArm", "tile": "stepTile", "blk": "stepBlock", "run": "stepRunEnd"}
 
     @staticmethod
@@ -188,14 +191,15 @@ class SoftmaxOnline(Module):
         BLKEL = S * BKV
         NWB = BLKEL // I
         B = N // BKV
-        LW = ceilDiv(I * 8, p.BUF)
         T_W = NWB // p.S_CH if p.S_CH else 0
         NB = max(2, p.N_EXP)
         DW = (2 * NWB) // NB if 2 * NWB >= NB else 1
+        Q_W = I // 8
+        maxLat = clog2(min(Q_W, BKV)) + MAX_REG
         return SoftmaxOnlineDerived(
-            I=I, B=B, LN=clog2(N), BLKEL=BLKEL, NWB=NWB, PW=B * NWB, LW=LW, L_LAST=I - EPS * (LW - 1),
-            STREAM=ceilDiv(BLKEL, EPS), T_W=T_W, DF=1 << clog2(2 * T_W * LW), WL=ceilDiv(S, EPS), NB=NB, WPW=LW,
-            DW=DW, BDEPTH=DW * LW, NWORDS=NWB * LW, RK=tuple(((m + 1) * BKV - 1) // EPS for m in range(S)))
+            I=I, B=B, LN=clog2(N), BLKEL=BLKEL, NWB=NWB, PW=B * NWB, Q_W=Q_W, STREAM=p.P * NWB, T_W=T_W,
+            DF=1 << clog2(2 * T_W * p.P), NB=NB, DW=DW, BDEPTH=DW * p.P, NWORDS=NWB * p.P, MAX_LAT=maxLat,
+            FEED_LAT=maxLat + p.P + FEED_REG)
 
     @staticmethod
     def checkDomain(p: SoftmaxOnlineParams) -> None:
@@ -206,7 +210,7 @@ class SoftmaxOnline(Module):
             (all(isPowerOfTwo(x) for x in (S, BKV, N, I, p.N_EXP, p.S_CH)), "S, BKV, N, I, N_EXP, S_CH powers of two"),
             (8 <= S <= I, "8 <= S <= I"),
             (8 <= BKV <= min(N, I), "8 <= BKV <= min(N, I)"),
-            (p.BUF == 40, "BUF = 40"),
+            (p.P == 8, "P = 8"),
         ]
         if all(holds for holds, _ in rules):
             if S * BKV < I:
@@ -226,13 +230,12 @@ class SoftmaxOnline(Module):
         # the blocks (spec §4)
         R, C, I, S = p.R, p.C, d.I, p.S
         self.reader = Serial()
-        self.packer = Repack(([EPS] * (d.LW - 1) + [d.L_LAST]) * d.NWB, EPS, PACK_LAT)
         self.carryExtent = S if carryExtent is None else carryExtent     # the carry passes' extent (spec §1: S)
-        self.exp = [Crossbar(R, C, p.BUF, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes, withValues=withValues)
+        self.exp = [Crossbar(R, C, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes, withValues=withValues)
                     for _ in range(p.N_EXP)]
-        self.carryExp = Crossbar(R, C, p.BUF, p.P, mode="EXP", rowsUsed=self.carryExtent, colsUsed=self.carryExtent,
+        self.carryExp = Crossbar(R, C, p.P, mode="EXP", rowsUsed=self.carryExtent, colsUsed=self.carryExtent,
                                  modes=modes, withValues=withValues)
-        self.carryLog = Crossbar(R, C, p.BUF, p.P, mode="LOG", rowsUsed=self.carryExtent, colsUsed=self.carryExtent,
+        self.carryLog = Crossbar(R, C, p.P, mode="LOG", rowsUsed=self.carryExtent, colsUsed=self.carryExtent,
                                  modes=modes, withValues=withValues)
         # what the steps record
         self.startAt, self.armedAt = {}, {}        # run -> the start pulse, the arm time
@@ -243,21 +246,22 @@ class SoftmaxOnline(Module):
         self.resources.crossbars[("EXP", I, I)] += p.N_EXP
         self.resources.crossbars[("EXP", self.carryExtent, self.carryExtent)] += 1
         self.resources.crossbars[("LOG", self.carryExtent, self.carryExtent)] += 1
-        self.resources.memories[(d.DF, 40)] = p.S_CH
-        self.resources.memories[(d.BDEPTH, 8)] = d.NB * EPS
+        self.resources.memories[(d.DF, I)] = p.S_CH
+        self.resources.memories[(d.BDEPTH, I)] += d.NB                  # += : the same shape as a FIFO can occur
 
     # -- declaration --------------------------------------------------------------------------------------------
     def ports(self) -> dict:
         p, d = self.p, self.d
         return {
-            "s": PortSpec("s", "in", "push+credit", 8, EPS, d.I, p.S_CH, "tile", CAP=2, signals=("s_d", "s_v", "s_cr")),
+            "s": planePort("s", "in", "push+credit", 8, d.I, p.S_CH, "tile", p.P, CAP=2,
+                           signals=("s_d", "s_v", "s_cr")),
             "go": PortSpec("go", "in", "burst", 1, 1, 1, 1, "run", CAP=1, signals=("start", "busy")),
-            "lp": PortSpec("lp", "out", "push+credit", 8, EPS, d.I, p.N_EXP, "block", CAP=p.LP_CAP,
-                           signals=("lp_d", "lp_v", "lp_cr")),
-            "la": PortSpec("la", "out", "push+credit", 9, 1, 1, 1, "block b >= 1", CAP=p.LA_CAP,
-                           signals=("la_d", "la_v", "la_cr")),
-            "ll": PortSpec("ll", "out", "push+credit", 8, 1, p.S, 1, "run", CAP=p.LL_CAP,
-                           signals=("ll_d", "ll_v", "ll_cr")),
+            "lp": planePort("lp", "out", "push+credit", 8, d.I, p.N_EXP, "block", p.P, CAP=p.LP_CAP,
+                            signals=("lp_d", "lp_v", "lp_cr")),
+            "la": planePort("la", "out", "push+credit", 9, p.S, 1, "block b >= 1", p.P, CAP=p.LA_CAP,
+                            signals=("la_d", "la_v", "la_cr")),
+            "ll": planePort("ll", "out", "push+credit", 8, p.S, 1, "run", p.P, CAP=p.LL_CAP,
+                            signals=("ll_d", "ll_v", "ll_cr")),
         }
 
     def processes(self) -> dict:
@@ -304,21 +308,26 @@ class SoftmaxOnline(Module):
         tDecide = readyAt(self.reader.freeAt, self.armedAt[run], arrivals[0] + FIFO_LAT,
                           self.retireAt[tile - 2] + RET_LAT if b >= 2 else None,
                           None if lp is None else lp + CR_IN_LAT, None if la is None else la + CR_IN_LAT)
-        # the reads: from the cycle after the decision, one word per cycle once the word is in its FIFO
+        # the reads: from the cycle after the decision, one plane per cycle once the plane is in its FIFO
         reads = []
         tOpen = tDecide + OPEN_LAT
-        with label("stream"):                   # the score words: word c of window w in its FIFO, read one per cycle
+        with label("stream"):                   # the score planes: plane c of window w in its FIFO, read one per cycle
             for i in range(d.NWORDS):
-                w, c = divmod(i, d.LW)
+                w, c = divmod(i, p.P)
                 reads.append(self.reader.take(readyAt(arrivals[w] + c + FIFO_LAT, tOpen if i == 0 else None)))
-            stream = self.packer.times(reads)                          # the core's stream words, one per cycle
+        # the corner-turn: window w's P core words from CT_LAT after its last plane's read, one per cycle
+        stream = []
+        for w in range(d.NWB):
+            tWord = reads[w * p.P + p.P - 1] + CT_LAT
+            with label("stream"):
+                stream += [tWord + c for c in range(p.P)]
         self.readTimes[tile] = reads
         io.giveCredit("s", tile, reads[-1] + SCR_LAT)
         self.streamTimes[tile], self.lastStreamWord[tile] = stream, stream[-1]
         if self.math:
             self.math.storeTile(tile, windows)
         self.counts.fifoWords += d.NWORDS
-        fifoBytes = d.NWORDS * ceilDiv(p.BUF, 8)                       # FIFO traffic: each word written once, read once
+        fifoBytes = d.NWORDS * d.Q_W                                   # FIFO traffic: each plane written once, read once
         self.counts.memWriteBytes += fifoBytes
         self.counts.memReadBytes += fifoBytes
         return Step("tile", tile, tDecide, int(reads[0]), int(reads[-1]) + 1,
@@ -336,36 +345,36 @@ class SoftmaxOnline(Module):
         passes, logPWindows = [], []
         for w in range(d.NWB):
             lane = (b * d.NWB + w) % p.N_EXP
-            xbarPass = self.exp[lane].run(math.expInput(w) if math else None, lastStreamWord + FEED_LAT)
+            xbarPass = self.exp[lane].run(math.expInput(w) if math else None, lastStreamWord + d.FEED_LAT)
             passes.append(xbarPass.events)
             logPWindows.append((lane, w, xbarPass.events["load_start"], math.logPWindow(w) if math else None))
             if math:
                 math.collectExp(w, xbarPass.out)
-        # the row sums are complete with the block's last drain word (+ SP_LAT); the carry waits for them, the row
+        # the row sums are complete with the block's last drain plane (+ SP_LAT); the carry waits for them, the row
         # maxima and the previous block's retire
-        with label("dpe_drain"):                                     # each pass's last drain word
-            lastDrain = [e["drain_start"] + d.LW - 1 for e in passes]
+        with label("dpe_drain"):                                     # each pass's last drain plane
+            lastDrain = [e["drain_start"] + p.P - 1 for e in passes]
         sumsDone = readyAt(*lastDrain) + SP_LAT
-        wait = readyAt(sumsDone, lastStreamWord + MAX_LAT, self.retireAt[block - 1] if b else None) + WAIT_LAT
-        walk = d.WL                          # the walk's words; the carry drain word with row S - 1 is word WL - 1
-        carryExpLast = None
+        wait = readyAt(sumsDone, lastStreamWord + d.MAX_LAT, self.retireAt[block - 1] if b else None) + WAIT_LAT
+        carryExpLast = carryExpEvents = None
         if b == 0:
-            logReady = wait + walk + GO_LAT
+            logReady = wait + GO_LAT
         else:
             xbarPass = self.carryExp.run(math.carryExpInput(run) if math else None, wait + GO_LAT)
-            with label("dpe_drain"):                                 # the carry-EXP drain walk
-                carryExpLast = xbarPass.events["drain_start"] + walk - 1
-            logReady = carryExpLast + GO_LAT
+            carryExpEvents = xbarPass.events
+            with label("dpe_drain"):                                 # the carry-EXP's drain planes
+                carryExpLast = xbarPass.events["drain_start"] + p.P - 1
+            logReady = carryExpLast + E_LAT + GO_LAT
             if math:
                 math.collectCarryExp(xbarPass.out)
         xbarPass = self.carryLog.run(math.carryLogInput(b) if math else None, logReady)
-        with label("dpe_drain"):                                     # the carry-LOG drain walk
-            retire = xbarPass.events["drain_start"] + walk - 1
+        with label("dpe_drain"):                                     # the carry-LOG's drain planes into the log l table
+            retire = xbarPass.events["drain_start"] + p.P - 1
         self.retireAt[block] = retire
         if math:
             math.finishBlock(run, xbarPass.window)
         return dict(lp=logPWindows, a_last=lastStreamWord, sp_done=sumsDone, wait=wait, cexp_last=carryExpLast,
-                    retire=retire, passes=passes)
+                    retire=retire, passes=passes, carry_exp=carryExpEvents, carry_log=xbarPass.events)
 
     def stepBlock(self, block: int, io) -> Step:
         p, d = self.p, self.d
@@ -374,11 +383,9 @@ class SoftmaxOnline(Module):
         for lane, w, t, values in o["lp"]:
             io.emit("lp", lane, block, w, t, values)
         unit = self.alphaUnit(block)
-        if unit is not None:
-            logAlpha = self.math.blockLogAlpha() if self.math else None
-            for m in range(p.S):
-                io.emit("la", 0, unit, m, self.streamTimes[block][d.RK[m]] + LA_EV_LAT,
-                        None if logAlpha is None else np.array([logAlpha[m]], dtype=np.int64))
+        if unit is not None:                                           # the block's log a: one window of S rows
+            io.emit("la", 0, unit, 0, lastWord + d.MAX_LAT + LA_LAT,
+                    self.math.blockLogAlpha().copy() if self.math else None)
         for crossbar in self.exp + [self.carryExp, self.carryLog]:
             self.counts.passes.update(crossbar.passes)
             crossbar.passes.clear()
@@ -388,8 +395,9 @@ class SoftmaxOnline(Module):
         self.counts.clbSelect += elements + 2 * p.S
         self.counts.memWriteBytes += elements
         self.counts.memReadBytes += elements
-        return Step("blk", block, lastWord, lastWord + FEED_LAT, o["retire"] + 1,
-                    {key: o[key] for key in ("a_last", "sp_done", "wait", "cexp_last", "retire", "passes")})
+        return Step("blk", block, lastWord, lastWord + d.FEED_LAT, o["retire"] + 1,
+                    {key: o[key] for key in ("a_last", "sp_done", "wait", "cexp_last", "retire", "passes", "carry_exp",
+                                             "carry_log")})
 
     def stepRunEnd(self, run: int, io) -> Step:
         p, d = self.p, self.d
@@ -398,8 +406,8 @@ class SoftmaxOnline(Module):
         tD7 = readyAt(coreDone, None if credit is None else credit + CR_IN_LAT)   # the log l read-out: an ll credit
         tE7 = tD7 + E7_LAT
         io.emit("ll", 0, run, 0, tE7, self.math.logL[run].copy() if self.math else None)
-        with label("stream"):                                        # the ll window's S words
-            lastLl = tE7 + p.S - 1
+        with label("stream"):                                        # the ll window's planes
+            lastLl = tE7 + p.P - 1
         done = lastLl + DONE_LAT
         self.coreDoneAt[run], self.doneAt[run] = coreDone, done
         io.giveCredit("go", run, done + GO_CR_LAT)

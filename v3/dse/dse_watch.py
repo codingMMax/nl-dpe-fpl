@@ -174,8 +174,9 @@ def report(pid: int, t0: float, n: int, final: bool, csv_path: Path = D.CSV_PATH
     complete = [r for r in cur if r.get("ok") == "1" and r.get("seeds") == "11;13;17"]
     synth_done = len(ev["synth_ok"]) + len(ev["synth_cached"])
     vpr_done = len(ev["vpr_ok"]) + len(ev["vpr_fail"])
-    L.append(f"done: {len(complete)} / 72 builds complete (3 seeds counted) | syntheses {synth_done} / 72 | "
-             f"VPR seeds {vpr_done + len(ev['vpr_skip'])} / 216 (this run {vpr_done}, skipped as finished "
+    L.append(f"done: {len(complete)} / {len(builds)} builds complete (3 seeds counted) | syntheses {synth_done} / "
+             f"{len(builds)} | VPR seeds {vpr_done + len(ev['vpr_skip'])} / {3 * len(builds)} (this run {vpr_done}, "
+             f"skipped as finished "
              f"{len(ev['vpr_skip'])}, not counted {len(ev['not_counted'])})")
     tree = process_tree(pid) if alive(pid) else []
 
@@ -186,7 +187,7 @@ def report(pid: int, t0: float, n: int, final: bool, csv_path: Path = D.CSV_PATH
     abc = [(build_of(c), age) for (_, comm, _, c, age) in tree if comm == "abc"]
     vpr = [(build_of(c), age) for (_, comm, _, c, age) in tree if comm == "vpr"]
     ours = sum(rss for (_, _, rss, _, _) in tree)
-    wait_syn = 72 - len(ev["synth_start"]) - len(ev["synth_cached"])
+    wait_syn = len(builds) - len(ev["synth_start"]) - len(ev["synth_cached"])
     queued = 3 * synth_done - len(ev["vpr_skip"])
     L.append(f"running: {len(parmys) + len(abc)} syntheses ({len(parmys)} in Parmys, {len(abc)} in ABC), {len(vpr)} VPR"
              f" | waiting: {max(0, wait_syn)} syntheses, {max(0, queued - len(ev['vpr_start']))} VPR seeds")

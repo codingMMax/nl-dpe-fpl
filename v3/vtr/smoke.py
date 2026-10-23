@@ -66,7 +66,8 @@ def _acc_points() -> dict:
     }
 
 
-HEAD_KEYS = ("NSEQ", "DM", "D", "BKV", "R", "C", "BUF", "P", "N_EXP", "N_E", "N_EP", "N_OC", "P_PROJ", "X_S")
+HEAD_KEYS = ("NSEQ", "DM", "D", "BKV", "R", "C", "P", "N_EXP", "N_E", "N_EP", "N_OC", "P_PROJ", "X_S")   # BUF left the
+#   model 2026-10-22 (the bit-plane pass); the 40-bit RTL keeps its default until the RTL pass
 
 
 def head_point(hp) -> dict:

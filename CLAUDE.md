@@ -67,7 +67,7 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
 ## Repo map
 | Path | Role |
 |------|------|
-| `v3/` | **LIVE.** `docs/` (experiment, architecture, simulator, mapping_tiling; `architecture_page/`) · `ip/{xbar,gemm,dimm,softmax,lib}` (RTL per module: `rtl/{sim,vtr}`, `tb/`, `spec.md`) · `top/` (`att_ctrl`, `att_head`) · `oracle/` (numpy oracles; `v2_kernels/` = test references, never models) · `simulator/` (the behavior-model package) · `vtr/` (the generic flow: 12 arch XMLs, `clock.sdc`, `run_vtr.py`, `smoke.py`) · `dse/` (`README.md` + `run_all.sh`, `space.py`, `vtr_dse.py` = the VTR run of the builds and its CSV, the collecting and plotting scripts, `results/{adp,edap}`) · `tools/` (gates) · `work/` (runs and logs, gitignored) |
+| `v3/` | **LIVE.** `docs/` (experiment, architecture, simulator, mapping_tiling, mapping_sensitivity, attention_stages; `architecture_page/`) · `ip/{xbar,gemm,dimm,softmax,lib}` (RTL per module: `rtl/{sim,vtr}`, `tb/`, `spec.md`) · `top/` (`att_ctrl`, `att_head`) · `oracle/` (numpy oracles; `v2_kernels/` = test references, never models) · `simulator/` (the behavior-model package) · `vtr/` (the generic flow: 12 arch XMLs, `clock.sdc`, `run_vtr.py`, `smoke.py`) · `dse/` (`README.md` + `run_all.sh`, `space.py`, `vtr_dse.py` = the VTR run of the builds and its CSV, the collecting and plotting scripts, `results/{adp,edap}`) · `tools/` (gates) · `work/` (runs and logs, gitignored) |
 | `memory.md` | durable repo facts, settled decisions, pitfalls |
 | `rtl_flow/` | legacy v1 flow, frozen reference |
 | `softmax_study/` | safe-softmax RTL + VTR + energy study (complete) |
@@ -77,31 +77,46 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
 | `archive/` | reference only |
 
 ## The v3 experiment in numbers
-- 12 configs: $R \in \{128, 256, 512, 1024\} \times C \in \{64, 128, 256\}$, $I = \min(R, C)$; `BUF` = 40 bits (a crossbar
-  loads 5 B per cycle), `P` = 8.
+- 8 configs (2026-10-22): $R \in \{128, 256, 512\}$, $C \in \{64, 128, 256\}$, $C \le R$, so $I = \min(R, C) = C$.
+  - 64×64 is the RTL's functional-validation size only (GATE 2), and 256×128 is the VTR smoke point.
+  - Until 2026-10-22 there were 12 configs, with $R$ up to 1024.
+  - `BUF` = 40 bits (a crossbar loads 5 B per cycle), `P` = 8.
 - FC: four GEMMs $(K, N) \in \{(512,128), (2048,256), (256,512), (512,512)\}$, $V = \lceil K/R \rceil$,
-  $H = \lceil N/C \rceil$, batch 1, used pass extent (P29). Its 48 rows use v2's VTR run (`v3/dse/results/fc_vtr_results.csv`, not
+  $H = \lceil N/C \rceil$, batch 1, used pass extent (P29). Its rows (32 on the 8 configs) use v2's VTR run (`v3/dse/results/fc_vtr_results.csv`, not
   re-run), priced by the v3 model into `fc_priced_results.csv`; v2's own rows are the regression reference in
   `v3/simulator/tests/ref/`.
-- Attention: one head, six shapes (`v3/dse/space.py`), 72 builds. One fixed mapping: $P_{proj} = 1$, $N_E = N_{EP} = 2d$,
+- Attention: one head, six shapes (`v3/dse/space.py`), 48 builds (72 on the 12 configs of the 2026-10-15/16 VTR run). One fixed mapping: $P_{proj} = 1$, $N_E = N_{EP} = 2d$,
   $N_{EXP} = 2$, $N_{OC}$ by the floor rule (2–8), $B_{kv} = 16$, $X_S = 16$, $B_q = S$.
 - Cycles: the simulator's compute cycles, weights preloaded, $T = t_{done} - t_{start}$ (pinned to the RTL by the gates).
   Energy: frozen per-operation prices (`simulator/platform/nl_dpe.json`). Area:
   $A = (\mathrm{clb} + \sum_{wc} W H + 2\,\mathrm{mem}) \times 66{,}117$ MWTA from VPR's counts (the routing-aware CLB tile
   is 2239 µm²; 1 MWTA = 0.033864 µm²). Fmax: VTR, the mean of seeds {11, 13, 17}, channel width 300, `vtr/clock.sdc`
   (I/O-excluding).
-- Results (2026-10-16): the FC front is 512×128 → 256×128 → 256×64 → 128×64 (a real area/latency trade-off); attention's
-  front is 128×64 alone; across the families the front is 256×128, 256×64, 128×64, where 128×64 and 256×64 tie and 256×64
-  is the balanced choice. The large configs are never competitive (`v3/docs/experiment.md` §8–§9).
+- Crossbar tile $W \times H$: the row-parallel rule of 2026-10-22 (`v3/docs/experiment.md` §5.1,
+  `simulator/platform/area.py footprint`).
+  - $H = \lceil \max(R + 7, C + 5) / 60 \rceil$ and $W = \lceil (A_{logic} + A_{xbar}) / (2239\,H) \rceil$, where $A_{xbar}$
+    is COFFE's local input crossbar.
+  - The v2 regression tests keep the legacy tiles (`rule="legacy"`).
+  - The row-parallel arch XMLs are staged in `vtr/arch_rowpar/` (`vtr/gen_arch.py --check`); VTR still uses v2's
+    `vtr/arch/`.
+  - The simulator's cycles follow the bit-plane pass since 2026-10-22 (10 cycles per pass, 8 plane words per window;
+    `v3/ip/xbar/spec.md`; model-only until the RTL pass). The results below still carry the 40-bit cycles.
+- Results (2026-10-22; an area-only update, the cycles at the 40-bit ports):
+  - the FC front is 512×256 → 256×256 → 256×128 → 256×64 → 128×128 → 128×64;
+  - attention's front is 128×64 alone;
+  - across the families the front is 128×64 and 256×128 (256×64 left it).
+  - On 2026-10-16 (12 configs, legacy tiles) the FC front was 512×128 → 256×128 → 256×64 → 128×64, and the cross front
+    was 256×128, 256×64, 128×64.
+  - Details: `v3/docs/experiment.md` §8–§9.
 
 ## Commands (from the repo root; the full table is in `v3/README.md`)
 ```
 export PYTHONDONTWRITEBYTECODE=1 TMPDIR=$PWD/v3/work/tmp
-python3 v3/tools/f2_check.py                        # the 9 simulator tests, ~30 s
+python3 v3/tools/f2_check.py                        # the 10 simulator tests, ~40 s
 python3 v3/simulator/tests/checkEquivalence.py      # the simulator against the frozen pre-refactor outputs
 python3 v3/tools/copies.py; python3 v3/tools/check_twins.py; python3 v3/tools/lint_rtl.py; python3 v3/tools/check_head_params.py
 python3 v3/dse/vtr_dse.py --self-test               # the VTR driver with fake tools; the real run takes hours: user's go only
-bash v3/dse/run_all.sh                              # priced rows -> rankings -> breakdown -> figures -> pages (12 s; v3/dse/README.md)
+bash v3/dse/run_all.sh                              # priced rows -> rankings -> breakdown -> config tables + critical path -> figures -> pages (30 s; v3/dse/README.md)
 ```
 
 ## Context economy

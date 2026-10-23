@@ -25,16 +25,16 @@ def extent(K: int, N: int, R: int, C: int, passExtent: str) -> tuple:
     raise ValueError(f"passExtent must be 'full' or 'used', got {passExtent!r}")
 
 
-def fc(K: int, N: int, R: int, C: int, *, M: int = 1, platform=None, BUF: int = 40, P: int = 8,
-       passExtent: str = "used", W=None, X=None, withValues: bool = True, availableAt=0) -> Graph:
-    """X [M, K] int8 through W [K, N] int8 on R x C crossbars. With a platform, BUF, P and the output stage's modes are
-    the platform's."""
+def fc(K: int, N: int, R: int, C: int, *, M: int = 1, platform=None, P: int = 8, passExtent: str = "used", W=None,
+       X=None, withValues: bool = True, availableAt=0) -> Graph:
+    """X [M, K] int8 through W [K, N] int8 on R x C crossbars. With a platform, P and the output stage's modes are the
+    platform's."""
     modes = NL_DPE_MODES
     if platform is not None:
-        BUF, P = platform.portWidthBits, platform.inputBitSlices
+        P = platform.inputBitSlices
         modes = tuple(PLATFORM_MODES[m] for m in platform.modes)
     rowsUsed, colsUsed = extent(K, N, R, C, passExtent)
-    gemm = GemmTop("gemm", GemmParams(K=K, N=N, R=R, C=C, BUF=BUF, P=P, ROWS_USED=rowsUsed, COLS_USED=colsUsed),
+    gemm = GemmTop("gemm", GemmParams(K=K, N=N, R=R, C=C, P=P, ROWS_USED=rowsUsed, COLS_USED=colsUsed),
                    rows=M, weights=W, withValues=withValues, modes=modes)
     V, H = gemm.d.V, gemm.d.H
     payload = None

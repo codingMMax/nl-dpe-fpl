@@ -39,14 +39,14 @@ def corpus(rng) -> list:
     def qk(name, S, d, nE, pp=1, runs=1, blocks=1, cls="random", cCap=2, **kw):
         p = qkParams(S, d, 16, R, C, nE, pProj=pp, runs=runs, blocks=blocks, cCap=cCap)
         cases.append(randomCase(name, p, runs, blocks, qkJobs(runs, blocks), rng, cls=cls,
-                                aPeriod=kw.pop("aPeriod", convPeriod(d, C)), bPeriod=kw.pop("bPeriod", convPeriod(d, C)),
+                                aPeriod=kw.pop("aPeriod", convPeriod()), bPeriod=kw.pop("bPeriod", convPeriod()),
                                 **kw))
 
     def pv(name, S, d, nEp, pp=1, runs=1, blocks=2, cls="random", **kw):
         p = pvParams(S, d, 16, R, C, nEp, nExp=2, pProj=pp, blocks=blocks)
         cases.append(randomCase(name, p, runs * blocks, blocks, pvJobs(runs, blocks), rng, cls=cls,
-                                aPeriod=kw.pop("aPeriod", convPeriod(min(R, C), C)),
-                                bPeriod=kw.pop("bPeriod", convPeriod(d, C)), **kw))
+                                aPeriod=kw.pop("aPeriod", convPeriod()),
+                                bPeriod=kw.pop("bPeriod", convPeriod()), **kw))
 
     # QK: S x 16 x d, int8 rows (row frame), K rows transposed, NARROW 5
     qk("qk_d16_e16_1s", 32, 16, 16)                                   # 1 slice

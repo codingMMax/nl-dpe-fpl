@@ -121,7 +121,7 @@ class Engine:
             sa, sb = self.spec[a], self.spec[b]
             if sa.direction != "out" or sb.direction != "in" or "pulse" in (sa.discipline, sb.discipline):
                 raise EdgeError(f"edge {a} -> {b}: must connect a data output to a data input")
-            for k in ("E", "Q", "W"):
+            for k in ("E", "Q", "W", "planes"):
                 if getattr(sa, k) != getattr(sb, k):
                     raise EdgeError(f"edge {a} -> {b}: {k} {getattr(sa, k)} != {getattr(sb, k)}")
             if offset < 0 or offset + sa.L > sb.L:

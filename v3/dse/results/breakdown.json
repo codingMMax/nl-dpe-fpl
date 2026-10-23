@@ -2,7 +2,7 @@
  "fc": {
   "128x64": {
    "crossbars": 30,
-   "tile_cells": 5,
+   "tile_cells": 6,
    "clb_count": 4.75,
    "cycles": 52.25,
    "fmax_mhz": 378.86225,
@@ -10,9 +10,9 @@
    "pass_price_pj": 14.783150000000001,
    "pass_price_full_pj": 14.783150000000001,
    "area_split": {
-    "dpe": 0.9569377990430622,
-    "clb": 0.030303030303030304,
-    "mem": 0.012759170653907496,
+    "dpe": 0.963855421686747,
+    "clb": 0.025435073627844713,
+    "mem": 0.0107095046854083,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -25,7 +25,7 @@
   },
   "128x128": {
    "crossbars": 15,
-   "tile_cells": 11,
+   "tile_cells": 12,
    "clb_count": 3.75,
    "cycles": 65.25,
    "fmax_mhz": 401.67175,
@@ -33,9 +33,9 @@
    "pass_price_pj": 27.6655,
    "pass_price_full_pj": 27.6655,
    "area_split": {
-    "dpe": 0.9663250366032211,
-    "clb": 0.021961932650073207,
-    "mem": 0.01171303074670571,
+    "dpe": 0.9690444145356663,
+    "clb": 0.020188425302826378,
+    "mem": 0.010767160161507403,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -46,32 +46,9 @@
     "method": "share of the total summed over the shapes"
    }
   },
-  "128x256": {
-   "crossbars": 8,
-   "tile_cells": 21,
-   "clb_count": 3.25,
-   "cycles": 84.75,
-   "fmax_mhz": 438.13925,
-   "passes": 8,
-   "pass_price_pj": 53.430200000000006,
-   "pass_price_full_pj": 53.430200000000006,
-   "area_split": {
-    "dpe": 0.9696969696969697,
-    "clb": 0.01875901875901876,
-    "mem": 0.011544011544011544,
-    "method": "share of the total summed over the shapes"
-   },
-   "energy_split": {
-    "dpe": 0.7182772890154903,
-    "clb": 0.22391239389006826,
-    "traffic": 0.051904514916448145,
-    "mem": 0.005905802177993299,
-    "method": "share of the total summed over the shapes"
-   }
-  },
   "256x64": {
    "crossbars": 15,
-   "tile_cells": 6,
+   "tile_cells": 10,
    "clb_count": 11.5,
    "cycles": 77.25,
    "fmax_mhz": 400.71725000000004,
@@ -79,9 +56,9 @@
    "pass_price_pj": 17.99395,
    "pass_price_full_pj": 17.99395,
    "area_split": {
-    "dpe": 0.8737864077669902,
-    "clb": 0.11165048543689321,
-    "mem": 0.014563106796116505,
+    "dpe": 0.9202453987730062,
+    "clb": 0.0705521472392638,
+    "mem": 0.009202453987730062,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -94,7 +71,7 @@
   },
   "256x128": {
    "crossbars": 7.5,
-   "tile_cells": 12,
+   "tile_cells": 15,
    "clb_count": 5,
    "cycles": 90.25,
    "fmax_mhz": 440.25250000000005,
@@ -102,9 +79,9 @@
    "pass_price_pj": 32.1863,
    "pass_price_full_pj": 32.1863,
    "area_split": {
-    "dpe": 0.9326424870466321,
-    "clb": 0.05181347150259067,
-    "mem": 0.015544041450777202,
+    "dpe": 0.9453781512605042,
+    "clb": 0.04201680672268908,
+    "mem": 0.012605042016806723,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -117,7 +94,7 @@
   },
   "256x256": {
    "crossbars": 4,
-   "tile_cells": 24,
+   "tile_cells": 25,
    "clb_count": 3.75,
    "cycles": 109.75,
    "fmax_mhz": 450.607,
@@ -125,9 +102,9 @@
    "pass_price_pj": 60.571000000000005,
    "pass_price_full_pj": 60.571000000000005,
    "area_split": {
-    "dpe": 0.9481481481481482,
-    "clb": 0.037037037037037035,
-    "mem": 0.014814814814814815,
+    "dpe": 0.9501187648456056,
+    "clb": 0.035629453681710214,
+    "mem": 0.014251781472684086,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -140,7 +117,7 @@
   },
   "512x64": {
    "crossbars": 8.5,
-   "tile_cells": 8,
+   "tile_cells": 18,
    "clb_count": 19.5,
    "cycles": 114.75,
    "fmax_mhz": 392.045,
@@ -148,9 +125,9 @@
    "pass_price_pj": 23.46515,
    "pass_price_full_pj": 24.415550000000003,
    "area_split": {
-    "dpe": 0.7727272727272727,
-    "clb": 0.2215909090909091,
-    "mem": 0.005681818181818182,
+    "dpe": 0.884393063583815,
+    "clb": 0.11271676300578035,
+    "mem": 0.002890173410404624,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -163,7 +140,7 @@
   },
   "512x128": {
    "crossbars": 4.25,
-   "tile_cells": 15,
+   "tile_cells": 27,
    "clb_count": 6.5,
    "cycles": 127.75,
    "fmax_mhz": 444.539,
@@ -171,9 +148,9 @@
    "pass_price_pj": 40.2775,
    "pass_price_full_pj": 41.227900000000005,
    "area_split": {
-    "dpe": 0.901060070671378,
-    "clb": 0.09187279151943463,
-    "mem": 0.007067137809187279,
+    "dpe": 0.9425051334702259,
+    "clb": 0.053388090349075976,
+    "mem": 0.004106776180698152,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -186,7 +163,7 @@
   },
   "512x256": {
    "crossbars": 2.25,
-   "tile_cells": 30,
+   "tile_cells": 36,
    "clb_count": 4.5,
    "cycles": 147.25,
    "fmax_mhz": 450.607,
@@ -194,9 +171,9 @@
    "pass_price_pj": 73.90220000000001,
    "pass_price_full_pj": 74.85260000000001,
    "area_split": {
-    "dpe": 0.9310344827586207,
-    "clb": 0.06206896551724138,
-    "mem": 0.006896551724137931,
+    "dpe": 0.9418604651162791,
+    "clb": 0.05232558139534884,
+    "mem": 0.005813953488372093,
     "method": "share of the total summed over the shapes"
    },
    "energy_split": {
@@ -206,81 +183,12 @@
     "mem": 0.017368499590694964,
     "method": "share of the total summed over the shapes"
    }
-  },
-  "1024x64": {
-   "crossbars": 6.5,
-   "tile_cells": 11,
-   "clb_count": 19.25,
-   "cycles": 140,
-   "fmax_mhz": 357.7845,
-   "passes": 6.5,
-   "pass_price_pj": 30.605950000000004,
-   "pass_price_full_pj": 37.258750000000006,
-   "area_split": {
-    "dpe": 0.7835616438356164,
-    "clb": 0.21095890410958903,
-    "mem": 0.005479452054794521,
-    "method": "share of the total summed over the shapes"
-   },
-   "energy_split": {
-    "dpe": 0.796077226028047,
-    "clb": 0.021608847838484477,
-    "traffic": 0.16835029209304106,
-    "mem": 0.013963634040427473,
-    "method": "share of the total summed over the shapes"
-   }
-  },
-  "1024x128": {
-   "crossbars": 3.25,
-   "tile_cells": 21,
-   "clb_count": 6.5,
-   "cycles": 153,
-   "fmax_mhz": 400.4195,
-   "passes": 3.25,
-   "pass_price_pj": 52.658300000000004,
-   "pass_price_full_pj": 59.3111,
-   "area_split": {
-    "dpe": 0.9069767441860465,
-    "clb": 0.08637873754152824,
-    "mem": 0.006644518272425249,
-    "method": "share of the total summed over the shapes"
-   },
-   "energy_split": {
-    "dpe": 0.8420710420232722,
-    "clb": 0.026649566423678772,
-    "traffic": 0.1140584459636421,
-    "mem": 0.017220945589406893,
-    "method": "share of the total summed over the shapes"
-   }
-  },
-  "1024x256": {
-   "crossbars": 1.75,
-   "tile_cells": 40,
-   "clb_count": 4.5,
-   "cycles": 172.5,
-   "fmax_mhz": 450.607,
-   "passes": 1.75,
-   "pass_price_pj": 96.763,
-   "pass_price_full_pj": 103.4158,
-   "area_split": {
-    "dpe": 0.9333333333333333,
-    "clb": 0.06,
-    "mem": 0.006666666666666667,
-    "method": "share of the total summed over the shapes"
-   },
-   "energy_split": {
-    "dpe": 0.8776372375888968,
-    "clb": 0.028148510783533354,
-    "traffic": 0.07602468843094871,
-    "mem": 0.018189563196621263,
-    "method": "share of the total summed over the shapes"
-   }
   }
  },
  "attention": {
   "128x64": {
    "crossbars": 230.83333333333334,
-   "tile_cells": 5,
+   "tile_cells": 6,
    "clb_count": 10440.833333333334,
    "cycles": 12217.666666666666,
    "fmax_mhz": 130.33566666666667,
@@ -288,9 +196,9 @@
    "pass_price_pj": 13.846337168783782,
    "pass_price_full_pj": 14.783150000000001,
    "area_split": {
-    "dpe": 0.09268304110511003,
-    "clb": 0.8602534746256875,
-    "mem": 0.045800728937693776,
+    "dpe": 0.1091911879062486,
+    "clb": 0.8445638820476531,
+    "mem": 0.04496539981900341,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -304,7 +212,7 @@
   },
   "128x128": {
    "crossbars": 228.16666666666666,
-   "tile_cells": 11,
+   "tile_cells": 12,
    "clb_count": 12886.666666666666,
    "cycles": 12338,
    "fmax_mhz": 124.2385,
@@ -312,9 +220,9 @@
    "pass_price_pj": 27.58381714737315,
    "pass_price_full_pj": 27.6655,
    "area_split": {
-    "dpe": 0.1530280427447479,
-    "clb": 0.8119510283088217,
-    "mem": 0.033346554177667714,
+    "dpe": 0.1646384543622549,
+    "clb": 0.8007584531186384,
+    "mem": 0.03288687889928984,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -326,33 +234,9 @@
    },
    "used_cells": 1.0
   },
-  "128x256": {
-   "crossbars": 228.16666666666666,
-   "tile_cells": 21,
-   "clb_count": 12913.666666666666,
-   "cycles": 16148.666666666666,
-   "fmax_mhz": 122.52333333333334,
-   "passes": 32110,
-   "pass_price_pj": 53.34851672664461,
-   "pass_price_full_pj": 53.430200000000006,
-   "area_split": {
-    "dpe": 0.25604432311571834,
-    "clb": 0.7127687147205042,
-    "mem": 0.02922593953702977,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "energy_split": {
-    "dpe": 0.6954687085778494,
-    "clb": 0.24914891706482825,
-    "traffic": 0.04961606914918348,
-    "mem": 0.00512401354711561,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "used_cells": 0.5
-  },
   "256x64": {
    "crossbars": 227.33333333333334,
-   "tile_cells": 6,
+   "tile_cells": 10,
    "clb_count": 10425,
    "cycles": 14435.833333333334,
    "fmax_mhz": 130.55833333333334,
@@ -360,9 +244,9 @@
    "pass_price_pj": 15.164254530202223,
    "pass_price_full_pj": 17.99395,
    "area_split": {
-    "dpe": 0.10811039280101231,
-    "clb": 0.8457003462753062,
-    "mem": 0.04494575121289365,
+    "dpe": 0.1680511110965136,
+    "clb": 0.7887542307307612,
+    "mem": 0.04191928214133836,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -376,7 +260,7 @@
   },
   "256x128": {
    "crossbars": 224.66666666666666,
-   "tile_cells": 12,
+   "tile_cells": 15,
    "clb_count": 12892,
    "cycles": 13727.166666666666,
    "fmax_mhz": 126.32666666666667,
@@ -384,9 +268,9 @@
    "pass_price_pj": 30.234344245994535,
    "pass_price_full_pj": 32.1863,
    "area_split": {
-    "dpe": 0.16293183148246582,
-    "clb": 0.8025026289970015,
-    "mem": 0.03294508752209475,
+    "dpe": 0.19566242253820793,
+    "clb": 0.7709708142560564,
+    "mem": 0.031650614010314125,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -400,7 +284,7 @@
   },
   "256x256": {
    "crossbars": 225.33333333333334,
-   "tile_cells": 24,
+   "tile_cells": 25,
    "clb_count": 17521.166666666668,
    "cycles": 16833.333333333332,
    "fmax_mhz": 114.37316666666668,
@@ -408,9 +292,9 @@
    "pass_price_pj": 60.16702080368982,
    "pass_price_full_pj": 60.571000000000005,
    "area_split": {
-    "dpe": 0.2250738984397548,
-    "clb": 0.7482725763826434,
-    "mem": 0.025168642826387935,
+    "dpe": 0.23226605968133857,
+    "clb": 0.7412960415456595,
+    "mem": 0.0249339824646161,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -424,7 +308,7 @@
   },
   "512x64": {
    "crossbars": 226.33333333333334,
-   "tile_cells": 8,
+   "tile_cells": 18,
    "clb_count": 10423.833333333334,
    "cycles": 17699.5,
    "fmax_mhz": 129.84583333333333,
@@ -432,9 +316,9 @@
    "pass_price_pj": 17.79710465447596,
    "pass_price_full_pj": 24.415550000000003,
    "area_split": {
-    "dpe": 0.13877522070641252,
-    "clb": 0.8165200482925843,
-    "mem": 0.04347665168946931,
+    "dpe": 0.2660345342496412,
+    "clb": 0.6956814517022614,
+    "mem": 0.03704244644786179,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -448,7 +332,7 @@
   },
   "512x128": {
    "crossbars": 223.66666666666666,
-   "tile_cells": 15,
+   "tile_cells": 27,
    "clb_count": 12869,
    "cycles": 16990.833333333332,
    "fmax_mhz": 120.25433333333334,
@@ -456,9 +340,9 @@
    "pass_price_pj": 35.50433869252178,
    "pass_price_full_pj": 41.227900000000005,
    "area_split": {
-    "dpe": 0.19533990654997344,
-    "clb": 0.7712340526017485,
-    "mem": 0.031710495550013644,
+    "dpe": 0.3039505666462495,
+    "clb": 0.6666926596634615,
+    "mem": 0.02741211250484276,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -472,7 +356,7 @@
   },
   "512x256": {
    "crossbars": 224.33333333333334,
-   "tile_cells": 30,
+   "tile_cells": 36,
    "clb_count": 17532.333333333332,
    "cycles": 20097,
    "fmax_mhz": 113.51166666666667,
@@ -480,9 +364,9 @@
    "pass_price_pj": 70.72111878000652,
    "pass_price_full_pj": 74.85260000000001,
    "area_split": {
-    "dpe": 0.26553751929370734,
-    "clb": 0.7090898970587973,
-    "mem": 0.023838695226670613,
+    "dpe": 0.3025309991129049,
+    "clb": 0.6732308978051466,
+    "mem": 0.022633161544852697,
     "method": "geometric mean of the per-shape shares"
    },
    "energy_split": {
@@ -493,78 +377,6 @@
     "method": "geometric mean of the per-shape shares"
    },
    "used_cells": 0.5
-  },
-  "1024x64": {
-   "crossbars": 225.33333333333334,
-   "tile_cells": 11,
-   "clb_count": 10419.5,
-   "cycles": 20963.166666666668,
-   "fmax_mhz": 129.93783333333334,
-   "passes": 61115.5,
-   "pass_price_pj": 23.029762456133355,
-   "pass_price_full_pj": 37.258750000000006,
-   "area_split": {
-    "dpe": 0.18084734006809497,
-    "clb": 0.7765294002143285,
-    "mem": 0.041385468000704216,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "energy_split": {
-    "dpe": 0.6623539695339442,
-    "clb": 0.2936667189265708,
-    "traffic": 0.03753942557584906,
-    "mem": 0.006194027331388082,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "used_cells": 0.0625
-  },
-  "1024x128": {
-   "crossbars": 222.66666666666666,
-   "tile_cells": 21,
-   "clb_count": 12883.166666666666,
-   "cycles": 20254.5,
-   "fmax_mhz": 124.9545,
-   "passes": 31022,
-   "pass_price_pj": 45.97525409066582,
-   "pass_price_full_pj": 59.3111,
-   "area_split": {
-    "dpe": 0.25264804109649464,
-    "clb": 0.7161438831836029,
-    "mem": 0.029400437580031524,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "energy_split": {
-    "dpe": 0.6713909125210457,
-    "clb": 0.28464581620102636,
-    "traffic": 0.03726552548557047,
-    "mem": 0.005897492219884689,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "used_cells": 0.125
-  },
-  "1024x256": {
-   "crossbars": 223.33333333333334,
-   "tile_cells": 40,
-   "clb_count": 17507.833333333332,
-   "cycles": 23360.666666666668,
-   "fmax_mhz": 110.31483333333333,
-   "passes": 15979,
-   "pass_price_pj": 91.68267124820821,
-   "pass_price_full_pj": 103.4158,
-   "area_split": {
-    "dpe": 0.32464859832829773,
-    "clb": 0.6517905405392109,
-    "mem": 0.021937124727990864,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "energy_split": {
-    "dpe": 0.6864621173326892,
-    "clb": 0.2686976333829639,
-    "traffic": 0.03679200814212506,
-    "mem": 0.005545355362592407,
-    "method": "geometric mean of the per-shape shares"
-   },
-   "used_cells": 0.25
   }
  },
  "projections": [
@@ -586,16 +398,6 @@
    "cycles": 22204,
    "end": 8711,
    "stream": 8704,
-   "core_floor": 13107
-  },
-  {
-   "shape": "ViT-B/16",
-   "n": 256,
-   "d_model": 768,
-   "config": "128x256",
-   "cycles": 28065,
-   "end": 13556,
-   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -659,36 +461,6 @@
    "core_floor": 13107
   },
   {
-   "shape": "ViT-B/16",
-   "n": 256,
-   "d_model": 768,
-   "config": "1024x64",
-   "cycles": 57160,
-   "end": 41476,
-   "stream": 41472,
-   "core_floor": 13107
-  },
-  {
-   "shape": "ViT-B/16",
-   "n": 256,
-   "d_model": 768,
-   "config": "1024x128",
-   "cycles": 51659,
-   "end": 41476,
-   "stream": 41472,
-   "core_floor": 13107
-  },
-  {
-   "shape": "ViT-B/16",
-   "n": 256,
-   "d_model": 768,
-   "config": "1024x256",
-   "cycles": 58307,
-   "end": 41476,
-   "stream": 41472,
-   "core_floor": 13107
-  },
-  {
    "shape": "DeiT-T",
    "n": 256,
    "d_model": 192,
@@ -706,16 +478,6 @@
    "cycles": 22202,
    "end": 8709,
    "stream": 8704,
-   "core_floor": 13107
-  },
-  {
-   "shape": "DeiT-T",
-   "n": 256,
-   "d_model": 192,
-   "config": "128x256",
-   "cycles": 28063,
-   "end": 13554,
-   "stream": 13568,
    "core_floor": 13107
   },
   {
@@ -779,36 +541,6 @@
    "core_floor": 13107
   },
   {
-   "shape": "DeiT-T",
-   "n": 256,
-   "d_model": 192,
-   "config": "1024x64",
-   "cycles": 27720,
-   "end": 12036,
-   "stream": 12032,
-   "core_floor": 13107
-  },
-  {
-   "shape": "DeiT-T",
-   "n": 256,
-   "d_model": 192,
-   "config": "1024x128",
-   "cycles": 23865,
-   "end": 12036,
-   "stream": 12032,
-   "core_floor": 13107
-  },
-  {
-   "shape": "DeiT-T",
-   "n": 256,
-   "d_model": 192,
-   "config": "1024x256",
-   "cycles": 30397,
-   "end": 13566,
-   "stream": 13568,
-   "core_floor": 13107
-  },
-  {
    "shape": "BERT-base",
    "n": 128,
    "d_model": 768,
@@ -826,16 +558,6 @@
    "cycles": 9408,
    "end": 4359,
    "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "BERT-base",
-   "n": 128,
-   "d_model": 768,
-   "config": "128x256",
-   "cycles": 12830,
-   "end": 6772,
-   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -899,36 +621,6 @@
    "core_floor": 3276
   },
   {
-   "shape": "BERT-base",
-   "n": 128,
-   "d_model": 768,
-   "config": "1024x64",
-   "cycles": 24136,
-   "end": 20740,
-   "stream": 20736,
-   "core_floor": 3276
-  },
-  {
-   "shape": "BERT-base",
-   "n": 128,
-   "d_model": 768,
-   "config": "1024x128",
-   "cycles": 25789,
-   "end": 20740,
-   "stream": 20736,
-   "core_floor": 3276
-  },
-  {
-   "shape": "BERT-base",
-   "n": 128,
-   "d_model": 768,
-   "config": "1024x256",
-   "cycles": 25635,
-   "end": 20740,
-   "stream": 20736,
-   "core_floor": 3276
-  },
-  {
    "shape": "BERT-Tiny",
    "n": 128,
    "d_model": 128,
@@ -946,16 +638,6 @@
    "cycles": 9405,
    "end": 4356,
    "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "BERT-Tiny",
-   "n": 128,
-   "d_model": 128,
-   "config": "128x256",
-   "cycles": 12827,
-   "end": 6769,
-   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1019,36 +701,6 @@
    "core_floor": 3276
   },
   {
-   "shape": "BERT-Tiny",
-   "n": 128,
-   "d_model": 128,
-   "config": "1024x64",
-   "cycles": 7752,
-   "end": 4356,
-   "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "BERT-Tiny",
-   "n": 128,
-   "d_model": 128,
-   "config": "1024x128",
-   "cycles": 9405,
-   "end": 4356,
-   "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "BERT-Tiny",
-   "n": 128,
-   "d_model": 128,
-   "config": "1024x256",
-   "cycles": 11664,
-   "end": 6769,
-   "stream": 6784,
-   "core_floor": 3276
-  },
-  {
    "shape": "JetFormer-150P",
    "n": 32,
    "d_model": 64,
@@ -1066,16 +718,6 @@
    "cycles": 1532,
    "end": 862,
    "stream": 864,
-   "core_floor": 204
-  },
-  {
-   "shape": "JetFormer-150P",
-   "n": 32,
-   "d_model": 64,
-   "config": "128x256",
-   "cycles": 2459,
-   "end": 1668,
-   "stream": 1696,
    "core_floor": 204
   },
   {
@@ -1133,36 +775,6 @@
    "n": 32,
    "d_model": 64,
    "config": "512x256",
-   "cycles": 2579,
-   "end": 1668,
-   "stream": 1696,
-   "core_floor": 204
-  },
-  {
-   "shape": "JetFormer-150P",
-   "n": 32,
-   "d_model": 64,
-   "config": "1024x64",
-   "cycles": 1279,
-   "end": 676,
-   "stream": 672,
-   "core_floor": 204
-  },
-  {
-   "shape": "JetFormer-150P",
-   "n": 32,
-   "d_model": 64,
-   "config": "1024x128",
-   "cycles": 1532,
-   "end": 862,
-   "stream": 864,
-   "core_floor": 204
-  },
-  {
-   "shape": "JetFormer-150P",
-   "n": 32,
-   "d_model": 64,
-   "config": "1024x256",
    "cycles": 2579,
    "end": 1668,
    "stream": 1696,
@@ -1186,16 +798,6 @@
    "cycles": 9277,
    "end": 4356,
    "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "JetFormer-JetClass",
-   "n": 128,
-   "d_model": 128,
-   "config": "128x256",
-   "cycles": 12648,
-   "end": 6769,
-   "stream": 6784,
    "core_floor": 3276
   },
   {
@@ -1253,36 +855,6 @@
    "n": 128,
    "d_model": 128,
    "config": "512x256",
-   "cycles": 11582,
-   "end": 6769,
-   "stream": 6784,
-   "core_floor": 3276
-  },
-  {
-   "shape": "JetFormer-JetClass",
-   "n": 128,
-   "d_model": 128,
-   "config": "1024x64",
-   "cycles": 7732,
-   "end": 4356,
-   "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "JetFormer-JetClass",
-   "n": 128,
-   "d_model": 128,
-   "config": "1024x128",
-   "cycles": 9277,
-   "end": 4356,
-   "stream": 4352,
-   "core_floor": 3276
-  },
-  {
-   "shape": "JetFormer-JetClass",
-   "n": 128,
-   "d_model": 128,
-   "config": "1024x256",
    "cycles": 11582,
    "end": 6769,
    "stream": 6784,
@@ -1292,7 +864,7 @@
  "projection_share": {
   "median": 0.5619195046439629,
   "min": 0.3570286557618989,
-  "max": 0.8592973152137885,
+  "max": 0.807144074053041,
   "stream_max_diff": 28
  }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """fc_rows.py — the FC DSE rows from the FC workload: one row per (shape, config) (docs/experiment.md §3.1, §4.1, §5).
 
-The four FC shapes (dse/space.py FC_SHAPES, Round 1's GEMVs, M = 1) on the 12 crossbar configs, the P29 used extent.
+The four FC shapes (dse/space.py FC_SHAPES, Round 1's GEMVs, M = 1) on the 8 crossbar configs, the P29 used extent.
 Each row is simulator/platform/rows.py `fcRow`: the GEMM's cycles, pass count, energy from the Report's counts x the
 platform's prices (per term; weight programming apart, as setup), the crossbar count and area; with the VTR metrics
 (--vtr: the FC VTR table, v2's run of 2026-10-10 kept in dse/results/fc_vtr_results.csv) also the total area, latency

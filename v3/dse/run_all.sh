@@ -11,6 +11,7 @@ python3 v3/dse/attn_rows.py v3/dse/results/attn_priced_results.csv --vtr v3/dse/
 # python3 v3/dse/check_energy.py                      # the two priced tables against an independent pricing of the ledger
 python3 v3/dse/rank.py
 python3 v3/dse/breakdown.py
+python3 v3/dse/config_table.py > v3/work/tmp/config_table.log        # the config tables + every build's critical path (15 s; the tables in the log and in results/attn_config_table.md)
 "$MPL" v3/dse/plot_dse.py
 python3 v3/dse/results_page.py
 echo "run_all: done -> v3/dse/results/"

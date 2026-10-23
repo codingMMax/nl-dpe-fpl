@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """testSoftmaxAccumulator.py — gates of the `softmax_online_acc` model (docs/simulator.md §4.4; ip/softmax/acc_spec.md
-§8).
+§8), the bit-plane pass (2026-10-22).
 
   gate1    GATE 1 on a sweep: S 8..128, D 8..64, N_OC 1..8 (partial last waves), NBLK 1..4, P_CH 1..8, SO / LN equal and
            unequal, 1-3 runs; crossbars 64x64, 128x64, 128x128; classes random / zeros / allneg / extremes / small /
            alpha0; late and slow inputs
-  closed   the jobs fed v2's station inputs (v2 `feasible_schedule`) == v2 `ocarry_cycle_model`: every LOG and EXP
-           job's decide, load_start, msb_fire, drain_start, drain_end; op_free == p_cr, la_free == la_cr; the run end
-           (v2's O-feed hold off: v3 has no O reader)
+  closed   the jobs fed input schedules (early, staggered windows, late alpha, late log l) == spec §5's job rules
+           written here by hand: every LOG and EXP job's decide, load_start, msb_fire, drain_start, drain_end; p_cr,
+           la_cr, ll_cr; the run end (until 2026-10-22 the witness was v2's `ocarry_cycle_model`, which times the
+           40-bit pass)
   rules    every job decision, credit, E9 window and run_done recomputed from the spec §5 formulas; each readiness
            term and each input credit binds somewhere
-  domain   the DSE's accumulator instances (6 shapes x 12 configs, N_EP = 2d, N_OC by the floor rule) are inside the
+  domain   the DSE's accumulator instances (6 shapes x 8 configs, N_EP = 2d, N_OC by the floor rule) are inside the
            guard; out-of-domain sets are rejected
   timing   values off: identical events and counts; random step orders: identical Report
   mutants  every named latency + 1 (events or run_done change), a dropped alpha credit (deadlock), a value mutant
@@ -26,8 +27,6 @@ import numpy as np
 
 V3 = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(V3))
-sys.path.insert(0, str(V3 / "oracle" / "v2_kernels"))    # test references only
-import ocarry_sim as v2oc  # noqa: E402
 
 import simulator.models.softmaxAccumulator as accumulator  # noqa: E402
 from ip.softmax.acc_cases import Case, build, randomCase, runCase  # noqa: E402
@@ -38,6 +37,8 @@ from simulator.models.softmaxAccumulator import SoftmaxAccParams, SoftmaxOnlineA
 from dse.space import CONFIGS, SHAPES as NAMED_SHAPES  # noqa: E402  (the DSE's design space, defined once)
 SHAPES = [shape[1:] for shape in NAMED_SHAPES]                       # (n, d_model, d)
 BKV = 16
+P = 8                                                                # plane words per window (spec §2)
+PASS = P + 2                                                         # a crossbar's pass period (ip/xbar/spec.md)
 
 
 def inDomain(p: dict) -> bool:
@@ -49,7 +50,8 @@ def inDomain(p: dict) -> bool:
 
 
 def nOcFloor(S: int, D: int, R: int, C: int, bkv: int = BKV) -> int:
-    """architecture.md §5.2: the smallest N_OC with T(ceil(P_oc / N_OC)) <= max(ceil(S Bkv / 5), T(1))."""
+    """architecture.md §5.2, held at its 40-bit form: the smallest N_OC with T(ceil(P_oc / N_OC)) <= max(ceil(S Bkv / 5),
+    T(1)), T the 40-bit pass."""
     I = min(R, C)
     LW = -(-I // 5)
     tFill, tSteady = LW + 10 + LW, max(LW + 8, 10, LW + 1)
@@ -93,37 +95,76 @@ def testGate1(rng) -> int:
     return len(cases)
 
 
+def handJobs(S: int, D: int, I: int, nOc: int, B: int, runs: int, tLast, tAlpha, tLogL) -> tuple:
+    """Spec §5's job rules by hand. tLast(r, b, q): window q's last plane; tAlpha(r, b), tLogL(r): the units' last
+    planes. A pass loading at ls fires its MSB at ls + 8, its ACAM at ls + 9, drains ls + 10 .. ls + 17, and the
+    leader takes the next burst from ls + 10; a job decided at d loads at d + 17 (LOG) or d + 10 (EXP), and its last
+    plane read is at d + 7. Returns ({(r, kind, b, w): events}, {credit: times}, {r: t_o8})."""
+    pOc = S * D // I
+    W = -(-pOc // nOc)
+    jobs, credits, runEnd = {}, {}, {}
+    leader = {"log": None, "exp": None}              # the group's last load_start
+
+    def place(group, key, ready, pre):
+        ls = ready + pre if leader[group] is None else max(ready + pre, leader[group] + PASS)
+        leader[group] = ls
+        jobs[key] = dict(decide=ls - pre, load_start=ls, msb_fire=ls + 8, drain_start=ls + 10, drain_end=ls + 17)
+        return jobs[key]
+    for r in range(runs):
+        for b in range(B):
+            for w in range(W):
+                wave = range(w * nOc, min((w + 1) * nOc, pOc))
+                if b:
+                    e = place("exp", (r, "rescale", b, w),
+                              max(tAlpha(r, b) + 1, jobs[(r, "log", b - 1, w)]["drain_end"] + 1), 10)
+                    if w == W - 1:
+                        credits[("la", r, b)] = e["decide"] + 7 + 2
+                ready = max(tLast(r, b, q) for q in wave) + 1
+                if b:
+                    ready = max(ready, jobs[(r, "rescale", b, w)]["drain_end"] + 1)
+                elif r:
+                    ready = max(ready, runEnd[r - 1] + 1)
+                e = place("log", (r, "log", b, w), ready, 17)
+                if w == W - 1:
+                    credits[("p", r, b)] = e["decide"] + 7 + 1
+        for w in range(W):
+            e = place("exp", (r, "epilogue", B - 1, w),
+                      max(tLogL(r) + 1, jobs[(r, "log", B - 1, w)]["drain_end"] + 1), 10)
+        credits[("ll", r)] = e["decide"] + 7 + 2
+        runEnd[r] = e["drain_start"] + 10 + 7                         # the last E9 plane
+    return jobs, credits, runEnd
+
+
 def testClosed() -> int:
     n = 0
     keys = ("decide", "load_start", "msb_fire", "drain_start", "drain_end")
+    schedules = {                                       # (tLast(r, b, q), tAlpha(r, b), tLogL(r))
+        "early": (lambda r, b, q: 7, lambda r, b: 7, lambda r: 7),
+        "staggered": (lambda r, b, q: 900 * r + 120 * b + 10 * q, lambda r, b: 900 * r + 120 * b, lambda r: 900 * r),
+        "late_alpha": (lambda r, b, q: 7, lambda r, b: 2000 * r + 400 * b, lambda r: 7),
+        "late_logl": (lambda r, b, q: 7, lambda r, b: 7, lambda r: 3000 * (r + 1)),
+        "slow_windows": (lambda r, b, q: 1500 * r + 300 * b + 40 * q, lambda r, b: 7, lambda r: 7),
+    }
     for (S, d, R, C, nOc, B, ngp) in ((16, 16, 64, 64, 2, 3, 2), (32, 8, 64, 64, 4, 4, 4), (16, 16, 64, 64, 2, 3, 4),
                                       (128, 64, 256, 256, 7, 8, 8), (64, 64, 64, 64, 8, 2, 8),
-                                      (16, 16, 64, 64, 2, 1, 2), (32, 32, 64, 64, 3, 2, 4)):
-        g = v2oc.geometry(S, d, R, C, nOc, B, ngp=ngp)
-        for lead, early, feed in ((200, 0, 0), (0, 0, 0), (-150, 0, 0), (0, 400, 0), (0, 0, 3000)):
-            schedule = v2oc.feasible_schedule(g, 3, 10, op_pace=g.LOAD * 3, la_lead=lead, ll_lead=50, early=early,
-                                              feed=feed)
+                                      (16, 16, 64, 64, 2, 1, 2), (32, 32, 64, 64, 3, 2, 4), (64, 32, 128, 64, 5, 3, 8)):
+        I = min(R, C)
+        for name, (tLast, tAlpha, tLogL) in schedules.items():
             acc = SoftmaxOnlineAcc("acc", SoftmaxAccParams(S=S, D=d, R=R, C=C, N_OC=nOc, NBLK=B, SO=4, LN=4, P_CH=ngp),
                                    runs=3, withValues=False)
-            credits = {}
-            for r, ri in enumerate(schedule):
-                for b in range(B):
-                    credits[(r, b)] = acc.block(r * B + b, ri.op_ready[b], ri.la_go[b] if b else None)
-                acc.epilogue(r, ri.ll_go)
-                ri.o_fed = acc.runEndAt[r]                              # v2's O-feed hold off: no O reader in v3
-            want = v2oc.ocarry_cycle_model(g, schedule)
+            got = {}
             for r in range(3):
-                for (b, w, ev) in want.log[r]:
-                    got = acc.jobs[(r, "log", b, w)]
-                    assert all(got[k] == ev[k] for k in keys), (S, d, r, "log", b, w, got, ev)
-                for (kind, b, w, ev) in want.exp[r]:
-                    got = acc.jobs[(r, kind, b, w)]
-                    assert all(got[k] == ev[k] for k in keys), (S, d, r, kind, b, w, got, ev)
                 for b in range(B):
-                    assert credits[(r, b)]["p_cr"] == want.op_free[r][b]
+                    c = acc.block(r * B + b, [tLast(r, b, q) for q in range(acc.d.P_OC)], tAlpha(r, b) if b else None)
+                    got[("p", r, b)] = c["p_cr"]
                     if b:
-                        assert credits[(r, b)]["la_cr"] == want.la_free[r][b]
-                assert acc.runEndAt[r] == want.o8[r][-1][-1]
+                        got[("la", r, b)] = c["la_cr"]
+                got[("ll", r)] = acc.epilogue(r, tLogL(r))["ll_cr"]
+            jobs, credits, runEnd = handJobs(S, d, I, nOc, B, 3, tLast, tAlpha, tLogL)
+            for key, ev in jobs.items():
+                assert all(acc.jobs[key][k] == ev[k] for k in keys), (S, d, name, key, acc.jobs[key], ev)
+            assert len(acc.jobs) == len(jobs) and got == credits, (S, d, name)
+            assert all(acc.runEndAt[r] == runEnd[r] for r in range(3)), (S, d, name, acc.runEndAt, runEnd)
             n += 1
     return n
 
@@ -145,7 +186,7 @@ def checkRules(c: Case, bind: dict) -> None:
     g, acc, sink = build(c, withValues=False)
     rep = run(g)
     p, d = acc.p, acc.d
-    S, B, W, LW, n = p.S, p.NBLK, d.W, d.LW, p.N_OC
+    S, B, W, n = p.S, p.NBLK, d.W, p.N_OC
     ev = eventTables(rep)
     cr = ev["cr"]
     pw, law, llw = ev["win"]["p_src.p"], ev["win"].get("la_src.la", {}), ev["win"]["ll_src.ll"]
@@ -158,7 +199,7 @@ def checkRules(c: Case, bind: dict) -> None:
         for k, v in terms.items():
             if v == decide:
                 bind[f"{kind}.{k}"] = bind.get(f"{kind}.{k}", 0) + 1
-    last = {"log": None, "exp": None}                     # the group's previous pass (msb_fire)
+    last = {"log": None, "exp": None}                     # the group's previous pass (acam_done)
     runEnd = {}
     for r in range(runs):
         for b in range(B):
@@ -168,40 +209,42 @@ def checkRules(c: Case, bind: dict) -> None:
                 wave = range(w * n, min((w + 1) * n, d.P_OC))
                 if b:
                     e = acc.jobs[(r, "rescale", b, w)]
-                    terms = dict(la=max(law[(u, m)][0] for m in range(S)) + accumulator.LA_LAT,
+                    assert w or law[(u, 0)][1] == 0                         # one E6 window per unit
+                    terms = dict(la=law[(u, 0)][0] + P - 1 + accumulator.LA_LAT,
                                  l_done=acc.jobs[(r, "log", b - 1, w)]["drain_end"] + accumulator.JOB_DONE_LAT)
-                    if last["exp"] is not None:
-                        terms["leader"] = last["exp"] + 1
+                    if last["exp"] is not None:                             # the pass finds the leader ready
+                        terms["leader"] = last["exp"] + 1 - accumulator.PRE_EXP
                     bound("rescale", terms, e["decide"])
-                    assert e["load_start"] == e["decide"] + accumulator.PRE
-                    last["exp"] = e["msb_fire"]
+                    assert e["load_start"] == e["decide"] + accumulator.PRE_EXP
+                    last["exp"] = e["acam_done"]
                     if w == W - 1:
-                        assert cr["acc.la"][u] == e["decide"] + LW - 1 + accumulator.LA_CR_LAT
+                        assert cr["acc.la"][u] == e["decide"] + P - 1 + accumulator.LA_CR_LAT
                 e = acc.jobs[(r, "log", b, w)]
-                terms = dict(data=max(pw[(j, q)][0] + LW - 1 for q in wave) + accumulator.FIFO_LAT)
+                terms = dict(data=max(pw[(j, q)][0] + P - 1 for q in wave) + accumulator.FIFO_LAT)
                 if b:
                     terms["e_done"] = acc.jobs[(r, "rescale", b, w)]["drain_end"] + accumulator.JOB_DONE_LAT
                 elif r:
                     terms["restart"] = runEnd[r - 1] + accumulator.RESTART_LAT
                 if last["log"] is not None:
-                    terms["leader"] = last["log"] + 1
+                    terms["leader"] = last["log"] + 1 - accumulator.PRE_LOG
                 bound("log", terms, e["decide"])
-                assert e["load_start"] == e["decide"] + accumulator.PRE
-                last["log"] = e["msb_fire"]
+                assert e["load_start"] == e["decide"] + accumulator.PRE_LOG
+                last["log"] = e["acam_done"]
                 if w == W - 1:
-                    assert cr["acc.p"][j] == e["decide"] + LW - 1 + accumulator.P_CR_LAT
+                    assert cr["acc.p"][j] == e["decide"] + P - 1 + accumulator.P_CR_LAT
         for w in range(W):
             e = acc.jobs[(r, "epilogue", B - 1, w)]
-            terms = dict(ll=llw[(r, 0)][0] + S - 1 + accumulator.LL_LAT,
+            terms = dict(ll=llw[(r, 0)][0] + P - 1 + accumulator.LL_LAT,
                          l_done=acc.jobs[(r, "log", B - 1, w)]["drain_end"] + accumulator.JOB_DONE_LAT)
             if last["exp"] is not None:
-                terms["leader"] = last["exp"] + 1
+                terms["leader"] = last["exp"] + 1 - accumulator.PRE_EXP
             bound("epilogue", terms, e["decide"])
-            last["exp"] = e["msb_fire"]
+            assert e["load_start"] == e["decide"] + accumulator.PRE_EXP
+            last["exp"] = e["acam_done"]
             if w == W - 1:
-                assert cr["acc.ll"][r] == e["decide"] + LW - 1 + accumulator.LL_CR_LAT
-        runEnd[r] = e["drain_end"] + accumulator.O8_LAT
-        assert e["drain_end"] == e["drain_start"] + LW - 1                  # the last window's last E9 word is at t_o8
+                assert cr["acc.ll"][r] == e["decide"] + P - 1 + accumulator.LL_CR_LAT
+        runEnd[r] = e["drain_start"] + accumulator.E9_LAT + P - 1           # the last E9 plane
+        assert e["drain_end"] == e["drain_start"] + P - 1
         for w in range(W):                                                  # E9: one window per epilogue wave
             t0 = acc.jobs[(r, "epilogue", B - 1, w)]["drain_start"] + accumulator.E9_LAT
             assert ev["win"]["acc.o"][(r, w)] == (t0, 0), (c.name, r, w)
@@ -212,7 +255,7 @@ def checkRules(c: Case, bind: dict) -> None:
         for (u, w), (t, _) in src.items():
             if w == 0 and u >= cap and t == cr[key][u - cap]:
                 bind[f"credit.{key}"] = bind.get(f"credit.{key}", 0) + 1
-    assert rep.cycles == runEnd[runs - 1] + 1, (rep.cycles, runEnd)        # the last E9 word + 1
+    assert rep.cycles == runEnd[runs - 1] + 1, (rep.cycles, runEnd)        # the last E9 plane + 1
 
 
 def rulesCases(rng) -> list:
@@ -250,7 +293,7 @@ def testDomain() -> int:
             n += 1
     base = dict(S=16, D=16, R=64, C=64, N_OC=2, NBLK=2, SO=4, LN=4, P_CH=2)
     for bad in (dict(S=12), dict(S=4), dict(S=128), dict(D=128), dict(D=2, S=8, P_CH=1, N_OC=1), dict(N_OC=5),
-                dict(N_OC=3), dict(P_CH=3), dict(P_CH=8), dict(BUF=32), dict(VWP=33), dict(NBLK=0), dict(SO=-1),
+                dict(N_OC=3), dict(P_CH=3), dict(P_CH=8), dict(P=4), dict(VWP=17), dict(NBLK=0), dict(SO=-1),
                 dict(N_OC=0)):
         if inDomain(dict(base, **bad)):
             raise AssertionError(f"checkDomain must reject {bad}")
@@ -269,8 +312,8 @@ def testTimingAndOrder(rng) -> None:
             assert r.events == a.events and r.cycles == a.cycles
 
 
-MUTANT_LATS = ("FIFO_LAT", "LA_LAT", "LL_LAT", "PRE", "JOB_DONE_LAT", "P_CR_LAT", "LA_CR_LAT", "LL_CR_LAT", "O8_LAT",
-               "RESTART_LAT", "E9_LAT", "RUN_DONE_LAT")
+MUTANT_LATS = ("FIFO_LAT", "LA_LAT", "LL_LAT", "PRE_LOG", "PRE_EXP", "JOB_DONE_LAT", "P_CR_LAT", "LA_CR_LAT",
+               "LL_CR_LAT", "RESTART_LAT", "E9_LAT", "RUN_DONE_LAT")
 
 
 def signature(c: Case) -> tuple:
@@ -325,7 +368,8 @@ def testMutants(rng) -> tuple:
 def main() -> int:
     rng = np.random.default_rng(20261014)
     print(f"  gate1    PASS  {testGate1(rng)} cases (every stage and every sent E9 window == oracle, every run)")
-    print(f"  closed   PASS  {testClosed()} schedules == v2 ocarry_cycle_model (every job, op_free, la_free, run end)")
+    print(f"  closed   PASS  {testClosed()} schedules == spec §5's job rules by hand (every job, p_cr, la_cr, ll_cr, "
+          "run end)")
     b = testRules(rng)
     print(f"  rules    PASS  every event recomputed from spec §5; terms bound: {dict(sorted(b.items()))}")
     print(f"  domain   PASS  {testDomain()} DSE accumulator instances inside the domain; out-of-domain sets rejected")

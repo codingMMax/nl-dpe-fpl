@@ -3,7 +3,7 @@
 testbench's files (docs/simulator.md §4.8; ip/softmax/acc_spec.md §8).
 
 The module's test graph: three sources (o_part tiles on P_CH channels, log a units, log l units) -> `softmax_online_acc`
--> one sink (E9: one window of N_OC-word O8 lanes per epilogue wave, push). A source sends each unit at its availability
+-> one sink (E9: one plane window of N_OC I O8 values per epilogue wave, push). A source sends each unit at its availability
 time, at its pace, and only with a credit in hand. GATE 1 compares, per run, every stage the model computed and every
 O8 window it sent with `attention_ref.ocarry_stage_values` and `attention_ref.epilogue`.
 """
@@ -24,6 +24,7 @@ import attention_ref as aref  # noqa: E402  (the oracle: used here only, never b
 from simulator.core.engine import portWords, run  # noqa: E402
 from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
+from simulator.core.records import planeWords  # noqa: E402
 from simulator.models.softmaxAccumulator import SoftmaxAccParams, SoftmaxOnlineAcc  # noqa: E402
 
 STAGES = ("t", "e", "o_new", "oq", "so", "lo")
@@ -40,7 +41,7 @@ class Case:
     pAvailableAt: object = 0        # per tile, or one time: the tile's earliest first word
     pPeriod: int | None = None      # per channel window spacing (the PV DIMM's wave period)
     laAvailableAt: object = 0       # per alpha unit, or one time
-    laPeriod: int | None = None     # spacing of the rows of an alpha unit
+    laPeriod: int | None = None     # spacing of the alpha windows (one per unit)
     llAvailableAt: object = 0       # per run, or one time
     meta: dict = field(default_factory=dict)
 
@@ -61,15 +62,15 @@ def build(case: Case, withValues: bool = True) -> tuple:
         r, b = divmod(u, B)
         return np.asarray(case.runs[r]["o_part"][b], dtype=np.int64).reshape(-1)[w * I:(w + 1) * I]
 
-    def laWindow(u, w):             # unit u = r (B - 1) + b - 1, window w = row w
+    def laWindow(u, w):             # unit u = r (B - 1) + b - 1: one window of the S rows' log a
         r, b1 = divmod(u, B - 1)
-        return np.array([int(case.runs[r]["log_a"][b1 + 1][w])], dtype=np.int64)
+        return np.asarray(case.runs[r]["log_a"][b1 + 1], dtype=np.int64)
 
     def llWindow(u, w):
         return np.asarray(case.runs[u]["log_l"], dtype=np.int64)
     sources = [Source("p_src", replace(ports["p"], direction="out"), runs * B, d.P_OC, availableAt=case.pAvailableAt,
                       period=case.pPeriod, payload=pWindow if withValues else None, withValues=withValues),
-               Source("la_src", replace(ports["la"], direction="out"), runs * (B - 1), S, availableAt=case.laAvailableAt,
+               Source("la_src", replace(ports["la"], direction="out"), runs * (B - 1), 1, availableAt=case.laAvailableAt,
                       period=case.laPeriod, payload=laWindow if withValues else None, withValues=withValues),
                Source("ll_src", replace(ports["ll"], direction="out"), runs, 1, availableAt=case.llAvailableAt,
                       payload=llWindow if withValues else None, withValues=withValues)]
@@ -104,13 +105,6 @@ def runCase(case: Case) -> dict:
     return dict(report=rep, acc=acc, sink=sink)
 
 
-def hexWord(values, bits: int) -> str:
-    v = 0
-    for j, x in enumerate(values):
-        v |= (int(x) & ((1 << bits) - 1)) << (bits * j)
-    return f"{v:x}"
-
-
 def defines(case: Case) -> dict:
     p = case.params
     keys = dict(S="S", D="D", R="R", C="C", NOC="N_OC", NBLK="NBLK", SO="SO", LN="LN", PCH="P_CH", VWP="VWP")
@@ -136,30 +130,29 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
     creditPulsesDistinct(rep, case.name)
     out = Path(outDir)
     out.mkdir(parents=True, exist_ok=True)
-    LW, I, B, VWP = d.LW, d.I, p.NBLK, p.VWP
+    I, B, VWP = d.I, p.NBLK, p.VWP
     sent = {}
     for e in rep.events:
         if e.kind == "win" and e.instance in ("p_src", "la_src", "ll_src"):
             sent.setdefault(f"{e.instance}.{e.port}", []).append((e.time, e.channel, e.unit, e.window))
 
-    def words(values, nWords, bits, q=5):
-        v = list(np.asarray(values, dtype=np.int64)) + [0] * (q * nWords - len(values))
-        return [hexWord(v[q * k:q * k + q], bits) for k in range(nWords)]
-    with open(out / "p_win.txt", "w") as f:                        # t ch unit window, then LW words of 5 VWP bits
+    def planes(values, E, W):                                     # a window's 8 plane words, hex
+        return " ".join(f"{x:x}" for x in planeWords(values, E, W, p.P))
+    with open(out / "p_win.txt", "w") as f:                        # t ch unit window, then 8 plane words (2 lanes)
         for (t, ch, u, w) in sorted(sent.get("p_src.p", []), key=lambda x: (x[2], x[3])):
             rr, b = divmod(u, B)
             v = np.asarray(case.runs[rr]["o_part"][b], dtype=np.int64).reshape(-1)[w * I:(w + 1) * I]
-            f.write(f"{t} {ch} {u} {w} " + " ".join(words(v, LW, VWP)) + "\n")
-    with open(out / "la_win.txt", "w") as f:                       # t unit row value (9 bit)
-        for (t, ch, u, w) in sorted(sent.get("la_src.la", []), key=lambda x: (x[2], x[3])):
+            f.write(f"{t} {ch} {u} {w} " + planes(v, VWP, I) + "\n")
+    with open(out / "la_win.txt", "w") as f:                       # t unit, then 8 plane words (9-bit log a, 2 lanes)
+        for (t, ch, u, w) in sorted(sent.get("la_src.la", []), key=lambda x: x[2]):
             rr, b1 = divmod(u, B - 1)
-            f.write(f"{t} {u} {w} {int(case.runs[rr]['log_a'][b1 + 1][w]) & 0x1FF:03x}\n")
-    with open(out / "ll_win.txt", "w") as f:                       # t unit, then S bytes
+            f.write(f"{t} {u} " + planes(case.runs[rr]["log_a"][b1 + 1], 9, p.S) + "\n")
+    with open(out / "ll_win.txt", "w") as f:                       # t unit, then 8 plane words of S bits
         for (t, ch, u, w) in sorted(sent.get("ll_src.ll", []), key=lambda x: x[2]):
-            f.write(f"{t} {u} " + " ".join(f"{int(x) & 0xFF:02x}" for x in case.runs[u]["log_l"]) + "\n")
-    with open(out / "o_win.txt", "w") as f:                        # E9: t run wave, then LW words of 5 N_OC bytes
+            f.write(f"{t} {u} " + planes(case.runs[u]["log_l"], 8, p.S) + "\n")
+    with open(out / "o_win.txt", "w") as f:                        # E9: t run wave, then 8 plane words of N_OC I bits
         for w in sorted(sink.received, key=lambda w: (w.unit, w.window)):
-            f.write(f"{w.time} {w.unit} {w.window} " + " ".join(words(w.values, LW, 8, 5 * p.N_OC)) + "\n")
+            f.write(f"{w.time} {w.unit} {w.window} " + planes(w.values, 8, p.N_OC * I) + "\n")
     (out / "run_done.txt").write_text("".join(f"{acc.runDoneAt[k]}\n" for k in range(len(case.runs))))
     (out / "events.txt").write_text("".join(line + "\n" for line in rep.eventLines()))
     plusargs = dict(NP=len(sent.get("p_src.p", [])), NLA=len(sent.get("la_src.la", [])), NRUN=len(case.runs),

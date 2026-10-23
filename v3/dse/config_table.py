@@ -26,8 +26,10 @@ Table 5, FC: the critical path by kind (one pass per row: the load, the slices, 
 the serializer, the output words on the port); the mean over the four shapes of each share.
 
 Outputs: dse/results/attn_config_table.md (the tables) and dse/results/critical_path.json (every build's critical
-path: the cycles by kind, by module, by both). Inputs: dse/data.py (the priced tables) and the simulator.
-Usage: python3 v3/dse/config_table.py [CONFIG ...] [--ref CONFIG] [--out FILE]     # default: the 12 configs,
+path: the cycles by kind, by module, by both; and `summary`: per family and config the geomean T and the mean share
+of each kind, attention also of each module, which dse/plot_dse.py and dse/results_page.py read). Inputs:
+dse/data.py (the priced tables) and the simulator. Part of dse/run_all.sh.
+Usage: python3 v3/dse/config_table.py [CONFIG ...] [--ref CONFIG] [--out FILE]     # default: the 8 configs,
          rows grouped by C with R inside; prints the tables
        python3 v3/dse/config_table.py --self-test
 """
@@ -231,15 +233,28 @@ def table4(rows: list, paths: list, cfg: str) -> str:
     return "\n".join(lines)
 
 
-def table5(paths: list) -> str:
-    lines = ["| config | T (geomean) | " + " | ".join(KIND_NAME[k] for k in KIND_ORDER) + " |",
-             "|---|---:|" + "---:|" * len(KIND_ORDER)]
+def fcSummary(paths: list) -> dict:
+    """Per config the FC rows' geomean T and the mean share of T of each kind."""
+    out = {}
     for R, C in sorted(CONFIGS, key=lambda rc: (rc[1], rc[0])):
         cfg = f"{R}x{C}"
         ps = [p for p in paths if p["family"] == "fc" and p["config"] == cfg]
-        lines.append(f"| {cfgName(cfg)} | {geomean([p['T'] for p in ps]):,.0f} | "
-                     + " | ".join(pct(st.mean(p["by_kind"].get(k, 0) / p["T"] for p in ps)) for k in KIND_ORDER)
-                     + " |")
+        out[cfg] = dict(T=geomean([p["T"] for p in ps]),
+                        shares={k: st.mean(p["by_kind"].get(k, 0) / p["T"] for p in ps) for k in KIND_ORDER})
+    return out
+
+
+def pathSummary(summary: list, paths: list) -> dict:
+    """The per-config summary written into critical_path.json: attention (the configs of the run) and FC."""
+    return dict(attention={s["config"]: dict(T=s["cycles"], shares=s["shares"]) for s in summary},
+                fc=fcSummary(paths))
+
+
+def table5(paths: list) -> str:
+    lines = ["| config | T (geomean) | " + " | ".join(KIND_NAME[k] for k in KIND_ORDER) + " |",
+             "|---|---:|" + "---:|" * len(KIND_ORDER)]
+    for cfg, s in fcSummary(paths).items():
+        lines.append(f"| {cfgName(cfg)} | {s['T']:,.0f} | " + " | ".join(pct(s["shares"][k]) for k in KIND_ORDER) + " |")
     return "\n".join(lines)
 
 
@@ -303,7 +318,7 @@ def selfTest() -> int:
             raise AssertionError(f"geomean accepted {bad}")
     rows = data.attentionRows()
     paths = allPaths()                                 # checkPath ran on every build: the sum, untraced, negative
-    assert len(paths) == 72 + 48; n += 1
+    assert len(paths) == (len(SHAPES) + len(FC_SHAPES)) * len(CONFIGS); n += 1
     # the attention T is the priced table's T_cycles, the FC T the FC table's: the trace changes no value
     priced = {(r["shape"], r["config"]): int(r["T_cycles"]) for r in rows}
     pricedFc = {(r["M"], r["K"], r["N"], r["config"]): int(r["T_cycles"]) for r in data.fcRows()}
@@ -332,7 +347,7 @@ def selfTest() -> int:
         assert all(p["by_kind"].get(k, 0) > 0 for k in KIND_ORDER), (p["workload"], p["config"], p["by_kind"])
         n += 1
     s = summarize(rows, paths, DEFAULT)
-    assert len(DEFAULT) == 12 and DEFAULT[:4] == ("128x64", "256x64", "512x64", "1024x64"); n += 1
+    assert len(DEFAULT) == 8 and DEFAULT[:4] == ("128x64", "256x64", "512x64", "128x128"); n += 1
     assert [x["config"] for x in s] == list(DEFAULT); n += 1
     for x in s:
         assert abs(sum(x["shares"][k] for k in KIND_ORDER) - 1) < 1e-12, x["config"]
@@ -355,7 +370,7 @@ def selfTest() -> int:
                           (x["adp"], gAdp[c] / gAdp[ref["config"]]), (x["edap"], gEdap[c] / gEdap[ref["config"]])):
             assert abs(got / want - 1) < 1e-6, (c, got, want)
             n += 1
-    t2 = chain(s, "1024x256")
+    t2 = chain(s, DEFAULT[-1])
     assert all(abs(x["adp"] - y["adp"] / t[-1]["adp"]) < 1e-9 for x, y in zip(t2, t)) and t2[-1]["adp"] == 1; n += 1
     for bad in (lambda: chain(s, "99x99"), lambda: summarize(rows, paths, ("128x64", "99x99"))):
         try:
@@ -365,8 +380,15 @@ def selfTest() -> int:
         else:
             raise AssertionError("an unknown config was accepted")
     # the document renders every table for a subset of configs
-    text = document(summarize(rows, paths, ("128x64", "256x128")), rows, paths, None, ("128x64", "256x128"))
+    sub = summarize(rows, paths, ("128x64", "256x128"))
+    text = document(sub, rows, paths, None, ("128x64", "256x128"))
     assert text.count("\n| 128×64 |") == 4 and "Per head at 128×64" in text and "## 4. FC" in text; n += 1
+    # the JSON summary: the attention configs of the run, every FC config, shares that sum to 1
+    ps = pathSummary(sub, paths)
+    assert list(ps["attention"]) == ["128x64", "256x128"] and len(ps["fc"]) == len(CONFIGS); n += 1
+    for fam in ps.values():
+        for cfg, v in fam.items():
+            assert abs(sum(v["shares"][k] for k in KIND_ORDER) - 1) < 1e-12 and v["T"] > 0, (cfg, v); n += 1
     print(f"config_table self-test: ALL PASS ({n} checks on {len(paths)} builds)")
     return 0
 
@@ -383,10 +405,12 @@ def main() -> int:
     configs = tuple(a.configs)
     rows = data.attentionRows()
     paths = allPaths(configs)
-    text = document(summarize(rows, paths, configs), rows, paths, a.ref, configs)
+    summary = summarize(rows, paths, configs)
+    text = document(summary, rows, paths, a.ref, configs)
     print(text)
     Path(a.out).write_text(text)
-    OUT_JSON.write_text(json.dumps(dict(kinds=KIND_ORDER, roles=ROLE_ORDER, builds=paths), indent=1) + "\n")
+    OUT_JSON.write_text(json.dumps(dict(kinds=KIND_ORDER, roles=ROLE_ORDER, summary=pathSummary(summary, paths),
+                                        builds=paths), indent=1) + "\n")
     print(f"-> {a.out}\n-> {OUT_JSON}")
     return 0
 

@@ -3,8 +3,9 @@
 
 Synthetic graphs with hand-computed answers: a source -> relay -> sink chain on push + credit edges (CAP 2 and 1),
 whose every window and credit time is worked out here; random step orders (determinism); a graph used as a module
-(composition == flattened); deadlock, discipline and order errors; the stages at their edges; the model stack loads
-no oracle, v2 kernel or pricing module.
+(composition == flattened); deadlock, discipline and order errors; the stages at their edges; the plane framing
+(records.planeWords, PortSpec planes / lanes / words: hand-computed words, round trips at the extremes, the padding);
+the model stack loads no oracle, v2 kernel or pricing module.
 Run: python3 v3/simulator/tests/testCore.py
 
 The chain: 5 units of one 2-word window. Source: start = max(previous end + 1, credit u-2 from the relay); relay:
@@ -34,8 +35,8 @@ from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.errors import ContractError, Deadlock, EdgeError  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
 from simulator.core.module import Module, Need  # noqa: E402
-from simulator.core.records import PortSpec, Step  # noqa: E402
-from simulator.core.stages import Buffer, Delay, Fifo, Map, Memory, Repack, Serial, Tree  # noqa: E402
+from simulator.core.records import PortSpec, Step, planePort, planeWords  # noqa: E402
+from simulator.core.stages import Buffer, Delay, Fifo, Map, Memory, Serial, Tree  # noqa: E402
 
 RELAY_CR_LAT = 1
 
@@ -384,23 +385,62 @@ def testStages() -> None:
     b.release(2, 12)
     expect(ContractError, lambda: b.put(3, 10), "free from 11")
     expect(ValueError, lambda: Buffer(0), "entries")
-    # Repack: 3 words of 5, 5, 4 bytes -> 3 words; one word per input word
-    assert Repack([5, 5, 4], 5, 2).times([0, 1, 2]) == [2, 3, 4]
-    # two 9-byte windows (5 + 4 bytes each) -> 4 words: the last input word completes two of them
-    r = Repack([5, 4, 5, 4], 5, 2)
-    assert r.sourceWord == [0, 2, 3, 3] and r.times([0, 1, 2, 3]) == [2, 4, 5, 6]
-    assert Repack([5, 4, 5, 4], 5, 2).times([0, 10, 11, 20]) == [2, 13, 22, 23]   # gaps in the reads
-    assert Repack([5, 5], 5, 1).times([3, 4]) == [4, 5]                         # an exact multiple: no padding
-    assert Repack([1], 5, 0).times([7]) == [7]                                  # one byte, one padded word
-    expect(ValueError, lambda: Repack([], 5, 2), "sizes")
-    expect(ValueError, lambda: Repack([5, 0], 5, 2), "sizes")
-    expect(ValueError, lambda: Repack([5, 4], 5, 2).times([0]), "read times")
 
 
 MODEL_STACK = ("simulator.core.engine", "simulator.core.environment", "simulator.core.stages",
                "simulator.core.crossbar", "simulator.models.gemm", "simulator.models.dimmTile",
                "simulator.models.softmaxOnline", "simulator.models.softmaxAccumulator",
                "simulator.models.attentionController", "simulator.models.fc", "simulator.models.attentionHead")
+
+
+def decodePlanes(words: list, E: int, W: int) -> list:
+    """The test's own reading of architecture.md §3.1: bit l W + i of word b = bit 8 l + b of element i, signed E bits."""
+    out = []
+    for i in range(W):
+        v = 0
+        for b, word in enumerate(words):
+            for lane in range(-(-E // 8)):
+                v |= ((word >> (lane * W + i)) & 1) << (8 * lane + b)
+        out.append(v - (1 << E) if v >> (E - 1) else v)
+    return out
+
+
+def testPlanes() -> int:
+    """The plane framing at its edges."""
+    n = 0
+    # hand-computed: [1, 2, 3] in 4 int8 slots: plane 0 = 0b101, plane 1 = 0b110, the rest 0; slot 3 padded
+    assert planeWords([1, 2, 3], 8, 4) == [0b0101, 0b0110, 0, 0, 0, 0, 0, 0]; n += 1
+    assert planeWords([-1], 8, 1) == [1] * 8 and planeWords([-128], 8, 1) == [0] * 7 + [1]; n += 1
+    # 9 bits in 2 lanes, W = 2: -1 = 0x1FF and 256 = 0x100; lane 1 (bits 2, 3) carries bit 8 in plane 0 only
+    assert planeWords([-1, 256], 9, 2) == [0b1101] + [0b0001] * 7; n += 1
+    # 13 bits: lane 1 carries bits 8 .. 12 in planes 0 .. 4, planes 5 .. 7 are 0 there (W2: bits >= E are 0)
+    w = planeWords([-1], 13, 1)
+    assert w == [0b11] * 5 + [0b01] * 3; n += 1
+    # round trips at the extremes, every width and lane count used by the head (1, 8, 9, 13, 16 bits)
+    rng = np.random.default_rng(7)
+    for E in (1, 8, 9, 13, 16):
+        lo, hi = -(1 << (E - 1)), (1 << (E - 1)) - 1
+        for W in (1, 5, 64):
+            for values in ([lo] * W, [hi] * W, [0] * W, [-1] * W, list(rng.integers(lo, hi + 1, size=W)),
+                           [lo, hi] * (W // 2) + [lo] * (W % 2)):
+                words = planeWords(values, E, W)
+                assert len(words) == 8 and decodePlanes(words, E, W) == [int(x) for x in values], (E, W, values)
+                assert all(word < 1 << (W * -(-E // 8)) for word in words), "no bit past the lanes"
+                n += 1
+    # padding: a short window's missing elements are 0 in every plane
+    assert decodePlanes(planeWords([-5, 7], 8, 6), 8, 6) == [-5, 7, 0, 0, 0, 0]; n += 1
+    expect(ValueError, lambda: planeWords([1, 2, 3], 8, 2), "values in a window")
+    n += 1
+    # PortSpec: plane framing has P words of ceil(E / 8) lanes, Q = W; element framing ceil(W / Q) words, one lane
+    s = planePort("c", "out", "push+credit", 13, 64, 8, "job", CAP=2)
+    assert (s.planes, s.Q, s.words, s.lanes) == (8, 64, 8, 2); n += 1
+    e = PortSpec("j", "in", "burst", 3, 1, 1, 1, "job", CAP=1)
+    assert (e.planes, e.words, e.lanes) == (0, 1, 1); n += 1
+    assert PortSpec("d", "out", "push", 8, 5, 12, 1, "row").words == 3; n += 1
+    expect(ValueError, lambda: PortSpec("x", "out", "push", 8, 5, 64, 1, "row", planes=8), "Q = W")
+    expect(ValueError, lambda: PortSpec("x", "out", "push", 8, 64, 64, 1, "row", planes=-1), "planes >= 1")
+    n += 2
+    return n
 
 
 def testIndependence() -> list:
@@ -430,7 +470,9 @@ def main() -> int:
     print("  fan errors   PASS  (unrouted fan-out credits, a push producer into an unrouted credited port, two givers, "
           "a double route, a wrong credit edge, a doubly fed channel, channels outside, data into a pulse port)")
     testStages()
-    print("  stages       PASS  (readyAt, Delay, Tree, Map, Serial, Buffer, Repack, Fifo, Memory at their edges)")
+    print("  stages       PASS  (readyAt, Delay, Tree, Map, Serial, Buffer, Fifo, Memory at their edges)")
+    print(f"  planes       PASS  {testPlanes()} checks (hand-computed plane words, round trips at the extremes of 1-16 "
+          "bits, the padding, PortSpec planes / lanes / words)")
     mods = testIndependence()
     print(f"  independence PASS  ({', '.join(mods)} load no oracle, v2 kernel or pricing module)")
     print("core: ALL PASS")

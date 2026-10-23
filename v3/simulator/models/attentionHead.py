@@ -26,11 +26,15 @@ from simulator.models.softmaxOnline import SoftmaxOnline, SoftmaxOnlineParams
 BKV_DEFAULT = 16
 
 
-def nOcFloor(S: int, D: int, R: int, C: int, BKV: int, BUF: int = 40, P: int = 8) -> int:
-    """architecture.md §5.2: the smallest N_OC with T(ceil(P_oc / N_OC)) <= max(ceil(S BKV / 5), T(1)) (I x I passes)."""
+NOC_BUF, NOC_P = 40, 8    # the floor rule's 40-bit pass (held 2026-10-22: the mapping counts do not change)
+
+
+def nOcFloor(S: int, D: int, R: int, C: int, BKV: int) -> int:
+    """architecture.md §5.2, held at its 40-bit form: the smallest N_OC with T(ceil(P_oc / N_OC)) <=
+    max(ceil(S BKV / 5), T(1)), T the 40-bit pass of I x I (LW = ceil(8 I / 40) words each way)."""
     I = min(R, C)
-    LW = ceilDiv(I * 8, BUF)
-    tFill, tSteady = LW + P + 2 + LW, max(LW + P, P + 2, LW + 1)
+    LW = ceilDiv(I * 8, NOC_BUF)
+    tFill, tSteady = LW + NOC_P + 2 + LW, max(LW + NOC_P, NOC_P + 2, LW + 1)
     pOc = S * D // I
     floor = max(ceilDiv(S * BKV, 5), tFill)
     return next(n for n in range(1, pOc + 1) if tFill + (ceilDiv(pOc, n) - 1) * tSteady <= floor)
@@ -39,7 +43,7 @@ def nOcFloor(S: int, D: int, R: int, C: int, BKV: int, BUF: int = 40, P: int = 8
 @dataclass
 class AttentionHeadParams:
     """The head's parameters (top/spec.md §2): the workload (NSEQ tokens, DM model width, D head width), the crossbar
-    (R, C, BUF, P), the mapping (BKV, N_EXP, N_E, N_EP, N_OC, P_PROJ, X_S), the derived sizes, and every module's
+    (R, C, P), the mapping (BKV, N_EXP, N_E, N_EP, N_OC, P_PROJ, X_S), the derived sizes, and every module's
     parameters."""
     NSEQ: int
     DM: int
@@ -47,7 +51,6 @@ class AttentionHeadParams:
     BKV: int
     R: int
     C: int
-    BUF: int
     P: int
     N_EXP: int
     N_E: int
@@ -61,7 +64,7 @@ class AttentionHeadParams:
     B: int            # key blocks, NSEQ / BKV
     V: int            # row tiles of a projection, ceil(DM / R)
     ROWS_X: int       # rows a projection lane loads: DM when V = 1, else R
-    LOADX: int        # words per X burst
+    LOADX: int        # plane words per X burst, P
     LN: int           # clog2 NSEQ
     NG_QK: int        # QK output groups, N_E / D
     NG_PV: int        # PV output groups, N_EP / BKV
@@ -77,13 +80,13 @@ class AttentionHeadParams:
 
 def headParams(NSEQ: int, DM: int, D: int, R: int, C: int, *, BKV: int = BKV_DEFAULT, N_E: int | None = None,
                N_EP: int | None = None, N_EXP: int = 2, N_OC: int | None = None, P_PROJ: int = 1, X_S: int = 16,
-               BUF: int = 40, P: int = 8) -> AttentionHeadParams:
+               P: int = 8) -> AttentionHeadParams:
     """The head's parameters (top/spec.md §2); N_E, N_EP default to 2d, N_OC to the floor rule."""
     I = min(R, C)
     S = min(NSEQ, I)
     N_E = 2 * D if N_E is None else N_E
     N_EP = 2 * D if N_EP is None else N_EP
-    N_OC = nOcFloor(S, D, R, C, BKV, BUF, P) if N_OC is None else N_OC
+    N_OC = nOcFloor(S, D, R, C, BKV) if N_OC is None else N_OC
     V = ceilDiv(DM, R)
     rowsX = DM if V == 1 else R
     RB, B = NSEQ // S, NSEQ // BKV
@@ -94,22 +97,22 @@ def headParams(NSEQ: int, DM: int, D: int, R: int, C: int, *, BKV: int = BKV_DEF
         (rowsX >= D, "ROWS_X >= D (a copy's row period covers the DIMM converter's)")])
     windowElements = min(S * BKV, I)
     return AttentionHeadParams(
-        NSEQ=NSEQ, DM=DM, D=D, BKV=BKV, R=R, C=C, BUF=BUF, P=P, N_EXP=N_EXP, N_E=N_E, N_EP=N_EP, N_OC=N_OC,
-        P_PROJ=P_PROJ, X_S=X_S, I=I, S=S, RB=RB, B=B, V=V, ROWS_X=rowsX, LOADX=ceilDiv(rowsX * 8, BUF), LN=LN,
+        NSEQ=NSEQ, DM=DM, D=D, BKV=BKV, R=R, C=C, P=P, N_EXP=N_EXP, N_E=N_E, N_EP=N_EP, N_OC=N_OC,
+        P_PROJ=P_PROJ, X_S=X_S, I=I, S=S, RB=RB, B=B, V=V, ROWS_X=rowsX, LOADX=P, LN=LN,
         NG_QK=N_E // D, NG_PV=N_EP // BKV, T_X=NSEQ // P_PROJ,
         nXbar=3 * P_PROJ * V + 3 * P_PROJ + N_E + N_EP + (N_EXP + 2) + 2 * N_OC,
-        gemm=GemmParams(K=DM, N=D, R=R, C=C, BUF=BUF, P=P, ROWS_USED=rowsX, COLS_USED=D),
-        qk=DimmTileParams(M=S, N=BKV, K=D, R=R, C=C, BUF=BUF, P=P, N_E=N_E, X_S=X_S, A_DOM=0, A_SIGNED=1, A_CH=P_PROJ,
+        gemm=GemmParams(K=DM, N=D, R=R, C=C, P=P, ROWS_USED=rowsX, COLS_USED=D),
+        qk=DimmTileParams(M=S, N=BKV, K=D, R=R, C=C, P=P, N_E=N_E, X_S=X_S, A_DOM=0, A_SIGNED=1, A_CH=P_PROJ,
                           A_SLOTS=RB, A_FRAME=0, A_ROWS=1, B_DOM=0, B_SIGNED=1, B_CH=P_PROJ, B_SLOTS=B, TRANS_B=1,
                           NARROW=5, C_CAP=2),
-        pv=DimmTileParams(M=S, N=D, K=BKV, R=R, C=C, BUF=BUF, P=P, N_E=N_EP, X_S=X_S, A_DOM=1, A_SIGNED=0, A_CH=N_EXP,
+        pv=DimmTileParams(M=S, N=D, K=BKV, R=R, C=C, P=P, N_E=N_EP, X_S=X_S, A_DOM=1, A_SIGNED=0, A_CH=N_EXP,
                           A_SLOTS=2, A_FRAME=1, A_ROWS=windowElements // BKV, B_DOM=0, B_SIGNED=1, B_CH=P_PROJ,
                           B_SLOTS=B, TRANS_B=0, NARROW=0, C_CAP=2),
-        sm=SoftmaxOnlineParams(S=S, BKV=BKV, N=NSEQ, R=R, C=C, BUF=BUF, P=P, N_EXP=N_EXP, S_CH=N_E // D, LP_CAP=2,
+        sm=SoftmaxOnlineParams(S=S, BKV=BKV, N=NSEQ, R=R, C=C, P=P, N_EXP=N_EXP, S_CH=N_E // D, LP_CAP=2,
                                LA_CAP=2, LL_CAP=1),
-        acc=SoftmaxAccParams(S=S, D=D, R=R, C=C, BUF=BUF, P=P, N_OC=N_OC, NBLK=B, SO=LN, LN=LN, P_CH=N_EP // BKV,
+        acc=SoftmaxAccParams(S=S, D=D, R=R, C=C, P=P, N_OC=N_OC, NBLK=B, SO=LN, LN=LN, P_CH=N_EP // BKV,
                              VWP=9 + clog2(BKV)),                        # VWP: the PV DIMM's output width
-        ctrl=AttCtrlParams(NSEQ=NSEQ, S=S, BKV=BKV, I=I, P_PROJ=P_PROJ, LOADX=ceilDiv(rowsX * 8, BUF)))
+        ctrl=AttCtrlParams(NSEQ=NSEQ, S=S, BKV=BKV, I=I, P_PROJ=P_PROJ, LOADX=P))
 
 
 def attentionHead(params: AttentionHeadParams, *, X=None, WQ=None, WK=None, WV=None, withValues: bool = True,

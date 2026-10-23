@@ -12,7 +12,7 @@ is gone.
 simulator/
   core/      cycleMath (ceilDiv, clog2, isPowerOfTwo, readyAt) · errors · records (Window, Credit, PortSpec,
              PortEvent, Step, Counts, Resources, Report) · module (Module, Need, checkRules) · graph · engine ·
-             stages (Serial, Buffer, Repack, Delay, Tree, Map, Fifo, Memory) · environment (Source, Sink) ·
+             stages (Serial, Buffer, Delay, Tree, Map, Fifo, Memory) · environment (Source, Sink) ·
              crossbar (Geometry, Crossbar, CrossbarGroup, outputStage: the `dpe` primitive and the pass grammar) ·
              trace (Time, label, segments, breakdown: every time carries the chain of waits that set it, so a run's
              last event holds its critical path; docs/simulator.md §3.1)

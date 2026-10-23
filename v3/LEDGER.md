@@ -5,6 +5,20 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 
 ## Status
 
+- **2026-10-22, the bit-plane pass, phases 1 and 2 done (docs and the simulator; Needs you 26 = checkpoint C2).**
+  - Every module's model follows the bit-plane pass. It has its crossbar charter `ip/xbar/spec.md`, its module spec
+    (`ip/gemm/spec.md` new; the DIMM, softmax, accumulator and head specs) and `architecture.md` §1–§5. Every model
+    is `model-only` until the RTL pass.
+  - F2 10/10. The equivalence reference is re-frozen as `work/equivalence/ref_2026-10-22` (ALL EQUAL). The by-design
+    diff against `ref_2026-10-18` has 0 unexpected differences.
+  - The 64×64 corpora are regenerated with GATE 1 (`work/corpus/bitplane/`).
+  - The DSE results are **not** regenerated: §8 still carries the 40-bit cycles.
+  - The RTL, the VTR smoke at 256×128 and GATE 2 follow, each on your go.
+- **2026-10-22:** the row-parallel crossbar tile, area side first (decisions below; `experiment.md` §2.1, §5.1, §8).
+  - The DSE now has 8 configs, and its results are regenerated as an area-only update: the cycles still use the 40-bit
+    ports.
+  - Next, each on your go (Needs you 25): the RTL pass (GATE 2 at 64×64, the VTR smoke at 256×128), then the timing
+    pass.
 - **Phase:** F1, F2 and F3 are done (F3 ran one module at a time).
   - Module 1, the tiled DIMM (`dimm_tile_top`), is **closed** (2026-10-14): spec, model, both RTL twins, GATE 2 at
     64×64 (16/16, plus 5/5 bring-up), VTR smoke at 128×128.
@@ -38,7 +52,7 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   - `docs/mapping_tiling.md`: parameter measurements on an earlier layer model, reference only.
 - **Gates:** `python3 v3/tools/copies.py` (copy lock), `python3 v3/tools/check_twins.py` (RTL twins),
   `python3 v3/tools/lint_rtl.py` (no runtime products), `python3 v3/tools/f1_check.py` (F1),
-  `python3 v3/tools/f2_check.py` (F2 = the eight simulator tests `v3/simulator/tests/test*.py`);
+  `python3 v3/tools/f2_check.py` (F2 = the ten simulator tests `v3/simulator/tests/test*.py`);
   `python3 v3/simulator/tests/checkEquivalence.py` (the refactored simulator against the frozen
   pre-refactor outputs); per module `ip/<module>/tb/run_*_rtl.py` (GATE 2 through `tools/rtl_gate2.py`: values,
   every event, total cycles); runs and logs in `v3/work/`.
@@ -94,6 +108,12 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 | 2026-10-17 | **Area and energy splits per config** (the (b) and (c) panels): attention = the geometric mean of each share over its 6 shapes; FC = the share of the total summed over its 4 shapes (FC builds without a memory block or a CLB add would make a geometric mean 0). Energy parts: DPE passes, CLB adds + compares, the passes' block-RAM port traffic, memory bytes. | user (recommendation accepted) |
 | 2026-10-18 | **`dse/results/` holds both families, one VTR table and one priced table each:** `fc_vtr_results.csv` (the 48 FC rows of v2's VTR table, verbatim), `fc_priced_results.csv` (the v3 model on them, `dse/fc_rows.py`), `attn_vtr_results.csv` (`dse/vtr_dse.py`), `attn_priced_results.csv` (`dse/attn_rows.py`). `fc_snapshot/` is merged away; v2's own rows and ranking are the regression reference in `simulator/tests/ref/`. `rank.py` and `breakdown.py` read the two priced tables and never run the simulator. The FC shapes are `space.py FC_SHAPES`. | user |
 | 2026-10-18 | **The simulator drains all C columns on every pass (your own edit of `core/crossbar.py`: `OUTPUT_CYC` from C, `colsUsed` removed), the RTL keeps the early-stopping P29 drain.** Energy and timing now both charge the full output side. The model is therefore not RTL-pinned for passes with COLS_USED < C (3–8 % of the attention passes at C = 128 and the larger C = 256 arrays, all of them at 128×256). Earlier the same day you had kept the P29 drain; this supersedes it. | user |
+| 2026-10-22 | **The row-parallel crossbar tile, area side first.** Each crossbar gets $R$ data pins in and $C$ out, plus the 7 control inputs and 5 status outputs. Tile: $H = \lceil \max(R+7, C+5)/60 \rceil$ and $W = \lceil (A_{logic} + A_{xbar}) / (2239\,H) \rceil$; every cell is charged 2239 µm², routing included. $A_{logic}$ is `nl_dpe/area_power.py` (buffers of $\max(R, C)$ entries, the DACs). $A_{xbar}$ is COFFE's row-parallel local input crossbar (`coffe_flow_22nm/sweep_summary_full.csv` `total_um2`). XML: pins `spread`, the CLB's Fc (clock 0), switch blocks everywhere. Held: the mapping counts, and channel width 300 (COFFE's W = 320 is noted). This pass prices the area only; the timing, the streams and the RTL follow, each on your go (`experiment.md` §5.1). | user |
+| 2026-10-22 | **8 DSE configs:** $R \in \{128, 256, 512\}$, $C \in \{64, 128, 256\}$, $C \le R$; the 1024-row arrays and 128×256 leave. 64×64 is the functional-validation size only (GATE 2); 256×128 is the VTR smoke point (`experiment.md` §2.1). | user |
+| 2026-10-22 | **The row-parallel pass** (for the timing pass; not built yet): 1 cycle loads a bit plane, 1 fires it, and 8 drain. The ACAM fires at cycle 9 and the drain starts at cycle 10, when the next load may start. There is no second accumulator or output register. Back to back, a pass starts every 10 cycles; alone it takes 18 (`architecture.md` §1, platform row). | user |
+| 2026-10-22 | **Bit planes on the wire:** a window is 8 plane words, LSB first; an element wider than 8 bits uses $\lceil E/8 \rceil$ lanes; 10 cycles per pass back to back, 18 alone; soft corner-turns where whole values are needed (`architecture.md` §3.1, `ip/xbar/spec.md`). | user |
+| 2026-10-22 | **Every stream around the crossbars widens to $I$ bits per cycle as planes**, including the softmax score reader and the head's X and O. The mapping counts and the credit sizes are held ($N_{OC}$ by the 40-bit floor rule, `PB_CAP` = 4, two $\log P$ slots). Energy keeps its per-byte accounting. | user |
+| 2026-10-22 | **The 64×64 gates of the bit-plane pass:** the DIMM (16), softmax (18, plus the 128×64 case) and accumulator (19) corpora, the head bring-up (5) and gate H (6), after the RTL of every module (static gates only) and the head's VTR smoke at 256×128 (Rule No. 1). | user |
 
 ## Needs you
 
@@ -202,6 +222,46 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
     `c73c4d8`, `d515d8c`). Uncommitted in your tree: the deletions of `sweep.csv`, `sweep.log` and
     `softmax-regular-vs-online.log` (HEAD still has them; a snapshot built from HEAD would too), the untracked
     `arch.info` (a VPR leftover, 143 KB) and `rtl_flow/CLAUDE.md`.
+25. **The row-parallel tile, after the area pass (2026-10-22).** Each of these waits for your go:
+    - (a) **Republish the regenerated pages.** They are local only so far: the results page (KiVh2rqfLT4ifXSiCMxbeR),
+      the stage page, the brief (9yDxh6dUnPuCru5iSPAgB2), the time page, and the pipelines page
+      (SXc2GZ3QzTgdjBbWH5HRK7). Their large array is now 512×256.
+    - (b) **Re-run `dse/mapping_sensitivity.py`.** It was last run on the 12 configs with the legacy tiles; the brief
+      says so where it quotes it.
+    - (c) **The RTL pass.** The crossbar twins get R-bit / C-bit ports (both are copied files), and the four modules'
+      feeders change. Functional validation is GATE 2 at 64×64 only; the VTR smoke is at 256×128 only, with the
+      staged XML. Then the timing pass: the 10-cycle pass and the bit-plane streams.
+    - (d) **A modeling question for that VTR run.** The wc data pins stay `equivalent="none"`, although the area now
+      pays for a local input crossbar (COFFE, 50 % population), which would let VPR permute them. The CLB models its
+      own crossbar as `equivalent="full"`.
+    - (e) **The commit.**
+26. **Checkpoint C2 of the bit-plane pass (2026-10-22): the model and the docs, before any RTL.**
+    - (a) **Review** `ip/xbar/spec.md`, `ip/gemm/spec.md` (new), the DIMM, softmax, accumulator and head specs (each
+      §10 lists the changes), `architecture.md` §1–§5, `simulator.md` §3–§4 and `experiment.md` §4.4–§5.
+    - (b) **The cycles of the 48 builds:** 1.74–8.15× fewer (median 3.13×) and FC 2.35–8.74× (median 4.50×),
+      `work/bitplane/cycles_48.csv`. $T$ now depends on $C$ only, plus one cycle per GEMM tree level. Re-price the DSE
+      with them? The rows would then mix the new cycles with the 40-bit builds' CLB and Fmax until a VTR re-run
+      (`experiment.md` §8 would say so). Until you decide, three DSE checks fail by design:
+      - `check_energy` reads the stored priced rows against the model's new memory bytes (`e_mem`, `e_sm`, `e_acc`,
+        `e_total` up to +2.6 %);
+      - `config_table --self-test` and `stage_analysis --self-test` hold the 40-bit closed forms and cycles (deferred
+        by the plan, as is `pipelines.py`).
+
+      `run_all.sh` would re-price the rows with the new cycles, so it waits for this decision.
+    - (c) **The E5 credit now sets the attention block period** (171–175 cycles per block at $S = I$, $d = 64$; the
+      score stream needs 128). A third $\log P$ slot (PV `A_SLOTS`, softmax `LP_CAP` = 3) would cut 0–16.2 % of the
+      cycles (median 8.4 %; JetFormer-150P 0 %), for one more PV A slot. Held at 2 per the plan; your call.
+    - (d) **The accumulator's LOG feed:** corner-turn, $I/8$-lane arithmetic, corner-turn back (`PRE_LOG` = 17, the
+      plan's cost line). A full-width arithmetic gives 10 cycles but needs $N_{OC} I$ lanes, about +20k LUT at
+      256×128 [estimate].
+    - (e) **The QK A transposer** (row frame) exceeds one word per cycle on 18 of the 288 mapping candidates ($P_{proj}$
+      = 4 with $N_E = d$, up to 1.6): there the staging credit paces X. The fixed mapping peaks at 0.2. The fix would be
+      the window stager's: one write port per A memory.
+    - (f) **Carried from C1:** the E8 lane framing (2 lanes); the PV A write ports ($N_{AB}$ = 2 per slice); 25 (d)
+      `equivalent="full"`; the go for the copied-file edits (`dpe_nldpe.v`, `dpe_blackbox.v`, `tb_gemm_top.v`).
+    - (g) **Predicted memory:** 593 blocks at the 128×128 smoke point, against 376 measured for the 40-bit RTL. The
+      accumulator rises 58 → 221, because its plane-word memories are wide and shallow.
+    - (h) **The commit.**
 
 ## Log
 
@@ -1039,3 +1099,406 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   (the start) counts as logic / ctrl, so the shares sum to 1. `--self-test` 301 checks on the 120 builds. The two
   leftovers are untracked and yours to remove: `bash v3/work/tmp/drop_critical_path.sh --go` (`critical_path.py`,
   `results/critical_path.md`). Docs: `experiment.md` §9.3 (one block), `simulator.md` §3.1, both READMEs.
+- 2026-10-18 (your "add the critical-path breakdown to the results page"): `config_table.py` writes a per-config
+  `summary` into `critical_path.json` (geomean T, mean shares by kind and by module); `plot_dse.py` draws
+  `dse_critical_path.{png,pdf}` (three panels: attention by kind, attention by module, FC by kind; configs grouped
+  by R like the area and energy panels); `results_page.py` adds the section after "Why attention and FC differ"
+  (figure, the two share tables, a reading computed from the JSON) and its Latency paragraph no longer quotes the
+  projections' share. `config_table.py` is step 3b of `run_all.sh` (36 s end to end; its tables go to
+  `work/tmp/config_table.log`). Page republished (version 17). Docs: dse/README, v3/README, CLAUDE.md, experiment.md §9.3.
+- 2026-10-18 (your "list out all the mapping parameters / constants, and analytically analyze their impact"):
+  `docs/mapping_sensitivity.md` — the inventory (8 mapping knobs with their fixed values and rules, the hardware
+  constants BUF / P / the pass grammar / the extent rules / the pass and fabric prices / the tile footprints, the
+  evaluation conventions), the closed forms (cycles: the stream $n T_p / P_{proj}$ + the core at the stream floor
+  with each stage's period = work / crossbars × τ_I; crossbars: $3P_{proj}(V+1) + N_E + N_{EP} + N_{EXP} + 2 +
+  2N_{OC}$; passes per module, checked against the ledger on the 72 builds), the per-knob table, and the one-at-a-time
+  sweep `dse/mapping_sensitivity.py` (72 builds × 22 variants, 1.5 min; `results/mapping_sensitivity.{md,json}`;
+  self-test 152 checks). Findings: energy is mapping-invariant but for $B_{kv}$ (+4.6 / −2.3 %); the fixed mapping
+  sits at the stream floor (adding core crossbars buys ≤ 5 %, removing them costs 8–61 %); $P_{proj}$ is the one
+  large lever (−26 % median at 2 copies, −35 % at 4, up to −64 %), unequal across configs (128×64 0.78 vs 1024×256
+  0.53 at 4 copies): at 4 copies the C ≤ 128 configs all lie within 11 % of 128×64 in cycles (128×128 1 % faster;
+  1024×64 from 1.42× to 1.10×), the C = 256 ones stay 13–26 % slower (1024×256 from 1.88× to 1.26×). Fmax and
+  the CLB area of a variant need VTR: the candidates for the next VTR runs are $P_{proj} = 4$ and $N_{EXP} = 4$
+  (the latter only at C ≥ 128: the PV log P staging overruns at C = 64, as does X_S = 32).
+- 2026-10-18 (your "how much will the mapping knobs impact the area and latency? and can we analytically derive the
+  best mapping knob combos"): `docs/mapping_sensitivity.md` §5 + `mapping_sensitivity.py --balanced` →
+  `results/mapping_balanced.{md,json}`. The core's optimum is analytic and is the fixed mapping (N_E* = N_EP* ≈ d(1 +
+  40/I) → 2d, N_EXP* ≈ 1 + 40/I → 2, N_OC by the floor rule); the projections' is not: P_proj* = min(n, I/B_kv,
+  pow2(5 T_p/S)) = 2–16 per build, against the DSE's 1. Balanced: cycles −22 to −52 % per config for +9–19 %
+  crossbar area; the configs' cycle ratios to 128×64 collapse from 1.00–1.88 to 1.00–1.20; still 2.0–2.4 × n²/5
+  because the softmax block pipeline is 2-deep (period 235 vs floor 205), each run has a PV + acc tail, and the
+  QK staging cap I/B_kv (A_CH ≤ NB) keeps large-R / d_m = 768 heads stream-bound. Soft logic / Fmax of P_proj*
+  builds unmeasured → VTR candidates. Self-test 229 checks.
+- 2026-10-18 (your "find (latency.geomean_min, config) ... how different from our current ADP ranking"):
+  `mapping_sensitivity.py --optimize` (270-point grid per build, 13 min) → `results/mapping_optimum.{md,json}`,
+  `docs/mapping_sensitivity.md` §6. **The attention ranking does not move:** ADP order = the fixed mapping's with
+  one swap (128×128 ↔ 1024×64 at 4/5), EDAP one swap (10/11), the front 128×64 alone in both; so the DSE's
+  conclusions are robust to the mapping within the grid. The numbers move: ADP 0.41–0.65 of the fixed per config
+  (cycles 0.36–0.60, area +2–8 %), more on the large arrays (the spread compresses). The optimum: P_proj 4–16,
+  N_E 2d, N_EP 2d/4d, N_EXP 4, B_kv 16. Assumption: the variant's soft logic and Fmax = the fixed build's (VTR);
+  closing it needs a VTR run of the optimal mapping on 2–3 configs.
+- 2026-10-19 (your "energy and time breakdown analytically contributed by each stage for the smallest and largest
+  attention size ... plain English"): `docs/attention_stages.md` — the four stages as passes (τ, the pass price), the
+  crossbars per stage from the mapping (3P_proj V, N_E, N_EXP + 2, N_EP, 2N_OC; the rate rule N ≥ 5dτ/I ≈ d(1 + 40/I)
+  → 2d), the passes per stage, the energy (E ∝ n²d·p(R,C)/I: cells fired per useful element RC/I; the farms 90 %;
+  the CLB part fixed) and the time (the projection stream n T_p/P_proj vs the port-bound core) with the per-stage
+  tables for JetFormer-150P and ViT-B/16 at 128×64 and 1024×256 (simulator numbers).
+- 2026-10-19 (your "pipelined time diagram, analytical equation ... sweep I ... bake this to a new HTML page"):
+  `dse/stage_analysis.py` (the two case-study heads × 12 configs: per-stage tables, the Gantt intervals at 128×64 and
+  1024×256, the closed-form cycle and energy models and their errors, the sweep over square arrays; self-test 284
+  checks), `dse/plot_stages.py` (the time diagrams, the sweep), `dse/stages_page.py` (the page, KaTeX from cdnjs) →
+  `results/stages/`; `space.py CASE_STUDY`. Models vs the simulator: energy within 0.0 / 0.4 %; cycles within
+  12 / 16 %, always low (the accumulator's rescale + LOG kinds pipeline only partly: the measured block
+  period at I = 64 is ~290 vs the model's 209 — a finding: at d = 64 the o-carry at the floor rule's N_OC = 8 does not
+  keep up, and the optimizer's N_EP = 4d picks were lifting its cap). `docs/attention_stages.md` §6. Page published:
+  https://claude.ai/artifact/3Eh8TjzsdS3ggVeB2qkWmd (the KaTeX stylesheet inlined from `dse/katex.min.css` and its 20
+  woff2 fonts published beside the page from `work/katex/fonts`, fetched on demand: the viewer admits only the
+  artifact's own files). Two earlier batches + this one uncommitted, on your go.
+- 2026-10-19 (your "bake the 3 equations ... coarser granularity: projection, tiled QK, online softmax, tiled PV and
+  output rescale"): the stage page's time diagram has one lane per stage (the units merged), the accumulator is
+  named the output rescale everywhere, and the three laws (latency n T_p + n S/5 or S T_p + n²/5; energy
+  E_fixed + 2n²d·p(R,C)/I with p = 0.17 C + 0.00016 RC pJ; area A_CLB(I) + N_xbar·tile) sit on the page with a
+  per-head table of their terms at 128×64 and 1024×256 (`stage_analysis.py` `laws`), and in `attention_stages.md`
+  §5. The latency law is a scaling law, not the model: the rest of T is the block pipeline (1.0–1.5× the floor)
+  and the run tails, which the schedule model carries.
+- 2026-10-19 (your "bake this into HTML ... assumptions of every subsection as bullets, plain sentences"): the stage
+  page's model section is the named per-stage model (T_projection_token/stream, T_QK, T_reader, T_EXP, T_softmax,
+  T_PV, T_output_rescale, T_block, T_stream_bound / T_core_bound, the explicit overheads T_fill / T_first_block /
+  T_readout / T_tail, T_head; E_* per stage with the CLB adds and compares in closed form; A_* per stage +
+  A_CLB(I)), each subsection with bullet explanations; `stage_analysis.py` implements it literally (self-test 334
+  checks). Errors vs the simulator: cycles ≤ 12 % (JetFormer) / 17 % (ViT, 11 of 12 within 6 %), energy ≤ 0.1 %, area exact.
+  Two findings on the way: (1) the output rescale's period is set by its loop through the two-block α ring (E6):
+  (T_EXP + T_PV + W τ + 2τ)/2 ≈ 273 at I = 64 vs the reader's 205, so the ring depth, not N_OC, bounds the core
+  (the serialized-two-passes guess was 60 % off at S = 128); (2) when the stream is slower than the core, the first
+  run is pinned to it and the other runs follow: T_stream_bound = stream + max(1, N_run − 1)·N_block·T_block.
+  Page version 7; `attention_stages.md` §5 mirrors the equations.
+- 2026-10-19 (your "make the HTML display wider", "I dont get the sweep here ... overlapping ... whats the insight"):
+  both pages full-width (`results_page.py` CSS, shared by the stage page: the 1180 px wrap and the 70–80 ch prose caps
+  lifted, a 24 px gutter; a figure fills the width but never grows past its own pixels). The sweep rebuilt on the
+  DSE's own grid instead of square arrays: one curve per C against R, four panels per head (cycles, energy, area,
+  cycles × area relative to 128×64), lines = the closed forms, markers = the simulator, no point labels
+  (`stage_analysis.py` `grid` + `gridChecks`/`gridMutants`, self-test 424 checks; `plot_stages.py`; `stages_page.py`
+  `sweep_notes`, the bullets computed from the grid). Findings, asserted by the self-test: JetFormer-150P's time is
+  flat in R (no row beyond d_model = 64 is loaded) and grows with C through the drain; ViT-B/16's grows with R
+  (24.4k → 57.2k cycles at C = 64) and C = 128 is the fastest at every R, because the core left after the stream,
+  max(1, N_run − 1)·N_block·T_block, is smallest at S = 128 (7.9k vs 13.1k at S = 64 and 13.9k at S = 256); energy
+  rises with R at every C once R ≥ C, and 128×256 (R < C: twice the passes, each draining 256 columns) costs more
+  than 256×256; area and cycles × area rise with R and with C everywhere; 1024×256 costs 4.4× (JetFormer) and 5.4×
+  (ViT) the product of 128×64; ViT's 128×128 is 9 % faster but 31 % larger (1.19×). Stage page version 9, results
+  page version 18; `attention_stages.md` §7 rewritten.
+- 2026-10-19 (your "does our mapping unintentionally favor the small crossbar ... my advisor is not convinced ...
+  something between the general description and the technical details"): the one-page brief
+  `dse/stages_brief.py` → `results/stages/brief.html`, published at https://claude.ai/artifact/9yDxh6dUnPuCru5iSPAgB2
+  (private; share it before showing), with `stages_costs.png` (`plot_stages.py costs`: stacked bars of the critical-path
+  cycles, the energy and the area by stage on the 12 arrays, both heads). Its argument, every number from the data:
+  (1) the projections' crossbar count is set by capacity, every other stage's by bandwidth (the ports needed to keep
+  pace with the score stream), and the array does not change a port; (2) a crossbar converts 3.0 → 4.8 values per cycle
+  from I = 64 to 1024 while firing R·C cells, so a unit of bandwidth costs about 23× more cells at 1024×256 than at
+  128×64; (3) at 128×64 → 1024×256 every stage's cost rises (ViT: projections 8.7k → 41.5k cycles, 18 → 3 tiles; QK + PV
+  energy +37 %, 92 % of the head; tiles 32×; soft logic + memory 67 % of the area) and the only gain, 1.4× per crossbar
+  in the farms, is one the softmax reader never lets a stage use; (4) the knob optimum (`mapping_optimum.json`) cuts
+  every ADP to 0.25–0.79 of the fixed mapping and swaps only ranks 4 and 5; S = min(n, I) and the full-column drain
+  cost the large arrays about 10 % (ViT) and up to 40 % (JetFormer at C = 256) by the equations, far below the 2.3×
+  area gap; (5) FC's 2048 × 256 is 64 tiles of 128×64 or 2 of 1024×256 (capacity-set: its area falls with the array,
+  0.74 → 0.19 mm², cycles 54 → 269). Line: attention needs ports, not cells. Answer to the question: the fixed mapping
+  does tilt the field (P_proj = 1 exposes the stream, S = I, the drain rule), but the ranking is structural, and the
+  knob sweep was already done and did not move it. `attention_stages.md` §7 points at the brief.
+- 2026-10-20 (your "add this pass period table to the brief"): the brief's section 2 carries the pass period of one
+  crossbar I by I (load ⌈8I/40⌉, the 8 bit-slices, τ(I), values per pass, values per cycle, cycles per value =
+  1/5 + 8/I) with the drain rule and where the two constants come from (the hard block's 40-bit port and 8 bit-slices,
+  gated against the RTL on 64×64). Brief version 2. Your questions settled on the way: doubling a bandwidth-set
+  stage's crossbars halves that stage's time, doubles its tiles, leaves energy at 1.000 (per-pass prices, no static
+  term) and moves the head 0–4 % (the reader and the rescale loop pace it); the DIMM and softmax lanes are flat
+  across arrays because R never enters once R ≥ C, C enters only through 8/I, and the reader is soft logic.
+- 2026-10-20 (your "why tiled QK launches then waits ... no continuous pipeline", then "make it simpler ... draw a
+  better explaining timing diagram"): the stage page (version 10) has a step-by-step diagram of JetFormer-150P at
+  128×64 (`plot_stages.py explain` → `stages_explain_<head>.png`, from the per-process steps that `stage_analysis.py`
+  now stores under `gantt[cfg].steps`; self-test 435 checks: the pipeline order of the first steps and, for one-run
+  heads, the first score job after the last query). What it shows: the QK lane's early activity is the per-token Q/K
+  conversions (8 cycles each, in step with the 21-cycle stream); a score job needs all S queries of its run, and with
+  S = n = 32 (one run) the first job waits for the last token (starts at 711, the stream ends at 683; the keys of block
+  0 were ready at 347); then block 0 passes through score job → tile read → EXP → PV → rescale, each starting when the
+  one before delivers, block 1 111 cycles behind, then the readout (36) and the flush (82): the 596 cycles after the
+  stream are one pipeline latency plus the tails, not throughput, and more crossbars would not shorten them. The
+  steady-state gaps of ViT's later runs are the two-block ring: block k + 2's tile read starts when PV finishes block
+  k (measured 299 cycles per block against the reader's 208).
+- 2026-10-20 (your "what is readout? why do the rescale blocks overlap but the PV jobs not?"): the diagram's two run
+  boxes are named for what they are (version 11): the log l read-out (E7: the softmax sends each query's final
+  normalizer to the accumulator, one row per cycle, S + 4 cycles) and the normalization O = o / l (the accumulator's
+  epilogue: EXP passes over its groups that emit O8 on E9). The overlap: the accumulator has two crossbar groups (EXP
+  for the rescale, LOG for the o-carry) with per-wave waits (rescale(b, w) needs LOG(b − 1, w) and the block's log α),
+  so block b's rescale waves run on the EXP group while block b − 1's LOG waves finish on the LOG group; a PV job runs
+  all its waves on the one lock-step farm, so jobs queue on it. Both statements are in the page's bullets.
+- 2026-10-20 (your "why do read tile 0 and 1 have a stop; why is softmax block 1 longer; simplify the diagram for the
+  advisor"): (1) the tile read follows the score words as the QK farm delivers them; at this head the QK job period
+  (111 cycles) exceeds the tile read (104), so the reader waits 7 cycles per block for the next block's first scores
+  (tile 1 decided at 862 when its first word arrived; at ViT the reader is the slower one and there is no stop);
+  (2) block 1 carries the carry-EXP pass that merges the running (m, log l) with block 0's, which block 0 does not
+  have: 54 cycles from its wait to its retire against 34 (`softmaxOnline.core`, b == 0 skips carryExp); (3) the brief
+  (version 3) gets section "2. The head in time": `plot_stages.py simple` → `stages_simple_<head>.png`, the
+  step-by-step diagram reduced to one box per block per stage with the stream, the wait for the last query, the
+  chain and the tails, four bullets; the later sections renumbered 3–7. The detailed diagram stays on the stage page.
+- 2026-10-20 (your "row conversion = reshape?; the small gap inside block 0; the same plot for ViT"): (1) the row
+  conversion is the LOG converter pass, one crossbar in LOG mode per int8 input channel turning a token's Q, K or V
+  row into log bytes so the DIMM can multiply by adding (`dimmTile.converterA/B`); PV's probabilities arrive as log
+  already, so only its V port has one; (2) the thin lines inside block 0 were the drawn edges of the next block's box,
+  which starts a few cycles before the previous ends (QK 5, PV 4, the softmax's next tile read 140, the rescale 67):
+  not idle time; the boxes are now drawn without edges and the later block lighter; (3) `plot_stages.py simple` draws
+  both heads at 128×64 (many blocks: no block labels, the runs bracketed above); the brief (version 5) shows ViT below
+  JetFormer: the first run starts after its 64 tokens at 2,230 and overlaps the stream to 8,724 at the stream's pace
+  (a 16-key block per 544 cycles); the later runs at 309 cycles per block, the two-block softmax–PV hand-over.
+- 2026-10-20 (your "use the math annotation to mark what every stage is doing"): the three time diagrams carry the
+  stage equations (`plot_stages.py STAGE_MATH`, `CONVERT_MATH`, mathtext): lane labels q_t, k_t, v_t = x_t W_Q, ...;
+  S_b = Q K_bᵀ; m, l running, P_b = e^{S_b − m}; O_b = P_b V_b; o ← α o + O_b, O = o / l; the conversion bars log q_t,
+  log k_t and log v_t; the boxes with room carry their block's equation, the log l read-out and O = o / l boxes too.
+  Both captions define the notation. Brief version 6, stage page version 12.
+- 2026-10-20 (your "the y-axis labels just need projections, QKᵀ, online softmax, PV, output rescale; the ViT
+  interleaved colours look like two PEs"): the lanes are named so (`LANE_DISPLAY`), the equations stay in the boxes
+  and the captions; the many-block diagram uses one colour per lane (the alternating shade only told consecutive
+  blocks apart, the blocks are not different units: one QK farm, one PV farm, one reader; only the softmax's EXP
+  passes alternate between its two crossbars, by wave). The few-block diagram keeps the lighter overlapping block,
+  which its bullets explain. Brief version 7, stage page version 13.
+- 2026-10-20 (your "another subplot for 1024×128, so 4 plots: 2 heads × 2 configs, to see how the time scales with
+  the array"): `stage_analysis.py DIAGRAMS = (128×64, 1024×128)` stores the per-process steps of both (self-test
+  440 checks, the step checks run on them too); `plot_stages.py simple` draws one head at the two arrays stacked on a
+  shared time axis (`draw_simple` per subplot; the token period from the model's T_projection_token, so JetFormer's
+  drain-paced 27 at 1024×128 is right; the texts sized to their boxes); the brief (version 8) shows the two pairs
+  with a scaling bullet each: JetFormer 1,279 → 1,532 (+20 %): the token 21 → 27 by the 128-column drain, the time
+  after the stream 596 → 663; ViT 24,395 → 51,659 (2.1×): the token 34 → 162 (18 → 3 tiles, so 3 ports), the stream
+  8,724 → 41,489, the first score block at 20,787 instead of 2,230 (S = 128 needs 128 tokens), 2 runs instead of 4,
+  the time after the stream 10,170 against 15,671.
+- 2026-10-20 (your "or should it do 1024×256?"): yes, the pair is 128×64 and 1024×256 (`DIAGRAMS`), the array every
+  table of the brief compares against and the DSE's extreme; for ViT it is also the S = n case: one run, the first
+  score block at 41,523 right after the stream ends at 41,489, the head 58,307 (2.4×), the time after the stream
+  16,818 against 15,671. JetFormer: the token 21 → 53 (the 256-column drain), 1,279 → 2,579 (2.0×), the time after
+  the stream 904 against 596. Brief version 9; self-test 435 checks.
+- 2026-10-20 (your "I just need the pipeline time, no analysis; a separate HTML to share with my advisor"):
+  `dse/stages_time.py` → `results/stages/time.html`: the two pairs (each head at 128×64 and 1024×256 on one time
+  axis) with the lane legend and the notation in the lede, one caption line each, nothing else. Published (private;
+  share before showing).
+- 2026-10-20 (your "what is 2 key blocks? 2 blocks at a time?"): a block is [S queries × 16 keys], the keys cut into
+  n / 16 blocks taken one after another within a run (the online part: m, l updated per block); "2 key blocks" was
+  JetFormer's 32 keys in 2 blocks. The titles and captions now say "the n keys in B blocks of 16, one block after
+  another" (time page version 2, brief version 10).
+- 2026-10-20 (your "make the mapping visual and intuitive without the implementation details ... an animation of the
+  dataflow ... together with the brief"): `dse/dataflow.py`, the animated dataflow board at the top of the brief's
+  section 2: an SVG board per array drawn from the simulator's step log (the DIAGRAMS arrays): the token stream into
+  the projection tiles drawn to scale with one port each (18 tiles and ports at ViT 128×64, 3 at 1024×256), the log
+  rows collecting into the run's S queries and the key and value blocks, the QK farm, the softmax reader pipe and
+  EXP, the PV farm, the rescale and the output; two arrays on one clock with play, speed and a scrubber; the time
+  diagram with a cursor under each board; the head switchable. No FIFOs, credits, jobs or controller: every motion is
+  a step. Self-test 26 checks: the series sizes, the query gate, and the script run under node with a stub DOM
+  through both heads. Brief version 11.
+- 2026-10-20 (your "the labels and dataflow are not shown completely"): rendered in headless Chrome
+  (`/usr/bin/google-chrome`, a throwaway profile in `work/tmp/flowcheck/`): the side-by-side boards shrank the text
+  to about 7 px, four label pairs collided, the rescale column ran off the board and the strip's lane names overlapped.
+  The board is redrawn (`dataflow.py`): one board per row at full width (1500 × 424 units), fixed columns with every
+  label inside its column, the tiles at one true scale (1 unit = 8 rows or columns), real subscripts and superscripts
+  (tspans), arrows that light up and carry a packet during each hand-over, the current key and value blocks outlined
+  and the run's queries bracketed. Self-test 32 checks: plus a layout check in headless Chrome with IBM Plex loaded
+  (every label inside its board, no label on a label or on a drawn shape, at ten times per head) and a planted
+  overlap it must catch; `--shot HEAD FRACTION` writes a screenshot. Brief version 12.
+- 2026-10-20 (your "I cannot see data flow into and out of W_Q W_K W_V; 'rows in the log domain' and 'farm' are
+  misleading; plot the actual transfer, how the computation happens in one crossbar or per token, and the flows
+  between stages"): the board is now driven by the crossbar passes themselves. `stage_analysis.py passEvents` stores,
+  for the DIAGRAMS arrays, each token's projection pass (load start/end, compute start, last bit-slice, drain
+  start/end, the row's output start/end; the K and V tiles run in lock-step with Q, asserted), every QK and PV job's
+  waves, the softmax's exp passes and retire per block, and the accumulator's rescale/LOG waves per block and its
+  normalization waves per run. `dataflow.py` panels: (1) projections, one token at a time: x_t → one W_Q tile
+  enlarged with its true proportions (the used rows × d weights inside the R × C array; the input bar filling with
+  the used rows at 5 per cycle; 8 bit-slice marks; the output bar sweeping all C columns, the used ones blue) →
+  q_t, k_t, v_t → stores, plus all tiles drawn to one scale lit in lock-step; (2) the Q, K, V stores (relabelled
+  from "rows in the log domain": "stored as logs, so the products become adds"); (3) attention, one key block at a
+  time, as matrices of their true shapes (each board to its own scale, the sizes printed): S_b = Q K_bᵀ, P_b with
+  m, l, O_b = P_b V_b, o, O, each filling smoothly wave by wave or pass by pass; "farm" replaced by "N crossbars,
+  W waves, a pass: I products". The layout check now treats lines as solid (a label on the old broadcast line was
+  missed before). Self-test 64 checks (the pass order load < compute < drain, the next load after the last
+  bit-slice, 5 values per cycle in, all C columns out, the waves inside their jobs, the node runtime over 201 times
+  per head with finite geometry, the Chrome layout check, a planted overlap). Brief version 13.
+- 2026-10-20 (your "in 1024×256 the output rescale bar has an idle interval: rendering or mapping?"): rendering. The
+  accumulator's run step starts at its first output word, so the normalization passes' load and bit-slices (25
+  cycles at I = 64, 64 at I = 256) were drawn as idle; at JetFormer 1024×256 that showed as a 66-cycle gap (block 1's
+  LOG wave drains at 2,459, the O = o / l pass loads from 2,462, the bar started at 2,526). `stage_analysis.simulate`
+  now starts the drawn run step at its first normalization pass (gantt lanes and steps), and the self-test asserts
+  every pass lies inside its drawn step (normalize, rescale, QK, PV; 694 checks; the old data fails it). Only this
+  lane was affected (every other lane starts at or before its first pass). Brief version 14, time page version 3,
+  stage page version 14.
+- 2026-10-20 (your "I didn't see the log, exp and reduction happen; how do we reflect the novel log-domain mapping
+  in the animation?"): the board's fourth panel, "how a block is computed: the log-domain mapping" (F1–F7 of
+  `architecture.md`): three bands, the log domain (soft logic: + and − of logs), the crossbars (identity weights:
+  EXP ↓, LOG ↑) and the linear domain (soft logic: adder trees, max), with one column per operation: the operands
+  through the LOG converters; QKᵀ as log q + log k → EXP ×N_E → Σ over d with the signs → s; the softmax as max → m
+  and log P = s − m with no crossbar (a score is already a log) → EXP ×N_EXP → Σ over 16 → l, then the carry LOG →
+  log l; PV as log P + log v → EXP ×N_EP → Σ over the 16 keys → O_b; the rescale as log α + lo → EXP → ± α o + O_b →
+  LOG → lo (o stays a log between blocks); the normalization as lo − log l → EXP → O. Each operation lights in the
+  phase of the simulator's pass that performs it: the adds during the load, the conversion during the 8 bit-slices,
+  the trees during the drain (`stage_analysis.passEvents` now stores the four phase times of every wave, the
+  accumulator's EXP and LOG waves apart, and the softmax's carry window). Two count lines give one block's
+  operations from its shapes (ViT at 128×64: 65,536 adds of logs, 65,536 EXP in 8 waves × 128, 64,512 tree adds →
+  1,024 scores; ...). Self-test 80 checks (phase order of every wave, block 0 without rescale waves, the carry window,
+  the node runtime, the Chrome layout check with a node's own label allowed inside it, a planted overlap). Brief
+  version 15.
+- 2026-10-20 (your "make the log-domain mapping the primary animation, explicit dataflow in and out, no token
+  numbers, no technical details, just the mapping with the timeline, embedded in the Attention head in time page";
+  your answers: the full chain F1–F7, both arrays on one clock, one key block as the packet, only the animation and
+  the timeline on the page): `dataflow.py MAP_SCRIPT` / `map_section`, the mapping-first board: three bands and one
+  column per operation, x·W_Q,K,V → LOG↑ → log q, log k, log v → (log q + log k → EXP↓ → Σ over d, ± → s) → (max
+  over 16 → m; s − m = log P with no crossbar → EXP↓ → Σ over 16 → l → LOG↑ → log l) → (log P + log v → EXP↓ → Σ over
+  16 keys → O_b) → (log α + lo → EXP↓ → ± α o + O_b → LOG↑ → lo) → (lo − log l → EXP↓ → O); every edge labelled with
+  its data (q·k, P, l, log P, log α, log v, O_b, o, lo, log O ...), the long routes log P, log α, log l above the log
+  band; one dot per stage in the block's colour travelling the edge of the current phase (adds during the load,
+  the conversion during the bit-slices, the trees during the drain) and the hand-over edges between stages; the
+  operation lit meanwhile; the status line names only "QKᵀ block b", "softmax block b" ...; no counts, waves or
+  token numbers. `stages_time.py` rebuilt around it (lede + four reading notes + the animation + the notation;
+  self-contained, the static figures removed). The layout check now tests polylines segment by segment (an L-shaped
+  route's bounding box is not the route) and reports the boxes behind each issue; the self-test runs both boards
+  under node and Chrome with a planted overlap each (84 checks). Time page version 4.
+- 2026-10-20 (your "group the mapping blocks into Projection, QKᵀ, online softmax, PV, rescale; mark the crossbars
+  allocated and the instances"): the mapping board's columns sit in five dashed module frames in the lane colours,
+  each with its name and counts at its foot: Projection (3·P_proj GEMMs, 3·P_proj·V crossbars), QKᵀ (1 DIMM tile,
+  N_E EXP + 2·P_proj LOG), online softmax (1 instance, N_EXP EXP + 2 carry), PV (1 DIMM tile, N_EP EXP + P_proj LOG),
+  rescale and normalize (1 accumulator, N_OC EXP + N_OC LOG; the normalization's EXP marked "shared"); every crossing
+  carries its count (×128, ×2, ×8 ...). The LOG converters moved into the tiles that own them: q, k into the QKᵀ
+  tile, v into the PV tile over its own route from the projections. The self-test asserts the module counts equal
+  the simulator's per-stage crossbar totals (board data `crossbars`, `P_PROJ`). Board 1600 × 520 units.
+- 2026-10-21 (your advisor's questions on the time page: does the projection take longer on the large array, why does
+  only ViT on 128 × 64 overlap the projection with the core, and where are the per-operation pipeline charts with
+  loading, compute and unloading): answered in chat, and the charts built as a new page for sharing,
+  `dse/pipelines.py` → `results/stages/pipelines.html`, https://claude.ai/artifact/SXc2GZ3QzTgdjBbWH5HRK7 (private;
+  version 1). The simulator runs (timing only) with every crossbar's passes recorded; per operation (projection, LOG
+  conversion, DIMM, online softmax, output rescale) a few consecutive passes at 128 × 64 and 1024 × 256 on one scale,
+  the whole head as two strips per crossbar group (input side: load, compute; output side: read-out), and the
+  stage-length table. Facts the answers quote, all asserted by `--self-test` (110 checks, incl. Chrome layout):
+  - Projection per token: JetFormer 21 → 53 cycles (read-out bound at 1024 × 256: 64 inputs load in 13, but all 256
+    columns read out in 52); ViT 34 → 162 (load bound: 768 inputs through 6 ports, 128 each, 26 cycles, against one
+    port, 154 cycles). Whole projection: JetFormer 687 → 1,718; ViT 8,719 → 41,526.
+  - Overlap: a run holds S = min(n, I) queries (the softmax carry passes are S × S). ViT on 128 × 64 is 4 runs of 64:
+    QKᵀ starts at 2,240 while the projection runs to 8,719. The other three cases are one run holding every query:
+    QKᵀ starts after the last token (JetFormer 721 after 687, 1,721 after 1,718; ViT at 1024 × 256: 41,541 after
+    41,526).
+  - The advisor's ordering "load largest, then compute, then unload" holds only where many numbers go in (the
+    projection). Compute is always the shortest (10). The identity crossbars of QKᵀ, PV, softmax and rescale load and
+    read out the same I values (13 and 13; 52 and 52); the LOG converters and JetFormer's projection at 1024 × 256 are
+    read-out bound. Back to back a crossbar starts a pass every max(load + 8, read-out + 1); a DIMM tile starts a new
+    key block only on idle crossbars, so the last read-out of each block is not hidden.
+- 2026-10-21 (your "can we derive the similar animation pipeline diagram of each operation? what's the diagram he
+  wants, the pipelined timeline?"): yes, the textbook pipeline diagram, at two levels: inside an operation (rows =
+  consecutive crossbar passes, each split into load / compute / read-out, staggered so the read-out of one pass sits
+  under the next pass's load) and for the full head (rows = the core's crossbar groups, one key block followed through
+  them, its neighbours faint, so the operations of different blocks overlap). The earlier timelines were resource
+  views (one lane per operation, one bar per block): they show when a unit is busy, not the stages inside it. Built
+  into `dse/pipelines.py` → https://claude.ai/artifact/SXc2GZ3QzTgdjBbWH5HRK7 version 2 (private): per operation an
+  animated board of the crossbar pipeline over the pass diagram with a cursor, both arrays on one clock; the boards show
+  every pass the crossbars hold (the read-out-bound projection at 1024 × 256 shows three tokens in flight: one
+  waiting for the array, one held for the output port, one reading out). The full-head chart follows the middle key
+  block of the last run: in ViT the QKᵀ runs two blocks ahead of the softmax (block 9 in QKᵀ while block 7 is in the
+  softmax and block 8 waits), about 3 blocks in flight at 128 × 64 and 4 at 1024 × 256. Self-test 131/131 (the
+  page's board texts equal the Python twin of the state rule at every sampled cycle; layout; planted faults).
+- 2026-10-22 (the plan you approved: the row-parallel crossbar area model, area side first; your notes: "we only need
+  64x64 for functional validation and 256x128 for VTR smoke"). Every check is listed below with its result.
+  - **Docs first.** `experiment.md` §2.1 (the 8 configs), §3.1, §4.3 (32 FC rows, 48 builds), §5 area row, the new
+    §5.1 (the tile rule, its constants and sources, the table, why tall narrow arrays grow most, the legacy rule), §8–§9
+    rewritten. Also `simulator.md` §4.7, `architecture.md` (the configs, the planned interface), the three decision rows
+    above, both READMEs and `CLAUDE.md`.
+  - **Code.**
+    - `simulator/platform/nl_dpe_tile.json` (new, v3-owned): the pins, the DAC, the COFFE local crossbar per R with its
+      provenance, and the legacy tiles read from the 12 XMLs.
+    - `area.py`: `logicAreaUm2` (the platform's per-unit areas with max(R, C) buffers, plus the DACs),
+      `localCrossbarUm2`, `blockAreaMwta`, `tileShape` (pins and area to W x H) and `footprint(R, C, rule)`;
+      `wcFootprint` is gone. `areaWcMwta`, `withVtr` and `rows.fcRow` / `attentionRow` take the rule;
+      `testFcRows.py` and `checkEquivalence.py` use `rule="legacy"`.
+    - `space.CONFIGS` holds the 8 configs. Every count that followed the 12 now follows it (`data.py`, the self-tests
+      of `vtr_dse.py` and `config_table.py`, `dse_watch.py`, `plot_dse.py`'s grid with the C > R cell left empty,
+      `results_page.py`, `testDimmTile.py`).
+    - The stage analysis' large array is 512×256 (`EXTREMES`, `DIAGRAMS`, the pipelines self-test's pace table:
+      53 / 111 cycles per token by the formula). `stages_page.py`'s sweep notes are indexed by (R, C).
+    - `vtr/gen_arch.py` (new) writes the 8 row-parallel XMLs to `vtr/arch_rowpar/`. The diff from the template is only
+      the tile's height, width, area, I and O, the clock's Fc 0, wc / wc_slice / nl_dpe's pins, and the directs.
+  - **Tiles, H x W cells, legacy → row-parallel** (per crossbar, at 2239 µm² a cell):
+    | array | 128×64 | 128×128 | 256×64 | 256×128 | 256×256 | 512×64 | 512×128 | 512×256 |
+    |---|---|---|---|---|---|---|---|---|
+    | legacy | 5×1 = 5 | 11×1 = 11 | 3×2 = 6 | 4×3 = 12 | 6×4 = 24 | 4×2 = 8 | 5×3 = 15 | 6×5 = 30 |
+    | row-parallel | 3×2 = 6 | 3×4 = 12 | 5×2 = 10 | 5×3 = 15 | 5×5 = 25 | 9×2 = 18 | 9×3 = 27 | 9×4 = 36 |
+
+    64×64 (validation only) is 2×3 = 6. All 80 priced rows carry these tiles: crossbar area = count × cells × 66,117,
+    the total area sums, and VPR's crossbar count equals the model's.
+  - **Checks**, logs in `v3/work/logs/*_rowpar.log`:
+    - F2 10/10 (38 s, no access outside v3/), with `testArea` 111 checks. Eight planted faults in the area model were
+      all caught, after a pin-count check was added for the two (the control and status pin counts) that the 9
+      arrays alone cannot catch.
+    - `checkEquivalence` ALL EQUAL under the legacy rule (72 + 48 reports and rows, 8 corpora). `testFcRows` 48/48
+      equal to v2.
+    - `check_head_params` 48 builds; `copies` 48/48; `check_twins`; `lint_rtl`.
+    - `gen_arch --check`: 8/8 XMLs, and 8 of 8 planted faults caught.
+    - Self-tests: `vtr_dse`, `rank` (26), `config_table` (216), `check_energy`, `dse_watch`, `stage_analysis` (580,
+      with the page's claims on the new grid), `pipelines` 131/131, `dataflow` (92).
+    - `run_all.sh` completes.
+    - Read-only pre-check: the 9 arrays incl. 64×64 pass every module's domain gate and `check_head_params`.
+  - **Results** (`experiment.md` §8; an area-only update, pessimistic for the larger arrays until the timing pass):
+    - FC front 512×256 → 256×256 → 256×128 → 256×64 → 128×128 → 128×64. 512×128 drops off it (27 cells, 68 % used).
+    - Attention front 128×64 alone.
+    - Cross front 128×64 (d 0.539) and 256×128 (0.611). 256×64 leaves it: its tile grew +67 % against +20 % at
+      128×64.
+  - **Page text that the new data made wrong, now computed from the data:**
+    - FC area falls with the array, but not at every step: at R = 512 with C ≤ 128 it rises again.
+    - At C = 256 the load is still 32–36 % of the attention path; it no longer "nearly vanishes" (128×256 is gone).
+    - The farms are 80–91 % of the energy, not "90 %".
+    - ViT's projection is 34 → 111 cycles per token.
+    - The memory note counts 12 builds.
+    - The FC EDAP ranking is no longer v2's.
+
+    The claims that depend on the data's pattern are asserted by the page scripts.
+  - **The 12-config results** before this pass are kept in `v3/work/snapshots/results_12cfg_2026-10-22/`.
+- 2026-10-22 (the bit-plane pass, phases 1 and 2: "do 1 and 2"; docs, then the simulator; no RTL, no runs). Logs in
+  `v3/work/logs/`.
+  - **Docs first:**
+    - `ip/xbar/spec.md` (new, the crossbar charter) and `ip/gemm/spec.md` (new);
+    - the DIMM, softmax, accumulator and head specs, each with its changes in §10;
+    - `architecture.md` §1, §3 (plane framing, E0–E9), §4.3–§4.7, §5.2, §5.5, §6, §7;
+    - `simulator.md` §3–§4 and `experiment.md` §4.4, §5.
+  - **Design numbers** (model-only until the RTL pass):
+    - the crossbar: T(M) = 10M + 8;
+    - the GEMM: $L_W$ = tree + 1;
+    - the DIMM: `START_LAT` 10 ($A_{GRP}$ = 8), `OUT_LAT` = 10 + log₂ K, converter period 10, $E_{wp}$ = 4 in the
+      head;
+    - the softmax: `CT_LAT` 2, `MAX_LAT` = log₂ min(I/8, B_kv) + 2, `FEED_LAT` = `MAX_LAT` + 10, `SP_LAT` 3,
+      `GO_LAT` 2, `E_LAT` 1, `LA_LAT` 1, `E7_LAT` 2;
+    - the accumulator: `PRE_LOG` 17, `PRE_EXP` 10 (a job decides ahead of its leader), `E9_LAT` 10;
+    - the head: `LOADX` 8.
+  - **Code:**
+    - `core/crossbar.py` has the pass rule, and `records.py` the plane framing (`planePort`, `planeWords`);
+    - `stages.Repack` is dropped;
+    - the models of every module drop `BUF` and are `model-only`;
+    - the case writers write plane words; `nOcFloor` is frozen at its 40-bit form;
+    - `checkEquivalence` takes the tile rule from the reference's manifest;
+    - `check_head_params` and `vtr/smoke.py` drop `BUF` from their key lists;
+    - the `vtr_dse` self-test pins the predicted 593 blocks.
+  - **Tests**, each with a hand-written closed form instead of the v2 kernels' 40-bit timing (the kernels stay value
+    witnesses):
+    - F2 10/10 + isolation (`work/f2/bitplane_p2/`): crossbar 258 cases and 5/5 mutants; GEMM 160 cases and 3/3;
+      DIMM 243 GATE 1 cases, 35 closed forms, 11/11 mutants and the memories against Yosys (§6 by hand reproduces all
+      8 Yosys pins with the 40-bit $A_{GRP}$); softmax 210 GATE 1 cases, 466 closed forms, 19/19 mutants;
+      accumulator 290 GATE 1 cases, 40 closed forms, 14/14 mutants;
+    - FC 48/48 rows: energy and area equal to v2, the cycles equal to 18 + $L_W$;
+    - trace: the head pins 3,818 and 12,481 (the 40-bit pass gave 7,752 and 24,395);
+    - core: 101 plane-framing checks.
+  - **By-design diff** against `ref_2026-10-18` (`work/bitplane/by_design_diff.txt`; 120 reports):
+    - 0 unexpected differences: passes, CLB operations and crossbars are equal everywhere;
+    - what moved: the cycles; the softmax and accumulator FIFO and memory bytes (the 40-bit padding goes, the 13-bit
+      values take 2 lanes); the memory inventories (the DIMMs at $I \ge 128$, the softmax, the accumulator);
+    - energy: $e_{total}$ +0.000 to +0.020 %, $e_{mem}$ +0.0 to +2.6 %.
+  - **Reference:** `freezeReference.py` → `work/equivalence/ref_2026-10-22` (80 reports, the row-parallel tiles, 626
+    files). `checkEquivalence` defaults to it: ALL EQUAL.
+  - **Corpora:** `work/corpus/bitplane/{dimm_64x64 16, softmax_64x64 18, softmax_bringup 5, softmax_rc 1, acc_64x64 19,
+    acc_bringup 5, head_64x64 6, head_bringup 5}`, every case GATE-1-certified. They are byte-identical to the
+    reference's copies.
+  - **Static gates:**
+    - `copies` 48/48 (no copied file edited); `check_twins` and `lint_rtl` pass (the RTL is unchanged);
+    - `check_head_params`: 48 mismatches, all `u_ctrl.LOADX` (RTL 26/52, model 8), by design until the RTL pass;
+    - `vtr_dse --self-test` passes;
+    - by design until the DSE rows are regenerated (Needs you 26 b): `check_energy` (192 differences in `e_mem`,
+      `e_sm`, `e_acc`, `e_total`), and the `config_table` and `stage_analysis` self-tests (40-bit closed forms and
+      cycles).
+  - **Cycles of the 48 builds:** attention 1.74–8.15× fewer (median 3.13×), FC 2.35–8.74× (median 4.50×)
+    (`work/bitplane/cycles_48.csv`).
+  - **Findings for C2:** Needs you 26 (c)–(e), (g).

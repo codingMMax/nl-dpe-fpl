@@ -38,7 +38,7 @@ class AttCtrlParams:
     BKV: int
     I: int
     P_PROJ: int
-    LOADX: int
+    LOADX: int        # plane words per X burst (P since 2026-10-22)
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ def pulsePort(name: str, unit: str) -> PortSpec:
 class AttCtrl(Module):
     NAME = "att_ctrl"
     PARAMS_CLASS = AttCtrlParams
-    BASIS = "rtl-pinned"           # 2026-10-15: bring-up 5/5 + gate H 6/6 on 64x64 (every event, cycles, values)
+    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was gate H-pinned 2026-10-15
 
     @staticmethod
     def derive(p: AttCtrlParams) -> AttCtrlDerived:
@@ -82,7 +82,7 @@ class AttCtrl(Module):
                  role: str | None = None):
         super().__init__(instance, params, withValues=withValues, role=role)
         if xSpec.words != self.p.LOADX:
-            raise ValueError(f"att_ctrl: the X bus carries {xSpec.words} words per burst, LOADX = {self.p.LOADX}")
+            raise ValueError(f"att_ctrl: the X bus carries {xSpec.words} planes per burst, LOADX = {self.p.LOADX}")
         self.xSpec = xSpec
         self.tStart = self.tRun = None
         self.xReadyAt = {}                     # (copy, token k) -> x_rdy rising (k >= 1)

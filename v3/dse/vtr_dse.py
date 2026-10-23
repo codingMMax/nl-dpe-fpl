@@ -2,7 +2,7 @@
 """vtr_dse.py — VTR of the attention DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/attn_vtr_results.csv.
 
 A build is one attention head (`att_head`) at the fixed mapping (the `head_params` defaults, experiment.md §4.2) for one
-shape (§3.2) on one crossbar config: 6 shapes x 12 configs = 72 builds. Its circuit is the smoke's (smoke.circuit: the
+shape (§3.2) on one crossbar config: 6 shapes x 8 configs = 48 builds (72 on the 12 configs of the 2026-10-15 run). Its circuit is the smoke's (smoke.circuit: the
 VTR twins + the parameter wrapper; top att_head_<shape>_<R>x<C>). The first 12 hex digits of the circuit's sha256 name
 the build's folder work/vtr/dse/<shape>_<R>x<C>_<hash>/, so another RTL gets another folder and nothing is overwritten:
   <top>.v            the circuit
@@ -32,8 +32,8 @@ Run log: one timestamped line per event, appended to work/dse/vtr_dse.log and ec
 into the same file); each tool's PID is logged at its start.
 
 Usage:
-  python3 v3/dse/vtr_dse.py --elab-only                        the elaboration checks of the 72 builds
-  python3 v3/dse/vtr_dse.py [--build JetFormer-150P@128x128]   the builds end to end (default all 72), seeds 11,13,17
+  python3 v3/dse/vtr_dse.py --elab-only                        the elaboration checks of the 48 builds
+  python3 v3/dse/vtr_dse.py [--build JetFormer-150P@128x128]   the builds end to end (default all 48), seeds 11,13,17
   python3 v3/dse/vtr_dse.py --aggregate                        rebuild the CSV from the folders (no tool)
   python3 v3/dse/vtr_dse.py --self-test                        fake tools, no VTR
 """
@@ -974,17 +974,19 @@ def _flow_tests(td: Path) -> list:
 
 
 def self_test() -> int:
-    """The builds (72, unique names / tops / folders, the smoke point's counts), the elaboration check, the gate, the
+    """The builds (shapes x configs, unique names / tops / folders, the smoke point's counts), the elaboration check, the gate, the
     pool, and main() end to end on fake tools. Temporary files under work/tmp (left in place)."""
     fails = []
     (V3 / "work" / "tmp").mkdir(parents=True, exist_ok=True)
     td = Path(tempfile.mkdtemp(prefix="vtr_dse_test_", dir=V3 / "work" / "tmp"))
     every = all_builds(td / "out")
-    if not (len(every) == 72 == len({b.name for b in every}) == len({b.top for b in every})
+    if not (len(every) == len(SHAPES) * len(CONFIGS) == len({b.name for b in every}) == len({b.top for b in every})
             == len({b.dir for b in every})):
-        fails.append("72 builds with unique names, tops and folders")
+        fails.append(f"{len(SHAPES) * len(CONFIGS)} builds with unique names, tops and folders")
     bt = next(b for b in every if b.label == "BERT-Tiny@128x128")
-    if (bt.n_xbar, bt.mem_blocks, bt.params["N_OC"], bt.params["N_E"], bt.params["P_PROJ"]) != (278, 376, 6, 128, 1):
+    # 593 memory blocks: the bit-plane model's prediction (2026-10-22); VPR packed 376 for the 40-bit RTL (2026-10-15),
+    # and the bit-plane head smoke (256x128) re-checks the prediction
+    if (bt.n_xbar, bt.mem_blocks, bt.params["N_OC"], bt.params["N_E"], bt.params["P_PROJ"]) != (278, 593, 6, 128, 1):
         fails.append(f"BERT-Tiny@128x128 (the smoke point): {bt.n_xbar} crossbars, {bt.mem_blocks} blocks, {bt.params}")
     if all_builds(td / "out")[5].digest != every[5].digest:
         fails.append("the circuit hash must be stable")

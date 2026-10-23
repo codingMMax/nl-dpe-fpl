@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check_head_params.py — the simulator builds the same head as the RTL, for every DSE build.
 
-For each of the 72 builds (docs/experiment.md §4.3) at the fixed mapping, `headParams` gives the head's top
+For each of the 48 builds (docs/experiment.md §4.3) at the fixed mapping, `headParams` gives the head's top
 parameters. This gate evaluates the VTR twin `top/rtl/vtr/att_head.v` with them, statically (no simulator, no tool):
 its localparams, then every module instance's parameters, each completed with the module's own header defaults from
 its VTR twin. It checks:
@@ -27,7 +27,8 @@ from smoke import veval  # noqa: E402
 from dse.space import CONFIGS, SHAPES  # noqa: E402
 from simulator.models.attentionHead import attentionHead, headParams  # noqa: E402
 
-TOP_KEYS = ("NSEQ", "DM", "D", "BKV", "R", "C", "BUF", "P", "N_EXP", "N_E", "N_EP", "N_OC", "P_PROJ", "X_S")
+TOP_KEYS = ("NSEQ", "DM", "D", "BKV", "R", "C", "P", "N_EXP", "N_E", "N_EP", "N_OC", "P_PROJ", "X_S")   # BUF left the
+#   model 2026-10-22 (the bit-plane pass); the 40-bit RTL keeps its default until the RTL pass
 FILES = {"gemm_top": "ip/gemm/rtl/vtr/gemm_top.v", "dimm_tile_top": "ip/dimm/rtl/vtr/dimm_tile_top.v",
          "softmax_online_top": "ip/softmax/rtl/vtr/softmax_online_top.v",
          "softmax_online_acc": "ip/softmax/rtl/vtr/softmax_online_acc.v", "att_ctrl": "top/rtl/vtr/att_ctrl.v"}

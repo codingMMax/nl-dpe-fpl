@@ -9,7 +9,7 @@ crossbar pass fires the whole R x C array every time and reads only the rows in 
   CLB adds / compares = count x add_pj / compare_pj;   memory = ceil(8 bytes / port) x bram_pj per direction
 
 Checks (every failure is listed; the exit status is 1 if there is one):
-  1  one pass at the boundaries: prices.py equals the formula for rows used 1, 2, 5, 6, R/2, R-1, R on all 12 configs;
+  1  one pass at the boundaries: prices.py equals the formula for rows used 1, 2, 5, 6, R/2, R-1, R on all the configs;
      the cells, the ACAM and the output side do not move with the rows used; 0 and R+1 rows are rejected; an empty
      ledger costs nothing; a ledger with two keys costs the sum of its keys
   2  every row of results/fc_priced_results.csv and results/attn_priced_results.csv: the simulator's ledger for the row's
@@ -173,7 +173,8 @@ def main() -> int:
     fc_rows, att_rows = data.fcRows(), data.attentionRows()
     fcRes = check_rows("fc", fc_rows, fc_run, None, fails)
     attRes = check_rows("attention", att_rows, attention_run, 0.0051, fails)
-    print(f"check_energy: {nb} boundary cases on 12 configs, {len(fc_rows)} FC rows, {len(att_rows)} attention rows")
+    print(f"check_energy: {nb} boundary cases on {len(CONFIGS)} configs, {len(fc_rows)} FC rows, {len(att_rows)} "
+          f"attention rows")
     report("fc", fcRes, len(fc_rows))
     report("attention", attRes, len(att_rows))
     if fails:

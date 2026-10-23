@@ -8,6 +8,10 @@ controller's behavior model `top/model.py`, the head workload `sim/workloads/att
 validated modules (`ip/gemm`, `ip/dimm/spec.md`, `ip/softmax/spec.md`, `ip/softmax/acc_spec.md`) and
 `docs/architecture.md` §4.1, §4.7 and §5. Refinements of §4.7 made while writing this spec are listed in §10.
 
+**2026-10-22, the bit-plane pass** (§10 item 6): X and $O_8$ move as bit planes, and a token burst is 8 plane words
+(`ip/xbar/spec.md`, `docs/architecture.md` §3.1). The behavior models implement this version. The RTL twins still
+have the 40-bit version and follow in the RTL pass, so gate H pins this version only after that.
+
 ## 1 Function
 
 One head of textbook attention on NL-DPE crossbars (`architecture.md` §1):
@@ -28,8 +32,8 @@ bit-exact. There is no output projection.
 
 ## 2 Parameters
 
-`att_head` takes the row's parameters (`experiment.md` §4): `NSEQ, DM, D, BKV, R, C, BUF, P, N_EXP, N_E, N_EP,
-N_OC, P_PROJ, X_S`.
+`att_head` takes the row's parameters (`experiment.md` §4): `NSEQ, DM, D, BKV, R, C, P, N_EXP, N_E, N_EP, N_OC,
+P_PROJ, X_S` (`BUF` removed 2026-10-22).
 
 Derived (no free numbers):
 
@@ -37,7 +41,7 @@ Derived (no free numbers):
 |---|---|
 | $I$, $S$ | $\min(R, C)$; $\min(n, I)$ query rows per run |
 | $R_b$, $B$ | $n/S$ runs; $n/B_{kv}$ key blocks |
-| $V$, $ROWS_X$, $LOADX$ | $\lceil d_m/R \rceil$ GEMM row tiles; $\min(d_m, R)$ rows in use (P29); $\lceil 8\,ROWS_X/BUF \rceil$ words per token burst |
+| $V$, $ROWS_X$, $LOADX$ | $\lceil d_m/R \rceil$ GEMM row tiles; $\min(d_m, R)$ rows in use (P29); $P$ = 8 plane words per token burst (until 2026-10-22 $\lceil 8\,ROWS_X/40 \rceil$ words) |
 | $LN = SO$ | $\log_2 n$ |
 | $NG_{QK}$, $NG_{PV}$ | $N_E/d$, $N_{EP}/B_{kv}$: the DIMMs' output channels |
 | $NB_A$ | $I/B_{kv}$: rows per QK A staging group |
@@ -51,13 +55,14 @@ The modules' parameters:
 | `qk` | `dimm_tile_top` | `ip/dimm/cases.py` `qk_params`$(S, d, B_{kv}, R, C, N_E, P_{proj}, R_b, B)$: A int8 row frame, `A_CH` = $P_{proj}$, `A_SLOTS` = $R_b$; B int8, `TRANS_B` = 1, `B_CH` = $P_{proj}$, `B_SLOTS` = $B$; `NARROW` = 5 |
 | `sm` | `softmax_online_top` | $S$, $B_{kv}$, $N = n$, `R`, `C`, $N_{EXP}$, `S_CH` = $NG_{QK}$, `LP_CAP` = 2, `LA_CAP` = 2, `LL_CAP` = 1 |
 | `pv` | `dimm_tile_top` | `pv_params`$(S, d, B_{kv}, R, C, N_{EP}, N_{EXP}, P_{proj}, B)$: A log, window frame, `A_CH` = $N_{EXP}$, `A_SLOTS` = 2, released; B int8, `TRANS_B` = 0, `B_CH` = $P_{proj}$, `B_SLOTS` = $B$ |
-| `acc` | `softmax_online_acc` | $S$, $D = d$, `R`, `C`, $N_{OC}$, `NBLK` = $B$, `SO` = `LN` = $\log_2 n$, `P_CH` = $NG_{PV}$, `VWP` = 13 |
+| `acc` | `softmax_online_acc` | $S$, $D = d$, `R`, `C`, $N_{OC}$, `NBLK` = $B$, `SO` = `LN` = $\log_2 n$, `P_CH` = $NG_{PV}$, `VWP` = 13; $N_{OC}$ by the floor rule held at its 40-bit form (`acc_spec.md` §9) |
 | `ctrl` | `att_ctrl` | `NSEQ`, `S`, `BKV`, `I`, `P_PROJ`, `LOADX` |
 
 Guards: every module's guard holds, plus:
 - $n$, $P_{proj}$ powers of two, $P_{proj} \le n$;
 - $d \le C$ ($H = 1$ in every GEMM);
-- $ROWS_X \ge d$ (a GEMM copy's row period covers the DIMM converter's period, `ip/dimm/spec.md` §3).
+- $ROWS_X \ge d$ (a GEMM copy's row period covers the DIMM converter's period, `ip/dimm/spec.md` §3; since
+  2026-10-22 both are one pass period, 10 cycles).
 
 ## 3 Ports
 
@@ -66,8 +71,8 @@ Guards: every module's guard holds, plus:
 | port | width | dir | discipline | unit |
 |---|---|---|---|---|
 | `x_rdy` | $P_{proj}$ | out | burst on ready | copy $p$ may start its next token burst in this cycle |
-| `x_v`, `x_d` | $P_{proj}$, $P_{proj} V \cdot 40$ | in | | copy $p$'s token burst: $LOADX$ words, lane $v$ = rows $vR \ldots$ of the token; tokens $t \equiv p \pmod{P_{proj}}$ in order; across copies in token order (token $t$'s burst starts no earlier than token $t - 1$'s; bursts may share a cycle) |
-| `o_v`, `o_d` | 1, $N_{OC}$ · 40 | out | push | E9: the final $O_8$ values, $N_{OC}$ words per cycle (`acc_spec.md` §3); the O projection reads them |
+| `x_v`, `x_d` | $P_{proj}$, $P_{proj} V R$ | in | | copy $p$'s token burst: $LOADX$ = 8 plane words, lane $v$ = rows $vR \ldots vR + ROWS_X - 1$ of the token; tokens $t \equiv p \pmod{P_{proj}}$ in order; across copies in token order (token $t$'s burst starts no earlier than token $t - 1$'s; bursts may share a cycle) |
+| `o_v`, `o_d` | 1, $N_{OC} I$ | out | push | E9: the final $O_8$ values, one plane window of $N_{OC} I$ elements per epilogue wave (`acc_spec.md` §3); the O projection reads them |
 | `start` / `busy`, `done` | 1 / 1, 1 | in / out | burst on ready | one run of the head per reset; `busy` falling is the start port's credit |
 | `weight_in`, `weight_en` | 8, 1 | in | | simulation twin only (the testbench preloads every crossbar, `PLAN.md` R8) |
 
@@ -76,7 +81,7 @@ Guards: every module's guard holds, plus:
 | port | width | dir | meaning |
 |---|---|---|---|
 | `start`, `busy`, `done` | 1 each | in, out, out | the head's run control |
-| `x_v` / `x_rdy` | $P_{proj}$ / $P_{proj}$ | in / out | a copy's burst words (a burst starts when `x_v` rises) / the copy may start a burst |
+| `x_v` / `x_rdy` | $P_{proj}$ / $P_{proj}$ | in / out | a copy's burst planes (a burst starts when `x_v` rises) / the copy may start a burst |
 | `gq_rdy`, `gk_rdy`, `gv_rdy` | $P_{proj}$ each | in | the copies' GEMM `MSB_SA_Ready` |
 | `qa_cr`, `qb_cr`, `pb_cr` | 1 each | in | the staging credits of the QK A, QK B and PV B ports |
 | `qj_v`, `qj_a`, `qj_b`, `qj_ra` / `qj_rdy` | 1, ⌈log₂ $R_b$⌉, ⌈log₂ $B$⌉, 1 / 1 | out / in | the QK DIMM's job port |
@@ -121,21 +126,21 @@ Cycle 0 is the first cycle after reset. A signal "at $t$" is high (or a register
 |---|---|---|
 | `RUN_LAT` | 1 | `start` taken at $t_s$: the head runs from $t_s + 1$ (admission, both job ports and the softmax start may act) |
 | `CR_LAT` | 1 | a staging credit pulse (`qa_cr`, `qb_cr`, `pb_cr`) at $t$ counts for admission from $t + 1$ |
-| `DONE_LAT` | 1 | `done` one cycle after the last run's `run_done`, i.e. two cycles after its last $O_8$ word on E9 (`acc_spec.md` §10 item 7) |
+| `DONE_LAT` | 1 | `done` one cycle after the last run's `run_done`, i.e. two cycles after its last $O_8$ plane on E9 (`acc_spec.md` §10 item 7) |
 | `BUSY_LAT` | 1 | `busy` falls one cycle after `done` (the start port's credit) |
 
 **Admission.** Copy $p$'s $k$-th token is $t = p + k P_{proj}$. `x_rdy`$[p]$ is high in cycle $c$ when every condition
 holds:
 - the head runs ($c \ge t_s +$ `RUN_LAT`);
-- no burst of the copy is in progress (its word count, started by `x_v` rising, is back to 0);
-- `gq_rdy`$[p]$, `gk_rdy`$[p]$ and `gv_rdy`$[p]$ are high (after the copy's previous burst: its GEMMs' `msb_fire` + 1;
-  `ip/gemm/model.py`);
+- no burst of the copy is in progress (its plane count, started by `x_v` rising, is back to 0);
+- `gq_rdy`$[p]$, `gk_rdy`$[p]$ and `gv_rdy`$[p]$ are high (after the copy's previous burst: its GEMMs' `acam_done` + 1,
+  the pass rule of `ip/xbar/spec.md`; until 2026-10-22 `msb_fire` + 1);
 - token $t$ is left ($t < n$);
 - QK A staging: $f_{qa}(c) + 2 > \lfloor t/NB_A \rfloor$; QK B staging: $f_{qb}(c) + 2 > \lfloor t/B_{kv} \rfloor$; PV B
   credit (edge E3, `PB_CAP` = 4 rows per copy): $f_{pb}(c) + 4 P_{proj} > t$. Here $f_x(c)$ counts the pulses of
   $x$`_cr` at cycles $\le c -$ `CR_LAT`.
 
-A burst starts in a cycle with `x_rdy`$[p]$ high, and then lasts $LOADX$ words (the environment's contract). For
+A burst starts in a cycle with `x_rdy`$[p]$ high, and then lasts $LOADX$ = 8 planes (the environment's contract). For
 $k \ge 1$, `x_rdy`$[p]$ is low right after burst $k - 1$, and rises at
 
 $$
@@ -216,6 +221,15 @@ rule, $X_S = 16$).
 4. **One start per reset.** A second run per reset would also need the DIMMs' slots cleared.
 5. **PV B credit: 4 rows per copy, with X in token order** (user, 2026-10-15; `architecture.md` §5.2). The credit is
    taken when the token enters the GEMM, so its loop includes the GEMM. With 2 rows it bound the X stream on 176 of
-   the 432 DSE builds (up to 8.9 % of the cycles); with 4 it binds on none. The PV DIMM writes V rows in row order,
-   so the copies' bursts must start in token order (§3); a starved copy would otherwise let the other copies' rows
-   overrun their row registers. The model raises on a violation (the PV DIMM's B port check).
+   the 432 DSE builds (up to 8.9 % of the cycles); with 4 it binds on none (the 40-bit timing). The PV DIMM writes V
+   rows in row order, so the copies' bursts must start in token order (§3); a starved copy would otherwise let the
+   other copies' rows overrun their row registers. The model raises on a violation (the PV DIMM's B port check).
+6. **The bit-plane pass** (user, 2026-10-21/22; `ip/xbar/spec.md`).
+   - **X:** a token burst is 8 plane words of $V R$ bits per copy (`x_d` $P_{proj} V R$ bits), so `LOADX` = $P$ for
+     every array. `BUF` is removed.
+   - **$O_8$:** E9 is one plane window of $N_{OC} I$ elements per epilogue wave (`o_d` $N_{OC} I$ bits).
+   - **Admission:** the GEMMs' `MSB_SA_Ready` rises at `acam_done` + 1. A copy's row period is the pass period (10
+     cycles) on every array.
+   - **Held:** the mapping ($N_{OC}$ by the 40-bit floor rule) and the credit sizes, including `PB_CAP` = 4. Its loop
+     (the token's burst, the GEMM's pass and drain, the DIMM's row write and credit) is about 33 cycles against the
+     4 rows × 10 cycles of the copy's row period.

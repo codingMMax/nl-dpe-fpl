@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""testSoftmaxOnline.py — gates of the `softmax_online_top` model (docs/simulator.md §4.4; ip/softmax/spec.md §8).
+"""testSoftmaxOnline.py — gates of the `softmax_online_top` model (docs/simulator.md §4.4; ip/softmax/spec.md §8), the
+bit-plane pass (2026-10-22).
 
   gate1    GATE 1 on a sweep: S 8..128, N = S .. 8 S, BKV 8 / 16 / 32, N_EXP 1 / 2 / 4, S_CH 1 / 2 / 4, 1-3 runs,
            classes random / zeros / extremes / small / rising; crossbars 64x64, 128x64, 256x128; late tiles and
            credit holds
-  closed   the core fed v2's stream schedule (word 0 at 2, back to back, block b >= 2 at ret(b - 2) + 1; carry
-           extent I) == v2 `softmax_online_cycle_model(pass_extent="used")`: every block's events and the total
-  rules    every tile decision, read, stream word, E5 / E6 / E7 window, s_cr, done and start credit recomputed from the
-           spec §5 formulas; each gate term (idle, arm, data, slot, lp, la) and the ll credit bind somewhere; the
-           packer's second word occurs
-  domain   the DSE's softmax instances (6 shapes x 12 configs x S_CH {1, 2}) are inside the guard; out-of-domain sets
+  closed   the core fed a stream schedule (word 0 at 2, back to back, block b >= 2 at ret(b - 2) + 1) == spec §5's
+           recurrence written here by hand: every block's EXP bursts, sp_done, wait, carry passes and retire, and the
+           total (until 2026-10-22 the witness was v2's `softmax_online_cycle_model`, which times the 40-bit pass)
+  rules    every tile decision, plane read, corner-turn word, E5 / E6 / E7 window, carry pass, s_cr, done and start
+           credit recomputed from the spec §5 formulas; each gate term (idle, arm, data, slot, lp, la) and the ll
+           credit bind somewhere
+  domain   the DSE's softmax instances (6 shapes x 8 configs x S_CH {1, 2}) are inside the guard; out-of-domain sets
            are rejected
   timing   values off: identical events and counts; random step orders: identical Report
-  mutants  every named latency + 1 that can bind (MAX_LAT never binds: sp_done > a_last + MAX_LAT, asserted in rules),
-           a dropped credit (deadlock), a value mutant (GATE 1): each fails a check
+  mutants  every named latency + 1 (MAX_REG through FEED_LAT and E6: m_new itself never binds the carry, as
+           sp_done > a_last + MAX_LAT, asserted in rules), a dropped credit (deadlock), a value mutant (GATE 1): each
+           fails a check
 Run: python3 v3/simulator/tests/testSoftmaxOnline.py
 """
 from __future__ import annotations
@@ -25,8 +28,6 @@ import numpy as np
 
 V3 = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(V3))
-sys.path.insert(0, str(V3 / "oracle" / "v2_kernels"))    # test references only
-import softmax_online_sim as v2sm  # noqa: E402
 
 import simulator.models.softmaxOnline as softmax  # noqa: E402
 from ip.softmax.cases import Case, build, randomCase, runCase  # noqa: E402
@@ -36,6 +37,8 @@ from simulator.models.softmaxOnline import SoftmaxOnline, SoftmaxOnlineParams  #
 
 from dse.space import CONFIGS, SHAPES as NAMED_SHAPES  # noqa: E402  (the DSE's design space, defined once)
 SHAPES = [shape[1:] for shape in NAMED_SHAPES]                       # (n, d_model, d)
+P = 8                                                                # plane words per window (spec §2)
+PASS = P + 2                                                         # a crossbar's pass period (ip/xbar/spec.md)
 
 
 def inDomain(p: dict) -> bool:
@@ -75,10 +78,52 @@ def testGate1(rng) -> int:
     return len(cases)
 
 
+def handCore(p: dict, firstWord) -> list:
+    """Spec §5's core by hand for one run, the block's first stream word at firstWord(b, ret) (ret: the blocks so
+    far). MAX_LAT = log2 min(I/8, BKV) + 2, FEED_LAT = MAX_LAT + P + 2; a pass drains from load_start + P + 2, its
+    last plane P - 1 later, and the next pass on the crossbar loads P + 2 after this one."""
+    I = min(p["R"], p["C"])
+    NWB, B, nExp = p["S"] * p["BKV"] // I, p["N"] // p["BKV"], p["N_EXP"]
+    maxLat = (min(I // 8, p["BKV"]).bit_length() - 1) + 2
+    feedLat = maxLat + P + 2
+    lane, carryExp, carryLog = {}, None, None       # the last load_start of each crossbar
+    blocks, ret = [], []
+    for b in range(B):
+        first = firstWord(b, ret)
+        aLast = first + P * NWB - 1
+        loads = []
+        for w in range(NWB):
+            g = (b * NWB + w) % nExp
+            ls = max(aLast + feedLat, lane[g] + PASS) if g in lane else aLast + feedLat
+            lane[g] = ls
+            loads.append(ls)
+        spDone = max(ls + PASS + P - 1 for ls in loads) + 3                  # last drain plane + SP_LAT
+        wait = max(spDone, aLast + maxLat, ret[b - 1] if b else 0) + 1       # + WAIT_LAT
+        cexpLast = None
+        if b == 0:
+            logReady = wait + 2                                              # + GO_LAT
+        else:
+            carryExp = max(wait + 2, carryExp + PASS) if carryExp is not None else wait + 2
+            cexpLast = carryExp + PASS + P - 1
+            logReady = cexpLast + 1 + 2                                      # + E_LAT + GO_LAT
+        carryLog = max(logReady, carryLog + PASS) if carryLog is not None else logReady
+        ret.append(carryLog + PASS + P - 1)
+        blocks.append(dict(first=first, a_last=aLast, loads=loads, sp_done=spDone, wait=wait, cexp_last=cexpLast,
+                           retire=ret[-1], la=aLast + maxLat + 1))
+    return blocks
+
+
+def streamSchedule(b: int, ret: list, previous: dict) -> int:
+    """The closed test's stream: block 0 at 2, then back to back, block b >= 2 not before ret(b - 2) + 1."""
+    first = 2 if b == 0 else previous["last"] + 1
+    if b >= 2:
+        first = max(first, ret[b - 2] + 1)
+    return first
+
+
 def testClosed() -> int:
     n = 0
     for (R, C) in ((64, 64), (128, 128), (256, 256), (128, 64), (512, 256)):
-        I = min(R, C)
         for S in (8, 16, 32, 64, 128, 256):
             for N in (S, 4 * S, 16):
                 for bkv in (8, 16, 32):
@@ -86,22 +131,21 @@ def testClosed() -> int:
                         p = dict(S=S, BKV=bkv, N=N, R=R, C=C, N_EXP=ne, S_CH=1)
                         if not inDomain(p) or N > 1024:
                             continue
-                        want = v2sm.softmax_online_cycle_model(S, bkv, R, C, 40, 8, ne, N, pass_extent="used")
-                        sm = SoftmaxOnline("sm", SoftmaxOnlineParams(**p), runs=1, withValues=False, carryExtent=I)
-                        d = sm.d
-                        previousLast = None
-                        for b in range(d.B):
-                            first = 2 if b == 0 else previousLast + 1
-                            if b >= 2:
-                                first = max(first, sm.retireAt[b - 2] + 1)
-                            lastWord = first + d.STREAM - 1
-                            o = sm.core(b, lastWord)
-                            wb = want.blocks[b]
-                            got = dict(first_word=first, last_word=lastWord, sp_full=o["sp_done"],
-                                       carry_start=o["wait"], cexp_last=o["cexp_last"], retire=o["retire"])
-                            assert got == wb, (p, b, got, wb)
-                            previousLast = lastWord
-                        assert sm.retireAt[d.B - 1] + 1 == want.total, (p, want.total)
+                        state = {}
+
+                        def firstWord(b, ret):
+                            first = streamSchedule(b, ret, state)
+                            state["last"] = first + P * (S * bkv // min(R, C)) - 1
+                            return first
+                        want = handCore(p, firstWord)
+                        sm = SoftmaxOnline("sm", SoftmaxOnlineParams(**p), runs=1, withValues=False)
+                        for b, wb in enumerate(want):
+                            o = sm.core(b, wb["a_last"])
+                            got = dict(loads=[e["load_start"] for e in o["passes"]], sp_done=o["sp_done"],
+                                       wait=o["wait"], cexp_last=o["cexp_last"], retire=o["retire"])
+                            assert [t for (_, _, t, _) in o["lp"]] == got["loads"]
+                            assert got == {k: wb[k] for k in got}, (p, b, got, wb)
+                        assert sm.retireAt[len(want) - 1] + 1 == want[-1]["retire"] + 1
                         n += 1
     return n
 
@@ -126,7 +170,10 @@ def checkRules(c: Case, bind: dict) -> None:
     rep = run(g)
     p, d = sm.p, sm.d
     ev = eventTables(rep)
-    S, B, LW = p.S, d.B, d.LW
+    S, B = p.S, d.B
+    maxLat = (min(d.I // 8, p.BKV).bit_length() - 1) + 2           # spec §5, by hand
+    feedLat = maxLat + P + 2
+    assert (d.MAX_LAT, d.FEED_LAT) == (maxLat, feedLat)
     cr = {k: [t for (t, _) in v] for k, v in ev["cr"].items()}
     arrival = {}
     for (t, ch, u, w) in ev["win"]["s_src.s"]:
@@ -136,9 +183,10 @@ def checkRules(c: Case, bind: dict) -> None:
     steps = {(s.process, s.unit): s for s in rep.steps["sm"]}
     readerFree = 0
     lpAt = {(u, w): (t, ch) for (t, ch, u, w) in ev["win"].get("sm.lp", [])}
-    laAt = {(u, w): t for (t, ch, u, w) in ev["win"].get("sm.la", [])}
+    laAt = {u: t for (t, ch, u, w) in ev["win"].get("sm.la", [])}
+    assert all(w == 0 for (_, _, _, w) in ev["win"].get("sm.la", []))      # one E6 window per block b >= 1
     llAt = {u: t for (t, ch, u, w) in ev["win"].get("sm.ll", [])}
-    lastPass = {}                                   # crossbar -> msb_fire of its last pass
+    lastAcam = {}                                   # crossbar -> acam_done of its last pass
     for j in range(len(c.scores) * B):
         r, b = divmod(j, B)
         st = steps[("tile", j)].events
@@ -158,35 +206,43 @@ def checkRules(c: Case, bind: dict) -> None:
         reads = sm.readTimes[j]
         t = tDecide + softmax.OPEN_LAT - 1
         for i in range(d.NWORDS):
-            w, cc = divmod(i, LW)
+            w, cc = divmod(i, P)
             t = max(t + 1, arrival[(j, w)] + cc + softmax.FIFO_LAT)
             assert reads[i] == t, (c.name, j, i)
         readerFree = int(reads[-1]) + 1
         assert cr["sm.s"][j] == reads[-1] + softmax.SCR_LAT
-        stream = sm.streamTimes[j]
-        previous = -1
-        for k, i in enumerate(sm.packer.sourceWord):
-            want = max(int(reads[i]) + softmax.PACK_LAT, previous + 1)
-            if k and sm.packer.sourceWord[k - 1] == i:
-                bind["second_word"] = bind.get("second_word", 0) + 1
-            assert stream[k] == want, (c.name, j, k)
-            previous = want
-        # the core: E5 windows at their pass's load_start, the pass placed by the grammar
+        stream = sm.streamTimes[j]                  # the corner-turn: window w's P words from its last plane + 2
+        assert list(stream) == [int(reads[w * P + P - 1]) + softmax.CT_LAT + cc for w in range(d.NWB)
+                                for cc in range(P)], (c.name, j)
+        # the core: E5 windows at their pass's load_start, the pass placed by the pass rule
         be = steps[("blk", j)].events
         lastWord = int(stream[-1])
         assert be["a_last"] == lastWord
         for w, ps in enumerate(be["passes"]):
             lane = (b * d.NWB + w) % p.N_EXP
-            want = max(lastWord + softmax.FEED_LAT, lastPass[lane] + 1 if lane in lastPass else 0)
+            want = max(lastWord + feedLat, lastAcam[lane] + 1 if lane in lastAcam else 0)
             assert ps["load_start"] == want and lpAt[(j, w)] == (want, lane), (c.name, j, w)
-            lastPass[lane] = ps["msb_fire"]
-        sumsDone = max(ps["drain_start"] for ps in be["passes"]) + LW - 1 + softmax.SP_LAT
-        assert be["sp_done"] == sumsDone and sumsDone > lastWord + softmax.MAX_LAT
+            lastAcam[lane] = ps["acam_done"]
+        sumsDone = max(ps["drain_start"] for ps in be["passes"]) + P - 1 + softmax.SP_LAT
+        assert be["sp_done"] == sumsDone and sumsDone > lastWord + maxLat
         previousRetire = steps[("blk", j - 1)].events["retire"] if b else 0
-        assert be["wait"] == max(sumsDone, lastWord + softmax.MAX_LAT, previousRetire) + softmax.WAIT_LAT
+        assert be["wait"] == max(sumsDone, lastWord + maxLat, previousRetire) + softmax.WAIT_LAT
+        if b == 0:
+            logReady = be["wait"] + softmax.GO_LAT
+            assert be["carry_exp"] is None
+        else:
+            ce = be["carry_exp"]
+            assert ce["load_start"] == max(be["wait"] + softmax.GO_LAT, lastAcam["cexp"] + 1 if "cexp" in lastAcam
+                                           else 0), (c.name, j)
+            lastAcam["cexp"] = ce["acam_done"]
+            assert be["cexp_last"] == ce["drain_start"] + P - 1
+            logReady = be["cexp_last"] + softmax.E_LAT + softmax.GO_LAT
+        cl = be["carry_log"]
+        assert cl["load_start"] == max(logReady, lastAcam["clog"] + 1 if "clog" in lastAcam else 0), (c.name, j)
+        lastAcam["clog"] = cl["acam_done"]
+        assert be["retire"] == cl["drain_start"] + P - 1
         if u is not None:
-            for m in range(S):
-                assert laAt[(u, m)] == int(stream[d.RK[m]]) + softmax.LA_EV_LAT, (c.name, j, m)
+            assert laAt[u] == lastWord + maxLat + softmax.LA_LAT, (c.name, j)
     for r in range(len(c.scores)):
         rs = steps[("run", r)].events
         coreDone = steps[("blk", (r + 1) * B - 1)].events["retire"] + 1
@@ -197,7 +253,7 @@ def checkRules(c: Case, bind: dict) -> None:
         if terms.get("ll") == tD7:
             bind["ll"] = bind.get("ll", 0) + 1
         assert rs["core_done"] == coreDone and rs["t_d7"] == tD7 and llAt[r] == tD7 + softmax.E7_LAT
-        assert rs["done"] == tD7 + softmax.E7_LAT + S - 1 + softmax.DONE_LAT
+        assert rs["done"] == tD7 + softmax.E7_LAT + P - 1 + softmax.DONE_LAT
         assert cr["sm.go"][r] == rs["done"] + softmax.GO_CR_LAT
         if r:
             assert go[r] >= cr["sm.go"][r - 1]
@@ -219,7 +275,7 @@ def testRules(rng) -> dict:
     bind = {}
     for c in rulesCases(rng):
         checkRules(c, bind)
-    for k in ("idle", "arm", "data", "slot", "lp", "la", "ll", "second_word"):
+    for k in ("idle", "arm", "data", "slot", "lp", "la", "ll"):
         assert bind.get(k, 0) > 0, f"rule term {k} never binds ({bind})"
     return bind
 
@@ -235,7 +291,7 @@ def testDomain() -> int:
                 n += 1
     for bad in (dict(S=8, BKV=8, N=64, R=128, C=128), dict(S=16, BKV=16, N=64, S_CH=8),
                 dict(S=8, BKV=16, N=16, R=128, C=128, N_EXP=2), dict(S=128, BKV=16, N=128, R=64, C=64),
-                dict(S=16, BKV=32, N=16), dict(S=24, BKV=16, N=48), dict(S=16, BKV=16, N=64, BUF=32),
+                dict(S=16, BKV=32, N=16), dict(S=24, BKV=16, N=48), dict(S=16, BKV=16, N=64, P=4),
                 dict(S=16, BKV=16, N=64, LP_CAP=0), dict(S=4, BKV=16, N=64)):
         q = dict(dict(R=64, C=64), **bad)
         if inDomain(q):
@@ -255,8 +311,8 @@ def testTimingAndOrder(rng) -> None:
             assert r.events == a.events and r.cycles == a.cycles
 
 
-MUTANT_LATS = ("FIFO_LAT", "CR_IN_LAT", "RET_LAT", "ARM_LAT", "OPEN_LAT", "PACK_LAT", "SCR_LAT", "FEED_LAT",
-               "SP_LAT", "WAIT_LAT", "GO_LAT", "LA_EV_LAT", "E7_LAT", "DONE_LAT", "GO_CR_LAT")
+MUTANT_LATS = ("FIFO_LAT", "CR_IN_LAT", "RET_LAT", "ARM_LAT", "OPEN_LAT", "CT_LAT", "SCR_LAT", "MAX_REG", "FEED_REG",
+               "SP_LAT", "WAIT_LAT", "GO_LAT", "E_LAT", "LA_LAT", "E7_LAT", "DONE_LAT", "GO_CR_LAT")
 
 
 def testMutants(rng) -> tuple:
@@ -303,7 +359,7 @@ def testMutants(rng) -> tuple:
 def main() -> int:
     rng = np.random.default_rng(20261014)
     print(f"  gate1    PASS  {testGate1(rng)} cases (every stage and every sent value == oracle, every run)")
-    print(f"  closed   PASS  {testClosed()} configurations == v2 softmax_online_cycle_model (used extent)")
+    print(f"  closed   PASS  {testClosed()} configurations == spec §5's core recurrence (by hand)")
     b = testRules(rng)
     print(f"  rules    PASS  every event recomputed from spec §5; terms bound: {dict(sorted(b.items()))}")
     print(f"  domain   PASS  {testDomain()} DSE softmax instances inside the domain; out-of-domain sets rejected")

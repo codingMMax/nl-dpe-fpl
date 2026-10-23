@@ -40,23 +40,27 @@ contract is `v2/sim/oracle/attention_ref.py::head_stages`, stage `O8`, bit-exact
 **Target.** VTR (Parmys + VPR) on the NL-DPE arch XMLs. The `dpe` hard block is the crossbar. Every module has a
 simulation twin (behavior `dpe`) and a VTR twin (bare `dpe`).
 
-**The crossbar pass** (`v2/sim/spec/dpe_nldpe.md`). A pass has three phases:
-- LOAD: $\lceil rows/5 \rceil$ words, 5 bytes per cycle;
-- COMPUTE: $P + 2 = 10$ cycles;
-- OUTPUT: $\lceil cols/5 \rceil$ words, one per cycle.
+**The crossbar pass** (`ip/xbar/spec.md`, user 2026-10-21/22). The crossbar takes one bit plane of its $R$ input
+rows per cycle and drains one bit plane of its $C$ output bytes per cycle:
+- a burst of $P = 8$ planes, LSB first, without gaps, starting in a cycle with `MSB_SA_Ready` high;
+- each plane fires the cycle after it arrives; the ACAM fires the cycle after the MSB plane;
+- the drain is $P$ planes from the cycle after the ACAM;
+- the next burst may start the cycle after the ACAM (one accumulator, one output register).
 
-Its timing:
-- $T_{fill} = LOAD + 10 + OUTPUT$ and $T_{steady} = \max(LOAD + P,\ 10,\ OUTPUT + 1)$;
-- $T(p) = T_{fill} + (p - 1)T_{steady}$ for $p$ back-to-back passes.
+So a pass alone takes 18 cycles, and passes start every 10 cycles back to back, on every array and at any extent:
+$T(p) = 10p + 8$ for $p$ back-to-back passes.
 
-A load burst starts only while `MSB_SA_Ready` is high, and once started neither the load nor the drain stops.
+Until 2026-10-22 the crossbar had one 40-bit port each way: LOAD $\lceil 8\,rows/40 \rceil$ words, COMPUTE
+$P + 2$, OUTPUT $\lceil 8\,cols/40 \rceil$ words, and $T_{steady} = \max(LOAD + P,\ 10,\ OUTPUT + 1)$. The RTL still
+has that interface until the RTL pass.
 
-**Extent rule** (P29, user 2026-10-14): every pass loads only the rows in use and drains only the columns in use, which
-saves load and drain cycles. A conversion pass never uses more than $I = \min(R, C)$. **Amended 2026-10-18 (user):**
-the drain walks every column of the array, in the energy (the output buffer and the drain are charged for $C$
-columns) and in the simulator's timing (`OUTPUT_CYC` = $\lceil 8C/BUF \rceil$); the columns in use are the valid
-prefix of the drained window. The RTL keeps the early-stopping drain, so the simulator is not RTL-pinned for passes
-with fewer columns in use than $C$ (`LEDGER.md`, Needs you 24).
+**Extent rule** (P29, user 2026-10-14): every pass reads only the rows in use, and its window is the columns in use.
+A conversion pass never uses more than $I = \min(R, C)$.
+- **Since 2026-10-22** the extent no longer changes the time: every pass loads and drains $P$ planes. It sets the
+  values (rows past the extent read as zero; columns past it drain as zero) and the energy (the input buffer is
+  charged per row used; the output buffer and the drain per column, as amended on 2026-10-18).
+- **Needs you 24 closes with the RTL pass:** the RTL's early-stopping drain disappears, so the model and the RTL drain
+  the same way again.
 
 | crossbars | extent (rows × columns) |
 |---|---|
@@ -69,11 +73,11 @@ with fewer columns in use than $C$ (`LEDGER.md`, Needs you 24).
 
 | item | value |
 |---|---|
-| configs | $R \in \{128, 256, 512, 1024\}$ × $C \in \{64, 128, 256\}$; $I = \min(R, C) \in \{64, 128, 256\}$ |
+| configs | $R \in \{128, 256, 512\}$ × $C \in \{64, 128, 256\}$ with $C \le R$, so $I = \min(R, C) = C$ (8 configs since 2026-10-22, `experiment.md` §2.1; until then $R$ also took 1024, 12 configs) |
 | shapes | six (`experiment.md` §3.2): $n \in \{32, 128, 256\}$, $d \in \{16, 32, 64\}$, $d_m \in \{64, 128, 192, 768\}$ |
 | parameters | shape, config and mapping are fixed at build time; one VTR circuit per row |
-| mapping | fixed for every shape, no search (user, 2026-10-15; `experiment.md` §4.2): $P_{proj} = 4$, $N_E = d$, $N_{EP} = 2d$, $N_{EXP} = 2$, $N_{OC}$ by the floor rule (§5.2), $B_{kv} = 16$, DIMM slices of $X_S = 16$ crossbars |
-| platform | `BUF` = 40 (5 bytes per cycle per crossbar port), `P` = 8 |
+| mapping | fixed for every shape, no search (user, 2026-10-15; `experiment.md` §4.2): $P_{proj} = 1$, $N_E = N_{EP} = 2d$, $N_{EXP} = 2$, $N_{OC}$ by the floor rule (§5.2, held at its 40-bit values), $B_{kv} = 16$, DIMM slices of $X_S = 16$ crossbars |
+| platform | the row-parallel crossbar (user, 2026-10-22; `ip/xbar/spec.md`): $R$ data pins in and $C$ out, one bit plane per cycle, `P` = 8. In the model since 2026-10-22; the RTL follows in the RTL pass. Its tile is in the area (`experiment.md` §5.1). Until then: `BUF` = 40 (5 bytes per cycle per crossbar port) |
 | RTL verification | on 64×64 crossbars, with small corpora; a full iverilog launch needs your approval |
 | VTR | VTR twins only; no DSPs (no runtime products) |
 
@@ -101,7 +105,7 @@ serves, and is verified with that module.
 | $LN = SO$ | `LN`, `SO` | $\log_2 n$ (the mean shift of $l$ and of $o$) |
 | $P_{proj}$ | `P_PROJ` | projection copies; token $t$ goes to copy $t \bmod P_{proj}$ |
 | $N_E$, $N_{EP}$, $N_{EXP}$, $N_{OC}$ | same | QK farm, PV farm, softmax EXP crossbars, accumulator group size |
-| $LW$ | `LW` | words per $I$-element window, $\lceil I/5 \rceil$ |
+| $P$ | `P` | bits per element, and plane words per window: 8 (§3.1) |
 
 ACAM forms:
 - $\mathrm{EXP}(y) = \mathrm{trunc8}(1 + y + \lfloor y^2/2 \rfloor)$, read as an unsigned byte;
@@ -150,28 +154,35 @@ The DIMMs keep no state between jobs.
 ### 3.1 Word and window
 
 A port carries **units**. A unit is a matrix (a token row, a tile's result, a block's $\log P$, ...) or a per-row
-vector. A unit is sent as follows:
-- it is cut row-major into **windows** of $W$ elements;
-- each window goes out as $\lceil W/Q \rceil$ **words** of $Q$ slots:
-  - $Q = 5$ for matrices;
-  - $Q = 1$ for the vectors $\log\alpha$ and $\log l$;
+vector. A unit is sent as follows (**plane framing**, user 2026-10-22):
+- it is cut row-major into **windows** of $W$ elements of $E$ bits;
+- each window goes out as $P = 8$ **plane words**, LSB first: word $b$ carries bit $b$ of every element. An element
+  wider than 8 bits uses $\lceil E/8 \rceil$ **lanes**: lane $\ell$ of word $b$ carries bit $8\ell + b$ (13-bit
+  $o_{part}$ and 9-bit $\log\alpha$ use 2 lanes);
 - windows are dealt to $L$ **channels**: window $w$ goes on channel $w \bmod L$;
-- framing is by count: $W$, $Q$ and the unit size are build-time parameters of both ends.
+- framing is by count: $W$, $E$ and the unit size are build-time parameters of both ends.
+
+A crossbar takes exactly this form (`ip/xbar/spec.md`): an edge from a producer into a crossbar with no arithmetic
+in between is a wire. A window moves in 8 cycles whatever its size, which keeps every stream at the crossbar's rate
+(one $I$-element window per pass). Only the job ports keep element framing ($Q$ slots per word, `control` fields).
 
 Signals of channel `x` (an $L$-channel port packs channel $i$ into field $i$ of each signal):
 
 | signal | width | direction | description |
 |---|---|---|---|
-| `x_v` | 1 | producer → consumer | a word is valid this cycle |
-| `x_d` | $Q \cdot E$ | producer → consumer | slot $i$ in bits $[iE, (i+1)E)$ = element $Qc + i$ of the window, where $c$ is the word's index in the window |
+| `x_v` | 1 | producer → consumer | a plane word is valid this cycle |
+| `x_d` | $W \lceil E/8 \rceil$ | producer → consumer | bit $\ell W + i$ = bit $8\ell + b$ of element $i$ of the window, where $b$ is the word's index in the window |
 | `x_cr` | 1 | consumer → producer | credit: one pulse per unit freed in the consumer's buffer |
 | `x_rdy` | 1 | consumer → producer | burst ports only: the consumer's crossbar can take a burst now (`MSB_SA_Ready`) |
 
 **Invariants** (each one checked by a port monitor):
-- **W1 gapless:** a window's words are on consecutive cycles.
-- **W2 padding:** slots past a window's last element are 0.
+- **W1 gapless:** a window's 8 words are on consecutive cycles.
+- **W2 padding:** bits of elements past a window's last element, and plane bits $\ge E$, are 0.
 - **W3 order:** on a channel, windows are in increasing index, and units are in the producer's order.
 - **W4 lock-step:** the channels of one DIMM output carry one wave's words in the same cycles.
+
+Until 2026-10-22 a window went out as $\lceil W/5 \rceil$ words of 5 slots (40-bit words), and $\log\alpha$ and
+$\log l$ one element per word.
 
 ### 3.2 Port disciplines
 
@@ -198,18 +209,23 @@ softmax window.
 The example column is BERT-Tiny ($n$ 128, $d$ 64, $d_m$ 128) at 128×64, with $P_{proj} = 1$ and $N_E = 2d$
 [derived].
 
-| edge | data | from → to | unit | $E$, $Q$ | $W$ | $L$ | discipline, `CAP` | credit | example |
+Every edge is plane-framed: 8 words per window (§3.1). The word width is $W \lceil E/8 \rceil$ bits per channel.
+
+| edge | data | from → to | unit | $E$ (lanes) | $W$ | $L$ | discipline, `CAP` | credit | example: words of |
 |---|---|---|---|---|---|---|---|---|---|
-| E0 | $X$ | environment → GEMM ×3, copy $p$ | token row, $d_m$ | 8, 5 | $\min(d_m, R)$ (row tile) | $V$ | burst on ready, token order across copies | — | 26 words/token |
-| E1 | $q_8$ | GEMM Q → QK DIMM, A port | token row, $d$ | 8, 5 | $d$ | $P_{proj}$ | push, 2 staging groups | `qa_cr` | 13 words/row |
-| E2 | $k_8$ | GEMM K → QK DIMM, B port | token row, $d$ | 8, 5 | $d$ | $P_{proj}$ | push, 2 staging groups | `qb_cr` | 13 words/row |
-| E3 | $v_8$ | GEMM V → PV DIMM, B port | token row, $d$ | 8, 5 | $d$ | $P_{proj}$ | push, $4P_{proj}$ rows | `pb_cr` | 13 words/row |
-| E4 | $s_8$ | QK DIMM → online softmax | tile: $S \times B_{kv}$ | 8, 5 | $I$ | $NG_{QK}$ | push, 2 tiles | `s_cr` | 16 windows of 13 words, 2 channels |
-| E5 | $\log P$ | online softmax → PV DIMM, A port | block: $S \times B_{kv}$ | 8, 5 | $NWEL$ | $N_{EXP}$ | push, 2 blocks | `pa_cr` | 16 windows of 4 rows × 16 keys |
-| E6 | $\log\alpha$ | online softmax → accumulator | block $b \ge 1$: $S$ windows of one row | 9, 1 | 1 | 1 | push, 2 blocks | `la_cr` | 64 words |
-| E7 | $\log l$ | online softmax → accumulator | run: $S$ | 8, 1 | $S$ | 1 | push, 1 run | `ll_cr` | 64 words |
-| E8 | $o_{part}$ | PV DIMM → accumulator | tile: $S \times d$ | 13, 5 | $I$ | $NG_{PV}$ | push, 2 tiles | `op_cr` | 64 windows, 8 channels |
-| E9 | $O_8$ | accumulator → head output (the O projection) | run: $S \times d$, one window per normalize wave | 8, $5 N_{OC}$ | $5 N_{OC} LW$ | 1 | push, no credit | — | 8 windows of 13 words of 320 bits per run |
+| E0 | $X$ | environment → GEMM ×3, copy $p$ | token row, $d_m$ | 8 (1) | $\min(d_m, R)$ (row tile) | $V$ | burst on ready, token order across copies | — | 128 bits |
+| E1 | $q_8$ | GEMM Q → QK DIMM, A port | token row, $d$ | 8 (1) | $d$ | $P_{proj}$ | push, 2 staging groups | `qa_cr` | 64 bits |
+| E2 | $k_8$ | GEMM K → QK DIMM, B port | token row, $d$ | 8 (1) | $d$ | $P_{proj}$ | push, 2 staging groups | `qb_cr` | 64 bits |
+| E3 | $v_8$ | GEMM V → PV DIMM, B port | token row, $d$ | 8 (1) | $d$ | $P_{proj}$ | push, $4P_{proj}$ rows | `pb_cr` | 64 bits |
+| E4 | $s_8$ | QK DIMM → online softmax | tile: $S \times B_{kv}$ | 8 (1) | $I$ | $NG_{QK}$ | push, 2 tiles | `s_cr` | 64 bits, 16 windows on 2 channels |
+| E5 | $\log P$ | online softmax → PV DIMM, A port | block: $S \times B_{kv}$ | 8 (1) | $NWEL$ | $N_{EXP}$ | push, 2 blocks | `pa_cr` | 64 bits, 16 windows of 4 rows × 16 keys |
+| E6 | $\log\alpha$ | online softmax → accumulator | block $b \ge 1$: one window of $S$ rows | 9 (2) | $S$ | 1 | push, 2 blocks | `la_cr` | 128 bits |
+| E7 | $\log l$ | online softmax → accumulator | run: one window of $S$ rows | 8 (1) | $S$ | 1 | push, 1 run | `ll_cr` | 64 bits |
+| E8 | $o_{part}$ | PV DIMM → accumulator | tile: $S \times d$ | 13 (2) | $I$ | $NG_{PV}$ | push, 2 tiles | `op_cr` | 128 bits, 64 windows on 8 channels |
+| E9 | $O_8$ | accumulator → head output (the O projection) | run: $S \times d$, one window per normalize wave | 8 (1) | $N_{OC} I$ | 1 | push, no credit | — | 512 bits, 8 windows per run |
+
+Until 2026-10-22 the matrices went in 40-bit words (26 words per token on E0, 13 per row on E1–E3), and $\log\alpha$
+and $\log l$ one row per word.
 
 The staging groups of E1–E2 are §4.4's $G$ rows: $I/B_{kv}$ for Q, $B_{kv}$ for K. A group is freed once every slice
 of the DIMM has written it out. Since several GEMM copies share one of these credits, a copy compares instead of
@@ -285,29 +301,31 @@ Each module's full spec (cycle formulas, port tables, case corpus) goes into `ip
 ### 4.3 GEMM (`gemm_top`)
 
 **Function.** $Y = \mathrm{trunc8}(X W)$, REGULAR. Used here with $K = d_m$, $N = d$:
-- $V = \lceil d_m/R \rceil$ row tiles reduced by a byte tree;
+- $V = \lceil d_m/R \rceil$ row tiles reduced by a bit-serial mod-256 tree;
 - $H = 1$;
 - P29 extent: rows $\min(d_m, R)$, columns $d$.
 
-**Ports** (unchanged):
+**Ports** (bit planes since 2026-10-22; the full contract is `ip/gemm/spec.md`):
 
 | port | width | description |
 |---|---|---|
-| `act_in`, `act_en` | $V \cdot 40$, 1 | E0: one row per pass, lane $v$ = row tile $v$, gapless burst |
+| `act_in`, `act_en` | $V R$, 1 | E0: one row per pass, lane $v$ = row tile $v$, 8 plane words |
 | `MSB_SA_Ready` | 1 (out) | a burst may start (`x_rdy`) |
-| `data_out`, `out_valid` | 40, 1 (out) | E1–E3: the row's $d$ results, $\lceil d/5 \rceil$ words, `out_valid` = word valid |
-| `reg_full` | 1 (out) | a busy flag, one cycle behind the words (not a word valid) |
+| `data_out`, `out_valid` | $C$, 1 (out) | E1–E3: the row's $d$ results, 8 plane words, `out_valid` = word valid |
+| `reg_full` | 1 (out) | a busy flag (not a word valid) |
 | `dpe_done` | 1 (out) | pulse after a pass's last word |
-
-`out_valid` was an internal register (the v2 testbench read it by name). v3 makes it a port; nothing else in
-`gemm_top` changed (2026-10-14, found at the head bring-up: `reg_full` had been listed here as the word valid).
 | `weight_in`, `weight_en` | 8, 1 | simulation twin only |
+
+`out_valid` was an internal register (the v2 testbench read it by name). v3 made it a port (2026-10-14, found at the
+head bring-up: `reg_full` had been listed here as the word valid).
 
 **Consumes** an $X$ row. **Produces** one int8 row of $Q$, $K$ or $V$. **Holds** the weights only.
 
-**Timing** (`gemm_sim.cycle_model`): one row per $T_p$, the $T_{steady}$ of its pass.
-- $T_p = 34$ cycles in the example.
+**Timing** (`ip/gemm/spec.md` §5): one row per pass, 10 cycles back to back.
+- The first output plane is at `drain_start` + `L_W`, with `L_W` = $\lceil \log_2 V \rceil$ (for $V > 1$) + 1.
 - The three GEMMs of a copy run in lock-step on the same X burst.
+- Until 2026-10-22: one row per $T_p = \max(\lceil 8\min(d_m, R)/40 \rceil + 8,\ \lceil 8C/40 \rceil + 1)$, which was
+  34 cycles in the example.
 
 ### 4.4 Tiled DIMM (`dimm_tile_top`)
 
@@ -325,7 +343,7 @@ with $C = AB$, or $C = AB^\top$ when `TRANS_B` = 1.
 
 | group | parameters | meaning |
 |---|---|---|
-| shape | `M, N, K, R, C, BUF, P, N_E` | job shape, crossbar, farm |
+| shape | `M, N, K, R, C, P, N_E` | job shape, crossbar, farm (`BUF` removed 2026-10-22) |
 | slices | `X_S` | crossbars per slice: 16, fixed (not searched; the DSE searches $N_E$) |
 | per operand X ∈ {A, B} | `X_DOM` | 0: int8 (LOG converters on the port), 1: log bytes |
 | | `X_SIGNED` | sign from the log byte, or + |
@@ -340,13 +358,13 @@ with $C = AB$, or $C = AB^\top$ when `TRANS_B` = 1.
 
 | port | width | direction | description |
 |---|---|---|---|
-| `a_v`, `a_d` | `A_CH`, `A_CH`·40 | in | A rows (int8 or log bytes), row-major windows |
+| `a_v`, `a_d` | `A_CH`, `A_CH`·$A_W$ | in | A rows (int8 or log bytes), row-major windows, 8 plane words each |
 | `a_cr` | 1 | out | an A slot was freed |
-| `b_v`, `b_d` | `B_CH`, `B_CH`·40 | in | B rows (or $B^\top$ rows) |
+| `b_v`, `b_d` | `B_CH`, `B_CH`·$L_B$ | in | B rows (or $B^\top$ rows), 8 plane words each |
 | `b_cr` | 1 | out | a B slot was freed |
 | `j_v`, `j_a`, `j_b`, `j_ra` | 1, $\lceil \log_2$ `A_SLOTS` $\rceil$, $\lceil \log_2$ `B_SLOTS` $\rceil$, 1 | in | a job: the A slot, the B slot, release A after the job (B slots are never released) |
 | `j_rdy` | 1 | out | the one-entry job register is empty: a job offered now is taken (burst on ready) |
-| `c_v`, `c_d` | $NG$, $NG \cdot 5 E_C$ | out | $C$: window $w$ on channel $w \bmod NG$, $I$ elements per window |
+| `c_v`, `c_d` | $NG$, $NG \cdot I \lceil E_C/8 \rceil$ | out | $C$: window $w$ on channel $w \bmod NG$, $I$ elements per window, 8 plane words ($E_C > 8$: 2 lanes) |
 | `c_cr` | 1 | in | the consumer freed one job's output |
 | `busy` | 1 | out | |
 | `weight_in`, `weight_en` | 8, 1 | in | simulation twin only (identity weights) |
@@ -377,8 +395,9 @@ the refinements of this section made there.
 
 **Why slices?** With one engine per farm, every control bit drives the whole farm: up to 16,384 sinks per bit with a
 128-crossbar farm [derived: RTL sinks per bit, before synthesis]. A slice bounds this to at most 2,688, whatever the
-farm size. It also splits each operand's write traffic: a slice writes only its own columns. One write port per slice
-then keeps up on every port, at all 432 candidates: the worst is 0.76 words per cycle, the Q port at $P_{proj} = 4$.
+farm size. It also splits each operand's write traffic: a slice writes only its own columns. Until 2026-10-22 one write
+port per slice kept up on every port, at all 432 candidates (the worst was 0.76 words per cycle, the Q port at
+$P_{proj} = 4$). The bit-plane pass raised the rates; the guards below give the new figures.
 
 **Structure.**
 
@@ -390,21 +409,24 @@ then keeps up on every port, at all 432 candidates: the worst is 0.76 words per 
  slice s = K_s columns x NG groups = X_S crossbars (s = 0 .. n_s-1):
    [A loader slice] -> [A memories: A_SLOTS slots]        [B loader slice] -> [B memories: B_SLOTS slots]
    [window engine copy, led by the slice's crossbar 0]
-   crossbar f: feed u = trunc8(L_A[row][k] + L_B[k][col]), I elements -> dpe EXP (I x I) -> sign s_A ^ s_B -> +-e
-   [per group: adder tree over the slice's K_s columns, log2 K_s levels]
+   crossbar f: feed u = trunc8(L_A[row][k] + L_B[k][col]), bit-serial, one plane per cycle -> dpe EXP (I x I)
+               -> per drain plane: sign XOR s_A ^ s_B
+   [per group: per-plane popcount tree over the slice's K_s columns, log2 K_s levels]
                                                                   |
  jobs (j_*) -> [job logic: slots valid in every slice, every slice idle, output credit] --start--> every slice
- [per group: adder tree across the n_s slices, log2 n_s levels] -> [NARROW: sat8(. >> s)] -> C out (NG channels)
+ [per group: popcount tree across the n_s slices, log2 n_s levels] -> [root accumulator: the exact sum]
+   -> [NARROW: sat8(. >> s)] -> [output plane buffer] -> C out (NG channels, 8 planes)
 ```
 
 1. **LOG converter** (one per input channel of an int8 operand):
    - an identity crossbar in LOG mode, extent = the row length;
    - one row per pass, with a one-row input buffer;
-   - it keeps up because its pass ($\lceil d/5 \rceil + 8$ cycles; 21 in the example) is never longer than the GEMM's
-     row period: $d \le \min(d_m, R)$ on every shape [derived].
-2. **Distribution.** A converted row, or a softmax window, is a sequence of 40-bit words. Each slice keeps the words
-   that hold its columns; a word that straddles a slice boundary goes to both. It is registered, with at most $n_s$
-   loads per bit.
+   - it keeps up because its pass period (10 cycles) equals the GEMM's row period: both are one pass of the bit-plane
+     rule (until 2026-10-22: $\lceil d/5 \rceil + 8$ cycles, 21 in the example, against the GEMM's longer period).
+   - The int8 planes go straight into the converter crossbar.
+2. **Distribution.** A converted row, or a softmax window, is 8 plane words. Each slice keeps the bits of its columns
+   in every plane. It is registered, with at most $n_s$ loads per bit. (Until 2026-10-22: 40-bit words, and a word
+   that straddled a slice boundary went to both.)
 3. **Loader slices.** They stage rows and write the farm's word layout, where A word (slot, $k$, window $w$) = rows
    $wNB \ldots wNB + NB - 1$ of column $k$.
    - **A, row-framed input** (Q):
@@ -414,8 +436,9 @@ then keeps up on every port, at all 432 candidates: the worst is 0.76 words per 
      - a complete group is emitted as $K_s$ column words, one per cycle.
    - **A, window-framed input** ($\log P$):
      - per input channel, a window register holds the slice's $K_s$ keys of the window, 2 windows deep;
-     - each window gives $K_s \times$ (rows per window / $NB$) words, one per cycle;
-     - the channels take turns on the slice's write port.
+     - each window gives $E_w = K_s \times$ (rows per window / $NB$) words; since 2026-10-22 every A memory writes its
+       share through its own port, so a window takes $E_{wp}$ cycles (4 in the head; until then $E_w$ through one port);
+     - the channels take turns on the slice's A memory ports.
    - **B, `TRANS_B` = 0** (V): the slice's rows (its keys) go one word each through a short queue.
    - **B, `TRANS_B` = 1** (K): $B_{kv}$ rows' slice columns are staged; then $K_s$ words are emitted, word $k$ = byte
      $k$ of each staged row.
@@ -428,18 +451,20 @@ then keeps up on every port, at all 432 candidates: the worst is 0.76 words per 
        (the Q, K and V ports here);
      - a window-framed port needs no staging credit, because its staging keeps up by the write-rate guard.
 5. **Core of a slice** (the verified datapath, per slice):
-   - A memories: $X_S/A_{GRP}$ banks of $NB$-byte words at {slot, wave, index}, blocked. One write port per slice
-     means no interleaving is needed.
-   - $A_{GRP}$ is the largest power of two $\le \min(\lceil I/5 \rceil, X_S)$: 8 / 16 / 16 at $I$ = 64 / 128 / 256.
+   - A memories: $N_{AB} = X_S/A_{GRP}$ banks of $NB$-byte words at {slot, wave, index}, blocked, each with its own
+     write port.
+   - $A_{GRP}$ is the largest power of two $\le \min(P, X_S)$ = 8 at every $I$ (since 2026-10-22: a wave's feed lasts
+     $P$ planes; until then $\min(\lceil I/5 \rceil, X_S)$: 8 / 16 / 16 at $I$ = 64 / 128 / 256).
    - B memories: k-slot memories of $N$-byte words for the slice's $K_s$ columns.
    - Per crossbar:
-     - prefetch registers;
-     - the feed word computed one cycle ahead;
+     - the A word ($NB$ bytes) and the column's B word ($N$ bytes) in shift registers, one bit per plane;
+     - $I$ bit-serial adders for $\mathrm{trunc8}(L_A + L_B)$: the carry is cleared at plane 0, the carry out of plane
+       7 is dropped;
      - `dpe` (EXP, identity weights, $I \times I$);
-     - a 4-entry A sign ring;
-     - a registered signed drain value.
-   - The engine copy: take-now acceptance, depth-2 drain queue.
-   - The slice's levels of the registered adder trees.
+     - the sign XOR of each drain plane: $x = e \oplus (s\ ?\ \mathtt{0xFF} : 0)$, so $\pm e = x - 255 s$.
+   - The engine copy: take-now acceptance.
+   - The slice's levels of the registered per-plane popcount trees. At the root, per group: $-255\, n_{neg}$ preloaded,
+     then $2^b\, \mathrm{POP}_b$ added plane by plane, so the sum is exact after plane 7 (`ip/dimm/spec.md` §4).
 6. **Job logic.** The offered job is taken when all of these hold:
    - its A slot and its B slot are valid in every slice;
    - every slice is idle;
@@ -460,15 +485,15 @@ then keeps up on every port, at all 432 candidates: the worst is 0.76 words per 
 | crossbars | $N_E + 2P_{proj}$ (converters on A and B) | $N_{EP} + P_{proj}$ (converter on B) |
 | example | $NB$ 4, $W_K$ 16, $NG$ 2, 8 waves, 1,024 windows; 8 slices of 8 columns; 130 crossbars | $NB$ 1, $W_K$ 64, $NG$ 8, 8 waves, 1,024 windows; 8 slices of 2 keys; 129 crossbars |
 
-**Timing** (the core, `dimm_tile_sim.tile_cycle_model`, with $A_{GRP}$ by the slice rule above):
-- $T_W$ waves;
-- start latency $A_{GRP} + 2$;
-- output word $c$ of wave $t$ at its drain start $+ c + 1 + \log_2 K$; the tree levels across slices are counted in
-  $\log_2 K$;
-- job total $T(T_W) + \log_2 K + A_{GRP} + 4$.
+**Timing** (`ip/dimm/spec.md` §5, the bit-plane pass since 2026-10-22):
+- $T_W$ waves, one every pass period (10 cycles);
+- start latency $A_{GRP} + 2$ = 10;
+- output plane $b$ of wave $t$ at its drain start $+ b +$ `OUT_LAT`, with `OUT_LAT` $= 10 + \log_2 K$: the sign XOR,
+  the $\log_2 K$ tree levels across slices, the 7 later drain planes, the root and the output plane buffer;
+- `done` two cycles after the last output plane.
 
-Two side effects of the $A_{GRP}$ cap at $I = 256$: 16 cycles less start latency per job, and twice the QK A memories
-(8 instead of 4 at $N_E = 128$).
+Until 2026-10-22 the timing was v2's `dimm_tile_sim.tile_cycle_model` (output word $c$ at drain start
+$+ c + 1 + \log_2 K$). The $A_{GRP}$ cap at 8 doubles the A memories at $I \ge 128$ (2 per slice at every $I$).
 
 The new stages add named latencies, pinned at gate D2 (§7):
 - the converter: one pass;
@@ -478,17 +503,20 @@ The new stages add named latencies, pinned at gate D2 (§7):
 **Guards.**
 - Powers of two for $M, N, K, N_E, X_S$; $N \le I$; $2 \le K \le N_E$; $N_E / K \le W_K$; $NG \le X_S$ (a slice holds
   whole columns).
-- Write rate per slice port ≤ 1 word per cycle:
-  - A, row frame: $K_s P_{proj} \le NB\, T_p$, with $T_p$ the producer's row period;
-  - A, window frame: $N_{EXP} K_s \cdot$ (rows per window / $NB$) $\le T_{sm}$, with $T_{sm} = \lceil I/5 \rceil + 8$
-    the softmax EXP pass period;
-  - B: $K_s P_{proj} \le B_{kv} T_p$.
+- Write rate per slice port ≤ 1 word per cycle, with every producer at one row or window per pass period
+  ($T = 10$, since 2026-10-22):
+  - A, row frame: $K_s P_{proj} \le NB\, T$;
+  - A, window frame: $N_{EXP} E_{wp} \le T$ (each A memory's port);
+  - B: $K_s P_{proj} \le B_{kv} T$ (`TRANS_B` = 1); $P_{proj} \le T$ (`TRANS_B` = 0, the shared row writer).
 
-  At $X_S = 16$ the worst values over the 432 candidates are 0.76 (Q), 0.76 ($\log P$), 0.19 (K) and 0.06 (V) words
-  per cycle [derived]. So $B_{kv} = 16$ runs on 64×64.
-- For the record: with one write port per slice, the PV farm size is limited only by this rate guard. $N_{EP} = d$
-  would pass at $I \ge 128$, and at $I = 64$ only with $X_S = 8$ [derived]. $N_{EP}$ stays $2d$ for now; searching
-  $\{d, 2d\}$ at $I \ge 128$ is open (`experiment.md` §7).
+  Over the 288 candidates of 2026-10-22 [derived, the model's derived values]: $\log P$ 0.8, K 0.4 and V 0.4 words per
+  cycle at worst. The Q port reaches 1.6, on 18 candidates ($P_{proj} = 4$ with $N_E = d$ at $I = 64$): there the
+  staging credit paces the X stream. At the fixed mapping ($P_{proj} = 1$, $N_E = 2d$) the worst is 0.2. (Until
+  2026-10-22, with the longer 40-bit periods: 0.76, 0.76, 0.19 and 0.06 over the 432 candidates.)
+- For the record: the PV farm size is limited only by this rate guard. With the 40-bit periods $N_{EP} = d$ would
+  have passed at $I \ge 128$, and at $I = 64$ only with $X_S = 8$. With the bit-plane pass it puts a window's 8
+  words into one A memory per slice half ($E_{wp} = 8$), so it needs 1.6 words per cycle at every $I$ [derived]. $N_{EP}$
+  stays $2d$; searching $\{d, 2d\}$ (`experiment.md` §7) would need a second write port per A memory.
 
 **Why int8 operands with an internal LOG?** It makes the DIMM a general matrix product. Its producers then need
 nothing special: the GEMM's output goes in directly. The price is one converter crossbar per int8 input channel
@@ -503,19 +531,20 @@ without a transpose outside the module.
 **Function.** One run per `start`: $S$ query rows over $N$ keys in blocks of $B_{kv}$. F4 runs per block, and the
 final $\log l$ is sent at the end of the run.
 
-**Parameters:** `S, BKV, N, R, C, BUF, P, N_EXP`; `S_CH` (input channels = the QK DIMM's $NG$); credit capacities.
+**Parameters:** `S, BKV, N, R, C, P, N_EXP`; `S_CH` (input channels = the QK DIMM's $NG$); credit capacities
+(`BUF` removed 2026-10-22).
 
 **Ports.**
 
 | port | width | direction | description |
 |---|---|---|---|
-| `s_v`, `s_d` | `S_CH`, `S_CH`·40 | in | E4: score windows ($I$ elements, int8) |
+| `s_v`, `s_d` | `S_CH`, `S_CH`·$I$ | in | E4: score windows ($I$ elements, int8), 8 plane words each |
 | `s_cr` | 1 | out | a tile's windows have all been read |
-| `lp_v`, `lp_d` | $N_{EXP}$, $N_{EXP} \cdot 40$ | out | E5: $\log P$ windows; window $g$ of the run on lane $g \bmod N_{EXP}$ |
+| `lp_v`, `lp_d` | $N_{EXP}$, $N_{EXP} \cdot I$ | out | E5: $\log P$ windows; window $g$ of the run on lane $g \bmod N_{EXP}$; each window is its EXP crossbar's input burst |
 | `lp_cr` | 1 | in | the consumer freed a $\log P$ slot |
-| `la_v`, `la_d` | 1, 9 | out | E6: $\log\alpha$ of blocks $b \ge 1$, one row per word |
+| `la_v`, `la_d` | 1, $2S$ | out | E6: $\log\alpha$ of blocks $b \ge 1$, one window of $S$ rows (9 bits, 2 lanes) |
 | `la_cr` | 1 | in | the consumer freed an $\alpha$ slot |
-| `ll_v`, `ll_d` | 1, 8 | out | E7: the final $\log l$ of the run, one row per word |
+| `ll_v`, `ll_d` | 1, $S$ | out | E7: the final $\log l$ of the run, one window of $S$ rows |
 | `ll_cr` | 1 | in | the consumer freed the $\log l$ slot |
 | `start`, `busy`, `done` | 1 each | in, out, out | one run per `start`; `done` after the run's $\log l$ has been sent |
 
@@ -525,18 +554,18 @@ $(m, \log l)$ per row within a run.
 **Structure.**
 
 ```text
-  E4 (S_CH ch) -> [input stage: FIFO per channel (2 tiles), read in window order, 20-byte packer] -> block stream
-     -> [store: 2-block ring]   [row max during the stream -> m_new, log a] -----------------> E6 log a
-     -> [EXP feed g = 0 .. N_EXP-1: read a window, s - m_new, clamp -128 -> 4-deep FIFO] ---------> E5 lane g
-              -> [EXP crossbar g] -> [row sums sp]
+  E4 (S_CH ch) -> [input stage: FIFO per channel (2 tiles), read in window order, double corner-turn] -> block stream
+     -> [store: 2-block ring]   [row max during the stream -> m_new, log a] -----------------> E6 log a (one window)
+     -> [EXP feed g = 0 .. N_EXP-1: read a window, s - m_new, clamp -128 -> double corner-turn] -> E5 lane g (a burst)
+              -> [EXP crossbar g] -> [row sums sp: per-plane counts]
      -> [carry: b = 0: lq = min(sp >> LN, 127); b >= 1: carry-EXP(clamp8(log a + log l)); carry-LOG -> log l]
-     -> [log l out: rows 0 .. S-1 after the run] ---------------------------------------------> E7 log l
+     -> [log l out: one window of the S rows after the run] ----------------------------------> E7 log l
 ```
 
 1. **Input stage** (new):
-   - one FIFO per channel, 40 bits wide, depth $2^{\lceil \log_2(2 T_W LW) \rceil}$ (two tiles);
-   - the reader takes window $w$ from FIFO $w \bmod$ `S_CH`, one word per cycle, in window order;
-   - a 20-byte packer forms the block stream: $S B_{kv}$ bytes, 5 per word, each block padded to whole words;
+   - one FIFO per channel of $I$-bit plane words, depth $2^{\lceil \log_2(2 T_W P) \rceil}$ (two tiles);
+   - the reader takes window $w$'s planes from FIFO $w \bmod$ `S_CH`, one per cycle, in window order;
+   - a double corner-turn forms the block stream: a window's 8 planes become its 8 words of $I/8$ bytes;
    - `s_cr` pulses after a tile's last read.
 
    A block's stream starts when all of these hold:
@@ -545,48 +574,53 @@ $(m, \log l)$ per row within a run.
    - a $\log P$ credit is available;
    - for $b \ge 1$, an $\alpha$ credit is available.
 
-   **Why pack?** Window-aligned words would remove the packer. But they cost 1–12 extra words per block (up to
-   1.46 %) [derived], on rows where the score stream sets the pace.
+   Until 2026-10-22 a 20-byte packer formed a stream of 5-byte words, each block padded to whole words; window-aligned
+   words would have cost 1–12 extra words per block. With plane words a window is always 8 words, so the corner-turn
+   needs no packer.
 2. **Core** (the verified datapath):
-   - store: $\max(2, N_{EXP})$ banks × 5 byte-lane RAMs, a 2-block ring, window-local layout;
+   - store: $\max(2, N_{EXP})$ banks of $I/8$-byte words, a 2-block ring, window-local layout (until 2026-10-22: 5
+     byte-lane RAMs per bank);
    - row max during the stream: $m_{new}$ and $\log\alpha$ tables, ping-pong by block parity;
-   - $N_{EXP}$ EXP feeds: each reads its windows, subtracts $m_{new}$ and clamps. The words its crossbar pops are the
-     $\log P$ output, which is why E5 cannot stall and needs the credit;
-   - row sums (2 stages, ping-pong);
+   - $N_{EXP}$ EXP feeds: each reads its windows, subtracts $m_{new}$ and clamps at $I/8$ lanes into a double
+     corner-turn, then sends one gapless burst per window. The burst is the $\log P$ output, which is why E5 cannot
+     stall and needs the credit (until 2026-10-22 the crossbar popped the words from a 4-deep feed FIFO);
+   - row sums: per drain plane, each row's count of set bits weighted by $2^b$ (2 stages, ping-pong);
    - the carry FSM with the carry-EXP and carry-LOG crossbars;
    - the final carry registers.
 
    The EXP crossbars use the extent $I \times I$; the carry-EXP and carry-LOG passes $S \times S$ (the rows in use).
 3. **Outputs** (framing new, data unchanged):
-   - E5 = the popped feed words;
-   - E6 = the per-row $\log\alpha$ events of blocks $b \ge 1$;
-   - E7 = the final $\log l$, read row by row through the 2-cycle registered read once `ll_cr` allows it.
+   - E5 = the EXP bursts;
+   - E6 = one window of the $S$ rows' $\log\alpha$ per block $b \ge 1$, one cycle after the block's last $m_{new}$;
+   - E7 = the final $\log l$, one window of the $S$ rows, sent as planes of the table once `ll_cr` allows it.
 
-   `done` follows the last E7 word.
+   `done` follows the last E7 plane.
 
-**Timing** (`softmax_online_sim`): the certified recurrence, with per-block score availability. The stream floor is
-$W_{st} = \lceil S B_{kv}/5 \rceil$ words per block (205 in the example).
+**Timing** (`ip/softmax/spec.md` §5): v2's recurrence on the bit-plane pass, with per-block score availability. The
+stream floor is $8\, NWB = 8 S B_{kv}/I$ words per block (128 in the example; until 2026-10-22
+$W_{st} = \lceil S B_{kv}/5 \rceil$ = 205).
 
-The module's full contract is `ip/softmax/spec.md`. Its §10 lists the refinements made there: E6 carries one row per
-window; the carry passes use $S \times S$; the gates sit in the input stage's reader, which opens a tile one cycle
-after its decision; `done` follows the last E7 word.
+The module's full contract is `ip/softmax/spec.md`. Its §10 lists the refinements made there: the carry passes use
+$S \times S$; the gates sit in the input stage's reader, which opens a tile one cycle after its decision; `done`
+follows the last E7 plane; the bit-plane pass (item 6).
 
 ### 4.6 Online softmax accumulator (`softmax_online_acc`)
 
 **Function.** The output half of the online softmax: F6 per block and F7 per run. It applies to any weighted sum under
 a blocked online softmax; here, the PV products.
 
-**Parameters:** `S, D, R, C, BUF, P, N_OC, NBLK, SO, LN`; `P_CH` (input channels = the PV DIMM's $NG$); `VWP` (13).
+**Parameters:** `S, D, R, C, P, N_OC, NBLK, SO, LN`; `P_CH` (input channels = the PV DIMM's $NG$); `VWP` (13)
+(`BUF` removed 2026-10-22).
 
 **Ports.**
 
 | port | width | direction | description |
 |---|---|---|---|
-| `p_v`, `p_d` | `P_CH`, `P_CH` · 65 | in | E8: $o_{part}$ windows (13-bit lanes) |
+| `p_v`, `p_d` | `P_CH`, `P_CH` · $2I$ | in | E8: $o_{part}$ windows (13-bit elements: 2 lanes of plane words) |
 | `p_cr` | 1 | out | a tile's $o_{part}$ has all been read |
-| `la_v`, `la_d`; `la_cr` | 1, 9; 1 | in; out | E6: $\log\alpha$; credit after an $\alpha$ slot's last use |
-| `ll_v`, `ll_d`; `ll_cr` | 1, 8; 1 | in; out | E7: $\log l$; credit after the normalization's last read |
-| `o_v`, `o_d` | 1, $N_{OC}$ · 40 | out | E9: the final $O_8$ values, one 40-bit word per crossbar per cycle, as the normalize jobs drain |
+| `la_v`, `la_d`; `la_cr` | 1, $2S$; 1 | in; out | E6: $\log\alpha$, one window per block; credit after an $\alpha$ slot's last use |
+| `ll_v`, `ll_d`; `ll_cr` | 1, $S$; 1 | in; out | E7: $\log l$, one window per run; credit after the normalization's last read |
+| `o_v`, `o_d` | 1, $N_{OC} I$ | out | E9: the final $O_8$ values, one plane window of $N_{OC} I$ elements per normalize wave (crossbar $i$'s window in elements $iI \ldots$) |
 | `run_done` | 1 | out | pulse one cycle after a run's last $O_8$ word |
 
 **Consumes** $o_{part}$ and $\log\alpha$ per block, and $\log l$ per run. **Produces** the final $O_8$ values.
@@ -598,38 +632,47 @@ a blocked online softmax; here, the PV products.
   E8 -> [FIFO per channel, 2 tiles] --+     E6 -> [log a: 2-entry ring]     E7 -> [log l table]
                                       v
   [LOG group, N_OC crossbars]  feed o' = (b ? +-e << SO : 0) + o_part -> oq, so    -> drain lo -> lo_mem, so_mem
+                               (corner-turn, I/8 lanes, corner-turn back)
   [EXP group, N_OC crossbars]  rescale feed   t  = clamp8(log a + lo)            -> drain e  -> e_mem
                                normalize feed tE = clamp8(lo - log l)            -> drain O8 -> E9 (o_v, o_d)
+                               (bit-serial adds, an 8-plane hold for the clamp; O8 through an 8-plane hold)
 ```
 
 1. **Inputs:**
-   - FIFOs of $5 \cdot 13$ bits, two tiles deep; window $p$ in FIFO $p \bmod$ `P_CH`;
-   - $\log\alpha$: a 2-entry ring of $S \times 9$-bit tables, in arrival order;
-   - $\log l$: an $S \times 8$-bit table.
+   - FIFOs of $2I$-bit plane words (2 lanes), two tiles deep; window $p$ in FIFO $p \bmod$ `P_CH`;
+   - $\log\alpha$: a 2-entry ring of $S \times 9$-bit tables, in arrival order, written plane by plane;
+   - $\log l$: an $S \times 8$-bit table, written plane by plane.
 2. **Engines** (the verified datapath):
    - Two lock-step groups of $N_{OC}$ identity crossbars ($I \times I$), each led by its crossbar 0.
    - Window $p = wN_{OC} + i$ runs on crossbar $i$ in wave $w$. There are $P_{oc} = S d/I$ windows per run, each of
      $RPW = I/d$ query rows.
-   - Per crossbar: `lo_mem` and `e_mem` ($W_{oc}\, 2^{\lceil \log_2 LW \rceil}$ words of 40 bits), and `so_mem`.
+   - Per crossbar: `lo_mem` and `e_mem` ($8 W_{oc}$ plane words of $I$ bits), and `so_mem` ($W_{oc}$ words of $I$
+     bits). Until 2026-10-22: $W_{oc}\, 2^{\lceil \log_2 LW \rceil}$ words of 40 bits.
+   - A job decides `PRE` cycles before its leader is ready, so the feed is prepared while the previous pass runs:
+     `PRE_LOG` = 17 (corner-turn, $I/8$-lane arithmetic, corner-turn back), `PRE_EXP` = 10 (the bit-serial add and
+     the clamp's hold).
    - Readiness:
      - **LOG** $(b, w)$: its windows are complete in their FIFOs, and the rescale $(b, w)$ is drained when $b \ge 1$.
      - **Rescale** $(b \ge 1, w)$: an $\alpha$ table is present and LOG$(b - 1, w)$ is drained.
      - **Normalize** $(w)$: $\log l$ is present and LOG$(B - 1, w)$ is drained.
    - A run's jobs begin after the previous run's last $O_8$ word.
-3. **Output (E9):** the normalize jobs' $O_8$ words, registered, two cycles after each drain word, one per crossbar:
-   - `o_d` word $i$ is word $q$ of crossbar $i$'s window $p = wN_{OC} + i$ (wave $w$); crossbars without a window in
-     the last wave send zeros, as do the lanes past a window's $I$ elements;
+3. **Output (E9):** the normalize jobs' $O_8$, one plane window per wave, 10 cycles after the wave's drain start
+   (the 8-plane hold sets each element's saturation flag after plane 7, then the output register):
+   - `o_d` bits $iI \ldots iI + I - 1$ are crossbar $i$'s window $p = wN_{OC} + i$ (wave $w$); crossbars without a
+     window in the last wave send zeros;
    - element $k$ of window $p$ is element $pI + k$ of the run's row-major $S \times d$ tile;
-   - there is no O reader and no read-out: the O projection reads E9 (user, 2026-10-15: the read-out is set by the
-     40-bit port, not by the crossbars or the mapping). `run_done` pulses one cycle after the run's last $O_8$ word.
+   - there is no O reader and no read-out: the O projection reads E9 (user, 2026-10-15: the read-out was set by the
+     40-bit port, not by the crossbars or the mapping). `run_done` pulses one cycle after the run's last $O_8$
+     plane.
 
 **Why in the softmax IP?** It uses only what the online softmax produces ($\alpha$, $l$) and the weighted partials.
 Together with `softmax_online_top` it forms the whole online softmax over key blocks. Nothing in it is specific to
 attention.
 
-**Timing:** the engines follow the verified v2 recurrence (`ocarry_sim`). The module's full contract, with the stream
-inputs and the output, is `ip/softmax/acc_spec.md`. Its §10 lists the refinements made there: the $\alpha$ ring in
-arrival order across runs, not cleared at a run's end; the table credits; `run_done`; no O reader (2026-10-15).
+**Timing:** the job rules of `ip/softmax/acc_spec.md` §5: v2's station (`ocarry_sim`) in structure, with the bit-plane
+feeds. The module's full contract, with the stream inputs and the output, is `ip/softmax/acc_spec.md`. Its §10 lists
+the refinements made there: the $\alpha$ ring in arrival order across runs, not cleared at a run's end; the table
+credits; `run_done`; no O reader (2026-10-15); the bit-plane pass (item 8).
 
 ### 4.7 Tiling controller (`att_ctrl`) and top (`att_head`)
 
@@ -654,8 +697,8 @@ The `att_head` ports:
 | port | width | direction | description |
 |---|---|---|---|
 | `x_rdy` | $P_{proj}$ | out | copy $p$ may take its next token |
-| `x_v`, `x_d` | $P_{proj}$, $P_{proj} V \cdot 40$ | in | E0: copy $p$'s token burst, `LOADX` = $\lceil \min(d_m, R)/5 \rceil$ words, $V$ lanes; tokens $t \equiv p \pmod{P_{proj}}$ in order |
-| `o_v`, `o_d` | 1, $N_{OC}$ · 40 | out | E9: the final $O_8$ values, $N_{OC}$ words per cycle (read by the O projection) |
+| `x_v`, `x_d` | $P_{proj}$, $P_{proj} V R$ | in | E0: copy $p$'s token burst, `LOADX` = 8 plane words, $V$ lanes; tokens $t \equiv p \pmod{P_{proj}}$ in order (until 2026-10-22: $\lceil \min(d_m, R)/5 \rceil$ 40-bit words) |
+| `o_v`, `o_d` | 1, $N_{OC} I$ | out | E9: the final $O_8$ values, one plane window of $N_{OC} I$ elements per normalize wave (read by the O projection) |
 | `start`, `busy`, `done` | 1 each | in, out, out | one head per `start` |
 | weights | | in | simulation twin only; the VTR twin has the weights preloaded |
 
@@ -686,18 +729,21 @@ Every rule is local to its module and decided in a register:
 
 **Why E3 has 4 rows per copy** (user, 2026-10-15). The GEMM cannot stall, so `att_ctrl` takes the E3 credit when
 the token enters the GEMM. The credit's loop is therefore X burst → V row out of the GEMM → LOG conversion → row
-write → `pb_cr`: 65 cycles at BERT-Tiny on 64×64, against a GEMM row period of 21. A credit binds when its loop is
-longer than `CAP` row periods. With 2 rows it bound the X stream on 176 of the 432 DSE builds (up to 8.9 % of the
-cycles); with 4 it binds on none, and every build runs as fast as with no E3 credit at all (model,
-`v3/docs/architecture_page/exp/pb_*.py`). The PV DIMM keeps two row registers per copy. It writes the V rows in row order, so
-the X bursts must start in token order across the copies (E0; one token stream does). Then rows come at least one
-conversion pass apart and stay at most $\lceil d/5 \rceil + P_{proj} - 1$ cycles, so at most one register per copy
-is full at a time. Without the order, a starved copy would let the other copies' rows overrun their registers; the
-model raises on it. (The alternative, 4 registers per copy, was not taken.)
+write → `pb_cr`: 65 cycles at BERT-Tiny on 64×64, against a GEMM row period of 21 (the 40-bit timing). A credit binds
+when its loop is longer than `CAP` row periods. With 2 rows it bound the X stream on 176 of the 432 DSE builds (up to
+8.9 % of the cycles); with 4 it bound on none, and every build ran as fast as with no E3 credit at all (model,
+`v3/docs/architecture_page/exp/pb_*.py`). Since the bit-plane pass the loop is 33 cycles against a row period of 10
+[model, BERT-Tiny on 64×64], so 4 rows still cover it. The PV DIMM keeps two row registers per copy. It writes the V
+rows in row order, so the X bursts must start in token order across the copies (E0; one token stream does). Then rows
+come at least one conversion pass apart and stay at most $P + P_{proj} - 1$ cycles (until 2026-10-22:
+$\lceil d/5 \rceil + P_{proj} - 1$), so at most one register per copy is full at a time. Without the order, a starved
+copy would let the other copies' rows overrun their registers; the model raises on it. (The alternative, 4 registers
+per copy, was not taken.)
 
 Fixed sizes [derived from the floor rule]:
 - $N_{OC}$ is the smallest group whose pass time reaches the stream floor:
-  $T(\lceil P_{oc}/N_{OC} \rceil) \le \max(\lceil S B_{kv}/5 \rceil, T(1))$.
+  $T(\lceil P_{oc}/N_{OC} \rceil) \le \max(\lceil S B_{kv}/5 \rceil, T(1))$, with $T$ the 40-bit pass. The rule is
+  held at this form since the bit-plane pass (2026-10-22: the mapping counts do not change).
 - That gives 6–8 at $d$ 64, 4 for JetFormer-150P and 2 for JetFormer-JetClass; 8 in the example.
 
 ### 5.3 No deadlock
@@ -742,11 +788,15 @@ Sizes in bytes [derived]. VTR counts memory blocks, so this does not predict the
 | $\log P$ (A slots) | PV DIMM | per slice $X_S/A_{GRP}$ blocked banks, 2 slots | $2 S B_{kv}$ | 2,048 |
 | $L_V$ (B slots) | PV DIMM | per slice $K_s$ k-slots of $d$-byte words | $n d$ | 8,192 |
 | staging Q / K / V | DIMM loader slices | row banks holding the slice's columns / row queues | | about 640 / 2,560 / 130 |
-| staging $\log P$ | PV DIMM loader slices | 2 windows per channel (the slice's keys), flip-flops | $2 N_{EXP} \cdot 5 LW$ in all | 260 |
-| score FIFOs + store | online softmax | `S_CH` × 2 tiles; 2-block ring | | 2,560 + 2,080 |
-| $o_{part}$ FIFOs | accumulator | `P_CH` × 2 tiles × 65 bits | | 16,640 |
-| lo / e / so | accumulator | per crossbar $W_{oc}\, 2^{\lceil \log_2 LW \rceil}$ words | | 10,880 |
-| total | | | | about 62 KB, plus small register tables |
+| staging $\log P$ | PV DIMM loader slices | 2 windows per channel (the slice's keys), flip-flops | $2 N_{EXP} \cdot NWEL$ in all | 256 |
+| score FIFOs + store | online softmax | `S_CH` × 2 tiles of $I$-bit plane words; 2-block ring of $I/8$-byte words | | 2,048 + 2,048 |
+| $o_{part}$ FIFOs | accumulator | `P_CH` × 2 tiles of $2I$-bit plane words | | 16,384 |
+| lo / e / so | accumulator | per crossbar $8 W_{oc}$, $8 W_{oc}$ and $W_{oc}$ words of $I$ bits | | 8,704 |
+| total | | | | about 59 KB, plus small register tables and the feeds' corner-turns |
+
+The example column follows the model's memory inventory of 2026-10-22 (the bit-plane pass; until then: 260,
+2,560 + 2,080, 16,640 and 10,880 bytes, about 62 KB). The DIMM's A memories are 2 per slice at every $I$
+($A_{GRP} = 8$).
 
 ## 6 Model ↔ RTL contract
 
@@ -762,9 +812,12 @@ Sizes in bytes [derived]. VTR counts memory blocks, so this does not predict the
   every word: the event list is exact.
 - **A module model** maps its input events and the credits arriving at its outputs to its output events and the
   credits it returns.
-  - Where a datapath already has a certified model, that model is reused: `gemm_sim`, `dimm_tile_sim`,
-    `softmax_online_sim`, `ocarry_sim`.
-  - The new stages add their pinned latencies: converters, loaders, slots, the softmax input stage, the E9 output.
+  - Until 2026-10-22 the datapaths with a certified v2 model reused its timing: `gemm_sim`, `dimm_tile_sim`,
+    `softmax_online_sim`, `ocarry_sim`. Those models time the 40-bit pass. Since the bit-plane pass they stay value
+    witnesses only. Each module's timing is its own spec's rules (`ip/*/spec.md`), whose named latencies the RTL pass
+    implements and GATE 2 pins.
+  - The stages added in v3 have their pinned latencies: converters, loaders, slots, the softmax input stage, the E9
+    output.
   - The DIMM's slices are internal and add no port events. The DIMM model uses the slice rule for $A_{GRP}$ (§4.4).
 - **Composition** visits the units in the order of §5.3, so one pass computes every event.
 - **Gate per module:** port monitors in the testbench log the same events. A module passes when its values are
@@ -776,6 +829,14 @@ Sizes in bytes [derived]. VTR counts memory blocks, so this does not predict the
 
 All RTL runs are on 64×64 crossbars with small corpora. A full iverilog launch needs your approval. VTR runs only on
 your go.
+
+**The bit-plane pass** (2026-10-22; `LEDGER.md` Needs you 25), following Rule No. 1:
+1. the RTL of every module, checked by the static gates only;
+2. the head's VTR smoke at 256×128 with `vtr/arch_rowpar/`;
+3. then GATE 2 at 64×64: the DIMM (16), softmax (18, plus the 128×64 case) and accumulator (19) corpora, the head
+   bring-up (5) and gate H (6).
+
+The table below is the plan the modules closed on in F3–F4.
 
 | gate | covers | oracle |
 |---|---|---|

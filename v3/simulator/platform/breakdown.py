@@ -46,7 +46,7 @@ def energyByRole(rep, platform: Platform) -> dict:
 
 def areaByComponent(clbCount: int, crossbars: int, memBlocks: int, R: int, C: int) -> dict:
     """The VTR area in grid cells and shares: CLB cells, crossbar tiles (count x the wc footprint), memory tiles."""
-    w, h = area.wcFootprint(R, C)
+    w, h = area.footprint(R, C)
     cells = dict(clb=clbCount, xbar=crossbars * w * h, mem=area.MEM_TILE_CELLS * memBlocks)
     total = sum(cells.values())
     return dict(cells=cells, total_cells=total, total_mwta=total * area.MWTA_PER_CELL,

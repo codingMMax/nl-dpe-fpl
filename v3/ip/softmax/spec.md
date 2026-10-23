@@ -1,11 +1,21 @@
 # `softmax_online_top` — online softmax (v3 module spec)
 
-Status: 2026-10-14, F3 / phase B, **validated**: GATE 2 18/18 at 64×64, VTR smoke at 128×128 (`LEDGER.md`). This
-is the module's contract: the behavior model `ip/softmax/model.py` and
-both RTL twins (`ip/softmax/rtl/{sim,vtr}/softmax_online_top.v`) implement it, and GATE 2 pins every latency named
-here. Built from the verified v2 core (store, row max, EXP feeds, row sums, carry; `v2/sim/rtl/softmax_online_top.v`,
-strict GATE 2 574/574) and `docs/architecture.md` §4.5. Refinements of §4.5 made while writing this spec are listed in
-§10.
+Status: 2026-10-14, F3 / phase B, **validated**: GATE 2 18/18 at 64×64, VTR smoke at 128×128 (`LEDGER.md`).
+
+**2026-10-22, the bit-plane pass** (§10 item 6):
+- every port carries bit planes (`ip/xbar/spec.md`, `docs/architecture.md` §3.1);
+- a double corner-turn replaces the 5-byte packer;
+- each EXP feed sends one gapless burst per window, and that burst is the E5 window;
+- the row sums add per-plane counts;
+- E6 and E7 are plane windows.
+
+The behavior model (`simulator/models/softmaxOnline.py`) implements this version. Both RTL twins still have the 40-bit
+version (F3) and follow in the RTL pass, so GATE 2 pins this version's latencies only after that.
+
+This is the module's contract: the behavior model and both RTL twins (`ip/softmax/rtl/{sim,vtr}/softmax_online_top.v`)
+implement it, and GATE 2 pins every latency named here. Built from the verified v2 core (store, row max, EXP feeds,
+row sums, carry; `v2/sim/rtl/softmax_online_top.v`, strict GATE 2 574/574) and `docs/architecture.md` §4.5.
+Refinements of §4.5 made while writing this spec are listed in §10.
 
 ## 1 Function
 
@@ -24,13 +34,14 @@ l' = \begin{cases} sp & b = 0 \\ \big(\mathrm{EXP}(\mathrm{clamp8}(\log\alpha + 
 $$
 
 with $LN = \log_2 N$, then $m \leftarrow m_{new}$. Outputs: $\log P$ per block, $\log\alpha$ per block $b \ge 1$, and the
-final $\log l$ per run. Value contract (GATE 1): `softmax_online_ref.logcarry_stage_values`, every stage.
+final $\log l$ per run. Value contract (GATE 1): `softmax_online_ref.logcarry_stage_values`, every stage. The values
+are unchanged by the bit-plane pass.
 
 ## 2 Parameters
 
 | group | parameter | meaning |
 |---|---|---|
-| shape | `S, BKV, N, R, C, BUF, P` | rows per run, keys per block, keys per run, crossbar, port width, bit slices |
+| shape | `S, BKV, N, R, C, P` | rows per run, keys per block, keys per run, crossbar, bit slices (`BUF` removed 2026-10-22) |
 | crossbars | `N_EXP` | EXP crossbars |
 | input | `S_CH` | input channels (= the QK DIMM's $NG$) |
 | credits | `LP_CAP`, `LA_CAP`, `LL_CAP` | consumer buffers in units: $\log P$ blocks (2), $\alpha$ blocks (2), $\log l$ runs (1) |
@@ -43,17 +54,18 @@ Derived (no free numbers):
 | $BLKEL$ | $S B_{kv}$: elements per block (= per tile) |
 | $NWB$ | $BLKEL/I$: windows per block |
 | $PW$ | $B \cdot NWB$: windows per run |
-| $LW$ | $\lceil 8I/BUF \rceil$: words per window |
-| $L_{last}$ | $I - 5(LW - 1)$: bytes in a window's last word |
-| $STREAM$ | $\lceil BLKEL/5 \rceil$: core stream words per block |
+| $Q_W$ | $I/8$: bytes per core stream word (a window is $P$ such words) |
+| $STREAM$ | $P \cdot NWB$: core stream words per block |
 | $T_W$ | $NWB/$`S_CH`: windows per channel per tile |
-| $DF$ | $2^{\lceil \log_2(2 T_W LW) \rceil}$: input FIFO depth (words, per channel; two tiles) |
-| $WL$ | $\lceil S/5 \rceil$: words of a carry pass |
-| $NB$, $WPW$, $DW$, $BDEPTH$ | the v2 store: $\max(2, N_{EXP})$ banks, $LW$, $\max(1, 2NWB/NB)$, $DW \cdot WPW$ |
+| $DF$ | $2^{\lceil \log_2(2 T_W P) \rceil}$: input FIFO depth (plane words, per channel; two tiles) |
+| $NB$, $DW$, $BDEPTH$ | the store: $\max(2, N_{EXP})$ banks, $DW = \max(1, 2NWB/NB)$ windows per bank, $BDEPTH = DW \cdot P$ words of $Q_W$ bytes |
+
+Until 2026-10-22: $LW = \lceil 8I/40 \rceil$ words per window, $L_{last}$, $STREAM = \lceil BLKEL/5 \rceil$, $WL =
+\lceil S/5 \rceil$, and 5 byte lanes per store bank.
 
 Guards (the RTL's elaboration guards; the model raises on the same sets):
-- $S$, $B_{kv}$, $N$, $I$, $N_{EXP}$, `S_CH` powers of two; $8 \le S \le I$; $8 \le B_{kv} \le \min(N, I)$; `BUF` = 40
-  (v2);
+- $S$, $B_{kv}$, $N$, $I$, $N_{EXP}$, `S_CH` powers of two; $8 \le S \le I$; $8 \le B_{kv} \le \min(N, I)$; $P = 8$
+  (one plane per bit of an int8 element; until 2026-10-22 `BUF` = 40);
 - $S B_{kv} \ge I$ (whole windows); `S_CH` $\le NWB$; $PW$ a multiple of $N_{EXP}$ (lanes keep their windows across
   runs);
 - `LP_CAP`, `LA_CAP`, `LL_CAP` $\ge 1$.
@@ -62,37 +74,54 @@ Guards (the RTL's elaboration guards; the model raises on the same sets):
 
 | port | width | dir | discipline | unit | `CAP` |
 |---|---|---|---|---|---|
-| `s_v`, `s_d` / `s_cr` | `S_CH`, `S_CH`·40 / 1 | in / out | push + credit | a tile ($S \times B_{kv}$ int8, $NWB$ windows of $I$) | 2 tiles |
+| `s_v`, `s_d` / `s_cr` | `S_CH`, `S_CH`·$I$ / 1 | in / out | push + credit | a tile ($S \times B_{kv}$ int8, $NWB$ windows of $I$) | 2 tiles |
 | `start` / `busy` | 1 / 1 | in / out | burst on ready | a run | 1 |
-| `lp_v`, `lp_d` / `lp_cr` | $N_{EXP}$, $N_{EXP} \cdot 40$ / 1 | out / in | push + credit | a block's $\log P$ ($NWB$ windows of $I$) | `LP_CAP` |
-| `la_v`, `la_d` / `la_cr` | 1, 9 / 1 | out / in | push + credit | a block $b \ge 1$: $S$ windows of one row | `LA_CAP` |
-| `ll_v`, `ll_d` / `ll_cr` | 1, 8 / 1 | out / in | push + credit | a run: one window of $S$ rows | `LL_CAP` |
-| `done` | 1 | out | | pulse after the run's last $\log l$ word | |
+| `lp_v`, `lp_d` / `lp_cr` | $N_{EXP}$, $N_{EXP} \cdot I$ / 1 | out / in | push + credit | a block's $\log P$ ($NWB$ windows of $I$) | `LP_CAP` |
+| `la_v`, `la_d` / `la_cr` | 1, $2S$ / 1 | out / in | push + credit | a block $b \ge 1$: one window of $S$ rows (9 bits, 2 lanes) | `LA_CAP` |
+| `ll_v`, `ll_d` / `ll_cr` | 1, $S$ / 1 | out / in | push + credit | a run: one window of $S$ rows | `LL_CAP` |
+| `done` | 1 | out | | pulse after the run's last $\log l$ plane | |
 
-Framing (`architecture.md` §3.1):
-- E4 (`s`): tile $j$ = the QK DIMM's job $j$. Window $w$ = elements $wI \ldots wI + I - 1$ of the tile, row-major; it
-  is on channel $w \bmod$ `S_CH`, $LW$ words, the last word padded.
-- E5 (`lp`): block $j$ of the stream ($j = rB + b$); window $w$ = elements $wI \ldots$ of the block's $\log P$, $LW$
-  words, on lane $(b \cdot NWB + w) \bmod N_{EXP}$ = the EXP crossbar that converts it.
-- E6 (`la`): block $j$ with $b \ge 1$ is unit $r(B - 1) + b - 1$; window $w$ = row $w$, one 9-bit word.
-- E7 (`ll`): run $r$ is unit $r$; one window of $S$ words, word $m$ = $\log l$ of row $m$.
+Framing (`architecture.md` §3.1, plane framing since 2026-10-22): every window is 8 plane words on consecutive
+cycles, LSB first.
+- E4 (`s`): tile $j$ = the QK DIMM's job $j$. Window $w$ = elements $wI \ldots wI + I - 1$ of the tile, row-major, on
+  channel $w \bmod$ `S_CH`.
+- E5 (`lp`): block $j$ of the stream ($j = rB + b$). Window $w$ = elements $wI \ldots$ of the block's $\log P$, on lane
+  $(b \cdot NWB + w) \bmod N_{EXP}$, the EXP crossbar that converts it. The window is that crossbar's input burst.
+- E6 (`la`): block $j$ with $b \ge 1$ is unit $r(B - 1) + b - 1$: one window, element $m$ = $\log\alpha$ of row $m$
+  (9 bits: lane 1 carries bit 8).
+- E7 (`ll`): run $r$ is unit $r$: one window, element $m$ = $\log l$ of row $m$.
+
+Until 2026-10-22: 40-bit words of 5 bytes; E6 was $S$ windows of one 9-bit word, E7 one window of $S$ words.
 
 ## 4 Structure
 
 ```text
- s_v/s_d (S_CH) -> [FIFO per channel, DF x 40, 1W1R]
-                -> [READER: tile j opens on its gate; window w from FIFO w mod S_CH, one word per cycle]
-                -> [PACKER: window words (5 or L_last bytes) -> STREAM words per block, each block padded] -> core
- core (v2, unchanged datapath; extents below):
-   store (2-block ring) | row max -> m_new, log a tables, la events | N_EXP EXP feeds -> lp words (pops)
-   row sums sp | carry: [carry-EXP of clamp8(log a + log l)] -> lq -> [carry-LOG] -> log l | retire count
- outputs: lp = the pops; la = the la events of blocks b >= 1; ll = the final log l, read row by row
+ s_v/s_d (S_CH) -> [FIFO per channel, DF x I bits, 1W1R]
+                -> [READER: tile j opens on its gate; window w's planes from FIFO w mod S_CH, one per cycle]
+                -> [DOUBLE CORNER-TURN: a window's 8 planes -> its P words of Q_W bytes] -> core stream
+ core (v2's datapath, at Q_W bytes per word):
+   store (2-block ring, bytes) | row max -> m_new, log a tables -> E6 planes
+   N_EXP EXP feeds: s - m_new, clamp -128, at Q_W lanes -> [DOUBLE CORNER-TURN] -> one 8-plane burst = E5 window
+   row sums sp: per-plane counts of each row's bits, accumulated over the 8 planes
+   carry: planes of clamp8(log a + log l) -> carry-EXP -> e (plane by plane) -> lq planes -> carry-LOG
+          -> the log l table (plane by plane) | retire count
+ outputs: lp = the EXP bursts; la = one plane window per block b >= 1; ll = the log l table's planes
  gates (registered): tile open = armed, rb < B, slot (block rb - 2 retired), lp credit, (rb >= 1) la credit
 ```
 
-Extents: the EXP passes $I \times I$; the carry-EXP and carry-LOG passes $S \times S$ (the rows and columns in use;
-since 2026-10-18 the simulator drains every column of the array on every pass, the extent setting the load and the
-valid window, while the RTL still stops after the columns in use: `architecture.md` §1).
+**The bit-plane datapath** (2026-10-22):
+- **Corner-turns.** A corner-turn buffer is $8 \times I$ bits. A window's planes are written into it as they arrive, and
+  its bytes are read out $Q_W$ per cycle once the last plane is in (or the reverse direction for a feed). Two buffers
+  per stream let one window drain while the next one fills.
+- **Row sums.** Each EXP drain plane $b$ carries bit $b$ of the window's EXP bytes. A window holds whole rows
+  ($I/B_{kv}$ of them, as $B_{kv}$ divides $I$). For each of them, the count of its $B_{kv}$ set bits in the plane is
+  added with weight $2^b$, so after plane 7 the row's sum is exact.
+- **Tables** ($m$, $m_{new}$, $\log\alpha$, $sp$, $e$, $lq$, $\log l$) are flip-flops, $S$ entries each. A plane of a
+  table is bit $b$ of every entry: the carry inputs, E6 and E7 read planes directly, and the carry-EXP and carry-LOG
+  drains write $e$ and $\log l$ one plane per cycle.
+
+Extents: the EXP passes $I \times I$; the carry-EXP and carry-LOG passes $S \times S$ (the rows and columns in use).
+Since 2026-10-22 the extent changes only the values and the energy, not the time (`ip/xbar/spec.md`).
 
 ## 5 Timing rules
 
@@ -100,18 +129,26 @@ Cycle 0 is the first cycle after reset. A signal "at $t$" is high (or a register
 
 | name | value | rule |
 |---|---|---|
-| `FIFO_LAT` | 1 | an E4 word valid at $t$ can be read from $t + 1$ |
+| `FIFO_LAT` | 1 | an E4 plane valid at $t$ can be read from $t + 1$ |
 | `CR_IN_LAT` | 1 | a credit pulse (`lp_cr`, `la_cr`, `ll_cr`) at $t$ counts for the gates from $t + 1$ |
-| `RET_LAT` | 1 | a block retired at $t$ (its carry-LOG drain word with row $S - 1$) counts for the gates from $t + 1$ |
+| `RET_LAT` | 1 | a block retired at $t$ (its carry-LOG's last drain plane) counts for the gates from $t + 1$ |
 | `ARM_LAT` | 2 | `start` accepted at $t$: the run is armed from $t + 2$ (the core's run state is cleared at $t + 1$) |
-| `OPEN_LAT` | 1 | the reader decides to open a tile at $t_{dec}$ and reads its first word at $t_{dec} + 1$ |
-| `PACK_LAT` | 2 | a core stream word completed by the read at $r$ reaches the core at $r + 2$; a second word completed by the same read, at $r + 3$ |
+| `OPEN_LAT` | 1 | the reader decides to open a tile at $t_{dec}$ and reads its first plane at $t_{dec} + 1$ |
+| `CT_LAT` | 2 | a window whose last plane is read at $r$: its first core word at $r + 2$ (the registered read, the corner-turn) |
 | `SCR_LAT` | 1 | `s_cr` pulses one cycle after a tile's last read |
-| `MAX_LAT`, `FEED_LAT`, `SP_LAT`, `WAIT_LAT`, `GO_LAT` | 4, 9, 2, 1, 4 | the v2 core (`softmax_online_sim`), from the block's last stream word $a_{last}$ |
-| `LA_EV_LAT` | 5 | a row's $\log\alpha$ is on `la_v` five cycles after the stream word that completes the row |
-| `E7_LAT` | 3 | the $\log l$ read-out decided at $t$: its first word at $t + 3$ (address register + the 2-cycle registered read) |
-| `DONE_LAT` | 1 | `done` one cycle after the last $\log l$ word |
+| `MAX_LAT` | $\log_2 \min(Q_W, B_{kv})$ + `MAX_REG` | the block's last core word at $a_{last}$: every row's $m_{new}$ from $a_{last}$ + `MAX_LAT`. The tree over a word's elements of one row has $\log_2 \min(Q_W, B_{kv})$ levels; `MAX_REG` = 2: the input register and the running max with $m$ |
+| `FEED_LAT` | `MAX_LAT` $+ P +$ `FEED_REG` | the EXP feeds start reading the block at $a_{last}$ + `MAX_LAT`: a window's $P$ store words, then `FEED_REG` = 2 (the registered read, the registered $s - m_{new}$ and clamp), fill its corner-turn by $a_{last}$ + `FEED_LAT` |
+| `SP_LAT` | 3 | a block's row sums are complete `SP_LAT` cycles after its last EXP drain plane (the count register, the weighted add, the window add) |
+| `WAIT_LAT` | 1 | the carry decision is registered |
+| `GO_LAT` | 2 | a carry input computed from the tables (registered), then its plane register |
+| `E_LAT` | 1 | the carry-EXP's last drain plane at $x$: $e$ is whole at $x + 1$ (its plane register) |
+| `LA_LAT` | 1 | the E6 window's first plane one cycle after $m_{new}$ (the registered $m - m_{new}$) |
+| `E7_LAT` | 2 | the $\log l$ read-out decided at $t$: its first plane at $t + 2$ (the decision register, the plane register) |
+| `DONE_LAT` | 1 | `done` one cycle after the last $\log l$ plane |
 | `GO_CR_LAT` | 1 | `busy` falls (the start port's credit) one cycle after `done` |
+
+Until 2026-10-22: `PACK_LAT` 2 (the packer), `MAX_LAT` 4, `FEED_LAT` 9, `SP_LAT` 2, `GO_LAT` 4, `LA_EV_LAT` 5 (a
+row's $\log\alpha$ five cycles after the word that completed the row), `E7_LAT` 3.
 
 **Tile open.** The reader is idle from cycle 0 and from the cycle after a tile's last read. Tile $j$ (run $r$, block
 $b$, the run's $rb = b$-th tile) is decided at the first cycle $t_{dec}$ at which the reader is idle and:
@@ -119,69 +156,76 @@ $b$, the run's $rb = b$-th tile) is decided at the first cycle $t_{dec}$ at whic
 - $b < 2$, or block $b - 2$ is retired ($t_{dec} \ge ret(b - 2) +$ `RET_LAT`);
 - $j <$ `LP_CAP`, or $t_{dec} \ge t_{lp\_cr}(j -$ `LP_CAP`$) +$ `CR_IN_LAT`;
 - $b = 0$, or with $u = r(B - 1) + b - 1$: $u <$ `LA_CAP`, or $t_{dec} \ge t_{la\_cr}(u -$ `LA_CAP`$) +$ `CR_IN_LAT`;
-- the tile's first word is in FIFO 0 ($t_{dec} \ge t_{arr}(0, 0) +$ `FIFO_LAT`).
+- the tile's first plane is in FIFO 0 ($t_{dec} \ge t_{arr}(0, 0) +$ `FIFO_LAT`).
 
 Opening takes one $\log P$ credit, and one $\alpha$ credit for $b \ge 1$.
 
-**Reads.** Input word $i$ of the tile (window $w = \lfloor i/LW \rfloor$, word $c = i \bmod LW$) is read at
+**Reads.** Plane word $i$ of the tile (window $w = \lfloor i/P \rfloor$, plane $c = i \bmod P$) is read at
 $r_0 = t_{dec} +$ `OPEN_LAT` and $r_i = \max(r_{i-1} + 1,\ t_{arr}(w, c) +$ `FIFO_LAT`$)$, where
-$t_{arr}(w, c)$ = window $w$'s first word cycle $+ c$. `s_cr` at $r_{last} +$ `SCR_LAT`.
+$t_{arr}(w, c)$ = window $w$'s first plane cycle $+ c$. `s_cr` at $r_{last} +$ `SCR_LAT`.
 
-**Packer.** Word $c$ carries bytes $5c \ldots$ of its window: 5 bytes, or $L_{last}$ for $c = LW - 1$; window $w$'s byte
-$x$ is block byte $wI + x$. Core stream word $k$ (block bytes $5k \ldots 5k + 4$) is complete with the input word
-$i(k)$ that holds block byte $\min(5k + 4, BLKEL - 1)$; it reaches the core at
-$t_s(k) = \max(r_{i(k)} +$ `PACK_LAT`$,\ t_s(k - 1) + 1)$. Only a tile's last read can complete two words, and the
-reader's idle cycle after it leaves the packer free for the second. $a_{last} = t_s(STREAM - 1)$.
+**Corner-turn.** Window $w$ is complete with its last plane's read $r_{wP + P - 1}$. Its $P$ core words (word $c$ =
+bytes $cQ_W \ldots cQ_W + Q_W - 1$ of the window, i.e. block bytes $wI + cQ_W \ldots$) reach the core at
+$t_s(w, c) = r_{wP + P - 1} +$ `CT_LAT` $+ c$. The next window's last plane is read at least $P$ cycles later, so the
+words never collide, and two buffers hold a window being drained and the next one filling. $a_{last} = t_s(NWB - 1,
+P - 1) = r_{last} +$ `CT_LAT` $+ P - 1$.
 
-**Core** (v2 `softmax_online_cycle_model`, from the stream instead of a fixed start). Per block $b$ of the run:
+**Core** (v2's recurrence on the bit-plane pass, from the stream). Per block $b$ of the run:
 - EXP window $g = b \cdot NWB + w$ on crossbar $g \bmod N_{EXP}$: one pass ($I \times I$) ready at
-  $a_{last} +$ `FEED_LAT`, placed by the pass grammar on the crossbar's own state; its `load_start` is the E5
-  window's time (its $LW$ words are popped on consecutive cycles);
-- $sp_{done} = \max_w (drain\_start + LW - 1) +$ `SP_LAT`;
-- $wait = \max(sp_{done},\ a_{last} +$ `MAX_LAT`$,\ ret(b - 1)) +$ `WAIT_LAT` (no $ret(b - 1)$ term at $b = 0$);
-- $b = 0$: the carry-LOG pass ($S \times S$) ready at $wait + WL +$ `GO_LAT`; $b \ge 1$: the carry-EXP pass
-  ($S \times S$) ready at $wait +$ `GO_LAT`, $x = drain\_start + WL - 1$, then the carry-LOG pass ready at
-  $x +$ `GO_LAT`;
-- $ret(b) = drain\_start_{LOG} + WL - 1$; after the last block, $t_{cd} = ret(B - 1) + 1$ (the core's done).
+  $a_{last} +$ `FEED_LAT`, placed by the pass rule on the crossbar's own state (back to back, a pass every 10 cycles).
+  Its `load_start` is the E5 window's time.
+- $sp_{done} = \max_w (drain\_start + P - 1) +$ `SP_LAT`.
+- $wait = \max(sp_{done},\ a_{last} +$ `MAX_LAT`$,\ ret(b - 1)) +$ `WAIT_LAT` (no $ret(b - 1)$ term at $b = 0$).
+- $b = 0$: the carry-LOG pass ($S \times S$) ready at $wait +$ `GO_LAT`.
+- $b \ge 1$: the carry-EXP pass ($S \times S$) ready at $wait +$ `GO_LAT`, with its last drain plane at
+  $x = drain\_start + P - 1$; then the carry-LOG pass ready at $x +$ `E_LAT` $+$ `GO_LAT`.
+- $ret(b) = drain\_start_{LOG} + P - 1$, the carry-LOG's last drain plane. After the last block,
+  $t_{cd} = ret(B - 1) + 1$ (the core's done).
+
+Until 2026-10-22: the carry walked $WL$ words ($b = 0$: carry-LOG at $wait + WL +$ `GO_LAT`; $ret$ and $x$ at
+$drain\_start + WL - 1$).
 
 The crossbars keep their pass state across runs; every other core register is cleared on the run's arm.
 
-**$\log\alpha$.** Row $m$ of block $b \ge 1$ completes with the stream word $k = \lfloor ((m + 1) B_{kv} - 1)/5 \rfloor$
-of the block: its E6 window at $t_s(k) +$ `LA_EV_LAT`.
+**$\log\alpha$.** Block $b \ge 1$'s E6 window at $a_{last} +$ `MAX_LAT` $+$ `LA_LAT`.
 
 **$\log l$ and done.** The read-out of run $r$ is decided at $t_{d7} = \max(t_{cd},\ t_{ll\_cr}(r -$
 `LL_CAP`$) +$ `CR_IN_LAT`$)$ (no credit term for $r <$ `LL_CAP`), and takes one $\log l$ credit. E7 window at
-$t_{d7} +$ `E7_LAT`; `done` at $t_{d7} +$ `E7_LAT` $+ S - 1 +$ `DONE_LAT`; `busy` falls at `done` + `GO_CR_LAT`.
+$t_{d7} +$ `E7_LAT`; `done` at $t_{d7} +$ `E7_LAT` $+ P - 1 +$ `DONE_LAT`; `busy` falls at `done` + `GO_CR_LAT`.
 
 **Run start.** `start` is taken in a cycle with `busy` low; `busy` is high from the next cycle until `done` +
 `GO_CR_LAT`.
 
-Model checks: the FIFO of a channel never holds more than $DF$ words; a block's E6 rows leave before block $b + 2$ can
-overwrite their table (guaranteed by the slot rule).
+Model checks: the FIFO of a channel never holds more than $DF$ words; a block's E6 window leaves before block $b + 2$
+can overwrite its table (guaranteed by the slot rule).
 
 ## 6 Memories
 
 | memory | organization | size |
 |---|---|---|
-| input FIFOs | `S_CH` × $DF$ words × 40 bits, 1W1R, registered read | $2 \cdot NWB \cdot LW \cdot 5$ bytes in use |
-| store | $NB$ banks × 5 byte lanes × $BDEPTH$ bytes, 1W1R (v2) | |
-| tables | $m$, $m_{new}$ and $\log\alpha$ (two each), $sp$ (two), $lq$, $\log l$: $S$ entries each, flip-flops (v2) | |
+| input FIFOs | `S_CH` × $DF$ words × $I$ bits, 1W1R, registered read | $2 \cdot NWB \cdot P$ plane words in use |
+| store | $NB$ banks × $BDEPTH$ words × $I$ bits ($Q_W$ bytes), 1W1R | |
+| corner-turns | 2 at the input, 2 per EXP feed: $8 \times I$ bits each, flip-flops | |
+| tables | $m$, $m_{new}$ and $\log\alpha$ (two each), $sp$ (two), $e$, $lq$, $\log l$: $S$ entries each, flip-flops (v2) | |
+
+Until 2026-10-22: FIFOs of 40-bit words, and the store's banks as 5 byte-lane memories of 8 bits.
 
 ## 7 Counts and resources
 
 - Passes per block: $NWB$ EXP ($I \times I$); one carry-LOG ($S \times S$); one carry-EXP ($S \times S$) for $b \ge 1$.
 - CLB per block: compares $S B_{kv}$ (row max) $+ S$ (running max); adds $2 S B_{kv}$ ($s - m_{new}$, row sums)
   $+ 2S$ ($\log\alpha + \log l$, $l'$); selects $S B_{kv} + 2S$ (the clamps).
-- Memory per block: $S B_{kv}$ bytes written into the store and read by the feeds. FIFO words per tile: $NWB \cdot LW$,
-  also counted as memory traffic: each word's 5 bytes written once and read once (2026-10-15).
+- Memory per block: $S B_{kv}$ bytes written into the store and read by the feeds. FIFO words per tile: $NWB \cdot P$
+  plane words, also counted as memory traffic: each word's $I/8$ bytes written once and read once (2026-10-15; until
+  2026-10-22 each 40-bit word's 5 bytes, so $5 \lceil I/5 \rceil$ bytes per window).
 - Crossbars: $N_{EXP}$ EXP + 1 carry-EXP + 1 carry-LOG = $N_{EXP} + 2$.
 
 ## 8 Gates
 
 - GATE 1 (case writer): every stage of the model == `softmax_online_ref.logcarry_stage_values`, every run.
-- Closed form: the core, fed v2's stream schedule (word 0 at 2, back to back, block $b \ge 2$ at $ret(b - 2) + 1$)
-  with the carry extent $I$, reproduces `softmax_online_cycle_model(pass_extent="used")`: every block's events and the
-  total.
+- Closed form (the model's test, written by hand from §5): the core, fed a stream with every tile early, gives every
+  block's EXP passes, $sp_{done}$, $wait$, carry passes and $ret$ by the recurrence of §5, and the run's total. (Until
+  2026-10-22 the witness was `softmax_online_sim.softmax_online_cycle_model`, which times the 40-bit pass.)
 - GATE 2 (64×64): the RTL's values on E5, E6 and E7, every port event and the total cycles == the model's.
 - VTR smoke (128×128): crossbar count == $N_{EXP} + 2$; Fmax, CLB, memory, path #1.
 
@@ -195,13 +239,26 @@ overwrite their table (guaranteed by the slot rule).
 
 ## 10 Refinements of `architecture.md` §4.5
 
-1. **E6 carries one row per window** ($W = 1$, $S$ windows per block): each row leaves as its maximum completes, as in
-   v2, so no buffer is needed. The edge table of §3.3 had $W = S$.
+1. **E6 carried one row per window** ($W = 1$, $S$ windows per block) until 2026-10-22: each row left as its maximum
+   completed, as in v2, so no buffer was needed. Since the bit-plane pass E6 is one window of $S$ rows (item 6).
 2. **The carry passes use the extent $S \times S$**, the rows and columns in use (the extent rule); the EXP passes
    stay $I \times I$. §1 listed $I \times I$ for all three. $S < I$ occurs for $n < I$, so the 64×64 corpus exercises it.
 3. **The gates move to the reader.** The core's v2 `score_ready` is gone: the reader opens a tile only when the store
-   slot, the run and the credits allow, and the packer cannot hold words. A tile opens one cycle after its decision,
-   so one idle cycle separates tiles; the packer uses it for a block's last partial word.
+   slot, the run and the credits allow, and the stream cannot hold words. A tile opens one cycle after its decision,
+   so one idle cycle separates tiles.
 4. **New guards:** $S B_{kv} \ge I$ (windows are whole), `S_CH` $\le NWB$, $PW$ a multiple of $N_{EXP}$.
-5. **Run control:** `done` follows the last E7 word; `busy` falling is the start port's credit. The final $m$ is not
+5. **Run control:** `done` follows the last E7 plane; `busy` falling is the start port's credit. The final $m$ is not
    an output (v2's `rd_m` is dropped).
+6. **The bit-plane pass** (user, 2026-10-21/22; `ip/xbar/spec.md`).
+   - **Ports:** every port carries 8 plane words per window: `s_d` and `lp_d` $I$ bits per channel, `la_d` $2S$ bits,
+     `ll_d` $S$ bits. `BUF` is removed.
+   - **Input:** the FIFOs hold plane words. A double corner-turn makes the core stream of $Q_W = I/8$ bytes per word,
+     so the 5-byte packer goes; window-aligned words cost nothing now.
+   - **EXP feeds:** $s - m_{new}$ and the clamp at $Q_W$ lanes into a double corner-turn, then one gapless burst per
+     window. The burst is the E5 window, so the pop-when-ready feed FIFO goes.
+   - **Row sums:** per-plane counts, weighted by $2^b$.
+   - **Carry:** inputs and outputs as planes of the tables, with no walk; `GO_LAT` 4 → 2.
+   - **E6:** one window of $S$ rows per block, after the block's last $m_{new}$ (`LA_LAT`). **E7:** one window of $S$
+     rows; `E7_LAT` 3 → 2.
+   - **Store:** $NB$ banks of $Q_W$-byte words (was 5 byte lanes).
+   - **Values, counts (except the FIFO bytes, §7) and the gate rules are unchanged.**

@@ -1,7 +1,9 @@
 """data.py — the DSE's two priced tables, loaded the same way by every script in dse/:
 
-  attentionRows()   the 72 priced attention builds, dse/results/attn_priced_results.csv (dse/attn_rows.py --vtr)
-  fcRows()          the 48 priced FC rows, dse/results/fc_priced_results.csv (dse/fc_rows.py --vtr)
+  attentionRows()   the 48 priced attention builds (6 shapes x the 8 configs), dse/results/attn_priced_results.csv
+                    (dse/attn_rows.py --vtr)
+  fcRows()          the 32 priced FC rows (4 shapes x the 8 configs), dse/results/fc_priced_results.csv
+                    (dse/fc_rows.py --vtr)
 
 Both come back as the CSV's rows, one dict per row with every value a string; both carry config "RxC", R, C,
 T_cycles, passes, the energy terms e_*_pj, clb_count, wc_vtr, mem_blocks, area_total_mwta, area_total_mm2, fmax_mhz,
@@ -11,6 +13,8 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
+
+from dse.space import CONFIGS, FC_SHAPES, SHAPES
 
 V3 = Path(__file__).resolve().parents[1]
 RESULTS = V3 / "dse" / "results"
@@ -29,11 +33,11 @@ def _priced(path: Path, n: int, writer: str) -> list:
 
 
 def attentionRows(path: Path = ATT_CSV) -> list:
-    return _priced(path, 72, "dse/attn_rows.py --vtr")
+    return _priced(path, len(SHAPES) * len(CONFIGS), "dse/attn_rows.py --vtr")
 
 
 def fcRows(path: Path = FC_CSV) -> list:
-    return _priced(path, 48, "dse/fc_rows.py --vtr")
+    return _priced(path, len(FC_SHAPES) * len(CONFIGS), "dse/fc_rows.py --vtr")
 
 
 def fcWorkload(r: dict) -> str:

@@ -14,7 +14,7 @@
 How a split is summarized over a family's shapes (user, 2026-10-17): attention takes the geometric mean of each
 share over its 6 shapes; FC takes the share of the total summed over its 4 shapes, because several FC builds have no
 memory block and no CLB add, and a geometric mean of a share that is 0 on one shape is 0.
-Inputs: dse/data.py (the 72 priced attention builds, the 48 FC rows).
+Inputs: dse/data.py (the 48 priced attention builds, the 32 FC rows).
 Usage: python3 v3/dse/breakdown.py          # dse/results/breakdown.json; the split tables and the means on stdout
 """
 from __future__ import annotations

@@ -7,7 +7,6 @@ fixed latency is just `t + NAME_LAT` in the module.
   Serial       one unit at a time: a unit ready at t, busy n cycles, starts at max(t, the end of the previous unit)
   Buffer       entries used in rotation: a unit may enter only after the unit `entries` before it has left (else an
                overrun error: the producer broke its contract)
-  Repack       a byte stream re-cut into words: the time of each output word from the read times of the input words
   Delay        values unchanged, time + k
   Tree         exact integer sum, time + levels
   Map          a function per element, time + k
@@ -18,7 +17,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from simulator.core.cycleMath import ceilDiv
 from simulator.core.errors import ContractError
 
 
@@ -62,29 +60,6 @@ class Buffer:
         if unit != len(self.freeFrom):
             raise ValueError(f"{self.name}: unit {unit} released out of order (expected unit {len(self.freeFrom)})")
         self.freeFrom.append(t)
-
-
-class Repack:
-    """A byte stream re-cut into words of `width` bytes, the last word padded. Input word i carries sizes[i] bytes.
-    Output word k is complete with the input word that holds its last byte; it leaves `latency` cycles after that
-    input word is read, one output word per cycle (a second word completed by the same read leaves one cycle later)."""
-
-    def __init__(self, sizes, width: int, latency: int):
-        sizes = [int(s) for s in sizes]
-        if not sizes or min(sizes) < 1 or width < 1:
-            raise ValueError("Repack: sizes must be >= 1 bytes and width >= 1")
-        ends = np.cumsum(sizes)                                   # the byte after each input word
-        total = int(ends[-1])
-        lastByte = np.minimum(np.arange(ceilDiv(total, width)) * width + width - 1, total - 1)
-        self.sourceWord = [int(i) for i in np.searchsorted(ends, lastByte, side="right")]   # input word of each output
-        self.nInputs, self.latency = len(sizes), int(latency)
-        self.output = Serial()
-
-    def times(self, readTimes) -> list:
-        """The output words' cycles, from the input words' read cycles."""
-        if len(readTimes) != self.nInputs:
-            raise ValueError(f"Repack: {len(readTimes)} read times for {self.nInputs} input words")
-        return [self.output.take(readTimes[i] + self.latency) for i in self.sourceWord]
 
 
 class Delay:

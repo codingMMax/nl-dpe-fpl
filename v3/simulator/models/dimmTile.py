@@ -1,46 +1,50 @@
-"""dimmTile.py — behavior model of `dimm_tile_top` (the tiled DIMM), contract `ip/dimm/spec.md`.
+"""dimmTile.py — behavior model of `dimm_tile_top` (the tiled DIMM), contract `ip/dimm/spec.md` (the bit-plane pass,
+2026-10-22: every port carries 8 plane words per window; the farm is fed bit-serially; the output is summed per plane).
 
 One execution gives the values, the cycle of every port event and the counts (docs/simulator.md §1). The model is the
 blocks of spec §4, each a stage (simulator/core/stages.py) or a crossbar group (simulator/core/crossbar.py):
   converterA, converterB   the LOG converters of the int8 ports, one crossbar per channel
-  aWriter, bWriter         the loaders' writers (Serial): the transposer, the window stager, the shared row writer
+  aWriter, bWriter         the loaders' writers (Serial): the transposer, the window stager (all A memory ports from
+                           one start, E_WP cycles per window), the shared row writer
   aStaging, bStaging       the staging entries (Buffer): the transposer's two groups, the stager's two windows per
                            channel, the row writer's two registers per channel
   aSlot                    the window-frame A slots (Buffer): a matrix may arrive only once the job using its slot
                            released it
   farm                     the N_E EXP crossbars in lock-step (CrossbarGroup). The slices run in lock-step by
-                           construction (the same words reach every slice in the same cycle), so one timing state
+                           construction (the same planes reach every slice in the same cycle), so one timing state
                            serves them all; they appear in the resources and the memory images
 Processes (one step per unit):
   a_in   an A input window      b_in   a B row      take   a job offer      jobs   a job
 The values (the operands' log bytes, a wave's farm input, the signed sums, the narrowing, the memory images) are
-`DimmTileMath`; a timing-only model has none.
+`DimmTileMath`; a timing-only model has none. The bit-serial feed and the per-plane sums compute the same values as
+the byte-wide forms (trunc8 of the sum; the exact signed sum), so the values are computed in the byte-wide form.
 """
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 import numpy as np
 
-from simulator.core.cycleMath import ceilDiv, clog2, isPowerOfTwo, readyAt
+from simulator.core.cycleMath import clog2, isPowerOfTwo, readyAt
 from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
-from simulator.core.records import PortSpec, Step
+from simulator.core.records import PortSpec, Step, planePort
 from simulator.core.stages import Buffer, Serial
 from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, Crossbar, CrossbarGroup, trunc8
 
 # named latencies (spec §5)
-CONV_IN_LAT = 1     # a row's first port word -> its converter burst
-DIST_LAT = 1        # a stream word -> every slice
+CONV_IN_LAT = 1     # a row's first port plane -> its converter burst
+DIST_LAT = 1        # a stream plane -> every slice
 EMIT_LAT = 1        # a staged unit complete at the slices -> its first write
 CR_LAT = 1          # a unit's last write -> its staging credit
 DEC_LAT = 1         # the registered job decision
-DRAIN_REG = 1       # the registered signed drain value
-DONE_LAT = 2        # the last output word -> done
-IDLE_LAT = 2        # the last drain word -> the slices read idle
+DRAIN_REG = 1       # the registered sign XOR of a drain plane
+ROOT_LAT = 2        # the last plane at the root -> the root accumulator, then the output plane buffer
+DONE_LAT = 2        # the last output plane -> done
+IDLE_LAT = 2        # the last drain plane -> the slices read idle
 REL_LAT = 1         # done -> a released slot reads invalid, its credit pulses
-EPS = 5             # int8 elements per 40-bit port word
 
 
 def signOfLog(L: np.ndarray) -> np.ndarray:
@@ -54,6 +58,17 @@ def addressBits(x: int) -> int:
     return max(1, clog2(x))
 
 
+def windowPortWords(windows: int, Q: int, NG: int, KS: int, A_GRP: int) -> int:
+    """E_WP (spec §5 window stager, §6 layout): window w of a matrix holds farm windows wQ + q (q < Q); its word
+    (q, i) goes to crossbar f = (wQ + q) mod NG + NG i of the slice, in A memory f // A_GRP. The most words any one
+    memory takes from one window, over the matrix's windows."""
+    most = 0
+    for w in range(windows):
+        perMemory = Counter(((w * Q + q) % NG + NG * i) // A_GRP for q in range(Q) for i in range(KS))
+        most = max(most, max(perMemory.values(), default=0))
+    return most
+
+
 @dataclass(kw_only=True)
 class DimmTileParams:
     """The RTL parameters of dimm_tile_top (RTL names and defaults). The A port: int8 rows (A_DOM 0, row frame) or
@@ -63,7 +78,6 @@ class DimmTileParams:
     K: int
     R: int = 64
     C: int = 64
-    BUF: int = 40
     P: int = 8
     N_E: int
     X_S: int = 16
@@ -90,20 +104,22 @@ class DimmTileDerived:
     W_K: int          # windows per job, M N / I
     NG: int           # groups (crossbars per window position), N_E / K
     T_W: int          # waves per job, W_K / NG
-    LW: int           # words per window, ceil(8 I / BUF)
     XS: int           # crossbars per slice
     NS: int           # slices
     KS: int           # k values per slice, XS / NG
-    A_GRP: int        # rows of the A transposer group (a power of two <= min(LW, XS))
+    A_GRP: int        # crossbars per A memory: the largest power of two <= min(P, XS)
+    N_AB: int         # A memories per slice, XS / A_GRP, each with its own write port
     B_GRP: int        # min(A_GRP, KS)
     LB: int           # the B row length: K (TRANS_B) or N
     A_W: int          # elements of an A window, A_ROWS K
-    EW: int           # window-frame writer words per window
+    EW: int           # words a window-frame window gives a slice, (A_ROWS / NB) KS
+    E_WP: int         # the most of a window's EW words that one A memory takes (its write port's cycles per window)
     VW: int           # the output value width, 9 + clog2 K
-    EC: int           # the C port's element width: 8 when narrowed, else VW
+    EC: int           # the C port's element width: 8 when narrowed, else VW (ceil(EC / 8) plane lanes)
+    T_CV: int         # the converter's pass period, P + 2 (the int8 ports' contract)
     TREE_LEVELS: int  # clog2 K
     START_LAT: int    # job go -> the first farm burst, A_GRP + 2
-    OUT_LAT: int      # drain start -> the group tree's output, DRAIN_REG + TREE_LEVELS
+    OUT_LAT: int      # drain start -> the first output plane, DRAIN_REG + TREE_LEVELS + (P - 1) + ROOT_LAT
     A_WPM: int        # A input windows per matrix
     B_WPM: int        # B rows per matrix
     CAP_A: int        # the A port's credit units in flight
@@ -225,7 +241,7 @@ class DimmTileMath:
 class DimmTile(Module):
     NAME = "dimm_tile_top"
     PARAMS_CLASS = DimmTileParams
-    BASIS = "rtl-pinned"           # GATE 2 2026-10-14: 16/16 corpus + 5/5 bring-up on 64x64, every event equal
+    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was GATE 2-pinned 2026-10-14
     STEP_METHODS = {"a_in": "stepLoadA", "b_in": "stepLoadB", "take": "stepTakeJob", "jobs": "stepRunJob"}
 
     @staticmethod
@@ -236,18 +252,20 @@ class DimmTile(Module):
         W_K = (M * N) // I
         NG = N_E // K
         T_W = W_K // NG if NG else 0
-        LW = ceilDiv(I * 8, p.BUF)
         XS = min(p.X_S, N_E)
         NS = N_E // XS
         KS = XS // NG if NG else 0
-        cap = max(1, min(LW, XS))
+        cap = max(1, min(p.P, XS))
         A_GRP = 1 << (cap.bit_length() - 1)
         LB = K if p.TRANS_B else N
         VW = 9 + clog2(K)
+        Q = p.A_ROWS // NB if NB else 0                               # farm windows per window-frame window
+        E_WP = windowPortWords(M // p.A_ROWS, Q, NG, KS, A_GRP) if p.A_FRAME == 1 and Q and NG else 0
         return DimmTileDerived(
-            I=I, NB=NB, W_K=W_K, NG=NG, T_W=T_W, LW=LW, XS=XS, NS=NS, KS=KS, A_GRP=A_GRP, B_GRP=min(A_GRP, KS),
-            LB=LB, A_W=p.A_ROWS * K, EW=(p.A_ROWS // NB) * KS if NB else 0, VW=VW, EC=8 if p.NARROW > 0 else VW,
-            TREE_LEVELS=clog2(K), START_LAT=A_GRP + 2, OUT_LAT=DRAIN_REG + clog2(K),
+            I=I, NB=NB, W_K=W_K, NG=NG, T_W=T_W, XS=XS, NS=NS, KS=KS, A_GRP=A_GRP, N_AB=XS // A_GRP,
+            B_GRP=min(A_GRP, KS), LB=LB, A_W=p.A_ROWS * K, EW=Q * KS, E_WP=E_WP, VW=VW,
+            EC=8 if p.NARROW > 0 else VW, T_CV=p.P + 2, TREE_LEVELS=clog2(K), START_LAT=A_GRP + 2,
+            OUT_LAT=DRAIN_REG + clog2(K) + (p.P - 1) + ROOT_LAT,
             A_WPM=M // p.A_ROWS, B_WPM=N if p.TRANS_B else K,
             CAP_A=2 if p.A_FRAME == 0 else p.A_SLOTS, A_UNIT=NB if p.A_FRAME == 0 else M // p.A_ROWS,
             CAP_B=2 if p.TRANS_B else 4 * p.B_CH, B_UNIT=N if p.TRANS_B else 1,
@@ -260,7 +278,7 @@ class DimmTile(Module):
         flags = ("A_DOM", "A_SIGNED", "A_FRAME", "B_DOM", "B_SIGNED", "TRANS_B")
         rules = [
             (all(isPowerOfTwo(x) for x in (M, N, K, N_E, p.X_S, I)), "M, N, K, N_E, X_S, I powers of two"),
-            (p.BUF == 40, "BUF = 40"),
+            (p.P == 8, "P = 8"),
             (I >= 8 and N <= I and M * N >= I, "I >= 8, N <= I, M*N >= I"),
             (2 <= K <= N_E, "2 <= K <= N_E"),
             (min(p.A_CH, p.B_CH, p.A_SLOTS, p.B_SLOTS, p.C_CAP) >= 1, "A_CH, B_CH, A_SLOTS, B_SLOTS, C_CAP >= 1"),
@@ -276,8 +294,8 @@ class DimmTile(Module):
                 (p.A_FRAME != 0 or (p.A_ROWS == 1 and p.A_CH <= NB and isPowerOfTwo(p.A_CH)),
                  "row frame: A_ROWS = 1, A_CH a power of two <= NB"),
                 (p.A_FRAME != 1 or (p.A_ROWS >= 1 and p.A_ROWS % NB == 0 and M % p.A_ROWS == 0 and p.A_DOM == 1
-                                    and p.A_ROWS * K <= 5 * 2 ** 16),
-                 "window frame: A_ROWS a multiple of NB, M a multiple of A_ROWS, A_DOM = 1"),
+                                    and p.A_ROWS * K <= I),
+                 "window frame: A_ROWS a multiple of NB, M a multiple of A_ROWS, A_ROWS K <= I, A_DOM = 1"),
             ]
         checkRules("dimm_tile_top", rules)
 
@@ -294,19 +312,19 @@ class DimmTile(Module):
         self.math = DimmTileMath(p, d) if withValues else None
         # the blocks (spec §4)
         R, C, I = p.R, p.C, d.I
-        self.converterA = [Crossbar(R, C, p.BUF, p.P, mode="LOG", rowsUsed=p.K, colsUsed=p.K, modes=modes,
+        self.converterA = [Crossbar(R, C, p.P, mode="LOG", rowsUsed=p.K, colsUsed=p.K, modes=modes,
                                     withValues=withValues) for _ in range(p.A_CH)] if p.A_DOM == 0 else []
-        self.converterB = [Crossbar(R, C, p.BUF, p.P, mode="LOG", rowsUsed=d.LB, colsUsed=d.LB, modes=modes,
+        self.converterB = [Crossbar(R, C, p.P, mode="LOG", rowsUsed=d.LB, colsUsed=d.LB, modes=modes,
                                     withValues=withValues) for _ in range(p.B_CH)] if p.B_DOM == 0 else []
         self.aWriter, self.bWriter = Serial(), Serial()
         self.aStaging = Buffer(2 if p.A_FRAME == 0 else 2 * p.A_CH, f"{instance}: A staging")
         self.bStaging = Buffer(2 if p.TRANS_B else 2 * p.B_CH,
                                f"{instance}: B staging" if p.TRANS_B else f"{instance}: B row register")
         self.aSlot = Buffer(p.A_SLOTS, f"{instance}: A slot")
-        self.farm = CrossbarGroup(p.N_E, R, C, p.BUF, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes,
+        self.farm = CrossbarGroup(p.N_E, R, C, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes,
                                   withValues=withValues)
         # what the steps record
-        self.aLastWord, self.bLastWord = {}, {}    # input window -> its last word at the slices
+        self.aLastWord, self.bLastWord = {}, {}    # input window -> its last plane at the slices
         self.aEmitAt = []                          # A staged unit (group / window) -> its first write
         self.bWriteAt = []                         # B row (TRANS_B = 0) -> its write
         self.bPortTime = None                      # the last B row's first word at the port (TRANS_B = 0)
@@ -322,22 +340,21 @@ class DimmTile(Module):
             self.resources.crossbars[("LOG", p.K, p.K)] += p.A_CH
         if p.B_DOM == 0:
             self.resources.crossbars[("LOG", d.LB, d.LB)] += p.B_CH
-        aMemories, bMemories = d.XS // d.A_GRP, d.KS // d.B_GRP
-        self.resources.memories[(p.A_SLOTS << (addressBits(d.T_W) + addressBits(d.A_GRP)), d.NB * 8)] += d.NS * aMemories
-        self.resources.memories[(p.B_SLOTS << addressBits(d.B_GRP), p.N * 8)] += d.NS * bMemories
+        self.resources.memories[(p.A_SLOTS << (addressBits(d.T_W) + addressBits(d.A_GRP)), d.NB * 8)] += d.NS * d.N_AB
+        self.resources.memories[(p.B_SLOTS << addressBits(d.B_GRP), p.N * 8)] += d.NS * (d.KS // d.B_GRP)
 
     # -- declaration --------------------------------------------------------------------------------------------
     def ports(self) -> dict:
         p, d = self.p, self.d
         return {
-            "a": PortSpec("a", "in", "push+credit", 8, EPS, d.A_W, p.A_CH, "row group" if p.A_FRAME == 0 else "matrix",
-                          CAP=d.CAP_A, signals=("a_d", "a_v", "a_cr")),
-            "b": PortSpec("b", "in", "push+credit", 8, EPS, d.LB, p.B_CH, "matrix" if p.TRANS_B else "row",
-                          CAP=d.CAP_B, signals=("b_d", "b_v", "b_cr")),
+            "a": planePort("a", "in", "push+credit", 8, d.A_W, p.A_CH, "row group" if p.A_FRAME == 0 else "matrix",
+                           p.P, CAP=d.CAP_A, signals=("a_d", "a_v", "a_cr")),
+            "b": planePort("b", "in", "push+credit", 8, d.LB, p.B_CH, "matrix" if p.TRANS_B else "row", p.P,
+                           CAP=d.CAP_B, signals=("b_d", "b_v", "b_cr")),
             "j": PortSpec("j", "in", "burst", d.SAW + d.SBW + 1, 1, 1, 1, "job", CAP=1,
                           signals=("j_a", "j_b", "j_ra", "j_v", "j_rdy"), control=True),
-            "c": PortSpec("c", "out", "push+credit", d.EC, EPS, d.I, d.NG, "job output", CAP=p.C_CAP,
-                          signals=("c_d", "c_v", "c_cr")),
+            "c": planePort("c", "out", "push+credit", d.EC, d.I, d.NG, "job output", p.P, CAP=p.C_CAP,
+                           signals=("c_d", "c_v", "c_cr")),
         }
 
     def processes(self) -> dict:
@@ -367,7 +384,7 @@ class DimmTile(Module):
     # -- the input side ------------------------------------------------------------------------------------------
     def convert(self, converters: list, channel: int, w) -> tuple:
         """(log bytes, stream time) of an input window: through the channel's converter (an int8 port), or as given
-        (a log port). The stream time is the first word the converter drains (or the port word)."""
+        (a log port). The stream time is the first plane the converter drains (or the port's first plane)."""
         if not converters:
             return (self.math.asLog(w.values) if self.math else None), w.time
         x = self.math.converterInput(w.values) if self.math else None
@@ -383,9 +400,9 @@ class DimmTile(Module):
         logBytes, tStream = self.convert(self.converterA, k % p.A_CH, w)
         if self.converterA:
             self.counts.passes[("LOG", p.K, p.K)] += 1
-        first = tStream + DIST_LAT                                     # the window's first and last word at the slices
-        with label("dpe_drain" if self.converterA else "stream"):    # the converter's drain words, or the port's
-            last = first + ceilDiv(d.A_W, EPS) - 1
+        first = tStream + DIST_LAT                                     # the window's first and last plane at the slices
+        with label("dpe_drain" if self.converterA else "stream"):    # the converter's drain planes, or the port's
+            last = first + p.P - 1
         self.aLastWord[k] = last
         if p.A_FRAME == 0:
             self._stageRowFrame(k, first, logBytes, io)
@@ -412,16 +429,17 @@ class DimmTile(Module):
                 self.aValidAt[matrix] = self.aWriter.freeAt            # the matrix's last write + 1
 
     def _stageWindowFrame(self, k: int, first: int, last: int, logBytes, io) -> None:
-        """Window frame: window k of its matrix; the stager writes its EW words; the matrix holds an A slot."""
+        """Window frame: window k of its matrix; the stager writes its EW words through the N_AB memory ports, all
+        from one start, E_WP cycles; the matrix holds an A slot."""
         p, d = self.p, self.d
         matrix, local = divmod(k, d.A_WPM)
         if self.math:
             self.math.storeAWindow(matrix, local * p.A_ROWS, logBytes)
         self.aSlot.put(matrix, first)
         self.aStaging.put(k, first)
-        tEmit = self.aWriter.take(last + EMIT_LAT, d.EW)
+        tEmit = self.aWriter.take(last + EMIT_LAT, d.E_WP)
         self.aEmitAt.append(tEmit)
-        self.aStaging.release(k, tEmit + d.EW)
+        self.aStaging.release(k, tEmit + d.E_WP)
         self.counts.memWriteBytes += p.A_ROWS * p.K
         if local == d.A_WPM - 1:
             self.aValidAt[matrix] = self.aWriter.freeAt
@@ -434,7 +452,7 @@ class DimmTile(Module):
             self.counts.passes[("LOG", d.LB, d.LB)] += 1
         first = tStream + DIST_LAT
         with label("dpe_drain" if self.converterB else "stream"):
-            last = first + ceilDiv(d.LB, EPS) - 1
+            last = first + p.P - 1
         self.bLastWord[k] = last
         if p.TRANS_B:
             self._stageTransposed(k, first, logBytes, io)
@@ -511,13 +529,15 @@ class DimmTile(Module):
             xbarPass = self.farm.run(feed, tGo + d.START_LAT)
             waves.append(xbarPass.events)
             sums = self.math.waveOutput(aMatrix, bMatrix, wave, xbarPass.out) if self.math else None
-            tOut = xbarPass.events["drain_start"] + d.OUT_LAT         # the registered drain value + the tree levels
+            with label("dpe_drain"):                                 # the wave's P drain planes
+                lastDrain = xbarPass.events["drain_start"] + p.P - 1
+            tOut = lastDrain + DRAIN_REG + d.TREE_LEVELS + ROOT_LAT   # = drain_start + OUT_LAT: the exact sums
             for g in range(d.NG):
                 io.emit("c", g, job, g + d.NG * wave, tOut, None if sums is None else self.math.narrowed(sums[g]))
         last = waves[-1]
-        with label("dpe_drain"):                                     # the last wave's drain words
-            lastWord = last["drain_start"] + d.LW - 1
-        done = lastWord + d.OUT_LAT + DONE_LAT
+        with label("stream"):                                        # the last wave's output planes
+            lastPlane = tOut + p.P - 1
+        done = lastPlane + DONE_LAT
         self.slicesIdleFrom = last["drain_end"] + IDLE_LAT
         if self.math:
             self.math.finishJob(job)

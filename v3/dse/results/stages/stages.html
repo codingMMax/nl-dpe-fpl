@@ -1,0 +1,275 @@
+<title>Attention Stage Analysis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"></script>
+<style>@font-face{font-family:KaTeX_AMS;font-style:normal;font-weight:400;src:url(fonts/KaTeX_AMS-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Caligraphic;font-style:normal;font-weight:700;src:url(fonts/KaTeX_Caligraphic-Bold.woff2) format("woff2")}@font-face{font-family:KaTeX_Caligraphic;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Caligraphic-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Fraktur;font-style:normal;font-weight:700;src:url(fonts/KaTeX_Fraktur-Bold.woff2) format("woff2")}@font-face{font-family:KaTeX_Fraktur;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Fraktur-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Main;font-style:normal;font-weight:700;src:url(fonts/KaTeX_Main-Bold.woff2) format("woff2")}@font-face{font-family:KaTeX_Main;font-style:italic;font-weight:700;src:url(fonts/KaTeX_Main-BoldItalic.woff2) format("woff2")}@font-face{font-family:KaTeX_Main;font-style:italic;font-weight:400;src:url(fonts/KaTeX_Main-Italic.woff2) format("woff2")}@font-face{font-family:KaTeX_Main;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Main-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Math;font-style:italic;font-weight:700;src:url(fonts/KaTeX_Math-BoldItalic.woff2) format("woff2")}@font-face{font-family:KaTeX_Math;font-style:italic;font-weight:400;src:url(fonts/KaTeX_Math-Italic.woff2) format("woff2")}@font-face{font-family:"KaTeX_SansSerif";font-style:normal;font-weight:700;src:url(fonts/KaTeX_SansSerif-Bold.woff2) format("woff2")}@font-face{font-family:"KaTeX_SansSerif";font-style:italic;font-weight:400;src:url(fonts/KaTeX_SansSerif-Italic.woff2) format("woff2")}@font-face{font-family:"KaTeX_SansSerif";font-style:normal;font-weight:400;src:url(fonts/KaTeX_SansSerif-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Script;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Script-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Size1;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Size1-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Size2;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Size2-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Size3;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Size3-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Size4;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Size4-Regular.woff2) format("woff2")}@font-face{font-family:KaTeX_Typewriter;font-style:normal;font-weight:400;src:url(fonts/KaTeX_Typewriter-Regular.woff2) format("woff2")}.katex{font:normal 1.21em KaTeX_Main,Times New Roman,serif;line-height:1.2;text-indent:0;text-rendering:auto}.katex *{-ms-high-contrast-adjust:none!important;border-color:currentColor}.katex .katex-version:after{content:"0.16.11"}.katex .katex-mathml{clip:rect(1px,1px,1px,1px);border:0;height:1px;overflow:hidden;padding:0;position:absolute;width:1px}.katex .katex-html>.newline{display:block}.katex .base{position:relative;white-space:nowrap;width:-webkit-min-content;width:-moz-min-content;width:min-content}.katex .base,.katex .strut{display:inline-block}.katex .textbf{font-weight:700}.katex .textit{font-style:italic}.katex .textrm{font-family:KaTeX_Main}.katex .textsf{font-family:KaTeX_SansSerif}.katex .texttt{font-family:KaTeX_Typewriter}.katex .mathnormal{font-family:KaTeX_Math;font-style:italic}.katex .mathit{font-family:KaTeX_Main;font-style:italic}.katex .mathrm{font-style:normal}.katex .mathbf{font-family:KaTeX_Main;font-weight:700}.katex .boldsymbol{font-family:KaTeX_Math;font-style:italic;font-weight:700}.katex .amsrm,.katex .mathbb,.katex .textbb{font-family:KaTeX_AMS}.katex .mathcal{font-family:KaTeX_Caligraphic}.katex .mathfrak,.katex .textfrak{font-family:KaTeX_Fraktur}.katex .mathboldfrak,.katex .textboldfrak{font-family:KaTeX_Fraktur;font-weight:700}.katex .mathtt{font-family:KaTeX_Typewriter}.katex .mathscr,.katex .textscr{font-family:KaTeX_Script}.katex .mathsf,.katex .textsf{font-family:KaTeX_SansSerif}.katex .mathboldsf,.katex .textboldsf{font-family:KaTeX_SansSerif;font-weight:700}.katex .mathitsf,.katex .textitsf{font-family:KaTeX_SansSerif;font-style:italic}.katex .mainrm{font-family:KaTeX_Main;font-style:normal}.katex .vlist-t{border-collapse:collapse;display:inline-table;table-layout:fixed}.katex .vlist-r{display:table-row}.katex .vlist{display:table-cell;position:relative;vertical-align:bottom}.katex .vlist>span{display:block;height:0;position:relative}.katex .vlist>span>span{display:inline-block}.katex .vlist>span>.pstrut{overflow:hidden;width:0}.katex .vlist-t2{margin-right:-2px}.katex .vlist-s{display:table-cell;font-size:1px;min-width:2px;vertical-align:bottom;width:2px}.katex .vbox{align-items:baseline;display:inline-flex;flex-direction:column}.katex .hbox{width:100%}.katex .hbox,.katex .thinbox{display:inline-flex;flex-direction:row}.katex .thinbox{max-width:0;width:0}.katex .msupsub{text-align:left}.katex .mfrac>span>span{text-align:center}.katex .mfrac .frac-line{border-bottom-style:solid;display:inline-block;width:100%}.katex .hdashline,.katex .hline,.katex .mfrac .frac-line,.katex .overline .overline-line,.katex .rule,.katex .underline .underline-line{min-height:1px}.katex .mspace{display:inline-block}.katex .clap,.katex .llap,.katex .rlap{position:relative;width:0}.katex .clap>.inner,.katex .llap>.inner,.katex .rlap>.inner{position:absolute}.katex .clap>.fix,.katex .llap>.fix,.katex .rlap>.fix{display:inline-block}.katex .llap>.inner{right:0}.katex .clap>.inner,.katex .rlap>.inner{left:0}.katex .clap>.inner>span{margin-left:-50%;margin-right:50%}.katex .rule{border:0 solid;display:inline-block;position:relative}.katex .hline,.katex .overline .overline-line,.katex .underline .underline-line{border-bottom-style:solid;display:inline-block;width:100%}.katex .hdashline{border-bottom-style:dashed;display:inline-block;width:100%}.katex .sqrt>.root{margin-left:.2777777778em;margin-right:-.5555555556em}.katex .fontsize-ensurer.reset-size1.size1,.katex .sizing.reset-size1.size1{font-size:1em}.katex .fontsize-ensurer.reset-size1.size2,.katex .sizing.reset-size1.size2{font-size:1.2em}.katex .fontsize-ensurer.reset-size1.size3,.katex .sizing.reset-size1.size3{font-size:1.4em}.katex .fontsize-ensurer.reset-size1.size4,.katex .sizing.reset-size1.size4{font-size:1.6em}.katex .fontsize-ensurer.reset-size1.size5,.katex .sizing.reset-size1.size5{font-size:1.8em}.katex .fontsize-ensurer.reset-size1.size6,.katex .sizing.reset-size1.size6{font-size:2em}.katex .fontsize-ensurer.reset-size1.size7,.katex .sizing.reset-size1.size7{font-size:2.4em}.katex .fontsize-ensurer.reset-size1.size8,.katex .sizing.reset-size1.size8{font-size:2.88em}.katex .fontsize-ensurer.reset-size1.size9,.katex .sizing.reset-size1.size9{font-size:3.456em}.katex .fontsize-ensurer.reset-size1.size10,.katex .sizing.reset-size1.size10{font-size:4.148em}.katex .fontsize-ensurer.reset-size1.size11,.katex .sizing.reset-size1.size11{font-size:4.976em}.katex .fontsize-ensurer.reset-size2.size1,.katex .sizing.reset-size2.size1{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size2.size2,.katex .sizing.reset-size2.size2{font-size:1em}.katex .fontsize-ensurer.reset-size2.size3,.katex .sizing.reset-size2.size3{font-size:1.1666666667em}.katex .fontsize-ensurer.reset-size2.size4,.katex .sizing.reset-size2.size4{font-size:1.3333333333em}.katex .fontsize-ensurer.reset-size2.size5,.katex .sizing.reset-size2.size5{font-size:1.5em}.katex .fontsize-ensurer.reset-size2.size6,.katex .sizing.reset-size2.size6{font-size:1.6666666667em}.katex .fontsize-ensurer.reset-size2.size7,.katex .sizing.reset-size2.size7{font-size:2em}.katex .fontsize-ensurer.reset-size2.size8,.katex .sizing.reset-size2.size8{font-size:2.4em}.katex .fontsize-ensurer.reset-size2.size9,.katex .sizing.reset-size2.size9{font-size:2.88em}.katex .fontsize-ensurer.reset-size2.size10,.katex .sizing.reset-size2.size10{font-size:3.4566666667em}.katex .fontsize-ensurer.reset-size2.size11,.katex .sizing.reset-size2.size11{font-size:4.1466666667em}.katex .fontsize-ensurer.reset-size3.size1,.katex .sizing.reset-size3.size1{font-size:.7142857143em}.katex .fontsize-ensurer.reset-size3.size2,.katex .sizing.reset-size3.size2{font-size:.8571428571em}.katex .fontsize-ensurer.reset-size3.size3,.katex .sizing.reset-size3.size3{font-size:1em}.katex .fontsize-ensurer.reset-size3.size4,.katex .sizing.reset-size3.size4{font-size:1.1428571429em}.katex .fontsize-ensurer.reset-size3.size5,.katex .sizing.reset-size3.size5{font-size:1.2857142857em}.katex .fontsize-ensurer.reset-size3.size6,.katex .sizing.reset-size3.size6{font-size:1.4285714286em}.katex .fontsize-ensurer.reset-size3.size7,.katex .sizing.reset-size3.size7{font-size:1.7142857143em}.katex .fontsize-ensurer.reset-size3.size8,.katex .sizing.reset-size3.size8{font-size:2.0571428571em}.katex .fontsize-ensurer.reset-size3.size9,.katex .sizing.reset-size3.size9{font-size:2.4685714286em}.katex .fontsize-ensurer.reset-size3.size10,.katex .sizing.reset-size3.size10{font-size:2.9628571429em}.katex .fontsize-ensurer.reset-size3.size11,.katex .sizing.reset-size3.size11{font-size:3.5542857143em}.katex .fontsize-ensurer.reset-size4.size1,.katex .sizing.reset-size4.size1{font-size:.625em}.katex .fontsize-ensurer.reset-size4.size2,.katex .sizing.reset-size4.size2{font-size:.75em}.katex .fontsize-ensurer.reset-size4.size3,.katex .sizing.reset-size4.size3{font-size:.875em}.katex .fontsize-ensurer.reset-size4.size4,.katex .sizing.reset-size4.size4{font-size:1em}.katex .fontsize-ensurer.reset-size4.size5,.katex .sizing.reset-size4.size5{font-size:1.125em}.katex .fontsize-ensurer.reset-size4.size6,.katex .sizing.reset-size4.size6{font-size:1.25em}.katex .fontsize-ensurer.reset-size4.size7,.katex .sizing.reset-size4.size7{font-size:1.5em}.katex .fontsize-ensurer.reset-size4.size8,.katex .sizing.reset-size4.size8{font-size:1.8em}.katex .fontsize-ensurer.reset-size4.size9,.katex .sizing.reset-size4.size9{font-size:2.16em}.katex .fontsize-ensurer.reset-size4.size10,.katex .sizing.reset-size4.size10{font-size:2.5925em}.katex .fontsize-ensurer.reset-size4.size11,.katex .sizing.reset-size4.size11{font-size:3.11em}.katex .fontsize-ensurer.reset-size5.size1,.katex .sizing.reset-size5.size1{font-size:.5555555556em}.katex .fontsize-ensurer.reset-size5.size2,.katex .sizing.reset-size5.size2{font-size:.6666666667em}.katex .fontsize-ensurer.reset-size5.size3,.katex .sizing.reset-size5.size3{font-size:.7777777778em}.katex .fontsize-ensurer.reset-size5.size4,.katex .sizing.reset-size5.size4{font-size:.8888888889em}.katex .fontsize-ensurer.reset-size5.size5,.katex .sizing.reset-size5.size5{font-size:1em}.katex .fontsize-ensurer.reset-size5.size6,.katex .sizing.reset-size5.size6{font-size:1.1111111111em}.katex .fontsize-ensurer.reset-size5.size7,.katex .sizing.reset-size5.size7{font-size:1.3333333333em}.katex .fontsize-ensurer.reset-size5.size8,.katex .sizing.reset-size5.size8{font-size:1.6em}.katex .fontsize-ensurer.reset-size5.size9,.katex .sizing.reset-size5.size9{font-size:1.92em}.katex .fontsize-ensurer.reset-size5.size10,.katex .sizing.reset-size5.size10{font-size:2.3044444444em}.katex .fontsize-ensurer.reset-size5.size11,.katex .sizing.reset-size5.size11{font-size:2.7644444444em}.katex .fontsize-ensurer.reset-size6.size1,.katex .sizing.reset-size6.size1{font-size:.5em}.katex .fontsize-ensurer.reset-size6.size2,.katex .sizing.reset-size6.size2{font-size:.6em}.katex .fontsize-ensurer.reset-size6.size3,.katex .sizing.reset-size6.size3{font-size:.7em}.katex .fontsize-ensurer.reset-size6.size4,.katex .sizing.reset-size6.size4{font-size:.8em}.katex .fontsize-ensurer.reset-size6.size5,.katex .sizing.reset-size6.size5{font-size:.9em}.katex .fontsize-ensurer.reset-size6.size6,.katex .sizing.reset-size6.size6{font-size:1em}.katex .fontsize-ensurer.reset-size6.size7,.katex .sizing.reset-size6.size7{font-size:1.2em}.katex .fontsize-ensurer.reset-size6.size8,.katex .sizing.reset-size6.size8{font-size:1.44em}.katex .fontsize-ensurer.reset-size6.size9,.katex .sizing.reset-size6.size9{font-size:1.728em}.katex .fontsize-ensurer.reset-size6.size10,.katex .sizing.reset-size6.size10{font-size:2.074em}.katex .fontsize-ensurer.reset-size6.size11,.katex .sizing.reset-size6.size11{font-size:2.488em}.katex .fontsize-ensurer.reset-size7.size1,.katex .sizing.reset-size7.size1{font-size:.4166666667em}.katex .fontsize-ensurer.reset-size7.size2,.katex .sizing.reset-size7.size2{font-size:.5em}.katex .fontsize-ensurer.reset-size7.size3,.katex .sizing.reset-size7.size3{font-size:.5833333333em}.katex .fontsize-ensurer.reset-size7.size4,.katex .sizing.reset-size7.size4{font-size:.6666666667em}.katex .fontsize-ensurer.reset-size7.size5,.katex .sizing.reset-size7.size5{font-size:.75em}.katex .fontsize-ensurer.reset-size7.size6,.katex .sizing.reset-size7.size6{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size7.size7,.katex .sizing.reset-size7.size7{font-size:1em}.katex .fontsize-ensurer.reset-size7.size8,.katex .sizing.reset-size7.size8{font-size:1.2em}.katex .fontsize-ensurer.reset-size7.size9,.katex .sizing.reset-size7.size9{font-size:1.44em}.katex .fontsize-ensurer.reset-size7.size10,.katex .sizing.reset-size7.size10{font-size:1.7283333333em}.katex .fontsize-ensurer.reset-size7.size11,.katex .sizing.reset-size7.size11{font-size:2.0733333333em}.katex .fontsize-ensurer.reset-size8.size1,.katex .sizing.reset-size8.size1{font-size:.3472222222em}.katex .fontsize-ensurer.reset-size8.size2,.katex .sizing.reset-size8.size2{font-size:.4166666667em}.katex .fontsize-ensurer.reset-size8.size3,.katex .sizing.reset-size8.size3{font-size:.4861111111em}.katex .fontsize-ensurer.reset-size8.size4,.katex .sizing.reset-size8.size4{font-size:.5555555556em}.katex .fontsize-ensurer.reset-size8.size5,.katex .sizing.reset-size8.size5{font-size:.625em}.katex .fontsize-ensurer.reset-size8.size6,.katex .sizing.reset-size8.size6{font-size:.6944444444em}.katex .fontsize-ensurer.reset-size8.size7,.katex .sizing.reset-size8.size7{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size8.size8,.katex .sizing.reset-size8.size8{font-size:1em}.katex .fontsize-ensurer.reset-size8.size9,.katex .sizing.reset-size8.size9{font-size:1.2em}.katex .fontsize-ensurer.reset-size8.size10,.katex .sizing.reset-size8.size10{font-size:1.4402777778em}.katex .fontsize-ensurer.reset-size8.size11,.katex .sizing.reset-size8.size11{font-size:1.7277777778em}.katex .fontsize-ensurer.reset-size9.size1,.katex .sizing.reset-size9.size1{font-size:.2893518519em}.katex .fontsize-ensurer.reset-size9.size2,.katex .sizing.reset-size9.size2{font-size:.3472222222em}.katex .fontsize-ensurer.reset-size9.size3,.katex .sizing.reset-size9.size3{font-size:.4050925926em}.katex .fontsize-ensurer.reset-size9.size4,.katex .sizing.reset-size9.size4{font-size:.462962963em}.katex .fontsize-ensurer.reset-size9.size5,.katex .sizing.reset-size9.size5{font-size:.5208333333em}.katex .fontsize-ensurer.reset-size9.size6,.katex .sizing.reset-size9.size6{font-size:.5787037037em}.katex .fontsize-ensurer.reset-size9.size7,.katex .sizing.reset-size9.size7{font-size:.6944444444em}.katex .fontsize-ensurer.reset-size9.size8,.katex .sizing.reset-size9.size8{font-size:.8333333333em}.katex .fontsize-ensurer.reset-size9.size9,.katex .sizing.reset-size9.size9{font-size:1em}.katex .fontsize-ensurer.reset-size9.size10,.katex .sizing.reset-size9.size10{font-size:1.2002314815em}.katex .fontsize-ensurer.reset-size9.size11,.katex .sizing.reset-size9.size11{font-size:1.4398148148em}.katex .fontsize-ensurer.reset-size10.size1,.katex .sizing.reset-size10.size1{font-size:.2410800386em}.katex .fontsize-ensurer.reset-size10.size2,.katex .sizing.reset-size10.size2{font-size:.2892960463em}.katex .fontsize-ensurer.reset-size10.size3,.katex .sizing.reset-size10.size3{font-size:.337512054em}.katex .fontsize-ensurer.reset-size10.size4,.katex .sizing.reset-size10.size4{font-size:.3857280617em}.katex .fontsize-ensurer.reset-size10.size5,.katex .sizing.reset-size10.size5{font-size:.4339440694em}.katex .fontsize-ensurer.reset-size10.size6,.katex .sizing.reset-size10.size6{font-size:.4821600771em}.katex .fontsize-ensurer.reset-size10.size7,.katex .sizing.reset-size10.size7{font-size:.5785920926em}.katex .fontsize-ensurer.reset-size10.size8,.katex .sizing.reset-size10.size8{font-size:.6943105111em}.katex .fontsize-ensurer.reset-size10.size9,.katex .sizing.reset-size10.size9{font-size:.8331726133em}.katex .fontsize-ensurer.reset-size10.size10,.katex .sizing.reset-size10.size10{font-size:1em}.katex .fontsize-ensurer.reset-size10.size11,.katex .sizing.reset-size10.size11{font-size:1.1996142719em}.katex .fontsize-ensurer.reset-size11.size1,.katex .sizing.reset-size11.size1{font-size:.2009646302em}.katex .fontsize-ensurer.reset-size11.size2,.katex .sizing.reset-size11.size2{font-size:.2411575563em}.katex .fontsize-ensurer.reset-size11.size3,.katex .sizing.reset-size11.size3{font-size:.2813504823em}.katex .fontsize-ensurer.reset-size11.size4,.katex .sizing.reset-size11.size4{font-size:.3215434084em}.katex .fontsize-ensurer.reset-size11.size5,.katex .sizing.reset-size11.size5{font-size:.3617363344em}.katex .fontsize-ensurer.reset-size11.size6,.katex .sizing.reset-size11.size6{font-size:.4019292605em}.katex .fontsize-ensurer.reset-size11.size7,.katex .sizing.reset-size11.size7{font-size:.4823151125em}.katex .fontsize-ensurer.reset-size11.size8,.katex .sizing.reset-size11.size8{font-size:.578778135em}.katex .fontsize-ensurer.reset-size11.size9,.katex .sizing.reset-size11.size9{font-size:.6945337621em}.katex .fontsize-ensurer.reset-size11.size10,.katex .sizing.reset-size11.size10{font-size:.8336012862em}.katex .fontsize-ensurer.reset-size11.size11,.katex .sizing.reset-size11.size11{font-size:1em}.katex .delimsizing.size1{font-family:KaTeX_Size1}.katex .delimsizing.size2{font-family:KaTeX_Size2}.katex .delimsizing.size3{font-family:KaTeX_Size3}.katex .delimsizing.size4{font-family:KaTeX_Size4}.katex .delimsizing.mult .delim-size1>span{font-family:KaTeX_Size1}.katex .delimsizing.mult .delim-size4>span{font-family:KaTeX_Size4}.katex .nulldelimiter{display:inline-block;width:.12em}.katex .delimcenter,.katex .op-symbol{position:relative}.katex .op-symbol.small-op{font-family:KaTeX_Size1}.katex .op-symbol.large-op{font-family:KaTeX_Size2}.katex .accent>.vlist-t,.katex .op-limits>.vlist-t{text-align:center}.katex .accent .accent-body{position:relative}.katex .accent .accent-body:not(.accent-full){width:0}.katex .overlay{display:block}.katex .mtable .vertical-separator{display:inline-block;min-width:1px}.katex .mtable .arraycolsep{display:inline-block}.katex .mtable .col-align-c>.vlist-t{text-align:center}.katex .mtable .col-align-l>.vlist-t{text-align:left}.katex .mtable .col-align-r>.vlist-t{text-align:right}.katex .svg-align{text-align:left}.katex svg{fill:currentColor;stroke:currentColor;fill-rule:nonzero;fill-opacity:1;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;display:block;height:inherit;position:absolute;width:100%}.katex svg path{stroke:none}.katex img{border-style:none;max-height:none;max-width:none;min-height:0;min-width:0}.katex .stretchy{display:block;overflow:hidden;position:relative;width:100%}.katex .stretchy:after,.katex .stretchy:before{content:""}.katex .hide-tail{overflow:hidden;position:relative;width:100%}.katex .halfarrow-left{left:0;overflow:hidden;position:absolute;width:50.2%}.katex .halfarrow-right{overflow:hidden;position:absolute;right:0;width:50.2%}.katex .brace-left{left:0;overflow:hidden;position:absolute;width:25.1%}.katex .brace-center{left:25%;overflow:hidden;position:absolute;width:50%}.katex .brace-right{overflow:hidden;position:absolute;right:0;width:25.1%}.katex .x-arrow-pad{padding:0 .5em}.katex .cd-arrow-pad{padding:0 .55556em 0 .27778em}.katex .mover,.katex .munder,.katex .x-arrow{text-align:center}.katex .boxpad{padding:0 .3em}.katex .fbox,.katex .fcolorbox{border:.04em solid;box-sizing:border-box}.katex .cancel-pad{padding:0 .2em}.katex .cancel-lap{margin-left:-.2em;margin-right:-.2em}.katex .sout{border-bottom-style:solid;border-bottom-width:.08em}.katex .angl{border-right:.049em solid;border-top:.049em solid;box-sizing:border-box;margin-right:.03889em}.katex .anglpad{padding:0 .03889em}.katex .eqn-num:before{content:"(" counter(katexEqnNo) ")";counter-increment:katexEqnNo}.katex .mml-eqn-num:before{content:"(" counter(mmlEqnNo) ")";counter-increment:mmlEqnNo}.katex .mtr-glue{width:50%}.katex .cd-vert-arrow{display:inline-block;position:relative}.katex .cd-label-left{display:inline-block;position:absolute;right:calc(50% + .3em);text-align:left}.katex .cd-label-right{display:inline-block;left:calc(50% + .3em);position:absolute;text-align:right}.katex-display{display:block;margin:1em 0;text-align:center}.katex-display>.katex{display:block;text-align:center;white-space:nowrap}.katex-display>.katex>.katex-html{display:block;position:relative}.katex-display>.katex>.katex-html>.tag{position:absolute;right:0}.katex-display.leqno>.katex>.katex-html>.tag{left:0;right:auto}.katex-display.fleqn>.katex{padding-left:2em;text-align:left}body{counter-reset:katexEqnNo mmlEqnNo}
+</style>
+<style>
+/* Layout: one reading column for text; figures run full width on white plot-paper mats; the two family summaries sit side by side and stack on phones */
+:root {
+  --bg: #f3f6f6; --surface: #ffffff; --fg: #1b2525; --muted: #586a69; --rule: #d3dcdb;
+  --accent: #0a6a65; --accent-soft: #dfefed; --paper: #ffffff;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1717; --surface: #162121; --fg: #e2eaea; --muted: #9db0ae; --rule: #2a3a39;
+  --accent: #5ec7be; --accent-soft: #1b3533; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1717; --surface: #162121; --fg: #e2eaea; --muted: #9db0ae; --rule: #2a3a39;
+  --accent: #5ec7be; --accent-soft: #1b3533; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: none; margin: 0; display: grid; gap: 40px; padding-block: 28px 56px;
+  padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { max-width: none; }
+.muted { color: var(--muted); }
+.families { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.family { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 18px 14px; display: grid; gap: 12px; min-width: 0; }
+.winner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.winner .cfg { font-family: var(--mono); font-weight: 500; font-size: 30px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.winner .g { font-family: var(--mono); font-size: 15px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; color: var(--muted); text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+table.ranks th:nth-child(n+2), table.ranks td:nth-child(n+2) { text-align: right; }
+tr.top td { background: var(--accent-soft); color: var(--fg); font-weight: 500; }
+.legend { font-size: 13px; }
+section { display: grid; gap: 14px; min-width: 0; }
+.fighead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.mat { background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px; overflow-x: auto; }
+.mat img { display: block; width: auto; max-width: 100%; height: auto; margin-inline: auto; }
+.mat.full img { max-width: none; }
+figcaption { font-size: 14px; }
+button.zoom { font: 500 13px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+button.zoom:hover { border-color: var(--accent); }
+button.zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notes { display: grid; gap: 6px; font-size: 14px; }
+code { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+
+.eq { margin: 10px 0 14px; overflow-x: auto; }
+.katex-display { margin: 0.4em 0; }
+.family table.ranks td:first-child { text-align: left; }
+</style>
+<div class="wrap">
+<header>
+  <p class="eyebrow">v3 DSE · stage analysis · 2026-10-19 · 8 configs, crossbar tiles 2026-10-22</p>
+  <h1>Where an attention head's time and energy go</h1>
+  <p class="lede">Two heads, the smallest and the largest of the DSE: JetFormer-150P (n 32, d<sub>model</sub> 64, d 32) and ViT-B/16 (n 256, d<sub>model</sub> 768, d 64); two arrays, 128 × 64 and 512 × 256; the DSE's fixed mapping. Numbers from the simulator; the closed forms below are checked against it on all 8 arrays (JetFormer-150P within 12 %, ViT-B/16 within 6 % on cycles, 0.1 %, 0.0 % on energy).</p>
+</header>
+
+<section aria-labelledby="h_g0">
+  <div class="fighead"><h2 id="h_g0">Time diagram: JetFormer-150P</h2><button class="zoom" id="z_g0" type="button" aria-controls="m_g0" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_g0"><img src="stages_gantt_JetFormer_150P.png" alt="Busy intervals of the five stages of the JetFormer-150P head at 128x64 and at 512x256" width="2400" height="840"></div>
+  <figcaption class="muted">One lane per stage (its busy time; the bars merge the stage's units); dashed lines = run boundaries. Top: 128 × 64, bottom: 512 × 256.</figcaption></figure>
+</section>
+<section aria-labelledby="h_g1">
+  <div class="fighead"><h2 id="h_g1">Time diagram: ViT-B/16</h2><button class="zoom" id="z_g1" type="button" aria-controls="m_g1" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_g1"><img src="stages_gantt_ViT_B_16.png" alt="Busy intervals of the five stages of the ViT-B/16 head at 128x64 and at 512x256" width="2400" height="840"></div>
+  <figcaption class="muted">One lane per stage (its busy time; the bars merge the stage's units); dashed lines = run boundaries. Top: 128 × 64, bottom: 512 × 256.</figcaption></figure>
+</section>
+
+<section aria-labelledby="h_ex">
+  <div class="fighead"><h2 id="h_ex">Reading the time diagram, step by step: JetFormer-150P at 128 × 64</h2><button class="zoom" id="z_ex" type="button" aria-controls="m_ex" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_ex"><img src="stages_explain_JetFormer_150P.png" alt="The time diagram of the smallest head at the smallest array with every step labelled by what it computes and arrows for what it waits on" width="3150" height="1110"></div>
+  <figcaption class="muted">Every box says what the stage computes. Arrows say what a stage waits for. The light ticks are the per-token conversions during the stream. Notation: x<sub>t</sub> a token and q<sub>t</sub>, k<sub>t</sub>, v<sub>t</sub> its projections; S<sub>b</sub> the scores of the run's S queries against key block b; m and l the running max and sum of each query row; P<sub>b</sub> = e<sup>S<sub>b</sub> − m</sup>; α = e<sup>m<sub>old</sub> − m<sub>new</sub></sup> the rescale when the max moves; O<sub>b</sub> = P<sub>b</sub> V<sub>b</sub> the block's partial output; o the accumulated output; O = o / l the head's output. The row conversions are the LOG passes that take the projections into the log domain, where the products are adds.</figcaption></figure>
+  <ul class="notes">
+    <li><b>The stream.</b> The projections deliver one token every 21 cycles and end at cycle 683. Tiled QK converts each token's Q and K rows as it arrives, 8 cycles each, and is done 19 cycles after the last token. It never falls behind.</li>
+    <li><b>The wait.</b> A score job needs all S queries of its run. Here S = n = 32, one run, so the first job needs the last token's query. It starts at cycle 711, 28 cycles after the stream ends. The keys of block 0 were ready at cycle 347 and waited.</li>
+    <li><b>The chain.</b> Then block 0 passes through four stages in turn, each starting when the one before delivers: score job 711–827, tile read 752–856, EXP 867–1,003, PV job 961–1,076, rescale 1,014–1,119. Block 1 follows 111 cycles behind. With 2 blocks this is one pass through the pipeline, not a steady state.</li>
+    <li><b>The tails.</b> The run ends with the log l read-out, the softmax sending each query's final normalizer to the accumulator, one row per cycle (36 cycles), and the normalization O = o / l, EXP passes over the accumulator's groups that emit the head's output (107 cycles).</li>
+    <li><b>Why the rescale blocks overlap and the PV jobs do not.</b> The accumulator has two crossbar groups, an EXP group for the rescale and a LOG group for the o-carry, and its waits are per wave: block 1's rescale waves start on the EXP group while block 0's LOG waves are still on the LOG group. A PV job runs all its waves on the one PV farm in lock-step, so the next job starts only when the farm is free.</li>
+    <li><b>So the 596 cycles after the stream are one pipeline latency plus the tails.</b> More crossbars in any stage would not shorten them: each stage is waiting for the one before, not working. A head with S &lt; n, such as ViT-B/16 at 128 × 64 (S = 64), starts its first run after S tokens and overlaps the rest of the stream.</li>
+  </ul>
+</section>
+
+<section aria-labelledby="h_read">
+  <h2 id="h_read">Highlights</h2>
+  <div class="notes">
+    <p><b>The projections stream the tokens; tiled QK, the online softmax, tiled PV and the output rescale form one pipeline behind them</b>, working in runs of S = min(n, I) queries and blocks of 16 keys. A run's QK can start once its S queries are projected, so short runs (small I) start early and overlap the stream; a run of S = n waits for every token.</p>
+    <p><b>A bigger array stretches the stream and lengthens the runs</b> (ViT-B/16: 34 → 111 cycles per token; 4 runs → one, no overlap). The pipeline's work is the same on every array.</p>
+  </div>
+</section>
+
+<section aria-labelledby="h_tab">
+  <h2 id="h_tab">The stages, by the numbers</h2>
+  <p class="muted">The farms (QK and PV) are 80–91 % of the energy; the projections and the softmax are the critical path.</p>
+<div class="families">
+  <div class="family">
+    <h2>JetFormer-150P (n 32, d<sub>model</sub> 64, d 32)</h2>
+    <p class="muted">Crossbars / passes per stage</p>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>stage</th><th>128 × 64</th><th>512 × 256</th></tr></thead><tbody><tr><td>projections</td><td>3 / 96</td><td>3 / 96</td></tr><tr><td>tiled QK</td><td>66 / 576</td><td>66 / 192</td></tr><tr><td>online softmax</td><td>4 / 19</td><td>4 / 7</td></tr><tr><td>tiled PV</td><td>65 / 544</td><td>65 / 160</td></tr><tr><td>output rescale</td><td>8 / 64</td><td>8 / 16</td></tr><tr class="top"><td>head</td><td>146 / 1,299</td><td>146 / 471</td></tr></tbody></table></div>
+    <p class="muted">Energy per stage (share of the head)</p>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>stage</th><th>128 × 64</th><th>512 × 256</th></tr></thead><tbody><tr><td>projections</td><td>1 nJ (5 %)</td><td>7 nJ (15 %)</td></tr><tr><td>tiled QK</td><td>14 nJ (45 %)</td><td>20 nJ (43 %)</td></tr><tr><td>online softmax</td><td>1 nJ (3 %)</td><td>1 nJ (2 %)</td></tr><tr><td>tiled PV</td><td>14 nJ (43 %)</td><td>17 nJ (37 %)</td></tr><tr><td>output rescale</td><td>1 nJ (5 %)</td><td>2 nJ (4 %)</td></tr><tr class="top"><td>head</td><td>32 nJ</td><td>47 nJ</td></tr></tbody></table></div>
+    <p class="muted">Cycles on the critical path per stage (share of T)</p>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>stage</th><th>128 × 64</th><th>512 × 256</th></tr></thead><tbody><tr><td>projections</td><td>675 (53 %)</td><td>1,667 (65 %)</td></tr><tr><td>tiled QK</td><td>185 (14 %)</td><td>121 (5 %)</td></tr><tr><td>online softmax</td><td>276 (22 %)</td><td>116 (4 %)</td></tr><tr><td>tiled PV</td><td>0 (0 %)</td><td>155 (6 %)</td></tr><tr><td>output rescale</td><td>141 (11 %)</td><td>518 (20 %)</td></tr><tr class="top"><td>head</td><td>1,279</td><td>2,579</td></tr></tbody></table></div>
+  </div>
+  <div class="family">
+    <h2>ViT-B/16 (n 256, d<sub>model</sub> 768, d 64)</h2>
+    <p class="muted">Crossbars / passes per stage</p>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>stage</th><th>128 × 64</th><th>512 × 256</th></tr></thead><tbody><tr><td>projections</td><td>18 / 4,608</td><td>6 / 1,536</td></tr><tr><td>tiled QK</td><td>130 / 66,048</td><td>130 / 16,896</td></tr><tr><td>online softmax</td><td>4 / 1,148</td><td>4 / 287</td></tr><tr><td>tiled PV</td><td>129 / 65,792</td><td>129 / 16,640</td></tr><tr><td>output rescale</td><td>16 / 8,192</td><td>12 / 2,048</td></tr><tr class="top"><td>head</td><td>297 / 145,788</td><td>281 / 37,407</td></tr></tbody></table></div>
+    <p class="muted">Energy per stage (share of the head)</p>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>stage</th><th>128 × 64</th><th>512 × 256</th></tr></thead><tbody><tr><td>projections</td><td>98 nJ (3 %)</td><td>131 nJ (3 %)</td></tr><tr><td>tiled QK</td><td>1,727 nJ (46 %)</td><td>2,013 nJ (46 %)</td></tr><tr><td>online softmax</td><td>50 nJ (1 %)</td><td>55 nJ (1 %)</td></tr><tr><td>tiled PV</td><td>1,687 nJ (45 %)</td><td>1,959 nJ (45 %)</td></tr><tr><td>output rescale</td><td>188 nJ (5 %)</td><td>220 nJ (5 %)</td></tr><tr class="top"><td>head</td><td>3,751 nJ</td><td>4,378 nJ</td></tr></tbody></table></div>
+    <p class="muted">Cycles on the critical path per stage (share of T)</p>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>stage</th><th>128 × 64</th><th>512 × 256</th></tr></thead><tbody><tr><td>projections</td><td>8,710 (36 %)</td><td>28,420 (63 %)</td></tr><tr><td>tiled QK</td><td>87 (0 %)</td><td>134 (0 %)</td></tr><tr><td>online softmax</td><td>10,480 (43 %)</td><td>11,299 (25 %)</td></tr><tr><td>tiled PV</td><td>4,851 (20 %)</td><td>4,403 (10 %)</td></tr><tr><td>output rescale</td><td>265 (1 %)</td><td>994 (2 %)</td></tr><tr class="top"><td>head</td><td>24,395</td><td>45,252</td></tr></tbody></table></div>
+  </div>
+</div>
+</section>
+
+<section aria-labelledby="h_eq">
+  <h2 id="h_eq">The model</h2>
+  <div class="notes">
+    <p><b>1. Symbols and the two primitives</b></p>
+    <ul>
+      <li>\(n\) tokens, \(d_m\) model width, \(d\) head width. The array is \(R \times C\) and \(I = \min(R, C)\).</li>
+      <li>A run is \(S = \min(n, I)\) queries. There are \(N_{run} = n / S\) runs and \(N_{block} = n / B_{kv}\) key blocks, with \(B_{kv} = 16\).</li>
+      <li>A projection has \(V = \lceil d_m / R \rceil\) tiles.</li>
+      <li>A crossbar has one port. The port moves \(w = 5\) bytes per cycle. A pass runs \(P = 8\) bit-slices.</li>
+    </ul>
+    <div class="eq">\[ \tau(r) = \max\!\Big(\Big\lceil \tfrac{r}{w} \Big\rceil + P,\ \Big\lceil \tfrac{C}{w} \Big\rceil + 1\Big), \qquad e_{pass}(r) = 0.17\,C + 0.00016\,RC + 0.015\,r + 0.010\,C\ \text{pJ}, \qquad e_{port}(r) = 0.0495\,\Big(\Big\lceil \tfrac{8r}{40} \Big\rceil + \Big\lceil \tfrac{8C}{40} \Big\rceil\Big)\ \text{pJ} \]</div>
+    <ul>
+      <li>\(\tau(r)\) is the time of one pass that loads \(r\) rows. The rows come in through the port, then the bit-slices run, then the \(C\) columns drain. The drain overlaps the next load unless it is longer.</li>
+      <li>\(e_{pass}(r)\) is the energy of one pass. The whole array fires every time: the ACAM on every column, every cell. Only the input buffer follows the rows loaded.</li>
+      <li>\(e_{port}(r)\) is the energy of the pass's port words.</li>
+      <li>A conversion pass handles \(I\) values. A score costs \(d\) conversions.</li>
+    </ul>
+
+    <p><b>2. Cycles per stage</b> (one key block of \(S \times B_{kv}\) scores, on the stage's own crossbars)</p>
+    <div class="eq">\[ T_{projection\_token} = \tau(\min(d_m, R)), \qquad T_{projection\_stream} = \frac{n \cdot T_{projection\_token}}{P_{proj}} \]</div>
+    <ul>
+      <li>A projection pass loads one token's \(\min(d_m, R)\) inputs. The \(V\) tiles load in parallel.</li>
+      <li>The three projections run in lock step. Each copy takes one token per \(T_{projection\_token}\) cycles.</li>
+    </ul>
+    <div class="eq">\[ T_{QK} = \frac{S B_{kv} d}{I N_E}\,\tau(I), \qquad T_{PV} = \frac{S d B_{kv}}{I N_{EP}}\,\tau(I) \]</div>
+    <ul>
+      <li>A block of QK needs \(S B_{kv} d\) conversions. Each pass converts \(I\) values. The \(N_E\) crossbars share the passes.</li>
+      <li>PV is the same with \(N_{EP}\) crossbars.</li>
+      <li>The adds and the trees are CLB logic. They keep up with the passes and add no cycles.</li>
+    </ul>
+    <div class="eq">\[ T_{reader} = \Big\lceil \tfrac{S B_{kv}}{K_{reader}} \Big\rceil, \qquad T_{EXP} = \frac{S B_{kv}}{I N_{EXP}}\,\tau(I), \qquad T_{softmax\_latency} = T_{reader} + T_{EXP} + 2\,\tau(S) + \Big\lceil \tfrac{S}{w} \Big\rceil, \qquad T_{softmax} = \max\!\Big(T_{reader},\ \tfrac{T_{softmax\_latency}}{2}\Big) \]</div>
+    <ul>
+      <li>The scores of a block enter the online softmax through one reader. The reader takes \(K_{reader}\) scores per cycle.</li>
+      <li>The EXP passes convert the block's scores on \(N_{EXP}\) crossbars.</li>
+      <li>The two carry passes update the running max and sum. They load \(S\) rows. The walk writes \(S\) values at \(w\) per cycle.</li>
+      <li>Blocks pipeline two deep in the softmax. So its period is the larger of the reader and half the block latency.</li>
+    </ul>
+    <div class="eq">\[ W_{rescale} = \Big\lceil \frac{S d}{I N_{OC}} \Big\rceil, \qquad T_{output\_rescale} = \frac{T_{EXP} + T_{PV} + W_{rescale}\,\tau(I) + 2\,\tau(I)}{2} \]</div>
+    <ul>
+      <li>The output rescale gives every output element a rescale pass and a LOG pass per block. \(N_{OC}\) crossbars take a wave of \(I\) elements each, so a kind needs \(W_{rescale}\) waves.</li>
+      <li>A block's rescale needs the block's row maxima from the softmax. Its LOG passes need the block's PV output. So one block goes through the EXP passes, the PV job, and the rescale waves in a chain.</li>
+      <li>The softmax hands the row maxima over through a ring that holds two blocks. The ring frees a slot when the rescale has read it. So the chain may take two block periods, and the period is half the chain.</li>
+    </ul>
+
+    <p><b>3. Latency</b></p>
+    <div class="eq">\[ T_{block} = \max\big(T_{QK},\ T_{softmax},\ T_{EXP},\ T_{PV},\ T_{output\_rescale}\big) \]</div>
+    <ul>
+      <li>The four core stages work on different blocks at the same time. Each has its own crossbars.</li>
+      <li>So the pipeline moves one block per \(T_{block}\), the slowest stage.</li>
+    </ul>
+    <div class="eq">\[ T_{stream\_bound} = T_{projection\_stream} + \max(1, N_{run} - 1)\, N_{block}\, T_{block}, \qquad T_{core\_bound} = \frac{S \cdot T_{projection\_token}}{P_{proj}} + N_{run} N_{block}\, T_{block} \]</div>
+    <ul>
+      <li>A run can start when its \(S\) queries are projected. Its blocks also need their keys, which the stream delivers in order.</li>
+      <li>If the stream is slower than the core, the first run follows the stream block by block. The other runs come after the stream, one after another. With one run, all of it comes after the stream.</li>
+      <li>If the core is slower, the stream waits for it. Then the first run starts after \(S\) tokens and every block takes \(T_{block}\).</li>
+      <li>The larger of the two bounds holds.</li>
+    </ul>
+    <div class="eq">\[ T_{fill} = \lceil \log_2 V \rceil + 4 + 24, \qquad T_{first\_block} = N_{run}\,(T_{softmax\_latency} - T_{block}), \qquad T_{readout} = (N_{run} - 1)(S + 4), \qquad T_{tail} = T_{PV} + W_{rescale}\,\tau(I) \]</div>
+    <ul>
+      <li>\(T_{fill}\): the projection output path and the first QK job.</li>
+      <li>\(T_{first\_block}\): a run's first block pays the full softmax latency. The others follow at the period.</li>
+      <li>\(T_{readout}\): a run ends by reading out its \(S\) log-sum values. The next run starts after that.</li>
+      <li>\(T_{tail}\): the last block still needs its PV job and the epilogue after the softmax is done.</li>
+    </ul>
+    <div class="eq">\[ T_{head} = \max\big(T_{stream\_bound},\ T_{core\_bound}\big) + T_{fill} + T_{first\_block} + T_{readout} + T_{tail} \]</div>
+
+    <p><b>4. Energy per stage</b> (pJ; \(e_{add} = 0.085\), \(e_{compare} = 0.264\), \(e_{memory} = 0.0495\) per 5 bytes)</p>
+    <div class="eq">\[ E_{projection} = 3Vn\,[e_{pass}(\min(d_m, R)) + e_{port}] + 3nd(V - 1)\,e_{add} \]</div>
+    <div class="eq">\[ E_{QK} = \Big(\tfrac{n^2 d}{I} + 2n\Big)[e_{pass}(I) + e_{port}] + (2n^2 d - n^2)\,e_{add} + n^2\,e_{compare} \]</div>
+    <div class="eq">\[ E_{softmax} = \Big(\tfrac{n^2}{I} + N_{run}(2N_{block} - 1)\Big)[e_{pass}(I) + e_{port}] + \tfrac{17}{8} n^2\,e_{add} + \tfrac{17}{16} n^2\,e_{compare} \]</div>
+    <div class="eq">\[ E_{PV} = \Big(\tfrac{n^2 d}{I} + n\Big)[e_{pass}(I) + e_{port}] + \Big(2n^2 d - \tfrac{n^2 d}{B_{kv}}\Big)e_{add} \]</div>
+    <div class="eq">\[ E_{output\_rescale} = \tfrac{2 n^2 d}{I B_{kv}}\,[e_{pass}(I) + e_{port}] + \tfrac{n^2 d}{8}\,e_{add} \]</div>
+    <div class="eq">\[ E_{memory} \approx \tfrac{e_{memory}}{5}\Big(3nd + \tfrac{2n^2 d}{B_{kv}} + \tfrac{2n^2 d}{S} + 4n^2 + \tfrac{7 n^2 d}{B_{kv}}\Big), \qquad E_{head} = E_{projection} + E_{QK} + E_{softmax} + E_{PV} + E_{output\_rescale} + E_{memory} \]</div>
+    <ul>
+      <li>Each stage's energy is its passes times the pass price, plus its CLB work.</li>
+      <li>The passes are the work divided by \(I\). The price grows with \(C\) and with \(R C\). So the pass energy grows as fired cells per converted value, \(RC / I\).</li>
+      <li>The CLB adds and compares do not depend on the array. QK and PV each add about \(2 n^2 d\) times.</li>
+      <li>\(E_{memory}\) is the block-RAM traffic of the stages. It is about 1 % of the head.</li>
+    </ul>
+
+    <p><b>5. Area per stage</b> (\(A_{tile}(R, C)\) = the tile's grid cells × 66,117 MWTA × 0.033864 µm²; the row-parallel tile of <code>experiment.md</code> §5.1: 6 cells at 128 × 64, 36 at 512 × 256)</p>
+    <div class="eq">\[ A_{projection} = 3 P_{proj} V\, A_{tile}, \quad A_{QK} = (N_E + 2P_{proj})\, A_{tile}, \quad A_{softmax} = (N_{EXP} + 2)\, A_{tile}, \quad A_{PV} = (N_{EP} + P_{proj})\, A_{tile}, \quad A_{output\_rescale} = 2 N_{OC}\, A_{tile} \]</div>
+    <div class="eq">\[ A_{head} = A_{projection} + A_{QK} + A_{softmax} + A_{PV} + A_{output\_rescale} + A_{CLB}(I) + A_{memory} \]</div>
+    <ul>
+      <li>Each stage's area is its crossbar count times one tile. The counts come from the mapping, not from the array.</li>
+      <li>The tile grows with the array. So the crossbar area grows with the array for the same work.</li>
+      <li>\(A_{CLB}(I)\) is the soft logic. It is head-level, from VTR. It grows with \(I\): 10.4k, 12.9k and 17.5k CLBs at \(I\) = 64, 128 and 256.</li>
+      <li>\(A_{memory}\) is the block RAM, also from VTR.</li>
+    </ul>
+
+    <p><b>6. Our mapping</b></p>
+    <ul>
+      <li>\(P_{proj} = 1\), \(N_E = N_{EP} = 2d\), \(N_{EXP} = 2\), \(N_{OC}\) by the floor rule (2 to 8), \(B_{kv} = 16\), \(S = \min(n, I)\), \(K_{reader} = 5\).</li>
+      <li>With these, \(T_{QK} = T_{PV} = T_{EXP}\) and \(T_{reader} = S B_{kv} / 5\). The output rescale's chain is the largest term on every array. So \(T_{block} = T_{output\_rescale}\).</li>
+      <li>The array enters the core only through \(S\) and \(\tau(I)\). It enters the stream through \(\min(d_m, R)\). It enters the energy through \(e_{pass} / I\). It enters the area through \(A_{tile}\) and \(A_{CLB}(I)\).</li>
+    </ul>
+  </div>
+<div class="families">
+  <div class="family">
+    <h2>JetFormer-150P (n 32, d<sub>model</sub> 64, d 32)</h2>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>R × C</th><th>T simulator</th><th>T<sub>head</sub></th><th>error</th>
+      <th>T<sub>projection_stream</sub></th><th>T<sub>block</sub></th><th>bound</th><th>E simulator (nJ)</th><th>E<sub>head</sub></th><th>error</th><th>A VTR (mm²)</th><th>A<sub>head</sub></th></tr></thead>
+      <tbody><tr><td>128 × 64</td><td>1,279</td><td>1,239</td><td>-3 %</td><td>672</td><td>147</td><td>core</td><td>32</td><td>32</td><td>-0.1 %</td><td>17.7</td><td>17.7</td></tr><tr><td>128 × 128</td><td>1,532</td><td>1,396</td><td>-9 %</td><td>864</td><td>136</td><td>core</td><td>34</td><td>34</td><td>-0.1 %</td><td>22.6</td><td>22.6</td></tr><tr><td>256 × 64</td><td>1,279</td><td>1,239</td><td>-3 %</td><td>672</td><td>147</td><td>core</td><td>34</td><td>34</td><td>-0.1 %</td><td>19.1</td><td>19.1</td></tr><tr><td>256 × 128</td><td>1,532</td><td>1,396</td><td>-9 %</td><td>864</td><td>136</td><td>core</td><td>36</td><td>36</td><td>-0.1 %</td><td>23.6</td><td>23.6</td></tr><tr><td>256 × 256</td><td>2,579</td><td>2,270</td><td>-12 %</td><td>1,696</td><td>150</td><td>core</td><td>42</td><td>42</td><td>-0.1 %</td><td>33.0</td><td>33.0</td></tr><tr><td>512 × 64</td><td>1,279</td><td>1,239</td><td>-3 %</td><td>672</td><td>147</td><td>core</td><td>37</td><td>37</td><td>-0.1 %</td><td>21.7</td><td>21.7</td></tr><tr><td>512 × 128</td><td>1,532</td><td>1,396</td><td>-9 %</td><td>864</td><td>136</td><td>core</td><td>40</td><td>40</td><td>-0.1 %</td><td>27.5</td><td>27.5</td></tr><tr><td>512 × 256</td><td>2,579</td><td>2,270</td><td>-12 %</td><td>1,696</td><td>150</td><td>core</td><td>47</td><td>47</td><td>-0.1 %</td><td>36.6</td><td>36.6</td></tr></tbody></table></div>
+  </div>
+  <div class="family">
+    <h2>ViT-B/16 (n 256, d<sub>model</sub> 768, d 64)</h2>
+    <div class="tablewrap"><table class="ranks"><thead><tr><th>R × C</th><th>T simulator</th><th>T<sub>head</sub></th><th>error</th>
+      <th>T<sub>projection_stream</sub></th><th>T<sub>block</sub></th><th>bound</th><th>E simulator (nJ)</th><th>E<sub>head</sub></th><th>error</th><th>A VTR (mm²)</th><th>A<sub>head</sub></th></tr></thead>
+      <tbody><tr><td>128 × 64</td><td>24,395</td><td>22,999</td><td>-6 %</td><td>8,704</td><td>273</td><td>stream</td><td>3,751</td><td>3,750</td><td>-0.0 %</td><td>34.6</td><td>34.6</td></tr><tr><td>128 × 128</td><td>22,204</td><td>21,503</td><td>-3 %</td><td>8,704</td><td>493</td><td>core</td><td>3,823</td><td>3,822</td><td>-0.0 %</td><td>45.1</td><td>45.1</td></tr><tr><td>256 × 64</td><td>31,050</td><td>29,654</td><td>-4 %</td><td>15,360</td><td>273</td><td>stream</td><td>3,895</td><td>3,895</td><td>-0.0 %</td><td>37.0</td><td>37.0</td></tr><tr><td>256 × 128</td><td>25,549</td><td>24,830</td><td>-3 %</td><td>15,360</td><td>493</td><td>core</td><td>3,940</td><td>3,939</td><td>-0.0 %</td><td>46.6</td><td>46.6</td></tr><tr><td>256 × 256</td><td>32,197</td><td>31,052</td><td>-4 %</td><td>15,360</td><td>870</td><td>core</td><td>4,031</td><td>4,030</td><td>-0.0 %</td><td>67.6</td><td>67.6</td></tr><tr><td>512 × 64</td><td>44,105</td><td>42,709</td><td>-3 %</td><td>28,416</td><td>273</td><td>stream</td><td>4,258</td><td>4,258</td><td>-0.0 %</td><td>42.1</td><td>42.1</td></tr><tr><td>512 × 128</td><td>38,604</td><td>37,677</td><td>-2 %</td><td>28,416</td><td>493</td><td>stream</td><td>4,298</td><td>4,297</td><td>-0.0 %</td><td>53.9</td><td>53.9</td></tr><tr><td>512 × 256</td><td>45,252</td><td>44,107</td><td>-3 %</td><td>28,416</td><td>870</td><td>core</td><td>4,378</td><td>4,377</td><td>-0.0 %</td><td>74.3</td><td>74.3</td></tr></tbody></table></div>
+  </div>
+</div>
+</section>
+
+<section aria-labelledby="h_sw">
+  <div class="fighead"><h2 id="h_sw">Sweeping the array: cycles, energy, area and their product</h2><button class="zoom" id="z_sw" type="button" aria-controls="m_sw" aria-pressed="false">Zoom in</button></div>
+  <figure><div class="mat" id="m_sw"><img src="stages_sweep.png" alt="Cycles, energy, area and cycles × area of both heads against R, one curve per C, as lines of the closed forms with the simulator's 8 configs as markers" width="3300" height="1470"></div>
+  <figcaption class="muted">The DSE grid, one curve per C against R. Lines: the closed forms T<sub>head</sub>, E<sub>head</sub>, A<sub>head</sub>. Markers: the simulator (area: VTR's counts). The last panel multiplies cycles by area and divides by the product at 128 × 64.</figcaption></figure>
+  <ul class="notes">
+    <li><b>Cycles, JetFormer-150P.</b> d<sub>model</sub> is 64, so a token never loads more than 64 rows. Time does not change with R. At every R ≥ C it is 1,279 cycles at C = 64, 1,532 at C = 128, 2,579 at C = 256. It grows with C, because every pass drains all C columns.</li>
+    <li><b>Cycles, ViT-B/16.</b> d<sub>model</sub> is 768, so a token loads all R rows at every R of the grid. Time grows with R: 24,395 to 44,105 cycles at C = 64. C = 128 is the fastest at every R. After the projection stream ends, the core still has to finish the later runs, or the whole run when there is only one. That leftover is 13.1k cycles at C = 64 (4 runs, S = 64), 7.9k at C = 128 (2 runs, S = 128), 13.9k at C = 256 (1 run, S = 256). It is smallest at S = 128.</li>
+    <li><b>Energy.</b> The CLB adds, compares and memory are the same at every array: JetFormer-150P 12.3 nJ of 31.8 nJ, ViT-B/16 1.54 µJ of 3.75 µJ at 128 × 64. The rest is the passes. A pass fires all R × C cells and drains all C columns for I converted values. So energy rises with R at every C once R ≥ C: JetFormer-150P 31.8 nJ to 36.9 nJ, ViT-B/16 3.75 µJ to 4.26 µJ at C = 64.</li>
+    <li><b>Area.</b> The crossbar tiles scale with R × C, the CLB with I. Area rises with R and with C at both heads: JetFormer-150P 17.7 to 36.6 mm², ViT-B/16 34.6 to 74.3 mm² from 128 × 64 to 512 × 256.</li>
+    <li><b>Cycles × area.</b> It rises with R and with C at every point. 128 × 64, the smallest array of the grid, is the best at both heads; 512 × 256 costs 4.2× (JetFormer-150P) and 4.0× (ViT-B/16). ViT-B/16's 128 × 128 is 9 % faster but 30 % larger, so its product is 1.19×. The DSE's ADP adds Fmax on top; its attention front is 128 × 64 alone.</li>
+    <li><b>Why.</b> Attention uses an array as a port-fed converter. A projection pass loads min(d<sub>model</sub>, R) rows. A DIMM pass loads I = min(R, C) rows. Every pass fires all R × C cells and drains all C columns. Rows and columns beyond those cost area, energy and drain time, and save no time.</li>
+  </ul>
+</section>
+
+<div class="notes muted">
+  <p>Data <code>v3/dse/results/stages/stages.json</code> (<code>dse/stage_analysis.py</code>), figures <code>dse/plot_stages.py</code>, page <code>dse/stages_page.py</code>, write-up <code>v3/docs/attention_stages.md</code>. BUF 40, P 8, B<sub>kv</sub> 16.</p>
+</div>
+</div>
+<script>
+document.querySelectorAll("button.zoom").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var mat = document.getElementById(b.getAttribute("aria-controls"));
+    var on = mat.classList.toggle("full");
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.textContent = on ? "Fit to width" : "Zoom in";
+  });
+});
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.renderMathInElement) renderMathInElement(document.body, {delimiters: [{left: "\\[", right: "\\]", display: true}, {left: "\\(", right: "\\)", display: false}], throwOnError: false});
+});
+</script>

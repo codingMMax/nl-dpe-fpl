@@ -1,11 +1,13 @@
 """softmaxAccumulator.py — behavior model of `softmax_online_acc` (the online softmax's accumulator), contract
-`ip/softmax/acc_spec.md`.
+`ip/softmax/acc_spec.md` (the bit-plane pass, 2026-10-22: plane words on every port; the LOG feed corner-turns, the EXP
+feeds add bit-serially; lo_mem and e_mem hold plane words; E9 is one plane window per epilogue wave).
 
 One execution gives the values, the cycle of every port event and the counts (docs/simulator.md §1). The model is the
 blocks of spec §4, two crossbar groups (simulator/core/crossbar.py):
   logGroup, expGroup   the LOG and EXP groups: N_OC identity crossbars each, in lock-step from crossbar 0 (I x I)
-A job is decided at the first cycle it is ready and its group's leader can take a burst; its pass starts PRE cycles
-later (spec §5). The job rules are the v2 station's (v2 `ocarry_sim.OcStation`, RTL-pinned) with stream inputs.
+A job is decided at the first cycle it is ready from which its pass, PRE_LOG / PRE_EXP cycles later, finds the
+group's leader ready (spec §5): the feed is prepared while the previous pass runs. The job rules are the v2 station's
+(v2 `ocarry_sim.OcStation`) with stream inputs.
 Processes (one step per unit):
   blk    a block: the rescale jobs (b >= 1) and the LOG jobs, wave by wave; p_cr, la_cr
   run    a run's end: the epilogue jobs and their O8 windows on E9, ll_cr, run_done
@@ -20,24 +22,26 @@ import numpy as np
 
 from simulator.core.cycleMath import ceilDiv, clog2, isPowerOfTwo, readyAt
 from simulator.core.module import Module, Need, checkRules
-from simulator.core.records import PortSpec, Step
+from simulator.core.records import PortSpec, Step, planePort
 from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, CrossbarGroup
 
 # named latencies (spec §5)
-FIFO_LAT = 1        # an E8 word valid at t is counted in its FIFO from t + 1
-LA_LAT = 1          # an E6 unit's last word at t: the unit is present from t + 1
-LL_LAT = 1          # an E7 unit's last word at t: the unit is present from t + 1
-PRE = 2             # a job decided at d: its pass's load_start at d + 2
-JOB_DONE_LAT = 1    # a job's last drain word at t counts for the other group's readiness from t + 1
-P_CR_LAT = 1        # p_cr one cycle after the last word's read of a block's last LOG job (d + LW - 1)
-LA_CR_LAT = 2       # la_cr two cycles after the last word's read of the unit's last rescale job
-LL_CR_LAT = 2       # ll_cr two cycles after the last word's read of the run's last epilogue job
-O8_LAT = 2          # the run's last epilogue drain word at t: the run ends (t_o8) at t + 2
+FIFO_LAT = 1        # an E8 plane valid at t is counted in its FIFO from t + 1
+LA_LAT = 1          # an E6 unit's last plane at t: the unit is present from t + 1
+LL_LAT = 1          # an E7 unit's last plane at t: the unit is present from t + 1
+PRE_LOG = 17        # a LOG job decided at d: its burst at d + 2P + 1 (8 plane reads, the registered read, the 8 groups
+#                     of I/8 elements from corner-turn A into corner-turn B)
+PRE_EXP = 10        # an EXP job decided at d: its burst at d + P + 2 (8 lo plane reads, the registered read, the clamp
+#                     flags register)
+JOB_DONE_LAT = 1    # a job's last drain plane at t counts for the other group's readiness from t + 1
+P_CR_LAT = 1        # p_cr one cycle after the last plane read of a block's last LOG job (d + P - 1)
+LA_CR_LAT = 2       # la_cr two cycles after the last lo plane read of the unit's last rescale job
+LL_CR_LAT = 2       # ll_cr two cycles after the last lo plane read of the run's last epilogue job
 RESTART_LAT = 1     # the next run's LOG jobs may decide from t_o8 + 1
-E9_LAT = 2          # an epilogue drain word at t is on E9 at t + 2 (the drain stage, then the output register)
+E9_LAT = 10         # an epilogue drain plane at drain_start + b is on E9 at drain_start + E9_LAT + b (P + 2: the
+#                     8-plane hold, the saturation flags, the output register)
 RUN_DONE_LAT = 1    # run_done one cycle after the run's end (t_o8)
-EPS = 5
 OQ_MAX = 127        # oq = min(|o'| >> SO, OQ_MAX) (spec §1)
 
 
@@ -48,7 +52,6 @@ class SoftmaxAccParams:
     D: int
     R: int = 64
     C: int = 64
-    BUF: int = 40
     P: int = 8
     N_OC: int
     NBLK: int
@@ -66,13 +69,13 @@ class SoftmaxAccDerived:
     RPW: int          # rows per window, I / D
     W: int            # waves per block, ceil(P_OC / N_OC)
     LWC: int          # crossbars active in the last wave
-    LW: int           # words per window, ceil(8 I / BUF)
+    LANES: int        # lanes of an E8 plane word, ceil(VWP / 8)
     T_W: int          # windows per input channel, P_OC / P_CH
-    FD: int           # the o_part FIFO's depth (a power of two >= 2 T_W LW)
+    FD: int           # the o_part FIFO's depth in plane words (a power of two >= 2 T_W P)
     NJ: int           # LOG jobs per run, NBLK W
     SHL: int          # the epilogue's left shift, max(SO - LN, 0)
     SHR: int          # the epilogue's right shift, max(LN - SO, 0)
-    MDEPTH: int       # the slot memories' depth, W << clog2 LW
+    MDEPTH: int       # lo_mem / e_mem depth in plane words, W P (so_mem: W words, one plane per window)
 
 
 class AccumulatorMath:
@@ -91,14 +94,14 @@ class AccumulatorMath:
         self.epilogueValues = None                         # the run's epilogue in flight: tE, eE, o8
 
     # -- the inputs -------------------------------------------------------------------------------------------------
-    def storeBlock(self, block: int, windows: list, alphaWindows: list) -> None:
+    def storeBlock(self, block: int, windows: list, alphaWindow) -> None:
         oPart = np.stack([np.asarray(w.values, dtype=np.int64) for w in windows])
         limit = 1 << (self.p.VWP - 1)
         if oPart.min(initial=0) < -limit or oPart.max(initial=0) >= limit:
             raise ValueError(f"tile {block} carries o_part outside {self.p.VWP} bits")
         self.oPart[block] = oPart
-        if alphaWindows:
-            logAlpha = np.array([int(w.values[0]) for w in alphaWindows], dtype=np.int64)
+        if alphaWindow is not None:
+            logAlpha = np.asarray(alphaWindow.values, dtype=np.int64)
             if logAlpha.min() < -256 or logAlpha.max() > 255:
                 raise ValueError(f"the alpha unit of block {block} is outside 9 bits")
             self.logAlpha[block] = logAlpha
@@ -191,21 +194,19 @@ class AccumulatorMath:
         stages["lo_final"], stages["so_final"] = stages["lo"][-1], stages["so"][-1]
 
     def e9Values(self, run: int, wave: range) -> np.ndarray:
-        """One E9 window's values [LW * 5 N_OC]: word q holds word q of crossbar i's window in lanes 5i .. 5i + 4
-        (zeros past the window and on crossbars without a window)."""
+        """One E9 window's values [N_OC I]: elements i I .. i I + I - 1 are crossbar i's window (zeros on crossbars
+        without a window)."""
         p, d = self.p, self.d
-        v = np.zeros((d.LW, p.N_OC, EPS), dtype=np.int64)
+        v = np.zeros((p.N_OC, d.I), dtype=np.int64)
         for i, q in enumerate(wave):
-            x = np.zeros(EPS * d.LW, dtype=np.int64)
-            x[:d.I] = self.state[run]["o8"][q]
-            v[:, i, :] = x.reshape(d.LW, EPS)
+            v[i] = self.state[run]["o8"][q]
         return v.reshape(-1)
 
     def e9Rows(self, waves: list) -> np.ndarray:
         """One run's E9 window values (wave order) -> its O8 rows [S, D] (the O projection's view of E9)."""
         p, d = self.p, self.d
-        a = np.stack([np.asarray(v, dtype=np.int64).reshape(d.LW, p.N_OC, EPS) for v in waves])
-        windows = [a[q // p.N_OC, :, q % p.N_OC, :].reshape(-1)[:d.I] for q in range(d.P_OC)]
+        a = np.stack([np.asarray(v, dtype=np.int64).reshape(p.N_OC, d.I) for v in waves])
+        windows = [a[q // p.N_OC, q % p.N_OC] for q in range(d.P_OC)]
         return np.concatenate(windows).reshape(p.S, p.D)
 
     def matrix(self, windowValues: np.ndarray) -> np.ndarray:
@@ -218,9 +219,7 @@ class AccumulatorMath:
 class SoftmaxOnlineAcc(Module):
     NAME = "softmax_online_acc"
     PARAMS_CLASS = SoftmaxAccParams
-    BASIS = "rtl-pinned"           # GATE 2 2026-10-14: 19/19 corpus + 5/5 bring-up on 64x64, every event equal;
-    #                                2026-10-15 E9 without the O reader (spec §10 item 7): the job and run_done timing
-    #                                is unchanged (head bring-up 5/5 that day); the E9 word times are not RTL-simulated
+    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was GATE 2-pinned 2026-10-14
     STEP_METHODS = {"blk": "stepBlock", "run": "stepRunEnd"}
 
     @staticmethod
@@ -228,11 +227,10 @@ class SoftmaxOnlineAcc(Module):
         I = min(p.R, p.C)
         P_OC = p.S * p.D // I
         W = ceilDiv(P_OC, p.N_OC)
-        LW = ceilDiv(I * 8, p.BUF)
         T_W = P_OC // p.P_CH
-        return SoftmaxAccDerived(I=I, P_OC=P_OC, RPW=I // p.D, W=W, LWC=P_OC - (W - 1) * p.N_OC, LW=LW, T_W=T_W,
-                                 FD=1 << clog2(2 * T_W * LW), NJ=p.NBLK * W, SHL=max(p.SO - p.LN, 0),
-                                 SHR=max(p.LN - p.SO, 0), MDEPTH=W << clog2(LW))
+        return SoftmaxAccDerived(I=I, P_OC=P_OC, RPW=I // p.D, W=W, LWC=P_OC - (W - 1) * p.N_OC,
+                                 LANES=ceilDiv(p.VWP, 8), T_W=T_W, FD=1 << clog2(2 * T_W * p.P), NJ=p.NBLK * W,
+                                 SHL=max(p.SO - p.LN, 0), SHR=max(p.LN - p.SO, 0), MDEPTH=W * p.P)
 
     @staticmethod
     def checkDomain(p: SoftmaxAccParams) -> None:
@@ -243,8 +241,8 @@ class SoftmaxOnlineAcc(Module):
             (all(isPowerOfTwo(x) for x in (p.S, p.D, I, p.P_CH)), "S, D, I, P_CH powers of two"),
             (8 <= p.S <= I, "8 <= S <= I"),
             (p.D <= I and (p.S * p.D) % I == 0, "D <= I and I | S*D"),
-            (p.BUF == 40, "BUF = 40"),
-            (p.VWP <= 32, "VWP <= 32"),
+            (p.P == 8, "P = 8"),
+            (p.VWP <= 16, "VWP <= 16 (at most two lanes)"),
         ]
         if all(holds for holds, _ in rules):
             P_OC = p.S * p.D // I
@@ -261,32 +259,33 @@ class SoftmaxOnlineAcc(Module):
         self.math = AccumulatorMath(p, d) if withValues else None
         # the blocks (spec §4)
         n, I = p.N_OC, d.I
-        self.logGroup = CrossbarGroup(n, p.R, p.C, p.BUF, p.P, mode="LOG", rowsUsed=I, colsUsed=I, modes=modes,
+        self.logGroup = CrossbarGroup(n, p.R, p.C, p.P, mode="LOG", rowsUsed=I, colsUsed=I, modes=modes,
                                       withValues=withValues)
-        self.expGroup = CrossbarGroup(n, p.R, p.C, p.BUF, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes,
+        self.expGroup = CrossbarGroup(n, p.R, p.C, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes,
                                       withValues=withValues)
         # what the steps record
         self.jobs = {}                             # (run, kind, b, w) -> job events; kind log | rescale | epilogue
         self.runEndAt, self.runDoneAt = {}, {}     # run -> t_o8, run_done
         self.resources.crossbars[("LOG", I, I)] += n
         self.resources.crossbars[("EXP", I, I)] += n
-        self.resources.memories[(d.FD, EPS * p.VWP)] = p.P_CH
-        self.resources.memories[(d.MDEPTH, 40)] = 2 * n          # lo_mem, e_mem
-        self.resources.memories[(d.MDEPTH, EPS)] = n             # so_mem
+        self.resources.memories[(d.FD, d.LANES * I)] += p.P_CH
+        self.resources.memories[(d.MDEPTH, I)] += 2 * n          # lo_mem, e_mem (plane words)
+        self.resources.memories[(d.W, I)] += n                   # so_mem (one plane per window)
         # the N_OC crossbars' copies of each slot memory share every address and write enable (lock-step groups)
-        self.resources.memShared[(d.MDEPTH, 40)] = n
-        self.resources.memShared[(d.MDEPTH, EPS)] = n
+        self.resources.memShared[(d.MDEPTH, I)] = n
+        self.resources.memShared[(d.W, I)] = n
 
     # -- declaration --------------------------------------------------------------------------------------------
     def ports(self) -> dict:
         p, d = self.p, self.d
         return {
-            "p": PortSpec("p", "in", "push+credit", p.VWP, EPS, d.I, p.P_CH, "tile", CAP=2, signals=("p_d", "p_v", "p_cr")),
-            "la": PortSpec("la", "in", "push+credit", 9, 1, 1, 1, "block b >= 1", CAP=2,
-                           signals=("la_d", "la_v", "la_cr")),
-            "ll": PortSpec("ll", "in", "push+credit", 8, 1, p.S, 1, "run", CAP=1, signals=("ll_d", "ll_v", "ll_cr")),
-            "o": PortSpec("o", "out", "push", 8, EPS * p.N_OC, EPS * p.N_OC * d.LW, 1, "run",
-                          signals=("o_d", "o_v")),                   # one window per epilogue wave (e9_rows)
+            "p": planePort("p", "in", "push+credit", p.VWP, d.I, p.P_CH, "tile", p.P, CAP=2,
+                           signals=("p_d", "p_v", "p_cr")),
+            "la": planePort("la", "in", "push+credit", 9, p.S, 1, "block b >= 1", p.P, CAP=2,
+                            signals=("la_d", "la_v", "la_cr")),
+            "ll": planePort("ll", "in", "push+credit", 8, p.S, 1, "run", p.P, CAP=1, signals=("ll_d", "ll_v", "ll_cr")),
+            "o": planePort("o", "out", "push", 8, p.N_OC * d.I, 1, "run", p.P,
+                           signals=("o_d", "o_v")),                  # one window per epilogue wave (e9Rows)
             "run_done": PortSpec("run_done", "out", "pulse", 1, 1, 1, 1, "run", signals=("run_done",)),
         }
 
@@ -299,7 +298,7 @@ class SoftmaxOnlineAcc(Module):
             run, b = divmod(unit, p.NBLK)
             windows = {"p": Need.eachChannel(p.P_CH, d.T_W)}
             if b:
-                windows["la"] = {0: p.S}
+                windows["la"] = {0: 1}
             return Need(windows=windows, after={"run": run})          # the previous runs' ends: restart
         return Need(windows={"ll": {0: 1}}, after={"blk": (unit + 1) * p.NBLK})
 
@@ -308,10 +307,12 @@ class SoftmaxOnlineAcc(Module):
         n = self.p.N_OC
         return range(w * n, min((w + 1) * n, self.d.P_OC))
 
-    def _job(self, group: CrossbarGroup, key: tuple, ready: int, feed, active: int) -> tuple:
-        """Decide a job (ready, and the leader can take a burst), run its pass PRE cycles later."""
-        decide = readyAt(ready, group.readyAt())
-        xbarPass = group.run(feed, decide + PRE)
+    def _job(self, group: CrossbarGroup, key: tuple, ready: int, feed, active: int, pre: int) -> tuple:
+        """Decide a job: the first cycle it is ready from which its pass, `pre` cycles later, finds the leader ready
+        (decide = max(ready, leader ready - pre)); the pass loads at decide + pre."""
+        loadStart = readyAt(ready + pre, group.readyAt())
+        decide = loadStart - pre
+        xbarPass = group.run(feed, loadStart)
         group.passes.clear()
         I = self.d.I
         self.counts.passes[(group.mode, I, I)] += active                 # the active crossbars of the wave
@@ -320,9 +321,9 @@ class SoftmaxOnlineAcc(Module):
         return events, xbarPass
 
     def lastRead(self, decide):
-        """The last of a job's LW FIFO words, read one per cycle from its decision."""
+        """The last of a job's P planes, read one per cycle from its decision."""
         with label("stream"):
-            return decide + self.d.LW - 1
+            return decide + self.p.P - 1
 
     def block(self, j: int, tLast: list, tAlpha: int | None = None) -> dict:
         """Block j's jobs (spec §5), wave by wave: rescale (b, w) for b >= 1, then LOG (b, w). tLast[q] = the last
@@ -338,7 +339,7 @@ class SoftmaxOnlineAcc(Module):
                 # rescale (b, w): t = clamp8(log a + lo) -> e
                 ready = readyAt(tAlpha + LA_LAT, self.jobs[(run, "log", b - 1, w)]["drain_end"] + JOB_DONE_LAT)
                 events, xbarPass = self._job(self.expGroup, (run, "rescale", b, w), ready,
-                                             math.rescaleInput(run, j, wave) if math else None, len(wave))
+                                             math.rescaleInput(run, j, wave) if math else None, len(wave), PRE_EXP)
                 if math:
                     math.collectRescale(run, wave, xbarPass.out)
                 if w == d.W - 1:
@@ -348,7 +349,7 @@ class SoftmaxOnlineAcc(Module):
                             self.jobs[(run, "rescale", b, w)]["drain_end"] + JOB_DONE_LAT if b else None,
                             self.runEndAt[run - 1] + RESTART_LAT if (b == 0 and run) else None)
             events, xbarPass = self._job(self.logGroup, (run, "log", b, w), ready,
-                                         math.logInput(run, j, b, wave) if math else None, len(wave))
+                                         math.logInput(run, j, b, wave) if math else None, len(wave), PRE_LOG)
             if math:
                 math.collectLog(run, wave, xbarPass.window)
             if w == d.W - 1:
@@ -356,13 +357,13 @@ class SoftmaxOnlineAcc(Module):
         if math:
             math.finishBlock(run)
         # counts (spec §7)
-        elements, memoryWords = p.S * p.D, d.P_OC * EPS * d.LW
+        elements, memoryBytes = p.S * p.D, d.P_OC * d.I                # a window set: P plane words of I / 8 bytes
         self.counts.clbAdd += elements * (2 if b else 1)
         self.counts.clbSelect += elements * (2 if b else 1)
-        self.counts.memWriteBytes += memoryWords * (2 if b else 1)
-        self.counts.memReadBytes += memoryWords * (2 if b else 0)
-        self.counts.fifoWords += d.P_OC * d.LW
-        fifoBytes = d.P_OC * d.LW * ceilDiv(EPS * p.VWP, 8)             # FIFO traffic: each word written once, read once
+        self.counts.memWriteBytes += memoryBytes * (2 if b else 1)
+        self.counts.memReadBytes += memoryBytes * (2 if b else 0)
+        self.counts.fifoWords += d.P_OC * p.P
+        fifoBytes = d.P_OC * p.P * d.LANES * d.I // 8                   # FIFO traffic: each plane written once, read once
         self.counts.memWriteBytes += fifoBytes
         self.counts.memReadBytes += fifoBytes
         return out
@@ -379,23 +380,25 @@ class SoftmaxOnlineAcc(Module):
             wave = self.wave(w)
             ready = readyAt(tLogL + LL_LAT, self.jobs[(run, "log", B - 1, w)]["drain_end"] + JOB_DONE_LAT)
             events, xbarPass = self._job(self.expGroup, (run, "epilogue", B - 1, w), ready,
-                                         math.epilogueInput(run, wave) if math else None, len(wave))
+                                         math.epilogueInput(run, wave) if math else None, len(wave), PRE_EXP)
             if math:
                 math.collectEpilogue(run, wave, xbarPass.out)
             if w == d.W - 1:
                 out["ll_cr"] = self.lastRead(events["decide"]) + LL_CR_LAT
-        self.runEndAt[run] = out["t_o8"] = events["drain_end"] + O8_LAT
+        tFirst = events["drain_start"] + E9_LAT                          # the last wave's first E9 plane
+        with label("stream"):                                          # its planes: the run's last O8 plane
+            self.runEndAt[run] = out["t_o8"] = tFirst + p.P - 1
         self.runDoneAt[run] = self.runEndAt[run] + RUN_DONE_LAT
         if math:
             math.finishEpilogue(run)
-        elements, memoryWords = p.S * p.D, d.P_OC * EPS * d.LW
+        elements, memoryBytes = p.S * p.D, d.P_OC * d.I
         self.counts.clbAdd += elements
         self.counts.clbSelect += 2 * elements
-        self.counts.memReadBytes += memoryWords                          # lo_mem; the O8 words go to E9, not memory
+        self.counts.memReadBytes += memoryBytes                          # lo_mem; the O8 planes go to E9, not memory
         return out
 
     def e9Windows(self, run: int) -> list:
-        """Run's E9 windows (spec §3): window w = epilogue wave w, its first word E9_LAT after the wave's drain start.
+        """Run's E9 windows (spec §3): window w = epilogue wave w, its first plane E9_LAT after the wave's drain start.
         Returns [(w, t, values)]."""
         out = []
         for w in range(self.d.W):
@@ -408,15 +411,16 @@ class SoftmaxOnlineAcc(Module):
         p, d = self.p, self.d
         run, b = divmod(j, p.NBLK)
         windows = io.windows("p")
-        tAlpha, alphaUnit, alphaWindows = None, None, []
+        tAlpha, alphaUnit, alphaWindow = None, None, None
         if b:
-            alphaWindows = io.windows("la")
+            (alphaWindow,) = io.windows("la")
             alphaUnit = run * (p.NBLK - 1) + b - 1
-            tAlpha = max(w.time for w in alphaWindows)
+            with label("stream"):                                    # the alpha window's last plane
+                tAlpha = alphaWindow.time + p.P - 1
         if self.math:
-            self.math.storeBlock(j, windows, alphaWindows)
-        with label("stream"):                                        # each o_part window's last word
-            tLast = [w.time + d.LW - 1 for w in windows]
+            self.math.storeBlock(j, windows, alphaWindow)
+        with label("stream"):                                        # each o_part window's last plane
+            tLast = [w.time + p.P - 1 for w in windows]
         credits = self.block(j, tLast, tAlpha)
         io.giveCredit("p", j, credits["p_cr"])
         if b:
@@ -431,8 +435,8 @@ class SoftmaxOnlineAcc(Module):
         (w,) = io.windows("ll")
         if self.math:
             self.math.storeLogL(run, w.values)
-        with label("stream"):                                        # the log l window's S words
-            tLogL = w.time + p.S - 1
+        with label("stream"):                                        # the log l window's last plane
+            tLogL = w.time + p.P - 1
         o = self.epilogue(run, tLogL)
         io.giveCredit("ll", run, o["ll_cr"])
         windows = self.e9Windows(run)

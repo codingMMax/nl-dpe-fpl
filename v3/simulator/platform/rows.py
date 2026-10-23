@@ -17,8 +17,10 @@ UM2_PER_MWTA = 0.033864
 ATTENTION_ROLES = ("gemm", "qk", "sm", "pv", "acc")      # the roles priced apart in an attention row
 
 
-def fcRow(R: int, C: int, shape: tuple, platform: Platform, vtr: dict | None = None, passExtent: str = "used") -> dict:
-    """One FC DSE row (timing only: the row's cycles and counts do not depend on the values, I4)."""
+def fcRow(R: int, C: int, shape: tuple, platform: Platform, vtr: dict | None = None, passExtent: str = "used",
+          tileRule: str = "row_parallel") -> dict:
+    """One FC DSE row (timing only: the row's cycles and counts do not depend on the values, I4). tileRule: the crossbar
+    tile's rule (area.footprint; "legacy" for the v2 regression tests)."""
     M, K, N = shape
     g = fc(K, N, R, C, M=M, platform=platform, passExtent=passExtent, withValues=False)
     rep = run(g)
@@ -30,19 +32,20 @@ def fcRow(R: int, C: int, shape: tuple, platform: Platform, vtr: dict | None = N
                passes=rep.totalCounts.nPasses, e_total_pj=e["e_total_pj"], e_pass_pj=e["e_pass_pj"],
                e_traffic_pj=e["e_traffic_pj"], e_adds_pj=e["e_adds_pj"], e_cmp_pj=e["e_cmp_pj"],
                e_mem_pj=e["e_mem_pj"], e_setup_pj=prices.setupEnergyPj(platform, res.nCrossbars),
-               area_wc_mwta=area.areaWcMwta(res.nCrossbars, R, C))
+               area_wc_mwta=area.areaWcMwta(res.nCrossbars, R, C, tileRule))
     m = (vtr or {}).get((row["config"], "gemm", M, K, N))
     if m is not None:
-        row.update(area.withVtr(rep.cycles, R, C, m))
+        row.update(area.withVtr(rep.cycles, R, C, m, tileRule))
         row["area_total_mm2"] = round(row["area_total_mwta"] * UM2_PER_MWTA / 1e6, 4)
         row["edap"] = round(e["e_total_pj"] * row["latency_ns"] * row["area_total_mm2"], 1)   # pJ x ns x mm^2
     return row
 
 
-def attentionRow(name: str, nseq: int, dModel: int, d: int, R: int, C: int, vtr: dict | None = None) -> dict:
+def attentionRow(name: str, nseq: int, dModel: int, d: int, R: int, C: int, vtr: dict | None = None,
+                 tileRule: str = "row_parallel") -> dict:
     """One attention DSE row at the fixed mapping (headParams defaults): the head's compute cycles (done - start),
     energy in total and per role, crossbars, the memory inventory and its predicted blocks; with VTR metrics also the
-    total area, latency and EDAP (experiment.md §5)."""
+    total area, latency and EDAP (experiment.md §5). tileRule as fcRow."""
     hp = headParams(nseq, dModel, d, R, C)
     g, parts = attentionHead(hp, withValues=False)
     rep = run(g)
@@ -59,7 +62,7 @@ def attentionRow(name: str, nseq: int, dModel: int, d: int, R: int, C: int, vtr:
                e_traffic_pj=round(e["e_traffic_pj"], 2), e_adds_pj=round(e["e_adds_pj"], 2),
                e_cmp_pj=round(e["e_cmp_pj"], 2), e_mem_pj=round(e["e_mem_pj"], 2),
                e_setup_pj=round(prices.setupEnergyPj(platform, nXbar), 2),
-               area_wc_mwta=area.areaWcMwta(nXbar, R, C),
+               area_wc_mwta=area.areaWcMwta(nXbar, R, C, tileRule),
                mem_bits_model=sum(words * bits * k for words, bits, k in memories),
                mem_max_words=max(words for words, _, _ in memories),
                mem_blocks_model=area.predictedMemBlocks(rep.resources.values(), R, C))
@@ -69,7 +72,7 @@ def attentionRow(name: str, nseq: int, dModel: int, d: int, R: int, C: int, vtr:
         row[f"e_{role}_pj"] = round(byRole.get(role, {}).get("e_total_pj", 0), 2)
     if vtr and (name, R, C) in vtr:
         m = vtr[(name, R, C)]
-        row.update(area.withVtr(T, R, C, m))
+        row.update(area.withVtr(T, R, C, m, tileRule))
         row["area_total_mm2"] = round(row["area_total_mwta"] * UM2_PER_MWTA / 1e6, 4)
         row["edap"] = round(e["e_total_pj"] * row["latency_ns"] * row["area_total_mm2"], 1)   # pJ x ns x mm^2
         row["vtr_seeds"] = m.get("seeds", "")

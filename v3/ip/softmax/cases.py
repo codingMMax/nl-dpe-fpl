@@ -24,6 +24,7 @@ import softmax_online_ref as oref  # noqa: E402  (the oracle: used here only, ne
 from simulator.core.engine import portWords, run  # noqa: E402
 from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
+from simulator.core.records import planeWords  # noqa: E402
 from simulator.models.softmaxOnline import SoftmaxOnline, SoftmaxOnlineParams  # noqa: E402
 
 STAGES = ("m_blk", "m_new", "log_a", "logp", "sp", "t", "e", "lprime", "lq", "log_l", "m", "log_l_final")
@@ -73,7 +74,7 @@ def build(case: Case, withValues: bool = True, carryExtent: int | None = None) -
                 withValues=withValues)
     lp = Sink("lp_snk", replace(ports["lp"], direction="in"), len(tiles), d.NWB, creditLatency=case.lpCreditLatency,
               withValues=withValues)
-    la = Sink("la_snk", replace(ports["la"], direction="in"), runs * (d.B - 1), p.S, creditLatency=case.laCreditLatency,
+    la = Sink("la_snk", replace(ports["la"], direction="in"), runs * (d.B - 1), 1, creditLatency=case.laCreditLatency,
               withValues=withValues)
     ll = Sink("ll_snk", replace(ports["ll"], direction="in"), runs, 1, creditLatency=case.llCreditLatency,
               withValues=withValues)
@@ -103,21 +104,13 @@ def runCase(case: Case) -> dict:
                 raise RuntimeError(f"GATE 1: {case.name} run {r} block {b}: sent log P != oracle")
             if b:
                 u = r * (B - 1) + b - 1
-                la = [int(w.values[0]) for w in sorted((w for w in sinks["la"].received if w.unit == u),
-                                                       key=lambda w: w.window)]
-                if la != [int(x) for x in want["log_a"][b]]:
+                (wa,) = [w for w in sinks["la"].received if w.unit == u]
+                if [int(x) for x in wa.values] != [int(x) for x in want["log_a"][b]]:
                     raise RuntimeError(f"GATE 1: {case.name} run {r} block {b}: sent log a != oracle")
         (wl,) = [w for w in sinks["ll"].received if w.unit == r]
         if not np.array_equal(np.asarray(wl.values), want["log_l_final"]):
             raise RuntimeError(f"GATE 1: {case.name} run {r}: sent log l != oracle")
     return dict(report=rep, sm=sm, sinks=sinks)
-
-
-def hexWord(values, bits: int) -> str:
-    v = 0
-    for j, x in enumerate(values):
-        v |= (int(x) & ((1 << bits) - 1)) << (bits * j)
-    return f"{v:x}"
 
 
 def defines(case: Case) -> dict:
@@ -146,33 +139,32 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
     creditPulsesDistinct(rep, case.name)
     out = Path(outDir)
     out.mkdir(parents=True, exist_ok=True)
-    LW, I = d.LW, d.I
+    I = d.I
     tiles = tilesOf(case, d.B, p.BKV)
     sent = {}
     for e in rep.events:
         if e.kind == "win" and e.instance in ("s_src", "go_src"):
             sent.setdefault(f"{e.instance}.{e.port}", []).append((e.time, e.channel, e.unit, e.window))
 
-    def words(values, nWords, bits=8, q=5):
-        v = list(np.asarray(values, dtype=np.int64)) + [0] * (q * nWords - len(values))
-        return [hexWord(v[q * k:q * k + q], bits) for k in range(nWords)]
+    def planes(values, E, W):                                     # a window's 8 plane words, hex
+        return [f"{x:x}" for x in planeWords(values, E, W, p.P)]
     sRows = sorted(sent.get("s_src.s", []), key=lambda x: (x[2], x[3]))
     with open(out / "s_win.txt", "w") as f:
         for (t, ch, u, w) in sRows:
-            f.write(f"{t} {ch} {u} {w} " + " ".join(words(tiles[u].reshape(-1)[w * I:(w + 1) * I], LW)) + "\n")
+            f.write(f"{t} {ch} {u} {w} " + " ".join(planes(tiles[u].reshape(-1)[w * I:(w + 1) * I], 8, I)) + "\n")
     goRows = sorted(sent.get("go_src.go", []), key=lambda x: x[2])
     (out / "go.txt").write_text("".join(f"{t}\n" for (t, _, _, _) in goRows))
-    with open(out / "lp_exp.txt", "w") as f:                     # per block, window-major: LW words each
+    with open(out / "lp_exp.txt", "w") as f:                     # per block, window-major: 8 plane words each
         for j in range(len(tiles)):
             ws = sorted((w for w in sinks["lp"].received if w.unit == j), key=lambda w: w.window)
             for w in ws:
-                f.write("\n".join(words(w.values, LW)) + "\n")
-    with open(out / "la_exp.txt", "w") as f:                     # per unit, per row: 9-bit two's complement
-        for w in sorted(sinks["la"].received, key=lambda w: (w.unit, w.window)):
-            f.write(f"{int(w.values[0]) & 0x1FF:03x}\n")
-    with open(out / "ll_exp.txt", "w") as f:                     # per run, per row
+                f.write("\n".join(planes(w.values, 8, I)) + "\n")
+    with open(out / "la_exp.txt", "w") as f:                     # per unit: 8 plane words of 2 lanes (9-bit log a)
+        for w in sorted(sinks["la"].received, key=lambda w: w.unit):
+            f.write("\n".join(planes(w.values, 9, p.S)) + "\n")
+    with open(out / "ll_exp.txt", "w") as f:                     # per run: 8 plane words of S bits
         for w in sorted(sinks["ll"].received, key=lambda w: w.unit):
-            f.write("".join(f"{int(x) & 0xFF:02x}\n" for x in w.values))
+            f.write("\n".join(planes(w.values, 8, p.S)) + "\n")
     (out / "events.txt").write_text("".join(line + "\n" for line in rep.eventLines()))
     plusargs = dict(NS=len(sRows), NRUN=len(case.scores), NBLK=len(tiles), NLA=len(sinks["la"].received),
                     LPCR=case.lpCreditLatency, LACR=case.laCreditLatency, LLCR=case.llCreditLatency,

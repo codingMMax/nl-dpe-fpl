@@ -30,6 +30,7 @@ EDAP view (the earlier one: energy x delay x area product), from edap/ranking_*.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -39,20 +40,24 @@ import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
 V3 = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(V3))
+from dse import data  # noqa: E402
+from dse.space import CONFIGS  # noqa: E402
+
 RESULTS = V3 / "dse" / "results"
 EDAP = RESULTS / "edap"            # the earlier view: energy x delay x area product ranking
 ADP = RESULTS / "adp"              # the current view: latency vs area per family, area-delay product across them
 OKABE = {"E": "#0072B2", "D": "#E69F00", "A": "#009E73"}
-RS, CS = (128, 256, 512, 1024), (64, 128, 256)
+RS, CS = tuple(sorted({r for r, _ in CONFIGS})), tuple(sorted({c for _, c in CONFIGS}))   # the map's axes; C <= R
 NOTES = {
     "fc": ("FC — crossbar ranking by EDAP",
            "GEMV M × K × N = 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512 (the v2 FC snapshot, rebuilt "
            "by the v3 model)"),
     "attention": ("Attention head — crossbar ranking by EDAP",
                   "one head, (n, d_model, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), "
-                  "BERT-Tiny (128, 128, 64),\nJetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). The 16 "
-                  "builds of the d = 64 shapes at C = 64 are priced from VPR's memory count (5–8 blocks above the "
-                  "simulator's prediction)."),
+                  "BERT-Tiny (128, 128, 64),\nJetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). The "
+                  f"{sum(r['mem_check'] == 'DIFFERS' for r in data.attentionRows())} builds of the d = 64 shapes at "
+                  "C = 64 are priced from VPR's memory count (5–8 blocks above the simulator's prediction)."),
 }
 
 
@@ -85,10 +90,10 @@ def figure(res: dict, name: str, title: str, wl_note: str) -> None:
     cmap = plt.get_cmap("viridis_r")                                   # reversed: the best (lowest) cells are bright
 
     ax = fig.add_subplot(gs[0, 0])                                     # (a) crossbar-size map
-    grid = np.array([[by[f"{r}x{c}"]["G_EDAP"] for c in CS] for r in RS])
+    grid = np.array([[by[f"{r}x{c}"]["G_EDAP"] if f"{r}x{c}" in by else np.nan for c in CS] for r in RS])   # NaN: C > R
     im = ax.imshow(grid, cmap=cmap, vmin=0, vmax=1, aspect="auto")
     annotate(ax, im, grid, lambda i, j, v: f"{v:.3f}\n#{by[f'{RS[i]}x{CS[j]}']['rank']}", fs=10, reverse=True)
-    bi, bj = np.unravel_index(np.argmin(grid), grid.shape)
+    bi, bj = np.unravel_index(np.nanargmin(grid), grid.shape)
     ax.add_patch(plt.Rectangle((bj - 0.5, bi - 0.5), 1, 1, fill=False, ec="#d62728", lw=3))
     ax.set_xticks(range(len(CS)), [str(c) for c in CS])
     ax.set_yticks(range(len(RS)), [str(r) for r in RS])
@@ -363,7 +368,7 @@ def split_panel(ax, split: dict, front: set, title: str, parts: tuple = AREA_SPL
                 ) -> None:
     """A split per config (user, 2026-10-17; dse/breakdown.py's area_split / energy_split): stacked bars of the parts
     in % of the total; configs grouped by R, the front configs' labels in bold, segments of 6 % and more labelled."""
-    cfgs = [f"{r}x{c}" for r in RS for c in CS]
+    cfgs = [f"{r}x{c}" for r in RS for c in CS if (r, c) in CONFIGS]
     x = np.arange(len(cfgs))
     bottom = np.zeros(len(cfgs))
     for k, lab, col, tcol in parts:
@@ -373,8 +378,9 @@ def split_panel(ax, split: dict, front: set, title: str, parts: tuple = AREA_SPL
             if h >= 6:
                 ax.text(xi, b + h / 2, f"{h:.0f}", ha="center", va="center", fontsize=8, color=tcol, zorder=3)
         bottom += v
-    for g in range(1, len(RS)):                                        # separators between the R groups
-        ax.axvline(g * len(CS) - 0.5, color="#bbbbbb", lw=0.8, zorder=1)
+    for i in range(1, len(cfgs)):                                      # separators between the R groups
+        if cfgs[i].split("x")[0] != cfgs[i - 1].split("x")[0]:
+            ax.axvline(i - 0.5, color="#bbbbbb", lw=0.8, zorder=1)
     ax.set_xticks(x, [c.replace("x", "×") for c in cfgs], rotation=45, ha="right", fontsize=8.5)
     for t, c in zip(ax.get_xticklabels(), cfgs):
         if c in front:
@@ -385,6 +391,35 @@ def split_panel(ax, split: dict, front: set, title: str, parts: tuple = AREA_SPL
     ax.set_title(title, fontsize=10.5)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=2 if len(parts) > 3 else 3, fontsize=9,
               frameon=False)
+
+
+KIND_SPLIT = (("dpe_load", "DPE load (a pass's input burst)", "#0072B2", "white"),
+              ("dpe_compute", "DPE compute (slices, shift-acc, ACAM)", "#D55E00", "white"),
+              ("dpe_drain", "DPE drain (output words)", "#56B4E9", "black"),
+              ("stream", "stream (port words, FIFO reads)", "#E69F00", "black"), ("logic", "logic", "#999999", "black"))
+ROLE_SPLIT = (("gemm", "projections (gemm)", "#0072B2", "white"), ("qk", "QK DIMM", "#56B4E9", "black"),
+              ("sm", "online softmax", "#E69F00", "black"), ("pv", "PV DIMM", "#009E73", "white"),
+              ("acc", "accumulator", "#CC79A7", "white"), ("ctrl", "controller", "#999999", "black"))
+
+
+def critical_path(cp: dict, fronts: dict) -> None:
+    """Where the cycles go on the critical path (dse/config_table.py's critical_path.json `summary`): per config the
+    mean share of each kind of wait, attention by kind (a) and by module (b), FC by kind (c). Writes
+    dse_critical_path.{png,pdf}."""
+    s = cp["summary"]
+    fig, (ax, bx, cx) = plt.subplots(1, 3, figsize=(20.4, 7.0), constrained_layout=True)
+    split_panel(ax, {c: v["shares"] for c, v in s["attention"].items()}, set(fronts["attention"]),
+                "(a) attention head: the critical path by kind of wait\n(mean share over the 6 heads)", KIND_SPLIT,
+                "share of the cycles on the critical path (%)")
+    split_panel(bx, {c: v["shares"] for c, v in s["attention"].items()}, set(fronts["attention"]),
+                "(b) attention head: the critical path by module\n(mean share over the 6 heads)", ROLE_SPLIT,
+                "share of the cycles on the critical path (%)")
+    split_panel(cx, {c: v["shares"] for c, v in s["fc"].items()}, set(fronts["fc"]),
+                "(c) FC: the critical path by kind of wait\n(mean share over the 4 shapes)", KIND_SPLIT,
+                "share of the cycles on the critical path (%)")
+    for ext in ("png", "pdf"):
+        fig.savefig(ADP / f"dse_critical_path.{ext}", dpi=160 if ext == "png" else None)
+    plt.close(fig)
 
 
 def latency_area(la: dict, bd: dict) -> dict:
@@ -446,6 +481,8 @@ def main() -> None:
     fronts = latency_area(json.loads((ADP / "latency_area.json").read_text()),
                           json.loads((RESULTS / "breakdown.json").read_text()))
     print(f"wrote {ADP / 'dse_la.png'} and .pdf, dse_la_fc.png, dse_la_attention.png, dse_adp_cross.png | fronts {fronts}")
+    critical_path(json.loads((RESULTS / "critical_path.json").read_text()), fronts)
+    print(f"wrote {ADP / 'dse_critical_path.png'} and .pdf")
     res = {name: json.loads((EDAP / f"ranking_{name}.json").read_text()) for name in ("fc", "attention")}
     cr = json.loads((EDAP / "ranking_cross.json").read_text())
     front, pick = cross(cr, len(res["fc"]["workloads"]), len(res["attention"]["workloads"]))

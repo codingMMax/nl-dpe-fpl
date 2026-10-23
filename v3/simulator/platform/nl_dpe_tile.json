@@ -1,0 +1,66 @@
+{
+  "rule": "row_parallel (docs/experiment.md §5.1, user 2026-10-22): H = ceil(max(R + control_pins, C + status_pins) / pins_per_tile_row); W = ceil((logic + local crossbar) / (H x one grid cell, 66,117 MWTA)); read by simulator/platform/area.py",
+  "pins_per_tile_row": 60,
+  "control_pins": 7,
+  "status_pins": 5,
+  "dac_um2_per_col": 0.30546875,
+  "dac_source": "nl_dpe/area_power.py: 0.0000782 mm^2 per 1024 DACs, 4 DACs per column",
+  "local_crossbar_um2": {
+    "64": 221.171477274,
+    "128": 679.785877064,
+    "256": 2080.0886326,
+    "512": 7269.61884854
+  },
+  "local_crossbar_source": "COFFE row-parallel sweep, coffe_flow_22nm/sweep_summary_full.csv column total_um2 (commit 0a750e4): the local input crossbar + its select SRAM for R + 7 inputs; COFFE ecde3effd352e5b2ba89d17c1e4cbd620b369eca, ERF_MAX_ITERATIONS 4, -a 1 -d 2 -hi 100, TensorSlices 22 nm constants (channel width 320); runs work/dpe_full_R{R}_C64",
+  "legacy_footprint": {
+    "128x64": [
+      1,
+      5
+    ],
+    "128x128": [
+      1,
+      11
+    ],
+    "128x256": [
+      3,
+      7
+    ],
+    "256x64": [
+      2,
+      3
+    ],
+    "256x128": [
+      3,
+      4
+    ],
+    "256x256": [
+      4,
+      6
+    ],
+    "512x64": [
+      2,
+      4
+    ],
+    "512x128": [
+      3,
+      5
+    ],
+    "512x256": [
+      5,
+      6
+    ],
+    "1024x64": [
+      1,
+      11
+    ],
+    "1024x128": [
+      3,
+      7
+    ],
+    "1024x256": [
+      5,
+      8
+    ]
+  },
+  "legacy_source": "[W, H] of the wc tile in v3/vtr/arch/nl_dpe_<R>x<C>_auto.xml on 2026-10-22 (v2's XMLs, tools/copies.py ARCHS): the logic alone rounded to the nearest cell, no local crossbar"
+}

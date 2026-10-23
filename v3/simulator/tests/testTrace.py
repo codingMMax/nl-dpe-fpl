@@ -5,14 +5,16 @@
             duration, max / min / sort keep the chosen object and a tie keeps the first, a 0 step adds no segment, a
             plain int is one untraced segment; a Time equals, hashes, formats, json- and pickle-serializes as its int;
             numpy on the left keeps the value; label nesting and the role; an unknown kind is refused
-  helpers   readyAt and the stages (Serial, Fifo, Repack, Memory, Buffer) keep the Time they choose
-  crossbar  the pass grammar's segments: load / compute / drain of a pass, a burst gated by the previous pass's
-            msb_fire, by its accumulator, by its output buffer (hand-computed on 8 x 8 and 8 x 1024)
+  helpers   readyAt and the stages (Serial, Fifo, Memory, Buffer) keep the Time they choose
+  crossbar  the pass rule's segments (the bit-plane pass, 2026-10-22): load / compute / drain of a pass, a burst gated
+            by the previous pass's ACAM, a late burst; the output register never binds, at any array width
+            (hand-computed on 8 x 8 and 8 x 1024)
   engine    an FC row: the breakdown equals the closed form per kind (V = 1 and V = 3); every port event's time is
             traced; a late source is an origin of that many cycles; a module that drops the chain shows as untraced
   head      BERT-Tiny at 128x64 and ViT-B/16 at 128x64 (two runs): the segments add up to T, none untraced or
             negative, the kinds known; the path opens with the first token's load; the same breakdown in 3 random
-            step orders
+            step orders; T pinned at the bit-plane model's values of 2026-10-22 (3818, 12481; the 40-bit pass gave
+            7752, 24395)
 Run: python3 v3/simulator/tests/testTrace.py
 """
 from __future__ import annotations
@@ -32,7 +34,7 @@ from simulator.core.engine import run, traced  # noqa: E402
 from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
 from simulator.core.records import PortSpec, Step  # noqa: E402
-from simulator.core.stages import Buffer, Fifo, Memory, Repack, Serial  # noqa: E402
+from simulator.core.stages import Buffer, Fifo, Memory, Serial  # noqa: E402
 import simulator.core.trace as trace  # noqa: E402
 from simulator.core.trace import KINDS, Time, breakdown, current, label, segments  # noqa: E402
 from simulator.models.attentionHead import attentionHead, headParams  # noqa: E402
@@ -137,9 +139,6 @@ def testHelpers() -> int:
     f.write(None, Time(7, "w"))
     _, r = f.read(Time(20, "d"))
     assert r == 20 and segments(r) == [(("d", "origin"), 20)]; n += 1
-    rp = Repack([5, 5, 2], 5, 1)
-    times = rp.times([Time(1, "r"), Time(2, "r"), Time(3, "r")])
-    assert all(isinstance(x, Time) for x in times) and [int(x) for x in times] == [2, 3, 4]; n += 1
     m = Memory(2)
     v = m.write(1, None, Time(9, "m"))
     assert v == 10 and isinstance(v, Time) and isinstance(m.read(1, Time(12, "x"))[1], Time); n += 1
@@ -151,36 +150,32 @@ def testHelpers() -> int:
 
 def testCrossbar() -> int:
     n = 0
-    c = xb.Crossbar(8, 8, withValues=False)                                 # LOAD 2, OUTPUT 2, P 8
+    c = xb.Crossbar(8, 8, withValues=False)                                 # P 8: plane 0 fires at 1, MSB at 8
     p1 = c.run(None, Time(0, "t"))
     e = p1.events
-    assert kinds(e["drain_end"]) == {"origin": 0, "dpe_load": 2, "dpe_compute": 9, "dpe_drain": 2}; n += 1
-    assert kinds(e["drain_start"]) == {"origin": 0, "dpe_load": 2, "dpe_compute": 9, "dpe_drain": 1}; n += 1
-    assert kinds(e["acam_done"]) == {"origin": 0, "dpe_load": 2, "dpe_compute": 9}; n += 1
-    assert kinds(e["msb_fire"]) == {"origin": 0, "dpe_load": 2, "dpe_compute": 7}; n += 1
-    assert kinds(p1.nextReadyAt) == {"origin": 0, "dpe_load": 2, "dpe_compute": 8} and p1.nextReadyAt == 10; n += 1
-    assert kinds(c.readyAt()) == kinds(p1.nextReadyAt) and kinds(c.accumulatorFreeAt)["dpe_compute"] == 10; n += 1
-    assert kinds(c.outputFreeAt) == {"origin": 0, "dpe_load": 2, "dpe_compute": 9, "dpe_drain": 3}; n += 1
-    # a burst offered early waits for msb_fire + RDY_LAT: the chain runs through the previous pass
+    assert kinds(e["compute_start"]) == {"origin": 0, "dpe_load": 1}; n += 1
+    assert kinds(e["msb_fire"]) == {"origin": 0, "dpe_load": 1, "dpe_compute": 7}; n += 1
+    assert kinds(e["acam_done"]) == {"origin": 0, "dpe_load": 1, "dpe_compute": 8} and e["acam_done"] == 9; n += 1
+    assert kinds(e["drain_start"]) == {"origin": 0, "dpe_load": 1, "dpe_compute": 8, "dpe_drain": 1}; n += 1
+    assert kinds(e["drain_end"]) == {"origin": 0, "dpe_load": 1, "dpe_compute": 8, "dpe_drain": 8}; n += 1
+    assert kinds(p1.nextReadyAt) == {"origin": 0, "dpe_load": 1, "dpe_compute": 9} and p1.nextReadyAt == 10; n += 1
+    assert kinds(c.readyAt()) == kinds(p1.nextReadyAt); n += 1
+    assert kinds(c.outputFreeAt) == {"origin": 0, "dpe_load": 1, "dpe_compute": 8, "dpe_drain": 9}; n += 1
+    # a burst offered early waits for the ACAM + RDY_LAT: the chain runs through the previous pass
     p2 = c.run(None, Time(0, "t"))
-    assert p2.events["load_start"] == 10 and kinds(p2.events["load_start"]) == {"origin": 0, "dpe_load": 2,
-                                                                                 "dpe_compute": 8}; n += 1
-    assert kinds(p2.events["drain_end"]) == {"origin": 0, "dpe_load": 4, "dpe_compute": 17, "dpe_drain": 2}; n += 1
+    assert p2.events["load_start"] == 10 and kinds(p2.events["load_start"]) == {"origin": 0, "dpe_load": 1,
+                                                                                 "dpe_compute": 9}; n += 1
+    assert kinds(p2.events["drain_end"]) == {"origin": 0, "dpe_load": 2, "dpe_compute": 17, "dpe_drain": 8}; n += 1
     # a late burst: its own origin
     p3 = c.run(None, Time(100, "late"))
     assert segments(p3.events["load_start"]) == [(("late", "origin"), 100)]; n += 1
-    # an output buffer still draining binds the ACAM: the chain runs through the previous pass's drain
-    w = xb.Crossbar(8, 1024, withValues=False)                              # OUTPUT 205
+    # the output register never binds, whatever the width: 8 x 1024 times like 8 x 8 (until 2026-10-22 its 205
+    # drain words bound the next ACAM)
+    w = xb.Crossbar(8, 1024, withValues=False)
     q1 = w.run(None, Time(0, "t"))
     q2 = w.run(None, Time(0, "t"))
-    assert q2.events["acam_done"] == q1.events["drain_end"] + 1 == 217; n += 1
-    assert kinds(q2.events["drain_end"]) == {"origin": 0, "dpe_load": 2, "dpe_compute": 9, "dpe_drain": 411}; n += 1
-    # an accumulator still busy binds compute_start (a short load, LOAD 1 at R = 1)
-    a = xb.Crossbar(1, 8, withValues=False)                                 # LOAD 1
-    a.run(None, Time(0, "t"))                                               # acam_done 10, accumulator free 11
-    r2 = a.run(None, Time(0, "t"))                                          # load_start 9, 9 + 1 < 11
-    assert r2.events["compute_start"] == 11 and kinds(r2.events["compute_start"]) == {"origin": 0, "dpe_load": 1,
-                                                                                       "dpe_compute": 10}; n += 1
+    assert q2.events["acam_done"] == q1.events["drain_end"] + 2 == 19; n += 1
+    assert kinds(q2.events["drain_end"]) == kinds(p2.events["drain_end"]); n += 1
     return n
 
 
@@ -189,8 +184,8 @@ def fcKinds(K, N, R, C, availableAt=0) -> tuple:
     rep = run(g)
     V, H = ceilDiv(K, R), ceilDiv(N, C)
     rows, cols = (K if V == 1 else R), (N if H == 1 else C)
-    want = {"origin": availableAt, "dpe_load": ceilDiv(8 * rows, 40), "dpe_compute": 9, "dpe_drain": 1,
-            "logic": (max(0, (V - 1).bit_length()) if V > 1 else 0) + 1, "stream": ceilDiv(cols, 5)}
+    want = {"origin": availableAt, "dpe_load": 1, "dpe_compute": 8, "dpe_drain": 1,
+            "logic": (max(0, (V - 1).bit_length()) if V > 1 else 0) + 1, "stream": 8}     # the 8 output planes
     return rep, kinds(rep.cycles), want
 
 
@@ -254,16 +249,17 @@ def headCheck(nseq, dm, d, R, C, orders=3) -> tuple:
 def testHead() -> int:
     n = 0
     T, bd, segs = headCheck(128, 128, 64, 128, 64)
-    assert T == 7752; n += 1
-    assert segs[0] == (("x0", "origin"), 1) and segs[1] == (("gemm", "dpe_load"), 26) and \
-        segs[2] == (("gemm", "dpe_compute"), 8), segs[:3]; n += 1
+    assert T == 3818; n += 1
+    # the first token's pass: its burst, then the 8 planes fired, the ACAM and the ready (9) before the next burst
+    assert segs[0] == (("x0", "origin"), 1) and segs[1] == (("gemm", "dpe_load"), 1) and \
+        segs[2] == (("gemm", "dpe_compute"), 9), segs[:3]; n += 1
     byKind = {}
     for (_, kind), c in bd.items():
         byKind[kind] = byKind.get(kind, 0) + c
-    assert byKind["dpe_load"] >= 128 * 26 and byKind["dpe_compute"] >= 128 * 8, byKind   # every token's projection
+    assert byKind["dpe_load"] >= 128 and byKind["dpe_compute"] >= 128 * 9, byKind   # every token's projection
     n += 1
     T2, bd2, segs2 = headCheck(256, 768, 64, 128, 64, orders=1)              # two runs, V = 6
-    assert T2 == 24395 and sum(bd2.values()) == T2; n += 1
+    assert T2 == 12481 and sum(bd2.values()) == T2; n += 1
     return n
 
 

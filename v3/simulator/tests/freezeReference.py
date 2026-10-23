@@ -2,16 +2,16 @@
 """freezeReference.py — freeze the simulator's outputs as the reference of checkEquivalence.py.
 
 The first reference (work/equivalence/ref/, git 816807b) was frozen from the old simulator to prove the refactor equal;
-it is kept. A rule change makes the model differ from it by design: the drain of 2026-10-18 (every pass drains all C
-columns; the RTL still stops after COLS_USED). This script freezes the current model into a new folder in the same
+it is kept. A rule change makes the model differ from it by design: the drain of 2026-10-18 (ref_2026-10-18), then the
+bit-plane pass of 2026-10-22 (ref_2026-10-22). This script freezes the current model into a new folder in the same
 format, so the gate goes on catching unintended changes:
 
   reports/fc_<R>x<C>_<M>_<K>_<N>.json.gz    the 48 FC builds of the DSE, timing-only (checkEquivalence.newReportDict)
   reports/att_<shape>_<R>x<C>.json.gz      the 72 attention builds (+ head_params, ctrl_t_s, ctrl_done)
   rows/fc_rows.csv, rows/att_rows.csv      the DSE rows (simulator/platform/rows.py; the FC rows with v2's VTR table,
-                                           the attention rows without VTR)
+                                           the attention rows without VTR), with the tile rule TILE_RULE
   corpus/<name>/                           the corpora of checkEquivalence.GENERATORS
-  manifest.json                            commit (+dirty), python, numpy, the sha256 of every file
+  manifest.json                            commit (+dirty), python, numpy, the tile rule, the sha256 of every file
 
 Usage: python3 v3/simulator/tests/freezeReference.py OUT_DIR [--jobs 8]     (OUT_DIR must not exist)
        then point checkEquivalence.py --ref at it (its default names the current reference)
@@ -45,6 +45,8 @@ from simulator.models.fc import fc  # noqa: E402
 from simulator.platform import area  # noqa: E402
 from simulator.platform.platform import Platform  # noqa: E402
 from simulator.platform.rows import attentionRow, fcRow  # noqa: E402
+
+TILE_RULE = "row_parallel"     # the crossbar tile of the rows (area.footprint; until 2026-10-22 "legacy")
 
 
 def dump(path: Path, obj: dict) -> None:
@@ -101,10 +103,11 @@ def main() -> int:
     # rows
     vtr = area.vtrTable(ce.REF / "vtr_results.csv")
     writeRows(out / "rows" / "fc_rows.csv",
-              [fcRow(R, C, shape, Platform("nl_dpe", rows=R, cols=C), vtr, passExtent=FC_PASS_EXTENT)
-               for R, C in CONFIGS for shape in FC_SHAPES])
+              [fcRow(R, C, shape, Platform("nl_dpe", rows=R, cols=C), vtr, passExtent=FC_PASS_EXTENT,
+                     tileRule=TILE_RULE) for R, C in CONFIGS for shape in FC_SHAPES])
     writeRows(out / "rows" / "att_rows.csv",
-              [attentionRow(name, nseq, dm, d, R, C) for name, nseq, dm, d in SHAPES for R, C in CONFIGS])
+              [attentionRow(name, nseq, dm, d, R, C, tileRule=TILE_RULE) for name, nseq, dm, d in SHAPES
+               for R, C in CONFIGS])
     # corpora, by the same generators the gate runs
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
         results = list(pool.map(lambda name: ce.regenerate(name, out, logDir), list(ce.GENERATORS)))
@@ -120,7 +123,7 @@ def main() -> int:
     dirty = subprocess.run(["git", "status", "--porcelain", "--", "v3"], cwd=REPO, capture_output=True,
                            text=True).stdout.strip() != ""
     manifest = dict(commit=commit + ("+dirty" if dirty else ""), python=pyplatform.python_version(),
-                    numpy=np.__version__, reports=n, seconds=round(time.time() - t0, 1),
+                    numpy=np.__version__, tile_rule=TILE_RULE, reports=n, seconds=round(time.time() - t0, 1),
                     generated=time.strftime("%Y-%m-%d %H:%M"), files=files, n_files=len(files))
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     print(f"freezeReference: {n} reports, 2 row tables, {len(ce.GENERATORS)} corpora, {len(files)} files -> {out} "

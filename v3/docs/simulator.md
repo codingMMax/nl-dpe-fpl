@@ -81,6 +81,8 @@ that changes on purpose updates the module's closed-form test in the same step.
 - Cycle 0 is the cycle `start` is high, as in the testbenches.
 - A word's time is the cycle it is valid at its producer's output port.
 - A window's time is the time of its first word. Word $c$ of the window is at time $+\,c$ (W1: windows are gapless).
+  Since 2026-10-22 every data port is plane-framed (`architecture.md` §3.1): a window is 8 plane words, word $b$ =
+  bit $b$ of every element, so a window takes 8 cycles whatever its size.
 - A credit's time is the cycle the consumer's pulse is high.
 - Every latency between a producer's output and a consumer's decision is a named constant of the module that has it
   (for example a registered hand-off). Nothing is implicit.
@@ -101,7 +103,7 @@ that changes on purpose updates the module's closed-form test in the same step.
 |---|---|---|
 | `Window` | `port`, `ch`, `unit`, `w`, `t`, `vals` | window `w` of unit `unit` on channel `ch`, first word at cycle `t`; `vals` = numpy array of its $W$ elements (`None` in timing-only mode) |
 | `Credit` | `port`, `unit`, `t` | the consumer freed the buffer of `unit` at cycle `t` |
-| `PortSpec` | `name`, `dir`, `discipline`, `E`, `Q`, `W`, `L`, `unit`, `CAP` | a port of `architecture.md` §3.1–§3.3; `discipline` ∈ {push + credit, burst on ready, push, pulse}; a pulse port is a one-bit wire with one pulse per unit (a credit, `x_rdy`, `run_done`) and carries no windows |
+| `PortSpec` | `name`, `dir`, `discipline`, `E`, `Q`, `W`, `L`, `unit`, `CAP`, `planes` | a port of `architecture.md` §3.1–§3.3; `discipline` ∈ {push + credit, burst on ready, push, pulse}; a pulse port is a one-bit wire with one pulse per unit (a credit, `x_rdy`, `run_done`) and carries no windows. `planes` = 8: plane framing (`planePort`; `words` = 8, `lanes` = $\lceil E/8 \rceil$); 0: element framing ($\lceil W/Q \rceil$ words: the job ports). `planeWords(values, E, W)` encodes a window for the testbench files |
 | `Step` | `process`, `unit`, `t_decide`, `t_start`, `t_done`, named events | one job: the times the testbench also logs |
 | `Counts` | passes per (mode, rows, cols); CLB adds, compares, selects; memory reads and writes in bytes; FIFO words | the energy ledger, per module |
 | `Resources` | crossbars per mode and extent; memories (words × bits, count) | per module |
@@ -163,34 +165,33 @@ plain comparison.
  platform:   configs, prices (energy), area model (crossbars exact + CLB / memory fitted from VTR)  ->  dse/
 ```
 
-### 4.2 The crossbar primitive (`Xbar`, `XbarGroup`)
+### 4.2 The crossbar primitive (`Crossbar`, `CrossbarGroup`)
 
-`Xbar` models one `dpe`. Its configuration: `R, C, BUF, P`, the weights (or identity), the output-stage mode and the
-extent (rows, columns; `architecture.md` §1). On NL-DPE the output stage is the ACAM, with the modes REGULAR, EXP and
-LOG; a mode the platform's output stage does not have is rejected. One call, `pass_(x, t_ready)`, does all of this:
+`Crossbar` models one `dpe` (`simulator/core/crossbar.py`; the charter is `ip/xbar/spec.md`). Its configuration:
+`R, C, P`, the weights (or identity), the output-stage mode and the extent (rows, columns; `architecture.md` §1). On
+NL-DPE the output stage is the ACAM, with the modes REGULAR, EXP and LOG; a mode the platform's output stage does not
+have is rejected. One call, `run(x, tReady)`, does all of this:
 - **Values:** an int8 MAC to int32, then the ACAM form of the mode ($\mathrm{trunc8}$, $\mathrm{EXP}$ or
   $\mathrm{LOG}$). This is the certified integer math (`nldpe_ref`).
-- **Timing:** the certified pass grammar (`pass_engine.schedule_pass_sequence`), one pass at a time, on the
-  crossbar's own state:
+- **Timing:** the bit-plane pass rule (user, 2026-10-21/22), one pass at a time, on the crossbar's own state:
 
   ```text
-  load_start    = max(t_ready, msb_fire_prev + 1)
-  compute_start = max(load_start + LOAD, acc_free)          LOAD   = ceil(8 rows / BUF)
+  load_start    = max(t_ready, acam_prev + RDY_LAT)          a burst of P planes, LSB first, one per cycle
+  compute_start = load_start + FIRE_LAT                      each plane fires the cycle after it arrives
   msb_fire      = compute_start + P - 1
-  acam_done     = max(msb_fire + 2, out_free)
-  drain_start   = acam_done + 1                             OUTPUT = ceil(8 C / BUF): the drain walks every column
-                                                            (user 2026-10-18; the RTL still stops after the columns
-                                                            in use, so the model is not RTL-pinned where cols < C)
-  drain_end     = acam_done + OUTPUT
-  state:  msb_fire_prev = msb_fire;  acc_free = acam_done + 1;  out_free = drain_end + 1
+  acam_done     = max(msb_fire + ACAM_LAT, out_free)         out_free = drain_end_prev + 1: never binds
+  drain_start   = acam_done + DRAIN_LAT                      P drain planes of C bits
+  drain_end     = acam_done + P
   ```
 
-  `BUF` (the port width in bits) and `P` come from the platform. On NL-DPE, `BUF` = 40, i.e. 5 bytes per cycle, and
-  `P` = 8.
+  So a pass alone takes $2P + 2$ = 18 cycles and back-to-back passes start every $P + 2$ = 10, on every array and at
+  any extent: the extent sets the values and the energy only. `P` comes from the platform (8 on NL-DPE). Until
+  2026-10-22 the crossbar had a 40-bit port each way: LOAD $= \lceil 8\,rows/40 \rceil$ and OUTPUT
+  $= \lceil 8C/40 \rceil$ words, the certified pass grammar of `pass_engine`.
 
 - **Result:** the output window (values, time `drain_start`) and the pass events, plus one pass added to the counts.
 
-`XbarGroup(n)` models $n$ crossbars run in lock-step from one leader, as the RTL does: a DIMM wave, an accumulator
+`CrossbarGroup(n)` models $n$ crossbars run in lock-step from one leader, as the RTL does: a DIMM wave, an accumulator
 group, a GEMM's tiles. It has one timing state and the values of all $n$ crossbars computed in one numpy operation.
 The DIMM's slices are lock-step by design (`architecture.md` §4.4), so the model runs one timing state for the whole
 farm. The slices appear only in the resources.
@@ -203,31 +204,31 @@ farm. The slices appear only in the resources.
 | `Delay(k)` | unchanged | $+k$ |
 | `Tree(levels)` | exact integer sum of the inputs | $+$ levels (registered) |
 | `Map(fn, k)` | `fn` per element: narrowing, sign, clamp, compaction | $+k$ |
-| `Serial()` | — | one unit at a time: a unit ready at $t$, busy $n$ cycles, starts at $\max(t$, the end of the previous unit$)$ (a word writer, a reader, a packer's output) |
+| `Serial()` | — | one unit at a time: a unit ready at $t$, busy $n$ cycles, starts at $\max(t$, the end of the previous unit$)$ (a word writer, a reader) |
 | `Buffer(entries)` | — | entries in rotation: unit $u$ may enter only after unit $u -$ `entries` released its entry; an early unit is a producer overrun (an error) |
-| `Repack(sizes, width, lat)` | — | a byte stream re-cut into words: output word $k$ leaves `lat` after the read of the input word holding its last byte, one per cycle |
 | `Fifo(depth)` | unchanged | a word is read at $\max$(its write time + 1, the reader's decision) |
 | `Memory(slots)` | the words of each slot | a slot is valid at its last write + 1; a read returns one cycle after its address |
 
 The $k$ of each use is a named constant of its module (I5); a plain fixed latency is just $t +$ `NAME_LAT` in the
 module. Stages never connect two modules: modules meet only at their ports (`architecture.md` §1). A module model is
 the wiring of its spec's blocks: each block is one stage or crossbar object, created once, and each step calls them in
-order (for example `simulator/models/dimmTile.py`: converters, writers, staging buffers, slots, the farm).
+order (for example `simulator/models/dimmTile.py`: converters, writers, staging buffers, slots, the farm). `Repack`,
+the softmax's 5-byte packer, was dropped with the bit-plane pass (2026-10-22).
 
 ### 4.4 Module models
 
 | module | processes (one step = ) | what a step computes | built from | must reproduce |
 |---|---|---|---|---|
-| GEMM `gemm_top` | rows (one row) | the $V \times H$ tiles as an `XbarGroup` (REGULAR); byte tree; $\mathrm{trunc8}$; output words timed by the pass grammar plus the tree and serializer stages | v2 `gemm_sim` (values), the `gemm_top` structure | `gemm_sim.cycle_model`; the 48 FC snapshot rows |
-| tiled DIMM `dimm_tile_top` | A loader (one input row or window), B loader (one input row), tile (one job) | loaders: LOG converters (`Xbar`, LOG), distribution, staging, slot writes. Tile: the decision; the start latency; per wave one `XbarGroup` pass of the farm on $\mathrm{EXP}(\mathrm{trunc8}(L_A + L_B))$; signs; the tree; narrowing; the output windows | v2 `dimm_tile_sim` (values and its RTL-pinned rules) | `dimm_tile_sim.tile_cycle_model` for back-to-back jobs |
-| online softmax `softmax_online_top` | input stage (one tile), block (one key block), run end (one run) | FIFOs and packer; store; row max; per EXP lane the feed and its passes; row sums; the carry passes; $\log\alpha$ events; the $\log l$ copy | v2 `softmax_online_sim` | `softmax_online_cycle_model` with every score available at start |
-| accumulator `softmax_online_acc` | block (one tile: its rescale and LOG jobs, wave by wave), run end (one run: the epilogue jobs, the O reader) | the LOG and EXP groups (an `XbarGroup` each) under the job rules; the O reader (`Serial`); the $O_8$ rows | v2 `ocarry_sim` | `ocarry_cycle_model` fed v2's station inputs |
+| GEMM `gemm_top` | rows (one row) | the $V \times H$ tiles as a `CrossbarGroup` (REGULAR); the bit-serial mod-256 tree; output planes timed by the pass rule plus the tree and output register | v2 `gemm_sim` (values), the `gemm_top` structure | `ip/gemm/spec.md`'s closed form ($10M + 8 + L_W$); the 48 FC snapshot rows (energy, area) |
+| tiled DIMM `dimm_tile_top` | A loader (one input row or window), B loader (one input row), tile (one job) | loaders: LOG converters (`Crossbar`, LOG), distribution, staging, slot writes. Tile: the decision; the start latency; per wave one `CrossbarGroup` pass of the farm on $\mathrm{EXP}(\mathrm{trunc8}(L_A + L_B))$; signs; the per-plane trees and the root; narrowing; the output planes | v2 `dimm_tile_sim` (values) | `ip/dimm/spec.md` §5's closed form for back-to-back jobs |
+| online softmax `softmax_online_top` | input stage (one tile), block (one key block), run end (one run) | FIFOs and the corner-turn; store; row max; per EXP lane the feed and its bursts; row sums; the carry passes; the $\log\alpha$ window; the $\log l$ window | v2 `softmax_online_sim` (values) | `ip/softmax/spec.md` §5's core recurrence |
+| accumulator `softmax_online_acc` | block (one tile: its rescale and LOG jobs, wave by wave), run end (one run: the epilogue jobs) | the LOG and EXP groups (a `CrossbarGroup` each) under the job rules; the E9 windows | v2 `ocarry_sim` (values) | `acc_spec.md` §5's job rules |
 | controller `att_ctrl` | admission (one token), job lists (one job), runs (one run) | the rules of `architecture.md` §4.7 | new | — |
 | source, sink | X source (one burst on `x_rdy`), $O_8$ sink (takes every word) | the head's environment | new | — |
 
-Each model starts from the certified v2 kernel named in the table: its values, and its RTL-pinned timing rules.
-"Must reproduce" means that, under the conditions the v2 closed form was pinned for, the behavior model gives the same
-cycles. Where the datapath is unchanged, this carries the v2 RTL co-verification over to the new model.
+Each model starts from the certified v2 kernel named in the table for its values. Until 2026-10-22 it also
+reproduced that kernel's RTL-pinned timing (the 40-bit pass). Since the bit-plane pass, "must reproduce" is the
+module spec's closed form, written by hand in the model's test; the RTL pass pins the latencies again by GATE 2.
 
 ### 4.5 Graphs and workloads
 
@@ -274,9 +275,10 @@ so any order gives the same values, times and counts. A test runs every workload
 ### 4.7 Platform: energy, area, Fmax
 
 - **Platform** (`simulator/platform/`; user, 2026-10-14). A platform is one crossbar type. Its config gives the crossbar's
-  `BUF`, `P` and output stage, the prices and the crossbar area. NL-DPE is the only platform implemented. The layer
-  stays open for a second type (Azure-Lily) later:
-  - no model hard-codes an NL-DPE value: `Xbar` reads `BUF`, `P` and its output stage from the platform, and prices
+  `P` and output stage, the prices and the crossbar area (the config's port width now enters only the prices: since
+  2026-10-22 the crossbar's timing has no `BUF`). NL-DPE is the only platform implemented. The layer stays open for a
+  second type (Azure-Lily) later:
+  - no model hard-codes an NL-DPE value: `Crossbar` reads `P` and its output stage from the platform, and prices
     and area come from the platform files;
   - the DIMM, the online softmax and its accumulator are built on EXP and LOG passes, so they are NL-DPE modules. An
     Azure-Lily head would be a different graph, with its own modules for those steps;
@@ -295,7 +297,10 @@ so any order gives the same values, times and counts. A test runs every workload
   and the DIMM counts one pairing add per product and one compare per narrowed output, as v2's attention ledger did
   (2026-10-15). CLB selects are counted but not priced, as in v2.
 - **Area:**
-  - crossbars are exact: count × the arch XML footprint;
+  - crossbars are exact: count × the tile footprint `area.footprint(R, C)`. Since 2026-10-22 this is the
+    row-parallel rule of `experiment.md` §5.1: the height from the pins, the width from the logic plus COFFE's local
+    crossbar; its constants are in `platform/nl_dpe_tile.json`. Until then it was the arch XML's tile, which the v2
+    regression tests keep as `rule="legacy"` (a frozen table, so it survives the XML swap);
   - memory blocks are predicted (`area.predicted_mem_blocks`, 2026-10-15): every module lists its memories (words ×
     bits), each takes its cheapest dual-port mode of the arch's 20 Kb block (1024 × 20 or 2048 × 10: ⌈bits / 20⌉
     blocks up to 1024 words), and copies that share every address and write enable (`Resources.mem_shared`: the

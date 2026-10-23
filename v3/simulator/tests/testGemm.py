@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""testGemm.py — gates of the `gemm_top` model (docs/simulator.md §4.4).
+"""testGemm.py — gates of the `gemm_top` model (ip/gemm/spec.md; docs/simulator.md §4.4).
 
-  corpus    the v2 GEMM corpora (default 16 cases, P29 144; GATE-2-certified on the RTL in v2), run through the FC
-            workload (source -> gemm_top -> sink): the output bytes and the wide probe S equal the expected files;
-            where the case drains every column, the run's cycles equal case.json and every row's events equal the v2
-            kernel `gemm_sim` timeline; where it drains fewer (COLS_USED < C), the model drains every column since
-            2026-10-18 (the RTL still stops), so the witness is `pass_engine`'s schedule at cols = C plus L_w and the
-            COLS_USED output words (fullDrainTimeline)
-  closed    back-to-back rows reproduce `gemm_sim.cycle_model` (both extents) over K, N, R, C, M where every column
-            is drained, fullDrainTimeline elsewhere
-  gated     rows offered late: each burst starts at max(offer, MSB_SA_Ready) and the events equal
-            `pass_engine.schedule_pass_sequence` + L_w
-  structure the model's parameters and port signals are the RTL's (ip/gemm/rtl/sim/gemm_top.v), derive() == the
-            RTL localparams, checkDomain() == the RTL extent guard
+  corpus    the v2 GEMM corpora (default 16 cases, P29 144; GATE-2-certified on the v2 RTL), run through the FC workload
+            (source -> gemm_top -> sink): the output bytes and the wide probe S equal the expected files; every row's
+            events and the run's cycles equal the spec's closed form (below); the pass counts carry the extent
+  closed    the spec's closed form, written here by hand (ip/gemm/spec.md §5): row m's burst at
+            max(offer_m, burst_{m-1} + P + 2); its crossbar events at the charter's offsets; its output window at
+            drain_start + L_W, L_W = clog2(V) + 1 (V > 1) or 1; M rows back to back take (P + 2) M + P + L_W cycles
+  gated     rows offered late: each burst at max(offer, MSB_SA_Ready), the same closed form
+  structure the model's parameters and port signals are the RTL's (ip/gemm/rtl/sim/gemm_top.v; BUF leaves the RTL in
+            the RTL pass), derive() == the spec's localparams, checkDomain() == the RTL extent guard
   timing    values off: identical events, steps and counts (I4); random step order: identical Report
   mutants   a latency + 1, a dropped MSB_SA_Ready credit, a wrong extent: each must fail a check
 Run: python3 v3/simulator/tests/testGemm.py
@@ -26,9 +23,6 @@ import numpy as np
 
 V3 = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(V3))
-sys.path.insert(0, str(V3 / "oracle" / "v2_kernels"))    # test references only
-import gemm_sim  # noqa: E402
-import pass_engine  # noqa: E402
 
 import simulator.models.gemm as gemm  # noqa: E402
 from simulator.core.engine import run  # noqa: E402
@@ -38,15 +32,31 @@ from simulator.tests import corpus  # noqa: E402
 from simulator.models.fc import fc, result  # noqa: E402
 from tools.check_twins import header, modules  # noqa: E402
 
-EVENTS = ("load_start", "load_end", "compute_start", "msb_fire", "shift_acc_done", "acam_done", "drain_start",
-          "drain_end", "array_drain_start", "array_drain_end", "done")
+P = 8
+PENDING_RTL_PARAMS = {"BUF"}           # parameters the RTL still has until the RTL pass (ip/gemm/spec.md §2)
+
+
+def rowEvents(burst: int, V: int, P: int = P) -> dict:
+    """ip/gemm/spec.md §5, from the charter's offsets (ip/xbar/spec.md §4): written here, not read from the model."""
+    lw = ((V - 1).bit_length() if V > 1 else 0) + 1               # clog2(V) registered levels + the output register
+    out = burst + P + 2 + lw
+    return dict(load_start=burst, load_end=burst + P - 1, compute_start=burst + 1, msb_fire=burst + P,
+                acam_done=burst + P + 1, drain_start=burst + P + 2, drain_end=burst + 2 * P + 1,
+                array_drain_start=out, array_drain_end=out + P - 1, done=out + P)
+
+
+def bursts(offers: list, P: int = P) -> list:
+    out = []
+    for t in offers:
+        out.append(max(t, 0) if not out else max(t, out[-1] + P + 2))
+    return out
 
 
 def loadCase(d: Path, cj: dict) -> tuple:
     M, K, N, R, C, V, H, ru = cj["M"], cj["K"], cj["N"], cj["R"], cj["C"], cj["V"], cj["H"], cj["rows_used"]
     w = corpus.readWords(d / "weights.mem").astype(np.uint8).view(np.int8).reshape(V, H, R, C)
     Wp = w.transpose(0, 2, 1, 3).reshape(V * R, H * C)
-    loadCycles = -(-ru * 8 // cj["BUF"])
+    loadCycles = -(-ru * 8 // cj["BUF"])                          # the v2 stimuli are 40-bit words: only data here
     words = corpus.readWords(d / "act.mem").reshape(M, V, loadCycles)
     Xp = np.zeros((M, V * R), dtype=np.int8)
     for m in range(M):
@@ -55,9 +65,15 @@ def loadCase(d: Path, cj: dict) -> tuple:
     return Wp[:K, :N].copy(), Xp[:, :K].copy()
 
 
+def extentOf(K: int, N: int, R: int, C: int, passExtent: str) -> tuple:
+    """(ROWS_USED, COLS_USED) of gemm_top at an extent, as fc.extent derives them."""
+    V, H = -(-K // R), -(-N // C)
+    return ((K if V == 1 else R), (N if H == 1 else C)) if passExtent == "used" else (R, C)
+
+
 def checkCase(d: Path, cj: dict, extentOverride=None) -> list:
     W, X = loadCase(d, cj)
-    M, K, N, R, C, H = cj["M"], cj["K"], cj["N"], cj["R"], cj["C"], cj["H"]
+    M, K, N, R, C, H, V = cj["M"], cj["K"], cj["N"], cj["R"], cj["C"], cj["H"], cj["V"]
     ext = cj["pass_extent"] if extentOverride is None else extentOverride
     g = fc(K, N, R, C, M=M, W=W, X=X, passExtent=ext)
     rep = run(g)
@@ -70,54 +86,17 @@ def checkCase(d: Path, cj: dict, extentOverride=None) -> list:
     S = np.stack([s[:N] for s in model.math.probeS])                    # lane h = columns h*C ..; padding past N
     if not np.array_equal(S, np.load(d / "expected_psum.npz")["S"]):
         problems.append("S probe")
-    V = cj["V"]
     ru, cu = extentOf(K, N, R, C, cj["pass_extent"])
-    if cu == C:
-        # the case drains every column: the kernel's timeline is the witness (GATE 2 on the RTL in v2)
-        if rep.cycles != cj["used_cycles"]:
-            problems.append(f"cycles {rep.cycles} != {cj['used_cycles']}")
-        ref = gemm_sim.NldpeGemm(M, K, N, R, C, cj["BUF"], cj["P"], pass_extent=cj["pass_extent"])
-        ref.program_weights(W)
-        timeline = ref.run(X).timeline
-        for m, (s, t) in enumerate(zip(rep.steps["gemm"], timeline)):
-            bad = [e for e in EVENTS if s.events[e] != getattr(t, e)]
-            if bad:
-                problems.append(f"row {m} events {bad}")
-                break
-        return problems
-    # the case drains fewer columns than C: since 2026-10-18 the model drains every column (the RTL still stops after
-    # COLS_USED), so the witness is the crossbar pass schedule at cols = C plus the tree and serializer latencies, and
-    # the output window keeps its COLS_USED bytes
-    want = fullDrainTimeline(M, R, C, cj["BUF"], cj["P"], ru, cu, V)
+    if dict(rep.counts["gemm"].passes) != {("REGULAR", ru, cu): M * V * H}:
+        problems.append(f"passes {dict(rep.counts['gemm'].passes)}")
+    want = [rowEvents(b, V) for b in bursts([0] * M)]
     for m, (s, w) in enumerate(zip(rep.steps["gemm"], want)):
-        bad = [e for e in w if s.events[e] != w[e]]
-        if bad:
-            problems.append(f"row {m} events {bad}")
+        if s.events != w:
+            problems.append(f"row {m} events {s.events} != {w}")
             break
     if rep.cycles != want[-1]["done"]:
         problems.append(f"cycles {rep.cycles} != {want[-1]['done']}")
     return problems
-
-
-def extentOf(K: int, N: int, R: int, C: int, passExtent: str) -> tuple:
-    """(ROWS_USED, COLS_USED) of gemm_top at an extent, as fc.extent derives them."""
-    V, H = -(-K // R), -(-N // C)
-    return ((K if V == 1 else R), (N if H == 1 else C)) if passExtent == "used" else (R, C)
-
-
-def fullDrainTimeline(M: int, R: int, C: int, BUF: int, P: int, ru: int, cu: int, V: int, offers=None) -> list:
-    """Row events of gemm_top with the drain over every column: pass_engine's schedule (load at ru rows, drain at C
-    columns), the first output word L_w later, COLS_USED bytes through the serializer, done after the last word.
-    L_w = TREE_PIPE + 1 is the charter's (gemm.md §5.2), written here and not read from the model, so a latency mutant
-    in the model is caught."""
-    lw = (V - 1).bit_length() + 1                     # clog2(V) registered tree levels + the serializer register
-    nWords = -(-cu // (BUF // 8))
-    out = []
-    for w in pass_engine.schedule_pass_sequence(offers if offers is not None else [0] * M, R, C, BUF, P, rows=ru,
-                                                cols=C):
-        t0 = w["drain_start"] + lw
-        out.append(dict(w, array_drain_start=t0, array_drain_end=t0 + nWords - 1, done=t0 + nWords))
-    return out
 
 
 def testCorpus(names=("gemm", "gemm_p29")) -> int:
@@ -138,18 +117,11 @@ def testClosed() -> int:
                 for ext in ("full", "used"):
                     for M in (1, 2, 5):
                         rep = run(fc(K, N, R, C, M=M, passExtent=ext, withValues=False))
-                        ru, cu = extentOf(K, N, R, C, ext)
-                        if cu == C:                                  # every column drained: the kernel's closed form
-                            cm = gemm_sim.cycle_model(M, K, N, R, C, pass_extent=ext)
-                            total, steady = cm.total, cm.t_steady
-                        else:                                        # fewer columns in use: the schedule at cols = C
-                            want = fullDrainTimeline(M, R, C, 40, 8, ru, cu, -(-K // R))
-                            total = want[-1]["done"]
-                            steady = want[1]["done"] - want[0]["done"] if M > 1 else None
-                        assert rep.cycles == total, (K, N, R, C, ext, M, rep.cycles, total)
-                        if M > 1:
-                            steps = rep.steps["gemm"]
-                            assert steps[1].tDone - steps[0].tDone == steady
+                        V = -(-K // R)
+                        want = [rowEvents(b, V) for b in bursts([0] * M)]
+                        assert [s.events for s in rep.steps["gemm"]] == want, (K, N, R, C, ext, M)
+                        lw = ((V - 1).bit_length() if V > 1 else 0) + 1
+                        assert rep.cycles == (P + 2) * M + P + lw, (K, N, R, C, ext, M, rep.cycles)
                         n += 1
     return n
 
@@ -161,13 +133,8 @@ def testGated(rng) -> int:
             M = int(rng.integers(1, 7))
             offers = sorted(int(t) for t in rng.integers(0, 500, size=M))
             rep = run(fc(K, N, R, C, M=M, passExtent="used", withValues=False, availableAt=offers))
-            V, H = -(-K // R), -(-N // C)
-            ru, cu = (K if V == 1 else R), (N if H == 1 else C)
-            want = pass_engine.schedule_pass_sequence(offers, R, C, 40, 8, rows=ru, cols=C)   # every column drained
-            lw = (gemm.clog2(V) if V > 1 else 0) + gemm.SER_LAT
-            for s, w in zip(rep.steps["gemm"], want):
-                assert s.events["load_start"] == w["load_start"] and s.events["drain_end"] == w["drain_end"]
-                assert s.events["array_drain_start"] == w["drain_start"] + lw
+            V = -(-K // R)
+            assert [s.events for s in rep.steps["gemm"]] == [rowEvents(b, V) for b in bursts(offers)], (K, N, offers)
             n += 1
     return n
 
@@ -175,26 +142,27 @@ def testGated(rng) -> int:
 def testStructure() -> None:
     text = (V3 / "ip" / "gemm" / "rtl" / "sim" / "gemm_top.v").read_text()
     params, ports = header(modules(text)["gemm_top"])
-    assert [p for p, _ in params] == GemmTop.paramNames(), (params, GemmTop.paramNames())
+    rtl = [p for p, _ in params]
+    assert set(rtl) - set(GemmTop.paramNames()) <= PENDING_RTL_PARAMS, (rtl, GemmTop.paramNames())
+    assert [p for p in rtl if p not in PENDING_RTL_PARAMS] == GemmTop.paramNames(), (rtl, GemmTop.paramNames())
     names = {p[3] for p in ports}
     model = GemmTop("g", GemmParams(K=600, N=300, R=256, C=128), rows=0, withValues=False)
     signals = {s for spec in model.ports().values() for s in spec.signals}
-    # not in the port contract: clock, reset, the weight strobes, and reg_full (a busy flag one cycle behind the words;
-    # out_valid is the word valid)
+    # not in the port contract: clock, reset, the weight strobes, and reg_full (a busy flag; out_valid is the word valid)
     assert signals <= names and names - signals == {"clk", "reset", "weight_in", "weight_en", "reg_full"}, (signals, names)
-    # derive() == the RTL localparams at a set of builds (V, H, EPS, TREE_PIPE, NTILES)
+    # derive() == the spec's localparams at a set of builds (V, H, TREE_PIPE, NTILES, L_W)
     for K, R in [(1, 64), (64, 64), (65, 64), (300, 64), (1024, 128), (2048, 128), (513, 256)]:
         d = GemmTop.derive(GemmParams(K=K, N=70, R=R, C=64))
         V = (K + R - 1) // R
         tree = 0 if V <= 1 else max(1, int(np.ceil(np.log2(V))))
-        assert (d.V, d.H, d.EPS, d.TREE_PIPE, d.NTILES) == (V, 2, 5, tree, 2 * V), (K, R, d)
+        assert (d.V, d.H, d.TREE_PIPE, d.NTILES, d.L_W) == (V, 2, tree, 2 * V, tree + 1), (K, R, d)
     # checkDomain() == the RTL extent guard (gemm_top.v g_bad_extent)
     ok = [dict(K=64, N=64, R=64, C=64), dict(K=17, N=9, R=64, C=64, ROWS_USED=17, COLS_USED=9),
           dict(K=17, N=9, R=64, C=64, ROWS_USED=40, COLS_USED=64), dict(K=300, N=9, R=64, C=64, COLS_USED=9)]
     bad = [dict(K=17, N=9, R=64, C=64, ROWS_USED=16), dict(K=300, N=9, R=64, C=64, ROWS_USED=60),
            dict(K=17, N=90, R=64, C=64, COLS_USED=40), dict(K=17, N=9, R=64, C=64, COLS_USED=8),
            dict(K=17, N=9, R=64, C=64, ROWS_USED=65), dict(K=17, N=9, R=64, C=64, COLS_USED=0),
-           dict(K=0, N=9, R=64, C=64)]
+           dict(K=0, N=9, R=64, C=64), dict(K=17, N=9, R=64, C=64, P=0)]
     for p in ok:
         GemmTop.checkDomain(GemmParams(**p))
     for p in bad:
@@ -231,7 +199,7 @@ def testMutants() -> int:
         caught += any(checkCase(dd, cj) for dd, cj in selected)                   # a latency + 1
     finally:
         gemm.SER_LAT = old
-    caught += any(checkCase(dd, cj, extentOverride="full") for dd, cj in selected)   # a wrong extent
+    caught += any(checkCase(dd, cj, extentOverride="full") for dd, cj in selected)   # a wrong extent (the counts)
     original = GemmTop.stepRow
 
     def noCredit(self, row, io):                                                  # a dropped MSB_SA_Ready credit
@@ -250,11 +218,11 @@ def testMutants() -> int:
 
 def main() -> int:
     rng = np.random.default_rng(20261014)
-    print(f"  corpus    PASS  {testCorpus()} cases (bytes, S probe, cycles, every row event == gemm_sim)")
-    print(f"  closed    PASS  {testClosed()} points == gemm_sim.cycle_model (both extents)")
-    print(f"  gated     PASS  {testGated(rng)} late-offer sequences == pass_engine + L_w")
+    print(f"  corpus    PASS  {testCorpus()} cases (bytes, S probe, passes; every row event == the closed form)")
+    print(f"  closed    PASS  {testClosed()} points == the closed form, (P + 2) M + P + L_W cycles")
+    print(f"  gated     PASS  {testGated(rng)} late-offer sequences == the closed form")
     testStructure()
-    print("  structure PASS  (parameters, port signals, derive, checkDomain == the RTL)")
+    print("  structure PASS  (parameters, port signals, derive, checkDomain == the RTL / the spec)")
     testTimingAndOrder(rng)
     print("  timing    PASS  (values off: same events, steps, counts; 5 random step orders: same Report)")
     print(f"  mutants   PASS  {testMutants()}/3 caught")
