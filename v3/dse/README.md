@@ -12,7 +12,7 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 | step | script | reads | writes |
 |---|---|---|---|
 | — | `space.py` | — | the 6 attention shapes and the 12 crossbar configs, defined once; imported by every script |
-| 0 | `vtr_dse.py` (hours; on your go only; not part of `run_all.sh`) | the 72 builds' circuits from the VTR twins (`top/`, `ip/*/rtl/vtr`), `vtr/arch/`, `vtr/run_vtr.py`, `vtr/smoke.py`, VTR | the run folders `work/vtr/dse/<build>_<hash>/` and `results/attn_vtr_results.csv`: per build Fmax per seed and the mean, CLB, memory, crossbars, I/O, DSP, the elaboration check. `--aggregate` rebuilds the CSV from the folders with no tool; `--self-test` runs it on fake tools; `dse_watch.py --pid PID` reports on a running driver. The FC table `results/fc_vtr_results.csv` is v2's run (below), not regenerated |
+| 0 | `vtr_dse.py` (hours; on your go only; not part of `run_all.sh`) | the 90 builds' circuits from the VTR twins (`top/`, `ip/*/rtl/vtr`), `vtr/arch/`, `vtr/run_vtr.py`, `vtr/smoke.py`, VTR | the run folders `work/vtr/dse/<build>_<hash>/` and `results/attn_vtr_results.csv`: per build Fmax per seed and the mean, CLB, memory, crossbars, I/O, DSP, the elaboration check. `--aggregate` rebuilds the CSV from the folders with no tool; `--self-test` runs it on fake tools; `dse_watch.py --pid PID` reports on a running driver. The FC table `results/fc_vtr_results.csv` is v2's run (below), not regenerated |
 | 1 | `fc_rows.py OUT.csv --vtr results/fc_vtr_results.csv` | the simulator (one GEMV per row, `simulator/platform/rows.py fcRow`; `space.py FC_SHAPES` × `CONFIGS`), the FC VTR table | `results/fc_priced_results.csv`: per row the cycles, the pass count, the energy per term, the crossbars, and with VTR the area, latency and EDAP |
 | 1 | `attn_rows.py OUT.csv --vtr results/attn_vtr_results.csv` | the simulator (one head per build, `attentionRow`), the attention VTR table | `results/attn_priced_results.csv`: the same per build, plus the energy per role and the memory inventory |
 | 1b | `check_energy.py` (4 s; part of `run_all.sh`) | both priced tables, the simulator's ledger of each row, the raw price table `simulator/platform/nl_dpe.json` | nothing: it prices every row from the ledger with the energy rule restated from the raw table (not from `prices.py`), compares the energy terms, the pass counts and the attention role columns with the row, and tries the pass price at its boundaries; exit 1 on any difference |
@@ -29,8 +29,6 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 | — | `pipelines.py` | the simulator (timing only, run with every crossbar's passes recorded: the projection tiles, the LOG converters of the DIMM ports, the QKᵀ and PV EXP crossbars, the softmax's EXP and carry crossbars, the accumulator's EXP and LOG groups) for `space.py CASE_STUDY` at `stage_analysis.py DIAGRAMS` | `results/stages/pipelines.json` and `results/stages/pipelines.html`, the page for sharing "Crossbar pipelines": each pass in its three stages (load through the pre-bit-plane port, compute 8 bit-slices + 2, read-out over all C columns); per operation an animated board of the crossbar pipeline (input port and buffer, array with its 8 bit-slices, output buffer and port; which pass sits where, every pass the crossbars hold) for both arrays on one clock, over the pipeline diagram (one row per pass) with a cursor; the full head around one key block (the middle block of the last run, its passes in colour, its neighbours faint, with a status line); the core-start windows; the stage-length table. The board's state rule is written twice, in the page script and in `unitState`; `--self-test` drives the page in headless Chrome and compares every board text and status line with the Python rule, checks the layout at the sampled cycles, and plants a rule fault and two layout faults; plus the pass grammar on every pass, the lock-step groups, the pass counts, the paces, run starts and block overlaps the page quotes; `--shot` writes screenshots to `work/tmp/flowcheck/` |
 | 4 | `plot_dse.py` (matplotlib: the miniconda Python) | the JSONs | `results/adp/dse_la_fc.png`, `dse_la_attention.png`: (a) the Pareto front, (b) the area split, (c) the energy split; `dse_adp_cross.png`; `dse_critical_path.{png,pdf}`: the critical path by kind (attention, FC) and by module (attention); `dse_la.{png,pdf}` (the three ADP panels, for the paper); `results/edap/dse_{fc,attention,pareto,cross}.{png,pdf}` |
 | 5 | `results_page.py` | the JSONs (`critical_path.json`'s summary for the critical-path section), the PNG sizes | `results/adp/dse_results.html` (the published page), `results/edap/dse_results_edap.html` |
-| — | `projection.py` (18 s; on demand, not part of `run_all.sh`) | the bit-plane simulator (`attentionRow`, `fcRow`), the previous (2026-10-16) VTR tables | `results/projection/{attn,fc}_priced_results.csv` (the priced tables' columns): each build priced by the bit-plane simulator with its Fmax and CLB count held at the previous (2026-10-16) VTR values and its crossbars and memory blocks predicted (user, 2026-10-23: the DSE projected before the bit-plane VTR run; estimates). Then `DSE_RESULTS=v3/dse/results/projection` runs `rank.py`, `breakdown.py` and `plot_dse.py` on that folder (`data.py`; no critical-path figure there). `--self-test`: today's 80 priced rows from their inputs by the same pricing, the held and predicted columns of every projected row |
-| — | `compare_page.py` | both folders' tables, JSONs and figures, `results/attn_vtr_bitplane.csv` (the smoke's calibration) | `results/compare/dse_compare.html` with its figures copied beside it (`old_*.png`, `proj_*.png`): the DSE page's sections, old and projected aligned (published with the 14 PNGs) |
 
 ## Conventions
 
@@ -56,13 +54,13 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 
 ## Inputs that are not regenerated here
 
-- `results/attn_vtr_results.csv`: the VTR run of the 72 attention builds on the 12 configs (the rows look up the 48 of
-  the 8 configs by key; `vtr_dse.py`, 2026-10-15/16, 19 h; the run
-  folders are in `v3/work/vtr/dse/`, 276 GB, and `vtr_dse.py --aggregate` rebuilds the CSV from them).
-- `results/fc_vtr_results.csv`: the VTR run of the 48 FC rows on the 12 configs (32 used), v2's run of 2026-10-10 (user 2026-10-13: reused, not
-  re-run): the 48 `family == gemm` rows of v2's `vtr_results.csv`, verbatim (`tools/copies.py` records the source).
-  v2's own priced rows and ranking (`dse_v2.csv`, `ranking_fc.json`, with the 84-row `vtr_results.csv`) are the
-  regression reference of `simulator/tests/testFcRows.py`, kept in `simulator/tests/ref/` as locked copies.
+- `results/attn_vtr_results.csv` and `results/fc_vtr_results.csv`: the VTR tables, regenerated in place by `vtr_dse.py`
+  (user, 2026-10-23: one set of result files; a build's line is replaced as it completes, lines of builds outside the
+  run leave at the first write; the run folders are `v3/work/vtr/dse/<build>_<hash>/`). Until the bit-plane sweep
+  completes they hold the previous runs: the 72 attention builds of 2026-10-15/16 on the 12 configs (`attn_rows.py`
+  prices each line at the N_E it records) and v2's 48 FC rows of 2026-10-10 (12 configs). v2's own priced rows and
+  ranking (`dse_v2.csv`, `ranking_fc.json`, with the 84-row `vtr_results.csv`) stay the regression reference of
+  `simulator/tests/testFcRows.py`, kept in `simulator/tests/ref/` as locked copies.
 
 ## Checks
 
@@ -70,7 +68,7 @@ bash v3/dse/run_all.sh          every step below, in order (about a minute; the 
 python3 v3/dse/check_energy.py                   every priced row against an independent pricing of its ledger
 python3 v3/dse/rank.py --self-test               the score arithmetic on hand-made cases
 python3 v3/simulator/tests/testFcRows.py         the 48 FC rows against v2's snapshot
-python3 v3/tools/check_head_params.py            the simulator's head parameters == the RTL's, for the 48 builds
+python3 v3/tools/check_head_params.py            the simulator's head parameters == the RTL's, for the 54 builds
 python3 v3/simulator/tests/testArea.py           the crossbar tile: the rule at its edges, the 9 tiles, the legacy table
 python3 v3/vtr/gen_arch.py --check               the staged row-parallel XMLs against the rule; planted faults
 ```

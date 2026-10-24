@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""vtr_dse.py — VTR of the DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/attn_vtr_bitplane.csv
-and dse/results/fc_vtr_bitplane.csv (the bit-plane RTL, 2026-10-23; the previous runs' (2026-10-16) tables attn_vtr_results.csv and
-fc_vtr_results.csv are kept as they are).
+"""vtr_dse.py — VTR of the DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/attn_vtr_results.csv
+and dse/results/fc_vtr_results.csv, regenerated in place (user, 2026-10-23: one set of result files; the tables hold this
+run's builds, each line replaced as its build completes; the previous run's lines leave the table at the first write).
 
 An attention build is one head (`att_head`) at the fixed mapping (the `head_params` defaults, experiment.md §4.2) for one
-shape (§3.2) on one crossbar config: 6 shapes x 8 configs = 48 builds (72 on the 12 configs of the 2026-10-15 run). An FC
+shape (§3.2) on one crossbar config: 6 shapes x 9 configs = 54 builds (48 on the 8 configs of 2026-10-22; 72 on the 12
+configs of the 2026-10-15 run). An FC
 build is one `gemm_top` for one FC GEMM (dse/space.py FC_SHAPES, the P29 extent fc.extent "used") on one config: 4 x 8
 = 32 builds (re-synthesized with the bit-plane GEMM, user 2026-10-23; until then v2's FC VTR rows were reused). A
 circuit is the smoke's (smoke.circuit: the VTR twins + the parameter wrapper; top att_head_<shape>_<R>x<C> or
-gemm_top_fc_<K>x<N>_<R>x<C>), on the config's row-parallel arch XML (vtr/arch_rowpar/). The first 12 hex digits of the
+gemm_top_fc_<K>x<N>_<R>x<C>), on the config's row-parallel arch XML (vtr/arch/). The first 12 hex digits of the
 sha256 of the circuit and the arch XML name the build's folder work/vtr/dse/<build>_<hash>/, so another RTL or another
 XML gets another folder and nothing is overwritten:
   <top>.v            the circuit
@@ -38,7 +39,7 @@ Run log: one timestamped line per event, appended to work/dse/vtr_dse.log and ec
 into the same file); each tool's PID is logged at its start.
 
 Usage:
-  python3 v3/dse/vtr_dse.py --elab-only                        the elaboration checks of the 48 builds
+  python3 v3/dse/vtr_dse.py --elab-only                        the elaboration checks of the 90 builds
   python3 v3/dse/vtr_dse.py [--build JetFormer-150P@128x128]   the builds end to end (default all 48), seeds 11,13,17
   python3 v3/dse/vtr_dse.py --aggregate                        rebuild the CSV from the folders (no tool)
   python3 v3/dse/vtr_dse.py --self-test                        fake tools, no VTR
@@ -75,8 +76,8 @@ from simulator.models.attentionHead import attentionHead, headParams  # noqa: E4
 from simulator.models.fc import extent, fc  # noqa: E402
 
 OUT = V3 / "work" / "vtr" / "dse"
-CSV_PATH = V3 / "dse" / "results" / "attn_vtr_bitplane.csv"    # the previous run's (2026-10-16) table: attn_vtr_results.csv
-FC_CSV_PATH = V3 / "dse" / "results" / "fc_vtr_bitplane.csv"     # the pre-bit-plane (v2) FC rows: fc_vtr_results.csv
+CSV_PATH = V3 / "dse" / "results" / "attn_vtr_results.csv"     # regenerated in place (user, 2026-10-23)
+FC_CSV_PATH = V3 / "dse" / "results" / "fc_vtr_results.csv"      # the same; v2's FC rows are simulator/tests/ref/vtr_results.csv
 RUN_LOG = V3 / "work" / "dse" / "vtr_dse.log"
 SEEDS = (11, 13, 17)
 TOOLS = dict(flow=smoke.VTR_ROOT / "vtr_flow" / "scripts" / "run_vtr_flow.py", python=smoke.VTR_ROOT / ".venv" / "bin" /
@@ -462,13 +463,16 @@ def build_row(b: Build) -> dict:
 
 
 def write_csv(rows: list, path: Path, order: list, fields: list = FIELDS) -> None:
-    """Merge build lines into the CSV (one line per build; a build's new line replaces its old one), in build order."""
+    """Merge build lines into the CSV (one line per build; a build's new line replaces its old one), in build order.
+    Lines of builds outside this run (another design space, or a table of another layout) leave the file."""
+    rank = {name: i for i, name in enumerate(order)}
     old = {}
     if path.is_file():
         with open(path, newline="") as f:
-            old = {r["build"]: r for r in csv.DictReader(f)}
+            rd = csv.DictReader(f)
+            if rd.fieldnames and "build" in rd.fieldnames:
+                old = {r["build"]: r for r in rd if r["build"] in rank}
     old.update({r["build"]: r for r in rows})
-    rank = {name: i for i, name in enumerate(order)}
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     with open(tmp, "w", newline="") as f:

@@ -41,7 +41,7 @@ WORK = V3 / "work" / "vtr" / "smoke"
 SDC = HERE / "clock.sdc"
 ROUTE_CHAN_WIDTH = 300
 WIDE = 2048            # ports up to 2048 bits are pins: no DSE build gets wrapper logic (FC K = 2048, C = 256)
-ARCH_DIR = HERE / "arch_rowpar"     # the row-parallel XMLs (vtr/gen_arch.py; v2's pre-bit-plane ones are vtr/arch/)
+ARCH_DIR = HERE / "arch"            # the row-parallel XMLs (vtr/gen_arch.py; one folder since 2026-10-23)
 
 
 def _gemm_points() -> dict:

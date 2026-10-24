@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""gen_arch.py — the row-parallel arch XMLs (docs/experiment.md §2.1, §5.1; user, 2026-10-22), staged in vtr/arch_rowpar/.
+"""gen_arch.py — the row-parallel arch XMLs (docs/experiment.md §2.1, §5.1; user, 2026-10-22) in vtr/arch/.
 
-The template is the live vtr/arch/nl_dpe_128x64_auto.xml (v2's; the 12 live XMLs differ only in the wc tile's height,
-width and area). One file per DSE config (dse/space.py CONFIGS) and per extra size (SMOKE: 64x64, the functional-
-validation size, for a smoke of the adder branch; no DSE row; the smokes run at 128x64, a DSE config),
-nl_dpe_<R>x<C>_auto.xml, changes only:
+The template is vtr/arch/nl_dpe_128x64_auto.xml, itself a row-parallel XML: the others differ from it only in the wc
+tile and the wc pb_type (v2's XMLs, the original template, left the tree on 2026-10-23, user: one vtr/arch/). One file
+per DSE config (dse/space.py CONFIGS; 64x64 is one since 2026-10-23) and per extra size
+(SMOKE, none today), nl_dpe_<R>x<C>_auto.xml, changes only:
   the wc tile      height H and width W (simulator/platform/area.py footprint); area = the block's logic + local
                    crossbar in MWTA (area.blockAreaMwta); the input split (user, 2026-10-23): I = the R data pins,
                    IC = the 7 control pins, both equivalent="none" (the data pins were swappable, equivalent="full",
@@ -16,7 +16,7 @@ nl_dpe_<R>x<C>_auto.xml, changes only:
   nl_dpe           data_in R pins, data_out C pins; the directs: the data at in[R-1:0] / out[C-1:0], the 7 controls at
                    in[R..R+6], the 5 status bits at out[C..C+4] (the template's order)
 Everything else stays byte-identical: pinlocations spread, the CLB's Fc 0.15 / 0.10, switchblock_locations all, the
-layout, the memory, the delays. VTR keeps the live XMLs until the RTL has the row-parallel ports.
+layout, the memory, the delays.
   --check   every staged XML: parses, its footprint, area and pins equal the rule, its directs cover the ports, and its
             line diff from the template lies inside the wc tile and the wc pb_type, only on those lines; then planted
             faults (a wrong height, a wrong pin count, a shifted control bit, a stray edit, a missing file) must fail
@@ -37,9 +37,9 @@ sys.path.insert(0, str(V3))
 from dse.space import CONFIGS  # noqa: E402
 from simulator.platform import area  # noqa: E402
 
-TEMPLATE = HERE / "arch" / "nl_dpe_128x64_auto.xml"
-OUT = HERE / "arch_rowpar"
-SMOKE = [(64, 64)]                  # smoke points outside the design space (user, 2026-10-23)
+OUT = HERE / "arch"
+TEMPLATE = OUT / "nl_dpe_128x64_auto.xml"
+SMOKE: list = []                    # extra sizes outside the design space (64x64 was one until it joined, 2026-10-23)
 STAGED = CONFIGS + SMOKE
 CONTROL, STATUS = area.TILE["control_pins"], area.TILE["status_pins"]
 FC_LINE = '\t\t<fc in_type="frac" in_val="0.15" out_type="frac" out_val="0.10" />\n'
@@ -73,21 +73,21 @@ def blocks(text: str) -> tuple:
 
 
 def staged_text(R: int, C: int, template: str) -> str:
+    """The XML of R x C from the template, a row-parallel XML: the wc tile's size and area, the data pin counts and
+    the directs' bit indices follow R and C; everything else is the template's."""
     w, h = area.footprint(R, C)
     a = round(area.blockAreaMwta(R, C))
-    data_in = int(re.search(r'<input name="data_in" num_pins="(\d+)"', template).group(1))
-    data_out = int(re.search(r'<output name="data_out" num_pins="(\d+)"', template).group(1))
-    pin_in, pin_out = data_in + CONTROL, data_out + STATUS
+    r0 = int(re.search(r'<input name="data_in" num_pins="(\d+)"', template).group(1))     # the template's R
+    c0 = int(re.search(r'<output name="data_out" num_pins="(\d+)"', template).group(1))   # and its C
     t = sub(template, r'<tile name="wc" height="\d+" width="\d+" area="\d+">',
             f'<tile name="wc" height="{h}" width="{w}" area="{a}">', 1)
-    t = sub(t, f'<input name="I" num_pins="{pin_in}"/>',
-            f'<input name="I" num_pins="{R}" equivalent="none"/>\n\t\t'
-            f'<input name="IC" num_pins="{CONTROL}" equivalent="none"/>', 2)
-    t = sub(t, f'<output name="O" num_pins="{pin_out}"/>', f'<output name="O" num_pins="{C + STATUS}"/>', 2)
-    t = sub(t, f'<input name="in" num_pins="{pin_in}"/>', f'<input name="in" num_pins="{R + CONTROL}"/>', 1)
-    t = sub(t, f'<output name="out" num_pins="{pin_out}"/>', f'<output name="out" num_pins="{C + STATUS}"/>', 1)
-    t = sub(t, f'<input name="data_in" num_pins="{data_in}"', f'<input name="data_in" num_pins="{R}"', 1)
-    t = sub(t, f'<output name="data_out" num_pins="{data_out}"', f'<output name="data_out" num_pins="{C}"', 1)
+    t = sub(t, f'<input name="I" num_pins="{r0}" equivalent="none"/>',
+            f'<input name="I" num_pins="{R}" equivalent="none"/>', 2)
+    t = sub(t, f'<output name="O" num_pins="{c0 + STATUS}"/>', f'<output name="O" num_pins="{C + STATUS}"/>', 2)
+    t = sub(t, f'<input name="in" num_pins="{r0 + CONTROL}"/>', f'<input name="in" num_pins="{R + CONTROL}"/>', 1)
+    t = sub(t, f'<output name="out" num_pins="{c0 + STATUS}"/>', f'<output name="out" num_pins="{C + STATUS}"/>', 1)
+    t = sub(t, f'<input name="data_in" num_pins="{r0}"', f'<input name="data_in" num_pins="{R}"', 1)
+    t = sub(t, f'<output name="data_out" num_pins="{c0}"', f'<output name="data_out" num_pins="{C}"', 1)
 
     def shift(m, port: str, old: int, new: int) -> str:
         hi, lo = int(m.group(1)), m.group(2)
@@ -96,12 +96,10 @@ def staged_text(R: int, C: int, template: str) -> str:
         if hi < old:
             raise ValueError(f"wc_slice.{port}[{m.group(0)}] cuts the data bits")
         return f"wc_slice.{port}[{hi - old + new}" + (f":{int(lo) - old + new}]" if lo is not None else "]")
-    t = sub(t, r"wc_slice\.in\[(\d+)(?::(\d+))?\]", lambda m: shift(m, "in", data_in, R), 1 + 6)
-    t = sub(t, r"wc_slice\.out\[(\d+)(?::(\d+))?\]", lambda m: shift(m, "out", data_out, C), 1 + 5)
-    t = sub(t, re.escape('\t\t\t<direct name="wc_data_in" input="wc.I" output="wc_slice.in"/>\n'),
-            f'\t\t\t<direct name="wc_data_in" input="wc.I" output="wc_slice.in[{R - 1}:0]"/>\n'
-            f'\t\t\t<direct name="wc_ctrl_in" input="wc.IC" output="wc_slice.in[{R + CONTROL - 1}:{R}]"/>\n', 1)
-    return sub(t, re.escape(FC_LINE), FC_BLOCK.replace("\\", "\\\\"), 1)
+    # the directs: the data range, the control bits (the 2-bit nl_dpe_control, 5 single bits) and the two wc-level
+    # directs on wc_slice.in; the data range and the 5 status bits on wc_slice.out
+    t = sub(t, r"wc_slice\.in\[(\d+)(?::(\d+))?\]", lambda m: shift(m, "in", r0, R), 1 + 6 + 2)
+    return sub(t, r"wc_slice\.out\[(\d+)(?::(\d+))?\]", lambda m: shift(m, "out", c0, C), 1 + 5)
 
 
 def ranges(root, port: str) -> list:

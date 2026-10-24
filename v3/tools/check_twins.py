@@ -8,7 +8,7 @@ blocks, never simulated). Checks:
 
   dpe       the `dpe` ports of ip/xbar/rtl/sim/dpe_nldpe.v == ip/xbar/rtl/vtr/dpe_blackbox.v, widths by the same
             expressions (R-bit data_in, C-bit data_out: the bit-plane interface, 2026-10-23) == the
-            `<model name="dpe">` port set of every arch XML in v3/vtr/arch_rowpar/; the blackbox has no body; and
+            `<model name="dpe">` port set of every arch XML in v3/vtr/arch/; the blackbox has no body; and
             vtr/gen_arch.py --check (the staged XMLs are its output)
   widths    every `dpe` connects exactly R and C bits: the head's two twins elaborate at an R != C build
             (BERT-Tiny at 256x128; the VTR twin with a copy of the blackbox whose defaults are that R and C), and
@@ -48,7 +48,7 @@ HERE = Path(__file__).resolve().parent
 V3 = HERE.parent
 IP = V3 / "ip"
 BASE = HERE / "twin_baseline"
-ARCH_DIR = V3 / "vtr" / "arch_rowpar"         # the row-parallel XMLs (2026-10-23; v2's pre-bit-plane ones are vtr/arch/)
+ARCH_DIR = V3 / "vtr" / "arch"                # the row-parallel XMLs (one folder since 2026-10-23)
 WIDTH_BUILD = (128, 128, 64, 256, 128)          # (NSEQ, DM, D, R, C) of the width gate: BERT-Tiny at 256x128
 
 # pair -> (module folder, file, top module, sim-only modules, sim-only top ports, (dependency folder, file)...)

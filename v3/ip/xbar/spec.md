@@ -146,7 +146,7 @@ The model's closed form, used by its tests, is:
 - It gets `KERNEL_WIDTH` and `NUM_COLS` parameters and the same port expressions as the behavior model, so
   `tools/check_twins.py` compares the two headers verbatim.
 - The VTR twins keep bare `dpe` instances (no parameters). Each connects exactly $R$ and $C$ bits, and Parmys maps
-  them onto the arch XML's `nl_dpe` block (`vtr/arch_rowpar/`, `data_in` $R$ pins, `data_out` $C$ pins).
+  them onto the arch XML's `nl_dpe` block (`vtr/arch/`, `data_in` $R$ pins, `data_out` $C$ pins).
 
 ## 8 Gates
 
@@ -157,5 +157,5 @@ The model's closed form, used by its tests, is:
   - the extent leaving the time unchanged.
 - **GATE 2:** the modules' 64×64 corpora exercise every crossbar. A few crossbar-only cases at 64×64 and 128×64
   are your call at the docs review.
-- **VTR:** the head smoke at 128×64 with `vtr/arch_rowpar/` (the crossbar count, Fmax, CLB, memory; 256×128 until
+- **VTR:** the head smoke at 128×64 with `vtr/arch/` (the crossbar count, Fmax, CLB, memory; 256×128 until
   2026-10-23).

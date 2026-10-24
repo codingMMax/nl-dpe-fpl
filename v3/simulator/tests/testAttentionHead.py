@@ -6,7 +6,7 @@
   rules    every att_ctrl event recomputed from spec §5 (each copy's x_rdy and bursts, the job takes, the softmax
            starts, done, busy falling); each admission term (the GEMMs' ready, the three staging credits, the run start)
            binds somewhere
-  domain   the 288 DSE builds (6 shapes x 8 configs x P_PROJ {1, 2, 4} x N_E {d, 2d}) are inside every module's guard
+  domain   the 324 DSE builds (6 shapes x 9 configs x P_PROJ {1, 2, 4} x N_E {d, 2d}) are inside every module's guard
   timing   values off: identical events and counts; random step orders: identical Report
   mutants  every att_ctrl latency + 1, a dropped staging credit and a dropped job credit (deadlock): each fails a check
 Run: python3 v3/simulator/tests/testAttentionHead.py

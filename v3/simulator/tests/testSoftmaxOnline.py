@@ -11,7 +11,7 @@ bit-plane pass (2026-10-22).
   rules    every tile decision, plane read, corner-turn word, E5 / E6 / E7 window, carry pass, s_cr, done and start
            credit recomputed from the spec §5 formulas; each gate term (idle, arm, data, slot, lp, la) and the ll
            credit bind somewhere
-  domain   the DSE's softmax instances (6 shapes x 8 configs x S_CH {1, 2}) are inside the guard; out-of-domain sets
+  domain   the DSE's softmax instances (6 shapes x 9 configs x S_CH {1, 2}) are inside the guard; out-of-domain sets
            are rejected
   timing   values off: identical events and counts; random step orders: identical Report
   mutants  every named latency + 1 (MAX_REG through FEED_LAT and E6: m_new itself never binds the carry, as

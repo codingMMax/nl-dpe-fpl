@@ -11,7 +11,7 @@
            pre-bit-plane pass)
   rules    every job decision, credit, E9 window and run_done recomputed from the spec §5 formulas; each readiness
            term and each input credit binds somewhere
-  domain   the DSE's accumulator instances (6 shapes x 8 configs, N_EP = 2d, N_OC by the floor rule) are inside the
+  domain   the DSE's accumulator instances (6 shapes x 9 configs, N_EP = 2d, N_OC by the floor rule) are inside the
            guard; out-of-domain sets are rejected
   timing   values off: identical events and counts; random step orders: identical Report
   mutants  every named latency + 1 (events or run_done change), a dropped alpha credit (deadlock), a value mutant

@@ -47,6 +47,18 @@ sys.path.insert(0, str(V3))
 from dse import data  # noqa: E402
 from dse import rank  # noqa: E402
 from dse.space import CONFIGS, FC_PASS_EXTENT, FC_SHAPES, SHAPES  # noqa: E402
+
+
+_ROW_NE: dict = {}
+
+
+def rowNE() -> dict:
+    """{(n, d_model, d, R, C): N_E} of the priced table's rows: each build is traced at the mapping its VTR line
+    was synthesized with (the 2026-10-16 run's lines carry 2d, the sweep's d); a build without a row takes the default."""
+    if not _ROW_NE:
+        for r in data.attentionRows():
+            _ROW_NE[(int(r["n"]), int(r["d_model"]), int(r["d"]), int(r["R"]), int(r["C"]))] = int(r["N_E"])
+    return _ROW_NE
 from simulator.core.cycleMath import ceilDiv  # noqa: E402
 from simulator.core.engine import run  # noqa: E402
 from simulator.core.trace import KINDS, breakdown, segments  # noqa: E402
@@ -98,7 +110,7 @@ def checkPath(b: dict) -> dict:
 
 def attentionPath(name: str, n: int, dm: int, d: int, R: int, C: int) -> dict:
     """One head's critical path (timing only)."""
-    g, parts = attentionHead(headParams(n, dm, d, R, C, N_E=2 * d), withValues=False)   # the 2026-10-16 run's mapping (N_E = 2d) until stage 5
+    g, parts = attentionHead(headParams(n, dm, d, R, C, N_E=rowNE().get((n, dm, d, R, C))), withValues=False)   # the row's own mapping
     run(g)
     ctrl = parts["ctrl"]
     return checkPath(dict(family="attention", workload=name, config=f"{R}x{C}", n=n, d_model=dm, d=d,

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check_head_params.py — the simulator builds the same head as the RTL, for every DSE build.
 
-For each of the 48 builds (docs/experiment.md §4.3) at the fixed mapping, `headParams` gives the head's top
+For each of the 54 builds (docs/experiment.md §4.3) at the fixed mapping, `headParams` gives the head's top
 parameters. This gate evaluates the VTR twin `top/rtl/vtr/att_head.v` with them, statically (no simulator, no tool):
 its localparams, then every module instance's parameters, each completed with the module's own header defaults from
 its VTR twin. It checks:

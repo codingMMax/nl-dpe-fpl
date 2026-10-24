@@ -29,6 +29,18 @@ V3 = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(V3))
 from dse import data  # noqa: E402
 from dse.space import CONFIGS, SHAPES  # noqa: E402
+
+
+_ROW_NE: dict = {}
+
+
+def rowNE() -> dict:
+    """{(n, d_model, d, R, C): N_E} of the priced table's rows: each build is traced at the mapping its VTR line
+    was synthesized with (the 2026-10-16 run's lines carry 2d, the sweep's d); a build without a row takes the default."""
+    if not _ROW_NE:
+        for r in data.attentionRows():
+            _ROW_NE[(int(r["n"]), int(r["d_model"]), int(r["d"]), int(r["R"]), int(r["C"]))] = int(r["N_E"])
+    return _ROW_NE
 from simulator.platform.breakdown import areaByComponent, projectionEnd  # noqa: E402
 from simulator.core.engine import run  # noqa: E402
 from simulator.platform import prices  # noqa: E402
@@ -77,7 +89,7 @@ def energySplit(rs: list, family: str) -> dict:
 
 def projectionsEnd(n: int, dm: int, d: int, R: int, C: int) -> tuple:
     """(cycles, the cycle at which the last projection output leaves the GEMMs) of one attention build."""
-    g, parts = attentionHead(headParams(n, dm, d, R, C, N_E=2 * d), withValues=False)   # the 2026-10-16 run's mapping (N_E = 2d) until stage 5
+    g, parts = attentionHead(headParams(n, dm, d, R, C, N_E=rowNE().get((n, dm, d, R, C))), withValues=False)   # the row's own mapping
     rep = run(g)
     return parts["ctrl"].done - parts["ctrl"].tStart, projectionEnd(rep)
 

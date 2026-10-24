@@ -119,7 +119,6 @@ ORACLES = ("nldpe_ref.py", "gemm_ref.py", "dimm_ref.py", "softmax_ref.py", "soft
 # need no edits.
 KERNELS = ("nldpe_sim.py", "pass_engine.py", "gemm_sim.py", "dimm_sim.py", "softmax_sim.py", "softmax_online_sim.py",
            "dimm_tile_sim.py", "ocarry_sim.py", "proj_sim.py", "attention_sim.py")
-ARCHS = tuple(f"nl_dpe_{r}x{c}_auto.xml" for r in (128, 256, 512, 1024) for c in (64, 128, 256))
 S, X = "v2/sim", "v2/experiment"
 COPIES = [
     *[(f"oracle/{f}", f"{S}/oracle/{f}", ()) for f in ORACLES],
@@ -143,7 +142,8 @@ COPIES = [
     ("ip/lib/rtl/vtr/att_fifo.v", f"{X}/rtl/att_fifo.v", ()),
     ("ip/lib/tb/tb_att_fifo.v", f"{S}/tb/tb_att_fifo.v", ()),
     # VTR flow (the generic parts; vtr_tops.py, run_vtr_dse.py and the cleanup script come with the first VTR run)
-    *[(f"vtr/arch/{f}", f"{X}/arch/{f}", ()) for f in ARCHS],
+    # v2's 12 arch XMLs (vtr/arch/nl_dpe_<R>x<C>_auto.xml) left the tree on 2026-10-23 (user: one vtr/arch/ with the
+    # row-parallel XMLs of vtr/gen_arch.py); their lines were here until then
     ("vtr/run_vtr.py", f"{X}/vtr/run_vtr.py", ()),
     ("vtr/clock.sdc", f"{X}/vtr/clock.sdc", ()),
     # twin-diff baselines recorded in v2: the last one (gemm.diff) forked 2026-10-23 (FORKED below)

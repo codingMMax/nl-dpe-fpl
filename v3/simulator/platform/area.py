@@ -20,7 +20,7 @@ from simulator.core.cycleMath import ceilDiv
 from simulator.platform.platform import MWTA_UM2, Platform
 
 V3 = Path(__file__).resolve().parents[2]
-ARCH_DIR = V3 / "vtr" / "arch_rowpar"       # the live XMLs (the memory block is the same in v2's vtr/arch/)
+ARCH_DIR = V3 / "vtr" / "arch"              # the row-parallel XMLs (vtr/gen_arch.py)
 TILE = json.loads((Path(__file__).resolve().parent / "nl_dpe_tile.json").read_text(encoding="utf-8"))
 MWTA_PER_CELL = 66117
 MEM_TILE_CELLS = 2
@@ -112,7 +112,8 @@ def vtrTable(path: Path) -> dict:
                 continue
             out[(r["config"], r["family"], int(r["M"]), int(r["K"]), int(r["N"]))] = dict(
                 fmax_mhz=float(r["fmax_mhz"]), clb=int(r["clb"]), memory=int(r["memory"]), wc=int(r["wc"]),
-                seeds=len([x for x in r["seeds"].split(";") if x]), top=r["top"], run_dir=r["run_dir"])
+                seeds=len([x for x in r["seeds"].split(";") if x]), top=r["top"], run_dir=r["run_dir"],
+                **{k: int(r[k]) for k in ("N_E", "N_EP", "N_OC", "P_PROJ") if r.get(k)})   # the row's mapping
     return out
 
 

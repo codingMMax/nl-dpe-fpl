@@ -13,7 +13,7 @@
   dimm         testDimmTile.py           GATE 1, spec §5's closed form, the spec rules, the memories (spec §6 vs Yosys)
   softmax      testSoftmaxOnline.py      GATE 1, spec §5's core recurrence, the spec rules
   accumulator  testSoftmaxAccumulator.py GATE 1, spec §5's job rules, the spec rules
-  head         testAttentionHead.py      GATE 1 on heads, the att_ctrl rules, the 288 DSE builds' domain
+  head         testAttentionHead.py      GATE 1 on heads, the att_ctrl rules, the 324 DSE builds' domain
 Each runs under the isolation probe (tools/probe_site): no access to the repository outside v3/.
 Outputs: v3/work/f2/<tag>/{logs,probe}/, summary.txt.
 Usage: python3 v3/tools/f2_check.py [--tag T]

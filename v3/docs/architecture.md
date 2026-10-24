@@ -73,7 +73,7 @@ A conversion pass never uses more than $I = \min(R, C)$.
 
 | item | value |
 |---|---|
-| configs | $R \in \{128, 256, 512\}$ × $C \in \{64, 128, 256\}$ with $C \le R$, so $I = \min(R, C) = C$ (8 configs since 2026-10-22, `experiment.md` §2.1; until then $R$ also took 1024, 12 configs) |
+| configs | $R \in \{64, 128, 256, 512\}$ × $C \in \{64, 128, 256\}$ with $C \le R$, so $I = \min(R, C) = C$ (9 configs since 2026-10-23: 64×64 joined the eight of 2026-10-22, `experiment.md` §2.1; until then $R$ also took 1024, 12 configs) |
 | shapes | six (`experiment.md` §3.2): $n \in \{32, 128, 256\}$, $d \in \{16, 32, 64\}$, $d_m \in \{64, 128, 192, 768\}$ |
 | parameters | shape, config and mapping are fixed at build time; one VTR circuit per row |
 | mapping | fixed for every shape, no search (user, 2026-10-15; `experiment.md` §4.2): $P_{proj} = 1$, $N_E = d$ (2026-10-23; $2d$ before), $N_{EP} = 2d$, $N_{EXP} = 2$, $N_{OC}$ by the floor rule (§5.2, held at its pre-bit-plane values), $B_{kv} = 16$, DIMM slices of $X_S = 16$ crossbars |
@@ -848,7 +848,7 @@ your go.
 
 **The bit-plane pass** (2026-10-22; `LEDGER.md` Needs you 25), following Rule No. 1:
 1. the RTL of every module, checked by the static gates only;
-2. the head's VTR smoke at 256×128 with `vtr/arch_rowpar/` (2026-10-23: stopped; the smokes run at 128×64, the
+2. the head's VTR smoke at 256×128 with the row-parallel XMLs (`vtr/arch/`) (2026-10-23: stopped; the smokes run at 128×64, the
    smallest array with the add in the crossbar's rows, user);
 3. then GATE 2 at 64×64: the DIMM (16), softmax (18, plus the 128×64 case) and accumulator (19) corpora, the head
    bring-up (5) and gate H (6).

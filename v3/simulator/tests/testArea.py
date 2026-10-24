@@ -8,7 +8,7 @@
              COFFE's logic_um2 (coffe_flow_22nm/sweep_summary_full.csv, quoted below, to its 0.1 um^2)
   xbar       localCrossbarUm2 equals the CSV's total_um2 for R = 64, 128, 256, 512; any other R is refused
   pins       the tile's 7 control and 5 status pins are the dpe block's ports besides data, clock and reset (the arch
-             XML's nl_dpe pb_type and its wc tile: I = 40 + 7, O = 40 + 5, the pre-bit-plane data width)
+             XML's nl_dpe pb_type and its wc tile: I = R data pins and IC = 7 control pins in, O = C + 5 out)
   footprint  the 9 row-parallel tiles worked out by hand, and again from the quoted CSV with integer pin arithmetic;
              C > R (the outputs set H); the 12 legacy tiles (v2's arch XMLs); an unknown rule or array is refused;
              areaWcMwta and withVtr price count x W x H x 66,117 MWTA under both rules
@@ -41,7 +41,7 @@ COFFE = ((64, 64, 11300.0, 221.171477274), (128, 64, 12198.0, 679.785877064), (1
 #   256x128 263 -> 5;  29,360 / 11,195 = 2.62 -> 3
 ROW_PARALLEL = {(64, 64): (3, 2), (128, 64): (2, 3), (128, 128): (4, 3), (256, 64): (2, 5), (256, 128): (3, 5),
                 (256, 256): (5, 5), (512, 64): (2, 9), (512, 128): (3, 9), (512, 256): (4, 9)}
-# v2's arch XMLs (vtr/arch/nl_dpe_<R>x<C>_auto.xml, <tile name="wc" height width>), as (W, H)
+# v2's arch XMLs (removed 2026-10-23; the table is nl_dpe_tile.json legacy_footprint), as (W, H)
 LEGACY = {(128, 64): (1, 5), (128, 128): (1, 11), (128, 256): (3, 7), (256, 64): (2, 3), (256, 128): (3, 4),
           (256, 256): (4, 6), (512, 64): (2, 4), (512, 128): (3, 5), (512, 256): (5, 6), (1024, 64): (1, 11),
           (1024, 128): (3, 7), (1024, 256): (5, 8)}
@@ -113,8 +113,10 @@ def testPins() -> int:
     tile = next(x for x in root.iter("tile") if x.get("name") == "wc")
     sub = tile.find("sub_tile")
     pins = {x.get("name"): int(x.get("num_pins")) for x in sub if x.tag in ("input", "output")}
-    assert (pins["I"], pins["O"]) == (ins["data_in"] + control, outs["data_out"] + status) == (47, 45), pins
-    return 2
+    assert (pins["I"], pins["IC"], pins["O"]) == (ins["data_in"], control, outs["data_out"] + status) == (128, 7, 69), pins
+    tile_wh = (int(tile.get("width")), int(tile.get("height")))
+    assert tile_wh == area.footprint(ins["data_in"], outs["data_out"]), tile_wh    # the XML's tile is the rule's
+    return 3
 
 
 def testFootprint() -> int:

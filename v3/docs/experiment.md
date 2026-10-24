@@ -31,19 +31,19 @@ config and mapping are all build-time parameters, so each row is one VTR circuit
 
 ### 2.1 Configs
 
-- **8 configs (user, 2026-10-22):** $R \in \{128, 256, 512\}$, $C \in \{64, 128, 256\}$, $C \le R$, so
-  $I = \min(R, C) = C$. The 1024-row arrays and 128×256 left with the row-parallel tile rule (§5.1): every config has
-  $C \le R$, and the COFFE local-crossbar sweep stops at $R = 512$.
-  - 64×64 is the size of the RTL's functional validation (GATE 2) only. Its tile is in the area model (§5.1), but it
-    has no DSE row.
+- **9 configs (user, 2026-10-23: 64×64 added to the eight of 2026-10-22):** $R \in \{64, 128, 256, 512\}$,
+  $C \in \{64, 128, 256\}$, $C \le R$, so $I = \min(R, C) = C$. The 1024-row arrays and 128×256 left with the
+  row-parallel tile rule (§5.1): every config has $C \le R$, and the COFFE local-crossbar sweep stops at $R = 512$.
+  - 64×64 is also the size of the RTL's functional validation (GATE 2; the square-array branch of the DIMM, the adders
+    in logic). It was validation-only until 2026-10-23.
   - The VTR smoke point is 128×64 since 2026-10-23 (user: the smallest array with the add in the crossbar's rows,
     $R = 2C$, the same $I$ as 64×64); it was 256×128 until then (that smoke of the trimmed bit-plane RTL was stopped in
-    ABC). 64×64 has its arch XML too (`vtr/gen_arch.py` `SMOKE`) for a smoke of the adder branch.
+    ABC).
   - Until 2026-10-22: $R \in \{128, 256, 512, 1024\} \times C \in \{64, 128, 256\}$, 12 configs (the results of
     §8–§9 as of 2026-10-16).
-- Arch XMLs: `vtr/arch_rowpar/nl_dpe_{R}x{C}_auto.xml` (`vtr/gen_arch.py`, `--check`): the row-parallel tiles, no
-  swappable pins (VPR's post-route pin fix-up aborts on them, 2026-10-23). v2's `vtr/arch/` (the pre-bit-plane port
-  and the legacy tiles) served the 2026-10-16 run and stays as a locked copy.
+- Arch XMLs: `vtr/arch/nl_dpe_{R}x{C}_auto.xml` (`vtr/gen_arch.py`, `--check`): the row-parallel tiles, no swappable
+  pins (VPR's post-route pin fix-up aborts on them, 2026-10-23). v2's XMLs (the pre-bit-plane port and the legacy
+  tiles) served the 2026-10-16 run and left the tree on 2026-10-23 (user: one folder, one set of result files).
   The auto layout grows the grid to fit the circuit. The area is a resource sum (§5), so grid growth does not enter
   the metric.
 - Platform constants: the row-parallel interface, $R$ bits in and $C$ bits out per cycle as bit planes, `P` = 8 planes
@@ -75,14 +75,14 @@ config and mapping are all build-time parameters, so each row is one VTR circuit
 
 - Results reused (user, 2026-10-13):
   - 48 VTR rows (seeds {11, 13, 17}, all ok) and 48 priced rows (used extent). Since 2026-10-22 the priced FC rows
-    are the 32 on the 8 configs (§2.1);
+    are the 36 on the 9 configs (§2.1; 32 on the eight of 2026-10-22);
   - files: v2's `vtr_results.csv`, `dse_v2.csv`, `ranking_fc.json`, kept as locked copies in `simulator/tests/ref/`
     (the regression reference of `testFcRows.py`); the FC results of this experiment are `dse/results/fc_vtr_results.csv`
     (the 48 FC rows of v2's VTR table) and `dse/results/fc_priced_results.csv` (the v3 model's rows on them,
     `dse/fc_rows.py`; 2026-10-17).
 - The snapshot stayed valid while the FC shapes, `gemm_top`, the prices and the area formula were unchanged. The
-  bit-plane pass changes `gemm_top` (`ip/gemm/spec.md`), so the 32 FC builds of the 8 configs are synthesized again with
-  the new RTL and the row-parallel arch XMLs (user, 2026-10-23), next to the 48 attention builds. v2's rows stay the
+  bit-plane pass changes `gemm_top` (`ip/gemm/spec.md`), so the 36 FC builds of the 9 configs are synthesized again with
+  the new RTL and the row-parallel arch XMLs (user, 2026-10-23), next to the 54 attention builds. v2's rows stay the
   regression reference of the model's energy and area (`testFcRows.py`).
 - Optional open item: these are the Round-1 FC shapes, not the FFNs of the six attention models.
 
@@ -158,7 +158,7 @@ N_{xbar} = \underbrace{3V + 3}_{\text{projections}} + \underbrace{2d + 2d + (2 +
 $$
 
 For example BERT-Tiny at 128×128 ($V = 1$, $d = 64$, $N_{OC} = 6$): 6 + 128 + 128 + 4 + 12 = 278, the count VTR
-placed. `tools/check_head_params.py` evaluates `att_head.v` for all 48 builds (72 until 2026-10-22): every instance's parameters and the
+placed. `tools/check_head_params.py` evaluates `att_head.v` for all 54 builds (48 on 2026-10-22/23, 72 until 2026-10-22): every instance's parameters and the
 crossbar count equal the simulator's (2026-10-15, ALL PASS, with a negative control).
 
 **How sensitive the metrics are to these knobs**, one at a time over the 72 builds of the 12 configs (2026-10-19; not yet re-run on the 8 configs and the row-parallel tiles), with the closed forms behind it:
@@ -171,7 +171,7 @@ column packing; more than one head per row or an output projection; runtime $n$ 
 
 ### 4.3 The rows
 
-48 builds: the six shapes × the 8 configs (72 on the 12 configs until 2026-10-22), each one `att_head` build with
+54 builds: the six shapes × the 9 configs (48 on the 8 configs of 2026-10-22, 72 on the 12 configs until then), each one `att_head` build with
 the mapping above. Every one is inside every module's domain (head model, 2026-10-15; rechecked 2026-10-22 on the 8
 configs and 64×64).
 

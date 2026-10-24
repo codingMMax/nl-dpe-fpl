@@ -11,7 +11,7 @@ pass (2026-10-22).
   rules      the decision binds on each of its terms (job offer, A / B valid, idle, output credit) exactly as spec §5
   staging    transposer, window stager (E_WP cycles per window over the A memory ports), row writer: write times and
              credits by spec §5, overruns raise
-  domain     the 288 DSE candidates (6 shapes x 8 configs x P_proj {1, 2, 4} x N_E {d, 2d}) are inside the module's
+  domain     the 324 DSE candidates (6 shapes x 9 configs x P_proj {1, 2, 4} x N_E {d, 2d}) are inside the module's
              domain for both instances; every head PV instance has E_WP = 4 (8 words over 2 memories), so the
              window-frame rate is 0.8; out-of-domain sets are rejected
   timing     values off: identical events and counts; random step orders: identical Report
@@ -287,7 +287,7 @@ def candidates() -> list:
 
 def testDomain() -> tuple:
     cs = candidates()
-    assert len(cs) == len(SHAPES) * len(CONFIGS) * 3 * 2 == 288, len(cs)
+    assert len(cs) == len(SHAPES) * len(CONFIGS) * 3 * 2 == 324, len(cs)
     worst = 0.0
     for meta, qk, pv in cs:
         for p in (qk, pv):

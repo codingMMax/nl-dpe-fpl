@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """attn_rows.py — the attention DSE rows from the head workload: one row per build (docs/experiment.md §4.3, §5).
 
-The mapping of the rows it prices (the 2026-10-16 run): P_PROJ 1, N_E = N_EP = 2d, N_EXP 2, N_OC by the floor rule, B_kv 16, X_S 16,
-(the fixed mapping is N_E = d since 2026-10-23; this script passes N_E = 2d explicitly until stage 5),
-B_q = S (the headParams defaults; tools/check_head_params.py proves the RTL builds the same head for every build).
+The fixed mapping: P_PROJ 1, N_E = d (2026-10-23; 2d before), N_EP = 2d, N_EXP 2, N_OC by the floor rule, B_kv 16, X_S 16,
+B_q = S. A build with a VTR line is priced at the N_E that line records (the 2026-10-16 run's lines carry 2d, the sweep's d),
+so the priced table stays consistent with whichever run the VTR table holds; a build without a line takes the default.
+(headParams's defaults; tools/check_head_params.py proves the RTL builds the same head for every build).
 Each row is simulator/platform/rows.py `attentionRow`: the head's compute cycles (done - start, no O read-out),
 energy from the Report's counts x the platform's frozen prices (in total, per term and per role; weight programming
 apart, as setup), the crossbar area (count x the arch XML's wc footprint) and the memory inventory with its predicted
@@ -37,9 +38,10 @@ def load_vtr(paths: list) -> dict:
                 for r in csv.DictReader(fh):
                     if r["ok"] != "1":
                         continue
-                    if int(r["P_PROJ"]) != 1 or int(r["N_E"]) != 2 * int(r["d"]):
-                        raise ValueError(f"{f} {r['build']}: not the fixed mapping (P_PROJ {r['P_PROJ']}, N_E {r['N_E']})")
+                    if int(r["P_PROJ"]) != 1:
+                        raise ValueError(f"{f} {r['build']}: not the fixed mapping (P_PROJ {r['P_PROJ']})")
                     out[(r["shape"], int(r["R"]), int(r["C"]))] = dict(
+                        N_E=int(r["N_E"]),                                        # the line's own mapping
                         fmax_mhz=float(r["fmax_mhz"]), clb=int(r["clb"]), memory=int(r["memory"]), wc=int(r["wc"]),
                         seeds=r["seeds"], fmax_seed={s: float(r[f"fmax_s{s}"]) for s in (11, 13, 17)
                                                      if r.get(f"fmax_s{s}")})
@@ -47,10 +49,11 @@ def load_vtr(paths: list) -> dict:
         r = json.loads(Path(f).read_text())
         p, fl = r["params"], r["flow"]
         shape = next(s for (s, n, dm, d) in SHAPES if (n, dm, d) == (p["NSEQ"], p["DM"], p["D"]))
-        if p.get("P_PROJ") != 1 or p.get("N_E") != 2 * p["D"]:
-            raise ValueError(f"{f}: not the fixed mapping (P_PROJ {p.get('P_PROJ')}, N_E {p.get('N_E')})")
+        if p.get("P_PROJ") != 1:
+            raise ValueError(f"{f}: not the fixed mapping (P_PROJ {p.get('P_PROJ')})")
         res = fl["resources"]
-        out[(shape, p["R"], p["C"])] = dict(fmax_mhz=fl["fmax_mhz"], clb=res["clb"], memory=res["memory"], wc=res["wc"])
+        out[(shape, p["R"], p["C"])] = dict(N_E=p.get("N_E"), fmax_mhz=fl["fmax_mhz"], clb=res["clb"], memory=res["memory"],
+                                           wc=res["wc"])
     return out
 
 
@@ -60,9 +63,8 @@ def main() -> int:
     ap.add_argument("--vtr", nargs="*", default=[])
     a = ap.parse_args()
     vtr = load_vtr(a.vtr)
-    # N_E = 2d: the mapping of the VTR rows this prices (the 2026-10-16 run); the fixed mapping is N_E = d since
-    # 2026-10-23 (headParams's default). Stage 5 prices the bit-plane run at the default.
-    rows = [attentionRow(name, n, dm, d, R, C, vtr, nE=2 * d) for (name, n, dm, d) in SHAPES for (R, C) in CONFIGS]
+    rows = [attentionRow(name, n, dm, d, R, C, vtr, nE=vtr.get((name, R, C), {}).get("N_E"))   # the line's own N_E
+            for (name, n, dm, d) in SHAPES for (R, C) in CONFIGS]
     keys = list(rows[0].keys())
     for r in rows:
         keys += [k for k in r if k not in keys]
