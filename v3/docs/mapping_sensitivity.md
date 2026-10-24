@@ -1,5 +1,9 @@
 # Mapping parameters, constants, and what they do to latency, area and energy
 
+> **Status note (2026-10-23):** pre-bit-plane analysis. It models the previous design (the 5-byte port, `BUF` = 40)
+> at the $N_E = 2d$ mapping and describes the 2026-10-16 run; frozen until the port to the bit-plane results after
+> stage 4 (`dse/mapping_sensitivity.py`).
+
 Status: 2026-10-18, analysis for the sensitivity study (user: "list out all the mapping parameters / constants, and
 analytically analyze their impact on these evaluated metrics"). The DSE does not search the mapping
 (`experiment.md` §4.2: one fixed mapping for every shape); this document lists everything the three metrics depend on
@@ -47,7 +51,7 @@ choices; a knob value that makes one of them overrun is "outside a contract" in 
 | the pass extent | load $ROWS\_USED$ rows (P29), drain all $C$ columns (2026-10-18) | `dpe_nldpe.v`, the models | the load side of $\tau$ follows the rows in use; the drain never shrinks |
 | the module latencies | named constants (`CONV_IN_LAT`, `DIST_LAT`, `EMIT_LAT`, …, 3–15 per module) | the specs and models, pinned by GATE 2 | the `logic` share of the critical path (2–4 % of a head) |
 | the pass price | cells $1.31\,\mathrm{pJ} \times RC / 8192$; ACAM $10.94\,\mathrm{pJ} \times C / 64$; input buffer $0.0149\,\mathrm{pJ}$ per row in use; output buffer $0.0099\,\mathrm{pJ}$ per column | `simulator/platform/nl_dpe.json`, `prices.py` (the whole array fires, only the rows in use are read) | the energy of a pass: $13.8\,\mathrm{pJ}$ at 128×64 (79 % ACAM), $23.0$ at 1024×64, $27.7$ at 128×128, $92.0$ at 1024×256 |
-| the fabric prices | block RAM $0.0495\,\mathrm{pJ}$ per 40-bit access; CLB add $0.085\,\mathrm{pJ}$, compare $0.264\,\mathrm{pJ}$ | the same | the port traffic ($\lceil 8r/40 \rceil + \lceil 8C/40 \rceil$ words per pass), the memory bytes, the CLB terms |
+| the fabric prices | block RAM $0.0495\,\mathrm{pJ}$ per pre-bit-plane access; CLB add $0.085\,\mathrm{pJ}$, compare $0.264\,\mathrm{pJ}$ | the same | the port traffic ($\lceil 8r/40 \rceil + \lceil 8C/40 \rceil$ words per pass), the memory bytes, the CLB terms |
 | the tile footprint | cells per crossbar: 1×5 (128×64), 2×3 (256×64), 1×11 (1024×64, 128×128), 4×6 (256×256), 5×8 (1024×256), … | `vtr/arch/nl_dpe_<R>x<C>_auto.xml` | the crossbar area: $N_{xbar} \times w h \times 66{,}117$ MWTA ($0.033864\,\mu\mathrm{m}^2$ per MWTA) |
 | CLB and memory tiles | 1 and 2 grid cells; counts from VPR | `area.py` | the soft-logic and BRAM area: VTR only, no model |
 | Fmax | VTR, the mean of seeds {11, 13, 17}, channel width 300, `clock.sdc` | `vtr_dse.py` | latency $= T / F_{max}$ |
@@ -96,7 +100,7 @@ the rate rules of §1.1 do. Consequences:
 - **$S = \min(n, I)$ is where $I$ enters the core:** the first run's QK waits for $S$ projected tokens, so at
   $n = S$ (one run) nothing of the core overlaps the stream, while at $n = 2S$ the first run's core runs under the
   second half of the stream. This is the +21 % cycles of the $n = 128$ heads from 128×64 to 128×128, not the drain.
-- **$BUF$ and $P$ scale every term:** all rates are per 40-bit word; $P$ adds to every pass. They are fixed by the
+- **$BUF$ and $P$ scale every term:** all rates are per pre-bit-plane word; $P$ adds to every pass. They are fixed by the
   RTL (the `BUF = 40` guards), so only an RTL change could move them.
 
 ### 2.2 Crossbars and area
@@ -262,7 +266,7 @@ column, 2.0–2.4) is structural: the online softmax's block pipeline is two dee
 EXP passes of the previous alternate on the critical path (a block period of 235 against the floor 205 at $I = 64$);
 each run adds its PV and accumulator tail and the re-arm; and where the cap $I / B_{kv}$ holds $P_{proj}^\*$ below
 $5 T_p / S$ (BERT-base and ViT at $R \ge 512$, every $d_m = 768$ head at $C = 64$), the stream still binds. Those
-three are RTL limits (the staging group, the pipeline depth, the 40-bit port), not mapping choices.
+three are RTL limits (the staging group, the pipeline depth, the pre-bit-plane port), not mapping choices.
 
 What the balanced numbers do not say: the soft logic and Fmax of a build with 2–16 projection copies (each copy is
 an X bus, a GEMM copy with its three converters, and its staging rows). VTR runs of the $P_{proj}^\*$ builds on a few
@@ -343,6 +347,6 @@ every config the ranking holds, and only a VTR run of the optimal mapping on two
    the per-config table in §4 says by how much the latency ranking at a fixed $C$ compresses. Its soft-logic cost
    (writers, staging) is the open question, and the candidate for the next VTR runs together with $N_{EXP} = 4$
    where the contracts allow it.
-4. **Three constants dominate everything and are not mapping choices:** the 40-bit port (every rate), the ACAM price
+4. **Three constants dominate everything and are not mapping choices:** the pre-bit-plane port (every rate), the ACAM price
    per column (the energy), and the drain of all $C$ columns (the latency at $C = 256$). A study that wants to move
    the attention front has to move one of them in the RTL.

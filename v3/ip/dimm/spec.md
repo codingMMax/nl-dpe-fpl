@@ -8,8 +8,17 @@ Status: 2026-10-14, F3 / phase A, **closed**: GATE 2 16/16 at 64×64, VTR smoke 
 - the farm is fed bit-serially;
 - the output is summed per plane.
 
-The behavior model (`simulator/models/dimmTile.py`) implements this version. Both RTL twins still have the 40-bit
-version (F3) and follow in the RTL pass, so GATE 2 pins this version's latencies only after that.
+**2026-10-23, the soft-logic trims** (§10 item 10, your go): the drain registers each count once (the sign XOR
+folded into the slice's popcount, one register per slice and one for the sum across the slices), and the C port
+carries value words.
+
+**2026-10-23, the DIMM revision** (§10 item 11, your go): where the array has the rows ($R \ge 2I$) the log-domain
+add moves into the crossbar (the identity stacked twice, $2I$ rows in use) and the bit-serial adders go; the B
+word loads once per job and rotates; the drain input is an AND and two XORs; the root accumulates in right-shift
+form. The head's QK farm is $N_E = d$.
+
+The behavior model (`simulator/models/dimmTile.py`) implements this version. 2026-10-23: both RTL twins implement the
+bit-plane version (GATE 2 at 64×64, 16/16); the trims follow through the same loop.
 
 This is the module's contract: the behavior model and both RTL twins (`ip/dimm/rtl/{sim,vtr}/dimm_tile_top.v`)
 implement it, and GATE 2 pins every latency named here. Built from the verified v2 tile core (memories, window engine,
@@ -61,6 +70,7 @@ Derived (no free numbers):
 | $E_{wp}$ | the most of a window's $E_w$ words that any one A memory takes (over the windows; §6 layout) |
 | $VW$, $E_C$ | $9 + \log_2 K$; output element bits $E_C$ = 8 (`NARROW` > 0) or $VW$ ($\lceil E_C/8 \rceil$ lanes) |
 | $T_{cv}$ | $P + 2$: the converter's pass period |
+| $X_{ADD}$ | $[R \ge 2I]$: the add is the crossbar's row sum (weights = the identity stacked twice, rows $r$ and $I + r$ to column $r$; $2I$ rows in use); else $I$ bit-serial adders per crossbar |
 
 Guards (the RTL's elaboration guards; the model raises on the same sets):
 - $P = 8$: one plane per bit of an int8 element (the stagers, the bit-serial adders and the root's $2^b$ and $255$
@@ -78,7 +88,7 @@ Guards (the RTL's elaboration guards; the model raises on the same sets):
 | `a_v`, `a_d` / `a_cr` | `A_CH`, `A_CH`·$A_W$ / 1 | in / out | push + credit | row frame: a group of $NB$ rows; window frame: a matrix | 2 groups; `A_SLOTS` |
 | `b_v`, `b_d` / `b_cr` | `B_CH`, `B_CH`·$L_B$ / 1 | in / out | push + credit | `TRANS_B` = 1: a matrix ($N$ rows); 0: a row | 2 matrices; 4 `B_CH` rows |
 | `j_v`, `j_a`, `j_b`, `j_ra` / `j_rdy` | 1, ⌈log₂ `A_SLOTS`⌉, ⌈log₂ `B_SLOTS`⌉, 1 / 1 | in / out | burst on ready | a job | 1 |
-| `c_v`, `c_d` / `c_cr` | $NG$, $NG \cdot I \lceil E_C/8 \rceil$ / 1 | out / in | push + credit | one job's $C$ | `C_CAP` |
+| `c_v`, `c_d` / `c_cr` | $NG$, $NG \cdot I \lceil E_C/8 \rceil$ / 1 | out / in | push + credit | one job's $C$, 8 value words per window (`docs/architecture.md` §3.1) | `C_CAP` |
 | `busy` | 1 | out | | from start to `done` | |
 | `weight_in`, `weight_en` | 8, 1 | in | | simulation twin only | |
 
@@ -113,10 +123,11 @@ Port contract for the producers:
    A loader: row frame -> TRANSPOSER (G = NB rows)   |  window frame -> WINDOW STAGER (one write port per A memory)
    B loader: TRANS_B = 1 -> TRANSPOSER (G = N rows)  |  TRANS_B = 0 -> the shared ROW WRITER's bus
    A memories (N_AB = X_S'/A_GRP, blocked), B memories (K_s/B_GRP); window engine (leader = the slice's crossbar 0);
-   per crossbar: A and B shift registers, I bit-serial adders -> dpe (EXP, identity, I x I) -> sign XOR;
-   the first log2 K_s levels of each group's per-plane popcount tree
- shared: slot valid bits, release, credits; JOB register + decision; tree levels log2 n_s; per group the ROOT
- accumulator, NARROW and the OUTPUT PLANE BUFFER; c_v / c_d
+   per crossbar: the A word (shift register) and its column's B word (rotating register, one per column)
+     -> dpe (EXP; X_ADD: identity stacked twice, 2I x I; else I bit-serial adders -> identity, I x I) -> sign XOR;
+   per group: the XOR'd planes of the slice's K_s crossbars -> popcount -> one register
+ shared: slot valid bits, release, credits; JOB register + decision; per group the sum of the n_s slice counts (one
+ register), the ROOT accumulator, NARROW and the OUTPUT WORD BUFFER; c_v / c_d (value words)
 ```
 
 **The bit-plane datapath** (2026-10-22):
@@ -124,22 +135,37 @@ Port contract for the producers:
 - **The distribution register** carries planes to every slice.
 - **The stagers** keep byte registers and write each arriving plane as one bit of every byte. A unit is complete
   with its last plane. The memories keep the byte layout of §6.
-- **Farm feed.** Each crossbar holds its A word ($NB$ bytes) and its column's B word ($N$ bytes) in shift registers
-  that shift one bit per plane. Row $r$ of the crossbar's input ($m = r / N$, $n = r \bmod N$ in the window) takes
-  $\mathrm{trunc8}(L_A[m][k] + L_B[k][n])$ from a bit-serial full adder: the carry is cleared at plane 0, and the
-  carry out of plane 7 is dropped.
+- **Farm feed.** Each crossbar holds its A word ($NB$ bytes) in a shift register that shifts one bit per plane. Its
+  column's B word ($N$ bytes), the same for every wave of a job, is loaded once per job straight from the memory
+  read and rotated one bit per plane (one register per column, shared by the column's $NG$ crossbars). Row $r$ of
+  the crossbar's input ($m = r / N$, $n = r \bmod N$ in the window) takes bit $b$ of $L_A[m][k]$ at plane $b$:
+  - with $X_{ADD}$, row $I + r$ takes bit $b$ of $L_B[k][n]$ and the crossbar's own row sum forms $L_A + L_B$
+    (its EXP form $\mathrm{trunc8}(1 + y + \lfloor y^2/2 \rfloor)$ has period 256 in $y$, so
+    $\mathrm{EXP}(L_A + L_B) = \mathrm{EXP}(\mathrm{trunc8}(L_A + L_B))$; checked over all 65,536 byte pairs);
+  - without $X_{ADD}$ (a square array), a bit-serial full adder per row forms $\mathrm{trunc8}(L_A[m][k] + L_B[k][n])$:
+    the carry is cleared at plane 0, and the carry out of plane 7 is dropped.
 - **Drain.** For an unsigned EXP byte $e$ and the term's sign $s$, $x = e \oplus (s\ ?\ \mathtt{0xFF} : 0)$, so
   $\pm e = x - 255 s$. Therefore
   $$
   C = \sum_k \pm e_k = \sum_b 2^b\, \mathrm{POP}_b - 255\, n_{neg}, \qquad
   \mathrm{POP}_b = \sum_k \mathrm{bit}_b(x_k), \qquad n_{neg} = \sum_k s_k .
   $$
-  - Per plane, the group's tree adds the counts $\mathrm{POP}_b$ (registered levels).
+  - The signs of the wave being drained are captured at its MSB plane; the drain input of a lane is
+    $x = (e \wedge \mathrm{valid}) \oplus s_A \oplus s_B$ (the $n_{neg}$ plane has $e = 0$; while idle the
+    tree's input is ignored).
+  - Per plane, each slice counts its $K_s$ crossbars' bits per element with the sign XOR folded in, into one
+    register; the sum of the $n_s$ slice counts is registered once more when $n_s > 1$ (until the trims: a
+    register after the XOR and at every level of both trees).
   - $n_{neg}$ goes through the same tree in the cycle before the first drain plane, and loads the root accumulator
     with $-255\, n_{neg}$ (a shift and a subtract).
-  - The root adds $2^b\, \mathrm{POP}_b$ plane by plane, LSB first.
-  - After plane 7 the value is exact. NARROW runs on it, and the output plane buffer sends its 8 planes (2 lanes for
-    $E_C > 8$).
+  - The root accumulates $\sum_b 2^b\, \mathrm{POP}_b - 255\, n_{neg}$ plane by plane, LSB first, in right-shift
+    form: bit $b$ of the value is final once plane $b$ is added, so it leaves the accumulator into a 7-bit low
+    register and the accumulator keeps $\lfloor a / 2^{b+1} \rfloor$ ($RW + 2$ bits, $RW = 1 + \log_2 K$); the
+    preload is $+n_{neg}$ before plane 0 and $-2\, n_{neg}$ at plane 7 ($-255 n = n - 256 n$). No barrel shifter,
+    no $VW$-wide adder.
+  - After plane 7 the value $a = 2^7 u + \mathrm{low}$ is exact. NARROW runs on it, and the output word buffer sends the window as 8 value
+    words of $I/8$ elements, word $c$ = elements $cI/8 \ldots$ ($\lceil E_C/8 \rceil$ bytes each; until the trims, 8
+    planes).
 
 ## 5 Timing rules
 
@@ -154,10 +180,10 @@ Cycle 0 is the first cycle after reset. A signal "at $t$" is high (or a register
 | `CR_LAT` | 1 | a staging credit pulses one cycle after the unit's last write |
 | `DEC_LAT` | 1 | the job decision is registered: decided in cycle $t_{dec}$, the slices start at $t_{go} = t_{dec} + 1$ |
 | `START_LAT` | $A_{GRP} + 2$ | the slices start at $t_{go}$; every window of the job is ready at $t_{go}$ + `START_LAT` |
-| `DRAIN_REG` | 1 | the registered sign XOR of a drain plane |
-| `TREE_LEVELS` | $\log_2 K$ | the per-plane popcount tree: $\log_2 K_s$ levels in each slice, then $\log_2 n_s$ shared, all registered |
-| `ROOT_LAT` | 2 | after the last plane reaches the root: the root accumulator, then the output plane buffer |
-| `OUT_LAT` | `DRAIN_REG` + `TREE_LEVELS` + $(P - 1)$ + `ROOT_LAT` | a wave's `drain_start` → its first output plane |
+| `SLICE_LAT` | 1 | a drain plane's sign XOR and the slice's popcount over its $K_s$ crossbars, registered once |
+| `SHARED_LAT` | $[n_s > 1]$ | the sum of the $n_s$ slice counts, registered once (no stage when $n_s = 1$) |
+| `ROOT_LAT` | 2 | after the last plane reaches the root: the root accumulator, then the output word buffer |
+| `OUT_LAT` | `SLICE_LAT` + `SHARED_LAT` + $(P - 1)$ + `ROOT_LAT` | a wave's `drain_start` → its first output word |
 | `DONE_LAT` | 2 | `done` two cycles after the job's last output word |
 | `IDLE_LAT` | 2 | the slices read idle two cycles after the job's last drain plane |
 | `REL_LAT` | 1 | a released slot reads invalid, and its credit pulses, one cycle after `done` |
@@ -211,11 +237,13 @@ matrix is the one in slot `j_a`: for a released slot, the oldest not yet release
 (EXP, identity, $I \times I$) ready at $t_{go}$ + `START_LAT`, placed by the pass rule on the farm's own state:
 back to back, a wave every 10 cycles. Crossbar $f = g + NG\,k$ (column $k$, group $g$) feeds window $(g + NG\,t, k)$:
 $u = \mathrm{trunc8}(L_A[m][k] + L_B[k][n])$ over the window's $I$ elements, one bit-serial plane per cycle.
-- Output plane $b$ of wave $t$, every channel: at `drain_start`$(t)$ + `OUT_LAT` $+ b$. (Until 2026-10-22, output word
-  $c$ at `drain_start` $+ c +$ `DRAIN_REG` + `TREE_LEVELS`: the 5-lane sums streamed as they drained.)
-- The root and the output plane buffer serve one wave at a time. A wave's planes reach the root 10 cycles after the
+- Output word $c$ of wave $t$, every channel: at `drain_start`$(t)$ + `OUT_LAT` $+ c$. (Until the trims of 2026-10-23,
+  output plane $b$ at the same time, with `OUT_LAT` = $1 + \log_2 K + (P - 1) + 2$: a register after the sign XOR and
+  at every tree level. Until 2026-10-22, output word $c$ at `drain_start` $+ c + 1 + \log_2 K$: the 5-lane sums
+  streamed as they drained.)
+- The root and the output word buffer serve one wave at a time. A wave's planes reach the root 10 cycles after the
   previous wave's, and leave 8 cycles later, so one buffer suffices.
-- `done` = the last output plane + `DONE_LAT`; $t_{idle}$ = the last wave's `drain_end` + `IDLE_LAT`.
+- `done` = the last output word + `DONE_LAT`; $t_{idle}$ = the last wave's `drain_end` + `IDLE_LAT`.
 
 ## 6 Memories
 
@@ -226,8 +254,9 @@ $u = \mathrm{trunc8}(L_A[m][k] + L_B[k][n])$ over the window's $I$ elements, one
 | transposer staging | 2 × $G$ × $K_s$ bytes, flip-flops (written one bit per plane) | |
 | window staging | `A_CH` × 2 × `A_ROWS` × $K_s$ bytes, flip-flops (written one bit per plane) | |
 | row writer | `B_CH` × 2 × $N$ bytes (shared, written one bit per plane) | |
-| farm feed | per crossbar: the A word ($NB$ bytes) and the column's B word ($N$ bytes) as shift registers, $I$ carry flip-flops | |
-| root and output | per group: $I$ accumulators of $VW + 1$ bits, the output plane buffer $I \times E_C$ bits | |
+| farm feed | per crossbar: the A word ($NB$ bytes, next and current) as shift registers; per column: the B word ($N$ bytes), rotating; without $X_{ADD}$: $I$ carry flip-flops per crossbar | |
+| drain | per slice and group: $I$ counts of $1 + \log_2 K_s$ bits; shared, per group: $I$ sums of $1 + \log_2 K$ bits ($n_s > 1$) | |
+| root and output | per group and element: the accumulator ($RW + 2$ bits), the low register (7 bits) and the $n_{neg}$ count ($RW$ bits); the output word buffer $I \times 8\lceil E_C/8 \rceil$ bits per group | |
 
 With $A_{GRP}$ capped at $P$ = 8 (2026-10-22; until then $\min(\lceil 8I/40 \rceil, X_S')$ = 8 / 16 / 16 at $I$ = 64 /
 128 / 256), a 16-crossbar slice has 2 A memories at every $I$, twice the count at $I \ge 128$.
@@ -237,8 +266,10 @@ wave $\lfloor w/NG \rfloor$. B word (slot, $k$) = row $k$ of $B$.
 
 ## 7 Counts and resources
 
-- Passes: LOG ($L$ rows × $L$ columns) per converted row; EXP ($I \times I$) $N_E T_W$ per job.
-- CLB adds: $K I$ per output window (the pairing adds $L_A + L_B$, one per product) $+ (K - 1) I$ (the trees).
+- Passes: LOG ($L$ rows × $L$ columns) per converted row; EXP ($2I$ rows × $I$ columns with $X_{ADD}$, $I \times I$
+  without) $N_E T_W$ per job. The energy model charges the input side per row used (`platform/prices.py`).
+- CLB adds: $(K - 1) I$ per output window (the trees), plus $K I$ (the pairing adds $L_A + L_B$, one per product)
+  without $X_{ADD}$; with $X_{ADD}$ the crossbar's row sum forms them.
   Compares: $I$ per output window when `NARROW` > 0 (the narrowing). Memory: the bytes written into A / B, and read
   by the farm. (2026-10-15: the pairing adds and the narrowing compares were added, as in v2's attention ledger.)
 - Crossbars: $N_E$ EXP + `A_CH` LOG (`A_DOM` = 0) + `B_CH` LOG (`B_DOM` = 0).
@@ -247,11 +278,13 @@ wave $\lfloor w/NG \rfloor$. B word (slot, $k$) = row $k$ of $B$.
 
 - GATE 1 (case writer): the model's $C$ == the oracle's, bit-exact, every job.
 - Closed form (the model's test, written by hand from §5): for back-to-back jobs, wave $t$ starts at
-  $t_{go}$ + `START_LAT` + $10t$; its output planes at `drain_start` + `OUT_LAT`; `done` and $t_{idle}$ as §5.
-  (Until 2026-10-22 the witness was `dimm_tile_sim.tile_cycle_model`, which times the 40-bit pass.)
-- GATE 2 (64×64): the RTL's values, every port event (windows, credits, job takes), the total cycles and every
-  slice's memory image == the model's; every slice's engine state equal in every cycle (monitor).
-- VTR smoke (128×128): crossbar count == $N_E$ + converters; Fmax, CLB, memory.
+  $t_{go}$ + `START_LAT` + $10t$; its output words at `drain_start` + `OUT_LAT`; `done` and $t_{idle}$ as §5.
+  (Until 2026-10-22 the witness was `dimm_tile_sim.tile_cycle_model`, which times the pre-bit-plane pass.)
+- GATE 2 (64×64 for the adder branch; 128×64 for $X_{ADD}$, the same $I$): the RTL's values, every port event
+  (windows, credits, job takes), the total cycles and every slice's memory image == the model's; every slice's
+  engine state equal in every cycle (monitor).
+- VTR smoke (128×64 since 2026-10-23, the smallest array with $X_{ADD}$; 128×128 before): crossbar count == $N_E$ +
+  converters; Fmax, CLB, memory.
 
 ## 9 The two instances of the head
 
@@ -261,6 +294,7 @@ wave $\lfloor w/NG \rfloor$. B word (slot, $k$) = row $k$ of $B$.
 | A | int8 $q_8$, row frame, `A_CH` = $P_{proj}$, `A_SLOTS` = $R_b$ | log $\log P$, sign +, window frame (`A_ROWS` = $NWEL/B_{kv}$), `A_CH` = $N_{EXP}$, `A_SLOTS` = 2, released |
 | B | int8 $k_8$, `TRANS_B` = 1, `B_CH` = $P_{proj}$, `B_SLOTS` = $B$ | int8 $v_8$, `TRANS_B` = 0, `B_CH` = $P_{proj}$, `B_SLOTS` = $B$ |
 | C | `NARROW` = 5 | `NARROW` = 0 |
+| farm | $N_E = d$: one group per wave (2026-10-23; $2d$ before: the QK DIMM holds 0.2–14.5 % of the head's critical path, median 0.9 %, so $d$ fewer crossbars cost +0.7–7.1 % cycles, median +2.0 %, on the 48 builds) | $N_{EP} = 2d$: rate-matched to the softmax, whose $N_{EXP} = 2$ EXP crossbars emit 2 P windows per pass period, exactly the farm's $2d \cdot I / (I \cdot d)$ |
 
 ## 10 Refinements of `architecture.md` §4.4
 
@@ -299,3 +333,42 @@ wave $\lfloor w/NG \rfloor$. B word (slot, $k$) = row $k$ of $B$.
      exact value, and the output plane buffer. `OUT_LAT` = $10 + \log_2 K$ (was $1 + \log_2 K$).
    - **Guard:** the window frame's $A_{ROWS} K \le 5 \cdot 2^{16}$ becomes $A_{ROWS} K \le I$.
    - **Values, counts and the job and slot rules are unchanged.**
+9. **RTL details of the bit-plane pass** (2026-10-23; no timing rule changes):
+   - a column's B word is one shift register shared by the column's $NG$ crossbars (its value is the same for all);
+   - a slice's wave sequencer runs on fixed offsets from $t_{go}$ (wave $t$'s reads at $t_{go} + 10t + j$, the
+     shift-register load at $+ $ `START_LAT` $- 1$); the drain side follows the slice's crossbar 0 (`shift_add_done`
+     starts the $n_{neg}$ plane, `reg_full` the drain planes, `dpe_done` the wave's end);
+   - the window stager's port $m$ writes its words of a window (NB-row group outer, local column inner) from a
+     constant table per window phase ($w \bmod NG/Q$).
+10. **The soft-logic trims** (2026-10-23, your go after the source count of the bit-plane RTL: the QK DIMM 87k → 147k
+    flip-flop bits, the PV DIMM 51k → 133k, at BERT-Tiny 256×128):
+    - **Drain registers:** the sign XOR is folded into the slice's popcount (no register after the XOR), and each tree
+      registers its result once instead of at every level. `OUT_LAT` = $10 + [n_s > 1]$ (was $10 + \log_2 K$).
+      Saves about 53k (QK) and 37k (PV) flip-flop bits there [source count]; the trees are combinational over
+      $K_s \le 8$ and $n_s \le 8$ inputs (the VTR smoke checks Fmax).
+    - **Value words on the C port:** both consumers (the online softmax, the accumulator) compute on values, so the
+      window leaves as 8 value words of $I/8$ elements instead of 8 planes. The output word buffer has the size of
+      the plane buffer it replaces; the consumers drop their input corner-turns (`ip/softmax/spec.md` §10 item 8,
+      `acc_spec.md` §10 item 10).
+    - **Values, counts, the job and slot rules, and every other latency are unchanged.**
+11. **The DIMM revision** (2026-10-23, your go; the smoke of the trimmed head at 256×128 was stopped after 1 h 16 min
+    in ABC, and the flow's own statistics of the QK DIMM alone at 64×64 read 336k cells: 64k flip-flops, 123k MUX,
+    43k XOR, 44k AND, 23k OR, 35k hard-adder bits; the $I$ bit-serial adders per crossbar were about 35 % of the
+    gates ABC sees and carried the slice-wide `fv`/`fp` nets):
+    - **The add in the crossbar where the array has the rows** ($X_{ADD}$, $R \ge 2I$: six of the eight configs,
+      both fronts). The crossbar's input protocol (a full plane per cycle, 8 gapless planes) fixes one bit
+      producer per lane per burst cycle, so the adders cannot be shared between lanes (an 8-plane hold costs more
+      than they do) nor usefully between crossbars (that is fewer crossbars at full rate). With $X_{ADD}$ the
+      producer is a wire. A square array ($R = C$: 128×128, 256×256, and 64×64) keeps the adders: it could hold the
+      add only with half its columns per pass (two crossbars per window-column, twice the passes), which the user
+      judged unfair to those configs; the rule "the add uses spare rows where the array has them" applies to
+      every config alike.
+    - **The B word register:** loaded once per job from the memory read, rotated per byte while feeding; the
+      next-word register goes (jobs never overlap a feed: the decision needs every slice idle).
+    - **The drain input:** the signs captured at the MSB plane, $x = (e \wedge d_{on}) \oplus s_A \oplus s_B$.
+    - **The root** in right-shift form (§4).
+    - **The QK farm** $N_E = d$ (§9). $N_{EP}$ stays $2d$: rate-matched to the softmax.
+    - **Values and every latency are unchanged**; the EXP passes use $2I$ rows with $X_{ADD}$ (energy: the input
+      side per row used), and the pairing adds leave the CLB count there.
+    - **Checks:** the functional check at 64×64 (the adder branch) and at 128×64 ($X_{ADD}$; the same $I$); the
+      smokes at 128×64, the smallest array with $X_{ADD}$ and the DSE's best attention config.

@@ -28,7 +28,7 @@ from dse.space import CONFIGS, SHAPES  # noqa: E402
 from simulator.models.attentionHead import attentionHead, headParams  # noqa: E402
 
 TOP_KEYS = ("NSEQ", "DM", "D", "BKV", "R", "C", "P", "N_EXP", "N_E", "N_EP", "N_OC", "P_PROJ", "X_S")   # BUF left the
-#   model 2026-10-22 (the bit-plane pass); the 40-bit RTL keeps its default until the RTL pass
+#   model 2026-10-22 and the RTL 2026-10-23 (the bit-plane pass)
 FILES = {"gemm_top": "ip/gemm/rtl/vtr/gemm_top.v", "dimm_tile_top": "ip/dimm/rtl/vtr/dimm_tile_top.v",
          "softmax_online_top": "ip/softmax/rtl/vtr/softmax_online_top.v",
          "softmax_online_acc": "ip/softmax/rtl/vtr/softmax_online_acc.v", "att_ctrl": "top/rtl/vtr/att_ctrl.v"}
@@ -82,14 +82,16 @@ def rtl_crossbars(insts: dict) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--p-proj", type=int, default=1)
-    ap.add_argument("--n-e-mult", type=int, default=2, help="N_E = N_EP = this x d")
+    ap.add_argument("--n-e-mult", type=int, default=None, help="N_E = this x d (default: headParams's d)")
+    ap.add_argument("--n-ep-mult", type=int, default=None, help="N_EP = this x d (default: headParams's 2d)")
     a = ap.parse_args()
     body = strip_comments(head_text())
     top_defaults, lps, insts = header(head_text())[0], localparams(body), instances(body)
     bad, n = [], 0
     for (name, nseq, dm, d) in SHAPES:
         for R, C in CONFIGS:
-            hp = headParams(nseq, dm, d, R, C, P_PROJ=a.p_proj, N_E=a.n_e_mult * d, N_EP=a.n_e_mult * d)
+            hp = headParams(nseq, dm, d, R, C, P_PROJ=a.p_proj, N_E=None if a.n_e_mult is None else a.n_e_mult * d,
+                            N_EP=None if a.n_ep_mult is None else a.n_ep_mult * d)
             env = {k: getattr(hp, k) for k in TOP_KEYS}
             for k, default in top_defaults:                      # derived top parameters (V)
                 if k not in env:
@@ -116,7 +118,8 @@ def main() -> int:
             n += 1
     for b in bad[:20]:
         print("  MISMATCH", b)
-    print(f"check_head_params: {n} builds (P_PROJ {a.p_proj}, N_E = N_EP = {a.n_e_mult}d), {len(insts)} instances each: "
+    print(f"check_head_params: {n} builds (P_PROJ {a.p_proj}, N_E {a.n_e_mult or 'd'}, N_EP {a.n_ep_mult or '2d'}), "
+          f"{len(insts)} instances each: "
           + ("ALL PASS" if not bad else f"{len(bad)} mismatches"))
     return 0 if not bad else 1
 

@@ -29,7 +29,7 @@ import numpy as np
 from simulator.core.cycleMath import clog2, isPowerOfTwo, readyAt
 from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
-from simulator.core.records import PortSpec, Step, planePort
+from simulator.core.records import PortSpec, Step, planePort, valuePort
 from simulator.core.stages import Buffer, Serial
 from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, Crossbar, CrossbarGroup, trunc8
@@ -40,9 +40,9 @@ DIST_LAT = 1        # a stream plane -> every slice
 EMIT_LAT = 1        # a staged unit complete at the slices -> its first write
 CR_LAT = 1          # a unit's last write -> its staging credit
 DEC_LAT = 1         # the registered job decision
-DRAIN_REG = 1       # the registered sign XOR of a drain plane
-ROOT_LAT = 2        # the last plane at the root -> the root accumulator, then the output plane buffer
-DONE_LAT = 2        # the last output plane -> done
+SLICE_LAT = 1       # a drain plane's sign XOR and the slice's popcount, registered once
+ROOT_LAT = 2        # the last plane at the root -> the root accumulator, then the output word buffer
+DONE_LAT = 2        # the last output word -> done
 IDLE_LAT = 2        # the last drain plane -> the slices read idle
 REL_LAT = 1         # done -> a released slot reads invalid, its credit pulses
 
@@ -117,9 +117,9 @@ class DimmTileDerived:
     VW: int           # the output value width, 9 + clog2 K
     EC: int           # the C port's element width: 8 when narrowed, else VW (ceil(EC / 8) plane lanes)
     T_CV: int         # the converter's pass period, P + 2 (the int8 ports' contract)
-    TREE_LEVELS: int  # clog2 K
+    SHARED_LAT: int   # the sum of the n_s slice counts, registered once: 1 if NS > 1 else 0
     START_LAT: int    # job go -> the first farm burst, A_GRP + 2
-    OUT_LAT: int      # drain start -> the first output plane, DRAIN_REG + TREE_LEVELS + (P - 1) + ROOT_LAT
+    OUT_LAT: int      # drain start -> the first output word, SLICE_LAT + SHARED_LAT + (P - 1) + ROOT_LAT
     A_WPM: int        # A input windows per matrix
     B_WPM: int        # B rows per matrix
     CAP_A: int        # the A port's credit units in flight
@@ -127,6 +127,8 @@ class DimmTileDerived:
     CAP_B: int        # the B port's credit units in flight
     B_UNIT: int       # B rows per credit unit
     SAW: int          # the job port's A slot field width
+    XADD: int         # [R >= 2I]: the add is the crossbar's row sum (the identity stacked twice, 2I rows in use);
+                      #   else I bit-serial adders per crossbar (spec §4, §10 item 11)
     SBW: int          # the job port's B slot field width
 
 
@@ -138,10 +140,21 @@ class JobOffer:
     releaseA: int
 
 
+def stackedIdentity(nE: int, R: int, C: int, I: int) -> np.ndarray:
+    """The X_ADD farm's weights [nE, R, C]: rows r and I + r carry 1 to column r (r < I), so the pass's row sum is
+    log a + log b before EXP (spec §4, §10 item 11; the DIMM preloads them, PLAN R8)."""
+    W = np.zeros((nE, R, C), dtype=np.int8)
+    r = np.arange(I)
+    W[:, r, r] = 1
+    W[:, I + r, r] = 1
+    return W
+
+
 class DimmTileMath:
     """The values of dimm_tile_top: the operands' log bytes (LA [M, K] per A matrix, LB [K, N] per B matrix), a wave's
-    farm input trunc8(LA + LB) over every slice's window, the signed EXP bytes summed per group (the trees), the
-    narrowing, and the memory images of the loaders' writes (spec §6)."""
+    farm input over every slice's window (X_ADD: LA in rows 0..I-1 and LB in rows I..2I-1, the crossbar adds; else
+    trunc8(LA + LB) in the first I rows), the signed EXP bytes summed per group (the trees), the narrowing, and the
+    memory images of the loaders' writes (spec §6)."""
 
     def __init__(self, p: DimmTileParams, d: DimmTileDerived):
         self.p, self.d = p, d
@@ -190,10 +203,16 @@ class DimmTileMath:
         return e // p.N, e % p.N, np.broadcast_to(self.kOf[:, None], e.shape)
 
     def waveInput(self, aMatrix: int, bMatrix: int, wave: int) -> np.ndarray:
-        """The farm's input [N_E, R]: trunc8(log a + log b) in the first I rows."""
+        """The farm's input [N_E, R]: with X_ADD the log bytes of a in rows 0..I-1 and of b in rows I..2I-1 (the
+        crossbar's row sum adds them); else trunc8(log a + log b) in the first I rows (spec §4)."""
         m, n, k = self._waveElements(wave)
+        I = self.d.I
         X = np.zeros((self.p.N_E, self.p.R), dtype=np.int8)
-        X[:, :self.d.I] = trunc8(self.LA[aMatrix][m, k] + self.LB[bMatrix][k, n]).view(np.int8)
+        if self.d.XADD:
+            X[:, :I] = trunc8(self.LA[aMatrix][m, k]).view(np.int8)
+            X[:, I:2 * I] = trunc8(self.LB[bMatrix][k, n]).view(np.int8)
+        else:
+            X[:, :I] = trunc8(self.LA[aMatrix][m, k] + self.LB[bMatrix][k, n]).view(np.int8)
         return X
 
     def waveOutput(self, aMatrix: int, bMatrix: int, wave: int, expBytes: np.ndarray) -> np.ndarray:
@@ -241,7 +260,8 @@ class DimmTileMath:
 class DimmTile(Module):
     NAME = "dimm_tile_top"
     PARAMS_CLASS = DimmTileParams
-    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was GATE 2-pinned 2026-10-14
+    BASIS = "rtl-pinned"           # the revised bit-plane RTL: GATE 2 16/16 at 64x64 (the adders) and 16/16 at 128x64
+                                   #   (X_ADD, the add in the crossbar's rows), 2026-10-23
     STEP_METHODS = {"a_in": "stepLoadA", "b_in": "stepLoadB", "take": "stepTakeJob", "jobs": "stepRunJob"}
 
     @staticmethod
@@ -264,12 +284,12 @@ class DimmTile(Module):
         return DimmTileDerived(
             I=I, NB=NB, W_K=W_K, NG=NG, T_W=T_W, XS=XS, NS=NS, KS=KS, A_GRP=A_GRP, N_AB=XS // A_GRP,
             B_GRP=min(A_GRP, KS), LB=LB, A_W=p.A_ROWS * K, EW=Q * KS, E_WP=E_WP, VW=VW,
-            EC=8 if p.NARROW > 0 else VW, T_CV=p.P + 2, TREE_LEVELS=clog2(K), START_LAT=A_GRP + 2,
-            OUT_LAT=DRAIN_REG + clog2(K) + (p.P - 1) + ROOT_LAT,
+            EC=8 if p.NARROW > 0 else VW, T_CV=p.P + 2, SHARED_LAT=int(NS > 1), START_LAT=A_GRP + 2,
+            OUT_LAT=SLICE_LAT + int(NS > 1) + (p.P - 1) + ROOT_LAT,
             A_WPM=M // p.A_ROWS, B_WPM=N if p.TRANS_B else K,
             CAP_A=2 if p.A_FRAME == 0 else p.A_SLOTS, A_UNIT=NB if p.A_FRAME == 0 else M // p.A_ROWS,
             CAP_B=2 if p.TRANS_B else 4 * p.B_CH, B_UNIT=N if p.TRANS_B else 1,
-            SAW=addressBits(p.A_SLOTS), SBW=addressBits(p.B_SLOTS))
+            SAW=addressBits(p.A_SLOTS), SBW=addressBits(p.B_SLOTS), XADD=int(p.R >= 2 * I))
 
     @staticmethod
     def checkDomain(p: DimmTileParams) -> None:
@@ -321,8 +341,9 @@ class DimmTile(Module):
         self.bStaging = Buffer(2 if p.TRANS_B else 2 * p.B_CH,
                                f"{instance}: B staging" if p.TRANS_B else f"{instance}: B row register")
         self.aSlot = Buffer(p.A_SLOTS, f"{instance}: A slot")
-        self.farm = CrossbarGroup(p.N_E, R, C, p.P, mode="EXP", rowsUsed=I, colsUsed=I, modes=modes,
-                                  withValues=withValues)
+        self.farm = CrossbarGroup(p.N_E, R, C, p.P, mode="EXP", rowsUsed=2 * I if d.XADD else I, colsUsed=I,
+                                  weights=stackedIdentity(p.N_E, R, C, I) if d.XADD and withValues else None,
+                                  modes=modes, withValues=withValues)
         # what the steps record
         self.aLastWord, self.bLastWord = {}, {}    # input window -> its last plane at the slices
         self.aEmitAt = []                          # A staged unit (group / window) -> its first write
@@ -335,7 +356,7 @@ class DimmTile(Module):
         self.released = {}                         # A slot -> its releases so far
         # resources: the crossbars, and the A and B memories as the RTL declares them (the two kinds are added, as
         # they can have the same shape: QK at I = 256)
-        self.resources.crossbars[("EXP", I, I)] = p.N_E
+        self.resources.crossbars[("EXP", 2 * I if d.XADD else I, I)] = p.N_E
         if p.A_DOM == 0:
             self.resources.crossbars[("LOG", p.K, p.K)] += p.A_CH
         if p.B_DOM == 0:
@@ -353,7 +374,7 @@ class DimmTile(Module):
                            CAP=d.CAP_B, signals=("b_d", "b_v", "b_cr")),
             "j": PortSpec("j", "in", "burst", d.SAW + d.SBW + 1, 1, 1, 1, "job", CAP=1,
                           signals=("j_a", "j_b", "j_ra", "j_v", "j_rdy"), control=True),
-            "c": planePort("c", "out", "push+credit", d.EC, d.I, d.NG, "job output", p.P, CAP=p.C_CAP,
+            "c": valuePort("c", "out", "push+credit", d.EC, d.I, d.NG, "job output", p.P, CAP=p.C_CAP,
                            signals=("c_d", "c_v", "c_cr")),
         }
 
@@ -531,11 +552,11 @@ class DimmTile(Module):
             sums = self.math.waveOutput(aMatrix, bMatrix, wave, xbarPass.out) if self.math else None
             with label("dpe_drain"):                                 # the wave's P drain planes
                 lastDrain = xbarPass.events["drain_start"] + p.P - 1
-            tOut = lastDrain + DRAIN_REG + d.TREE_LEVELS + ROOT_LAT   # = drain_start + OUT_LAT: the exact sums
+            tOut = lastDrain + SLICE_LAT + d.SHARED_LAT + ROOT_LAT   # = drain_start + OUT_LAT: the exact sums
             for g in range(d.NG):
                 io.emit("c", g, job, g + d.NG * wave, tOut, None if sums is None else self.math.narrowed(sums[g]))
         last = waves[-1]
-        with label("stream"):                                        # the last wave's output planes
+        with label("stream"):                                        # the last wave's output words
             lastPlane = tOut + p.P - 1
         done = lastPlane + DONE_LAT
         self.slicesIdleFrom = last["drain_end"] + IDLE_LAT
@@ -548,7 +569,8 @@ class DimmTile(Module):
         # counts (spec §7)
         self.counts.passes.update(self.farm.passes)
         self.farm.passes.clear()
-        self.counts.clbAdd += p.K * p.M * p.N                          # the pairing adds: log a + log b per product
+        if not d.XADD:
+            self.counts.clbAdd += p.K * p.M * p.N                      # the pairing adds: log a + log b per product
         self.counts.clbAdd += d.W_K * (p.K - 1) * d.I                  # the trees: K - 1 adds per output element
         if p.NARROW:
             self.counts.clbCompare += p.M * p.N                        # the narrowing sat8(C >> NARROW) per element

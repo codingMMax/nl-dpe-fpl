@@ -1,4 +1,8 @@
-ngxiang# Mapping and tiling parameters of the attention layer
+# Mapping and tiling parameters of the attention layer
+
+> **Status note (2026-10-23):** the loading rule here (F-load, 5 bytes per cycle, `BUF` = 40) is the pre-bit-plane
+> design's; since 2026-10-22 a pass is 10 cycles of bit planes (`ip/xbar/spec.md`). Kept as the record of the
+> 2026-10-12 discussion.
 
 Status: 2026-10-12, from the DSE design discussion. Every number below comes from the V1 cycle model
 (`v2/sim/simulator/kernels/attention_sim.py`, `pass_engine.py`; used pass extent, P29) unless marked otherwise. The

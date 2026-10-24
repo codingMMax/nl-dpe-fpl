@@ -8,7 +8,7 @@
   closed   the jobs fed input schedules (early, staggered windows, late alpha, late log l) == spec §5's job rules
            written here by hand: every LOG and EXP job's decide, load_start, msb_fire, drain_start, drain_end; p_cr,
            la_cr, ll_cr; the run end (until 2026-10-22 the witness was v2's `ocarry_cycle_model`, which times the
-           40-bit pass)
+           pre-bit-plane pass)
   rules    every job decision, credit, E9 window and run_done recomputed from the spec §5 formulas; each readiness
            term and each input credit binds somewhere
   domain   the DSE's accumulator instances (6 shapes x 8 configs, N_EP = 2d, N_OC by the floor rule) are inside the
@@ -50,8 +50,8 @@ def inDomain(p: dict) -> bool:
 
 
 def nOcFloor(S: int, D: int, R: int, C: int, bkv: int = BKV) -> int:
-    """architecture.md §5.2, held at its 40-bit form: the smallest N_OC with T(ceil(P_oc / N_OC)) <= max(ceil(S Bkv / 5),
-    T(1)), T the 40-bit pass."""
+    """architecture.md §5.2, held at its pre-bit-plane form: the smallest N_OC with T(ceil(P_oc / N_OC)) <= max(ceil(S Bkv / 5),
+    T(1)), T the pre-bit-plane pass."""
     I = min(R, C)
     LW = -(-I // 5)
     tFill, tSteady = LW + 10 + LW, max(LW + 8, 10, LW + 1)
@@ -98,15 +98,19 @@ def testGate1(rng) -> int:
 def handJobs(S: int, D: int, I: int, nOc: int, B: int, runs: int, tLast, tAlpha, tLogL) -> tuple:
     """Spec §5's job rules by hand. tLast(r, b, q): window q's last plane; tAlpha(r, b), tLogL(r): the units' last
     planes. A pass loading at ls fires its MSB at ls + 8, its ACAM at ls + 9, drains ls + 10 .. ls + 17, and the
-    leader takes the next burst from ls + 10; a job decided at d loads at d + 17 (LOG) or d + 10 (EXP), and its last
-    plane read is at d + 7. Returns ({(r, kind, b, w): events}, {credit: times}, {r: t_o8})."""
+    leader takes the next burst from ls + 10; a job decided at d loads at d + 17 (LOG) or d + 10 (EXP), the group's
+    next job decides at d + 16 (LOG, the single corner-turns) or d + 17 (EXP, the single hold) at the earliest; an
+    EXP job's last lo plane read is at d + 7, a LOG job's last o_part word read at d + 15. Returns
+    ({(r, kind, b, w): events}, {credit: times}, {r: t_o8})."""
     pOc = S * D // I
     W = -(-pOc // nOc)
     jobs, credits, runEnd = {}, {}, {}
     leader = {"log": None, "exp": None}              # the group's last load_start
+    gap = {"log": 16, "exp": 17}                     # the single feed buffers (spec §5 LOG_GAP, EXP_GAP)
 
     def place(group, key, ready, pre):
-        ls = ready + pre if leader[group] is None else max(ready + pre, leader[group] + PASS)
+        ls = ready + pre if leader[group] is None else max(ready + pre, leader[group] + PASS,
+                                                           leader[group] - pre + gap[group] + pre)
         leader[group] = ls
         jobs[key] = dict(decide=ls - pre, load_start=ls, msb_fire=ls + 8, drain_start=ls + 10, drain_end=ls + 17)
         return jobs[key]
@@ -126,7 +130,7 @@ def handJobs(S: int, D: int, I: int, nOc: int, B: int, runs: int, tLast, tAlpha,
                     ready = max(ready, runEnd[r - 1] + 1)
                 e = place("log", (r, "log", b, w), ready, 17)
                 if w == W - 1:
-                    credits[("p", r, b)] = e["decide"] + 7 + 1
+                    credits[("p", r, b)] = e["decide"] + 15 + 1
         for w in range(W):
             e = place("exp", (r, "epilogue", B - 1, w),
                       max(tLogL(r) + 1, jobs[(r, "log", B - 1, w)]["drain_end"] + 1), 10)
@@ -200,6 +204,7 @@ def checkRules(c: Case, bind: dict) -> None:
             if v == decide:
                 bind[f"{kind}.{k}"] = bind.get(f"{kind}.{k}", 0) + 1
     last = {"log": None, "exp": None}                     # the group's previous pass (acam_done)
+    prev = {"log": None, "exp": None}                     # the group's previous decision (the gap rule)
     runEnd = {}
     for r in range(runs):
         for b in range(B):
@@ -214,9 +219,10 @@ def checkRules(c: Case, bind: dict) -> None:
                                  l_done=acc.jobs[(r, "log", b - 1, w)]["drain_end"] + accumulator.JOB_DONE_LAT)
                     if last["exp"] is not None:                             # the pass finds the leader ready
                         terms["leader"] = last["exp"] + 1 - accumulator.PRE_EXP
+                        terms["gap"] = prev["exp"] + accumulator.EXP_GAP
                     bound("rescale", terms, e["decide"])
                     assert e["load_start"] == e["decide"] + accumulator.PRE_EXP
-                    last["exp"] = e["acam_done"]
+                    last["exp"], prev["exp"] = e["acam_done"], e["decide"]
                     if w == W - 1:
                         assert cr["acc.la"][u] == e["decide"] + P - 1 + accumulator.LA_CR_LAT
                 e = acc.jobs[(r, "log", b, w)]
@@ -227,20 +233,22 @@ def checkRules(c: Case, bind: dict) -> None:
                     terms["restart"] = runEnd[r - 1] + accumulator.RESTART_LAT
                 if last["log"] is not None:
                     terms["leader"] = last["log"] + 1 - accumulator.PRE_LOG
+                    terms["gap"] = prev["log"] + accumulator.LOG_GAP
                 bound("log", terms, e["decide"])
                 assert e["load_start"] == e["decide"] + accumulator.PRE_LOG
-                last["log"] = e["acam_done"]
+                last["log"], prev["log"] = e["acam_done"], e["decide"]
                 if w == W - 1:
-                    assert cr["acc.p"][j] == e["decide"] + P - 1 + accumulator.P_CR_LAT
+                    assert cr["acc.p"][j] == e["decide"] + 2 * P - 1 + accumulator.P_CR_LAT
         for w in range(W):
             e = acc.jobs[(r, "epilogue", B - 1, w)]
             terms = dict(ll=llw[(r, 0)][0] + P - 1 + accumulator.LL_LAT,
                          l_done=acc.jobs[(r, "log", B - 1, w)]["drain_end"] + accumulator.JOB_DONE_LAT)
             if last["exp"] is not None:
                 terms["leader"] = last["exp"] + 1 - accumulator.PRE_EXP
+                terms["gap"] = prev["exp"] + accumulator.EXP_GAP
             bound("epilogue", terms, e["decide"])
             assert e["load_start"] == e["decide"] + accumulator.PRE_EXP
-            last["exp"] = e["acam_done"]
+            last["exp"], prev["exp"] = e["acam_done"], e["decide"]
             if w == W - 1:
                 assert cr["acc.ll"][r] == e["decide"] + P - 1 + accumulator.LL_CR_LAT
         runEnd[r] = e["drain_start"] + accumulator.E9_LAT + P - 1           # the last E9 plane
@@ -274,8 +282,8 @@ def testRules(rng) -> dict:
     bind = {}
     for c in rulesCases(rng):
         checkRules(c, bind)
-    want = ("log.data", "log.e_done", "log.restart", "log.leader", "rescale.la", "rescale.l_done", "epilogue.ll",
-            "epilogue.l_done", "credit.acc.p", "credit.acc.la", "credit.acc.ll")
+    want = ("log.data", "log.e_done", "log.restart", "log.gap", "rescale.la", "rescale.l_done", "rescale.gap",
+            "epilogue.ll", "epilogue.l_done", "credit.acc.p", "credit.acc.la", "credit.acc.ll")
     for k in want:
         assert bind.get(k, 0) > 0, f"rule term {k} never binds ({bind})"
     return bind
@@ -312,8 +320,8 @@ def testTimingAndOrder(rng) -> None:
             assert r.events == a.events and r.cycles == a.cycles
 
 
-MUTANT_LATS = ("FIFO_LAT", "LA_LAT", "LL_LAT", "PRE_LOG", "PRE_EXP", "JOB_DONE_LAT", "P_CR_LAT", "LA_CR_LAT",
-               "LL_CR_LAT", "RESTART_LAT", "E9_LAT", "RUN_DONE_LAT")
+MUTANT_LATS = ("FIFO_LAT", "LA_LAT", "LL_LAT", "PRE_LOG", "PRE_EXP", "LOG_GAP", "EXP_GAP", "JOB_DONE_LAT", "P_CR_LAT",
+               "LA_CR_LAT", "LL_CR_LAT", "RESTART_LAT", "E9_LAT", "RUN_DONE_LAT")
 
 
 def signature(c: Case) -> tuple:

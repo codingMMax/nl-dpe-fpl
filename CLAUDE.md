@@ -78,14 +78,16 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
 
 ## The v3 experiment in numbers
 - 8 configs (2026-10-22): $R \in \{128, 256, 512\}$, $C \in \{64, 128, 256\}$, $C \le R$, so $I = \min(R, C) = C$.
-  - 64×64 is the RTL's functional-validation size only (GATE 2), and 256×128 is the VTR smoke point.
+  - 64×64 is the RTL's functional-validation size (GATE 2; the adder branch of the DIMM). The smokes run at 128×64, the
+    smallest array with the add in the crossbar's rows (2026-10-23; 256×128 before).
   - Until 2026-10-22 there were 12 configs, with $R$ up to 1024.
-  - `BUF` = 40 bits (a crossbar loads 5 B per cycle), `P` = 8.
+  - The crossbar's port is $R$ bits in and $C$ bits out per cycle (bit planes, `P` = 8 planes per window, a pass every
+    10 cycles; `v3/ip/xbar/spec.md`). The pre-bit-plane design loaded 5 bytes per cycle (`BUF` = 40; gone since 2026-10-22).
 - FC: four GEMMs $(K, N) \in \{(512,128), (2048,256), (256,512), (512,512)\}$, $V = \lceil K/R \rceil$,
   $H = \lceil N/C \rceil$, batch 1, used pass extent (P29). Its rows (32 on the 8 configs) use v2's VTR run (`v3/dse/results/fc_vtr_results.csv`, not
   re-run), priced by the v3 model into `fc_priced_results.csv`; v2's own rows are the regression reference in
   `v3/simulator/tests/ref/`.
-- Attention: one head, six shapes (`v3/dse/space.py`), 48 builds (72 on the 12 configs of the 2026-10-15/16 VTR run). One fixed mapping: $P_{proj} = 1$, $N_E = N_{EP} = 2d$,
+- Attention: one head, six shapes (`v3/dse/space.py`), 48 builds (72 on the 12 configs of the 2026-10-15/16 VTR run). One fixed mapping: $P_{proj} = 1$, $N_E = d$ (2026-10-23; $2d$ before), $N_{EP} = 2d$,
   $N_{EXP} = 2$, $N_{OC}$ by the floor rule (2–8), $B_{kv} = 16$, $X_S = 16$, $B_q = S$.
 - Cycles: the simulator's compute cycles, weights preloaded, $T = t_{done} - t_{start}$ (pinned to the RTL by the gates).
   Energy: frozen per-operation prices (`simulator/platform/nl_dpe.json`). Area:
@@ -97,11 +99,14 @@ size (R × C) makes the best NL-DPE FPGA for FC layers and for one head of textb
   - $H = \lceil \max(R + 7, C + 5) / 60 \rceil$ and $W = \lceil (A_{logic} + A_{xbar}) / (2239\,H) \rceil$, where $A_{xbar}$
     is COFFE's local input crossbar.
   - The v2 regression tests keep the legacy tiles (`rule="legacy"`).
-  - The row-parallel arch XMLs are staged in `vtr/arch_rowpar/` (`vtr/gen_arch.py --check`); VTR still uses v2's
-    `vtr/arch/`.
+  - The row-parallel arch XMLs are in `vtr/arch_rowpar/` (`vtr/gen_arch.py --check`; no swappable pins: VPR's post-route
+    pin fix-up aborts on `equivalent="full"`, 2026-10-23); the VTR
+    flow uses them since 2026-10-23 (`vtr/smoke.py`); v2's `vtr/arch/` serves the previous results (2026-10-16 run).
   - The simulator's cycles follow the bit-plane pass since 2026-10-22 (10 cycles per pass, 8 plane words per window;
-    `v3/ip/xbar/spec.md`; model-only until the RTL pass). The results below still carry the 40-bit cycles.
-- Results (2026-10-22; an area-only update, the cycles at the 40-bit ports):
+    `v3/ip/xbar/spec.md`; pinned to the bit-plane RTL by GATE 2 on 2026-10-23). The results below still carry the
+    pre-bit-plane cycles until the DSE VTR run (stage 4, on the user's go).
+- Results (2026-10-22; the previous head's rows, the 2026-10-16 run at $N_E = 2d$, re-priced with the row-parallel tiles;
+  pre-bit-plane cycles):
   - the FC front is 512×256 → 256×256 → 256×128 → 256×64 → 128×128 → 128×64;
   - attention's front is 128×64 alone;
   - across the families the front is 128×64 and 256×128 (256×64 left it).

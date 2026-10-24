@@ -1,20 +1,34 @@
 // ============================================================================
-// dimm_tile_top.v — tiled DIMM (v3, contract ip/dimm/spec.md). VTR twin: bare `dpe` hard blocks (port contract
-// ip/xbar/rtl/vtr/dpe_blackbox.v), no programming path, never simulated. Simulation twin:
-// ip/dimm/rtl/sim/dimm_tile_top.v (gate: tools/check_twins.py). Model: ip/dimm/model.py.
+// dimm_tile_top.v — tiled DIMM (v3, contract ip/dimm/spec.md, the bit-plane pass). VTR twin: bare `dpe` hard blocks
+// (port contract ip/xbar/rtl/vtr/dpe_blackbox.v; the widths from the arch XML, vtr/arch_rowpar/), no programming
+// path, never simulated. Simulation twin: ip/dimm/rtl/sim/dimm_tile_top.v (gate: tools/check_twins.py). Model:
+// simulator/models/dimmTile.py.
 //
 // One job: C[m][n] = sum_k (-1)^(sA ^ sB) EXP(trunc8(LA[m][k] + LB[k][n])), then sat8(C >> NARROW) if NARROW > 0.
-// Operand ports take row-major rows (int8 through a LOG converter per channel, or log bytes); the module stages
-// them into the farm's word layout, holds A_SLOTS / B_SLOTS matrices, takes jobs (slot pair, release bit) on a
-// burst-on-ready job port into a one-entry register, and pushes C windows on NG channels against C_CAP credits.
+// Every port carries a window as 8 plane words on consecutive cycles, LSB first (bit e of plane word b = bit b of
+// element e; C in ECL = ceil(EC/8) lanes of I bits). Operand ports take rows (int8 through a LOG converter per
+// channel, or log bytes); the module stages them into the farm's word layout, holds A_SLOTS / B_SLOTS matrices, takes
+// jobs (slot pair, release bit) on a burst-on-ready job port into a one-entry register, and pushes C windows on NG
+// channels against C_CAP credits.
 //
-// Structure (spec §4): per channel converter -> distribution register (word index, window count) -> the slices.
-// The loaders' control (completion, writer counters, memory addresses) is shared, the staging data and the write
-// ports are per slice. Slice s = the farm's columns [s*KS, (s+1)*KS) of all NG groups (X_S' crossbars): its A and B
-// memories, its copy of the v2 window engine (leader = its crossbar 0), its crossbars, the first log2 KS tree
-// levels. Shared: slots, jobs, credits, the last log2 NS tree levels, narrowing, the output channels.
+// Rewritten 2026-10-23 for the bit-plane pass (spec §10 item 8) from the pre-bit-plane F3 module (git show
+// 8acf73c:v3/ip/dimm/rtl/sim/dimm_tile_top.v). Kept: the loaders' control, the slots, the jobs and the credits. New:
+// the stagers shift in one bit per plane; A_GRP = min(P, X_S'); the window stager writes through each A memory's own
+// port, E_WP cycles per window; the farm is fed from shift registers; the drain is summed per plane (popcount trees,
+// the root accumulator, NARROW on the exact value, the output word buffer).
+// Revised 2026-10-23 (spec §10 item 11): where R >= 2I the add is the crossbar's row sum (X_ADD: the identity stacked
+// twice, rows r and I + r; no adders), else I bit-serial adders per crossbar; the B word loads once per job and
+// rotates; the drain input is (e & d_on) ^ s_A ^ s_B with the signs captured at the MSB plane; the root accumulates
+// in right-shift form (u <= 2 n_neg, then floor(u/2) + POP_b per plane, -2 n_neg at plane 7; the bit shifted out is
+// final and goes to a 7-bit low register).
+//
+// Structure (spec §4): per channel converter -> distribution register (plane index, window count) -> the slices.
+// The loaders' control (completion, writer counters, memory addresses) is shared, the staging data is per slice.
+// Slice s = the farm's columns [s*KS, (s+1)*KS) of all NG groups (X_S' crossbars): its A and B memories, its copy of
+// the wave sequencer, its crossbars, the first log2 KS popcount-tree levels. Shared: slots, jobs, credits, the last
+// log2 NS tree levels, the root accumulators, NARROW, the output plane buffer, the output channels.
 // Every latency is named in spec §5; the model times every port event by the same rules (GATE 2: Delta = 0).
-// Domain: the elaboration guards below (= DimmTile.guard).
+// Domain: the elaboration guards below (DimmTile.checkDomain; A_CH and B_CH powers of two).
 // ============================================================================
 
 `timescale 1ns / 1ps
@@ -25,7 +39,6 @@ module dimm_tile_top #(
     parameter K        = 16,
     parameter R        = 64,
     parameter C        = 64,
-    parameter BUF      = 40,
     parameter P        = 8,
     parameter N_E      = 32,
     parameter X_S      = 16,
@@ -48,17 +61,20 @@ module dimm_tile_top #(
     parameter VW       = 9 + $clog2(K),
     parameter EC       = (NARROW > 0) ? 8 : VW,
     parameter SAW      = (A_SLOTS > 1) ? $clog2(A_SLOTS) : 1,
-    parameter SBW      = (B_SLOTS > 1) ? $clog2(B_SLOTS) : 1
+    parameter SBW      = (B_SLOTS > 1) ? $clog2(B_SLOTS) : 1,
+    parameter A_W      = A_ROWS * K,                            // an A window's elements (plane word bits)
+    parameter LBL      = TRANS_B ? K : N,                       // a B row's elements
+    parameter ECL      = (EC + 7) / 8                           // the C port's plane lanes
 ) (
     input  wire                  clk,
     input  wire                  reset,
     // A port: A_CH channels, push + credit
     input  wire [A_CH-1:0]       a_v,
-    input  wire [A_CH*BUF-1:0]   a_d,
+    input  wire [A_CH*A_W-1:0]   a_d,
     output reg                   a_cr,
     // B port
     input  wire [B_CH-1:0]       b_v,
-    input  wire [B_CH*BUF-1:0]   b_d,
+    input  wire [B_CH*LBL-1:0]   b_d,
     output reg                   b_cr,
     // job port: burst on ready into the job register
     input  wire                  j_v,
@@ -68,169 +84,203 @@ module dimm_tile_top #(
     output wire                  j_rdy,
     // C port: NG channels, push + credit
     output wire [NG-1:0]         c_v,
-    output wire [NG*5*EC-1:0]    c_d,
+    output wire [NG*I*ECL-1:0]   c_d,
     input  wire                  c_cr,
     output wire                  busy
 );
     // ---- derived (spec §2) -------------------------------------------------------------------------------------
-    localparam EPS   = BUF / 8;
     localparam NB    = I / N;                                   // rows per farm window
     localparam W_K   = (M * N) / I;                             // windows per column
     localparam T_W   = W_K / NG;                                // waves
-    localparam LW    = (I * 8 + BUF - 1) / BUF;                 // words per farm window
     localparam XS    = (X_S < N_E) ? X_S : N_E;                 // crossbars per slice
     localparam NS    = N_E / XS;                                // slices
     localparam KS    = XS / NG;                                 // columns per slice
-    localparam AGC   = (LW < XS) ? LW : XS;
-    localparam A_GRP = 1 << ($clog2(AGC + 1) - 1);              // crossbars per A memory
+    localparam AGC   = (P < XS) ? P : XS;
+    localparam A_GRP = 1 << ($clog2(AGC + 1) - 1);              // crossbars per A memory: 2^k <= min(P, X_S')
     localparam B_GRP = (A_GRP < KS) ? A_GRP : KS;               // columns per B memory
-    localparam LBL   = TRANS_B ? K : N;                         // B row length
-    localparam A_W   = A_ROWS * K;                              // elements per A input window
-    localparam LWA   = (A_W + 4) / 5;                           // words per A input window
-    localparam LWB   = (LBL + 4) / 5;                           // words per B row
     localparam NQW   = A_ROWS / NB;                             // NB-row groups per A input window (window frame)
-    localparam EW    = NQW * KS;                                // words a window gives a slice (window frame)
+    localparam NQ1   = (A_FRAME == 1) ? NQW : 1;
     localparam WPMA  = M / A_ROWS;                              // A input windows per matrix
+    localparam PW    = $clog2(P);                               // plane index bits
     localparam KSW   = (KS > 1) ? $clog2(KS) : 1;
     localparam LKS   = $clog2(KS);
     localparam LNG   = $clog2(NG);
     localparam LG    = $clog2(A_GRP);
     localparam LBG   = $clog2(B_GRP);
+    localparam LQ    = $clog2(NQ1);
     localparam LTW   = (T_W > 1) ? $clog2(T_W) : 1;
-    localparam NAB   = XS / A_GRP;                              // A memories per slice
+    localparam NAB   = XS / A_GRP;                              // A memories per slice, each with its own write port
     localparam NBM   = KS / B_GRP;                              // B memories per slice
-    localparam LNABW = (NAB > 1) ? $clog2(NAB) : 1;
     localparam LNBMW = (NBM > 1) ? $clog2(NBM) : 1;
-    localparam AAW   = SAW + LTW + ((LG > 0) ? LG : 1);         // A memory address {slot, wave, index}
-    localparam BAW   = SBW + ((LBG > 0) ? LBG : 1);             // B memory address {slot, index}
-    // (LGW / LBGW below: the index field widths)
-    localparam VWS   = 9 + LKS;                                 // a slice's partial sum
+    localparam LGW   = (LG > 0) ? LG : 1;
+    localparam LBGW  = (LBG > 0) ? LBG : 1;
+    localparam LQW   = (LQ > 0) ? LQ : 1;
+    localparam AAW   = SAW + LTW + LGW;                         // A memory address {slot, wave, index}
+    localparam BAW   = SBW + LBGW;                              // B memory address {slot, index}
     localparam LNS   = $clog2(NS);
-    localparam TWW   = $clog2(T_W + 1) + 1;                     // engine counter widths (v2)
-    localparam CW    = $clog2(LW + 1) + 1;
-    localparam CTLW  = 2 + CW + TWW;                            // {valid, last, word, wave}
+    localparam CW    = 1 + LKS;                                 // a slice's per-plane counts
+    localparam RW    = CW + LNS;                                // the root's per-plane counts: 1 + log2 K
+    localparam CTLW  = 3 + PW;                                  // the drain control {n_neg, plane valid, plane, last}
     localparam CCW   = $clog2(C_CAP + 1);
     localparam LCHA  = (A_CH > 1) ? $clog2(A_CH) : 0;
     localparam LCHB  = (B_CH > 1) ? $clog2(B_CH) : 0;
     localparam LNB   = $clog2(NB);
-    localparam LGW   = (LG > 0) ? LG : 1;
-    localparam LBGW  = (LBG > 0) ? LBG : 1;
+    // the window stager (window frame, spec §5): a window's farm windows repeat their crossbar pattern every NPH windows
+    localparam NPH   = (NQ1 < NG) ? NG / NQ1 : 1;
+    localparam LPH   = $clog2(NPH);
+    localparam LPHW  = (LPH > 0) ? LPH : 1;
+
+    // word (q, i) of a window at phase ph (q < NQ1, i < KS; q outer, i inner) goes to the slice's crossbar
+    // f = (ph*NQ1 + q) mod NG + NG i, in A memory f >> LG (spec §6)
+    function integer wp_words;                                  // E_WP: the most words of a window one memory takes
+        input integer dummy;
+        integer ph, m, q, i, n, most;
+        begin
+            most = 0;
+            for (ph = 0; ph < NPH; ph = ph + 1)
+                for (m = 0; m < NAB; m = m + 1) begin
+                    n = 0;
+                    for (q = 0; q < NQ1; q = q + 1)
+                        for (i = 0; i < KS; i = i + 1)
+                            if ((((((ph << LQ) + q) & (NG - 1)) + (i << LNG)) >> LG) == m) n = n + 1;
+                    if (n > most) most = n;
+                end
+            wp_words = most;
+        end
+    endfunction
+    function integer wsel;                                      // memory m's e-th word at phase ph: {1, q, i} or 0
+        input integer m, ph, e;
+        integer q, i, n;
+        begin
+            wsel = 0;
+            n = 0;
+            for (q = 0; q < NQ1; q = q + 1)
+                for (i = 0; i < KS; i = i + 1)
+                    if ((((((ph << LQ) + q) & (NG - 1)) + (i << LNG)) >> LG) == m) begin
+                        if (n == e) wsel = (1 << 20) | (q << 10) | i;
+                        n = n + 1;
+                    end
+        end
+    endfunction
+    localparam E_WP  = wp_words(0);                             // the window stager's cycles per window
+    localparam LEW   = $clog2(E_WP);
+    localparam LEWW  = (LEW > 0) ? LEW : 1;
+    localparam SELW  = 1 + LQW + KSW;                           // a port table entry {valid, q, i}
 
     generate
         if ((M & (M-1)) != 0 || (N & (N-1)) != 0 || (K & (K-1)) != 0 || (N_E & (N_E-1)) != 0
             || (X_S & (X_S-1)) != 0 || (I & (I-1)) != 0 || I < 8 || N > I || M * N < I || K < 2 || K > N_E
-            || NG > W_K || NG > XS || K > I || LBL > I || BUF != 40 || EPS != 5
+            || NG > W_K || NG > XS || K > I || LBL > I || P != 8
             || (A_CH & (A_CH-1)) != 0 || (B_CH & (B_CH-1)) != 0 || A_SLOTS < 1 || B_SLOTS < 1 || C_CAP < 1
             || (A_FRAME == 0 && (A_ROWS != 1 || A_CH > NB))
             || (A_FRAME == 1 && (A_ROWS < NB || (A_ROWS % NB) != 0 || (M % A_ROWS) != 0 || A_DOM != 1
-                                 || (NQW & (NQW-1)) != 0))
+                                 || (NQW & (NQW-1)) != 0 || A_ROWS * K > I))
             || NARROW < 0 || NARROW >= VW)
         begin : g_bad_param
             dimm_tile_parameter_outside_domain u_bad ();
         end
     endgenerate
 
-    genvar gch, gs, gi, gr, gq, gj, gm;
+    genvar gch, gs, gi, gr, gj, gm, gp, ge, gl;
 
     // =============================================================================================================
-    // 1  streams: converter per channel (int8) or the port word (log), then the distribution register (DIST_LAT 1)
-    //    with the framing counters (word in window, windows on the channel; low bits only)
+    // 1  streams: converter per channel (int8) or the port planes (log), then the distribution register (DIST_LAT 1)
+    //    with the framing counters (plane in the window, windows on the channel; low bits only)
     // =============================================================================================================
     localparam ANW = (A_FRAME == 0) ? ((2 * NB / A_CH > 1) ? $clog2(2 * NB / A_CH) : 1) : 1;    // window count bits
     localparam BNW = TRANS_B ? ((2 * N / B_CH > 1) ? $clog2(2 * N / B_CH) : 1) : 1;
-    localparam ACW = $clog2(LWA + 1);
-    localparam BCW = $clog2(LWB + 1);
-    wire [A_CH-1:0]     sa_v;
-    wire [A_CH*BUF-1:0] sa_d;
-    wire [B_CH-1:0]     sb_v;
-    wire [B_CH*BUF-1:0] sb_d;
+    wire [A_CH-1:0]      sa_v;
+    wire [A_CH*A_W-1:0]  sa_d;
+    wire [B_CH-1:0]      sb_v;
+    wire [B_CH*LBL-1:0]  sb_d;
     wire [A_CH+B_CH-1:0] conv_err;
     generate
         for (gch = 0; gch < A_CH; gch = gch + 1) begin : g_sa
             if (A_DOM == 0) begin : g_conv
-                dimm_conv #(.R(R), .C(C), .BUF(BUF), .P(P), .L(K)) u_conv (
+                dimm_conv #(.R(R), .C(C), .P(P), .L(A_W)) u_conv (
                     .clk(clk), .reset(reset),
-                    .x_v(a_v[gch]), .x_d(a_d[gch*BUF +: BUF]),
-                    .s_v(sa_v[gch]), .s_d(sa_d[gch*BUF +: BUF]), .err(conv_err[gch]));
+                    .x_v(a_v[gch]), .x_d(a_d[gch*A_W +: A_W]),
+                    .s_v(sa_v[gch]), .s_d(sa_d[gch*A_W +: A_W]), .err(conv_err[gch]));
             end else begin : g_log
                 assign sa_v[gch] = a_v[gch];
-                assign sa_d[gch*BUF +: BUF] = a_d[gch*BUF +: BUF];
+                assign sa_d[gch*A_W +: A_W] = a_d[gch*A_W +: A_W];
                 assign conv_err[gch] = 1'b0;
             end
         end
         for (gch = 0; gch < B_CH; gch = gch + 1) begin : g_sb
             if (B_DOM == 0) begin : g_conv
-                dimm_conv #(.R(R), .C(C), .BUF(BUF), .P(P), .L(LBL)) u_conv (
+                dimm_conv #(.R(R), .C(C), .P(P), .L(LBL)) u_conv (
                     .clk(clk), .reset(reset),
-                    .x_v(b_v[gch]), .x_d(b_d[gch*BUF +: BUF]),
-                    .s_v(sb_v[gch]), .s_d(sb_d[gch*BUF +: BUF]), .err(conv_err[A_CH + gch]));
+                    .x_v(b_v[gch]), .x_d(b_d[gch*LBL +: LBL]),
+                    .s_v(sb_v[gch]), .s_d(sb_d[gch*LBL +: LBL]), .err(conv_err[A_CH + gch]));
             end else begin : g_log
                 assign sb_v[gch] = b_v[gch];
-                assign sb_d[gch*BUF +: BUF] = b_d[gch*BUF +: BUF];
+                assign sb_d[gch*LBL +: LBL] = b_d[gch*LBL +: LBL];
                 assign conv_err[A_CH + gch] = 1'b0;
             end
         end
     endgenerate
 
     reg  [A_CH-1:0]     da_v;
-    reg  [A_CH*BUF-1:0] da_d;
-    reg  [A_CH*ACW-1:0] da_c;
+    reg  [A_CH*A_W-1:0] da_d;
+    reg  [A_CH*PW-1:0]  da_c;
     reg  [A_CH*ANW-1:0] da_n;
     reg  [B_CH-1:0]     db_v;
-    reg  [B_CH*BUF-1:0] db_d;
-    reg  [B_CH*BCW-1:0] db_c;
+    reg  [B_CH*LBL-1:0] db_d;
+    reg  [B_CH*PW-1:0]  db_c;
     reg  [B_CH*BNW-1:0] db_n;
-    reg  [A_CH*ACW-1:0] fa_c;                                    // framing state: next word index, windows seen
+    reg  [A_CH*PW-1:0]  fa_c;                                    // framing state: next plane index, windows seen
     reg  [A_CH*ANW-1:0] fa_n;
-    reg  [B_CH*BCW-1:0] fb_c;
+    reg  [B_CH*PW-1:0]  fb_c;
     reg  [B_CH*BNW-1:0] fb_n;
     integer ci;
     always @(posedge clk) begin
         for (ci = 0; ci < A_CH; ci = ci + 1) begin
             da_v[ci] <= !reset && sa_v[ci];
-            da_d[ci*BUF +: BUF] <= sa_d[ci*BUF +: BUF];
-            da_c[ci*ACW +: ACW] <= fa_c[ci*ACW +: ACW];
+            da_d[ci*A_W +: A_W] <= sa_d[ci*A_W +: A_W];
+            da_c[ci*PW +: PW] <= fa_c[ci*PW +: PW];
             da_n[ci*ANW +: ANW] <= fa_n[ci*ANW +: ANW];
             if (reset) begin
-                fa_c[ci*ACW +: ACW] <= 0; fa_n[ci*ANW +: ANW] <= 0;
+                fa_c[ci*PW +: PW] <= 0; fa_n[ci*ANW +: ANW] <= 0;
             end
             else if (sa_v[ci]) begin
-                if (fa_c[ci*ACW +: ACW] == LWA - 1) begin
-                    fa_c[ci*ACW +: ACW] <= 0;
+                if (fa_c[ci*PW +: PW] == P - 1) begin
+                    fa_c[ci*PW +: PW] <= 0;
                     fa_n[ci*ANW +: ANW] <= fa_n[ci*ANW +: ANW] + 1'b1;
                 end
-                else fa_c[ci*ACW +: ACW] <= fa_c[ci*ACW +: ACW] + 1'b1;
+                else fa_c[ci*PW +: PW] <= fa_c[ci*PW +: PW] + 1'b1;
             end
         end
         for (ci = 0; ci < B_CH; ci = ci + 1) begin
             db_v[ci] <= !reset && sb_v[ci];
-            db_d[ci*BUF +: BUF] <= sb_d[ci*BUF +: BUF];
-            db_c[ci*BCW +: BCW] <= fb_c[ci*BCW +: BCW];
+            db_d[ci*LBL +: LBL] <= sb_d[ci*LBL +: LBL];
+            db_c[ci*PW +: PW] <= fb_c[ci*PW +: PW];
             db_n[ci*BNW +: BNW] <= fb_n[ci*BNW +: BNW];
             if (reset) begin
-                fb_c[ci*BCW +: BCW] <= 0; fb_n[ci*BNW +: BNW] <= 0;
+                fb_c[ci*PW +: PW] <= 0; fb_n[ci*BNW +: BNW] <= 0;
             end
             else if (sb_v[ci]) begin
-                if (fb_c[ci*BCW +: BCW] == LWB - 1) begin
-                    fb_c[ci*BCW +: BCW] <= 0;
+                if (fb_c[ci*PW +: PW] == P - 1) begin
+                    fb_c[ci*PW +: PW] <= 0;
                     fb_n[ci*BNW +: BNW] <= fb_n[ci*BNW +: BNW] + 1'b1;
                 end
-                else fb_c[ci*BCW +: BCW] <= fb_c[ci*BCW +: BCW] + 1'b1;
+                else fb_c[ci*PW +: PW] <= fb_c[ci*PW +: PW] + 1'b1;
             end
         end
     end
 
     // =============================================================================================================
-    // 2  A loader control (shared): row frame = transposer of NB-row groups; window frame = window stager
+    // 2  A loader control (shared): row frame = transposer of NB-row groups; window frame = window stager writing
+    //    through every A memory's own port. Outputs per A memory port: write, address; the staging read selects
     // =============================================================================================================
-    reg                 aw_we;            // a slice write this cycle (combinational)
-    reg  [KSW-1:0]      aw_i;             // local column
-    reg  [7:0]          aw_q;             // NB-row group inside the window (window frame)
+    wire [NAB-1:0]      aw_we;            // the A memory ports' writes this cycle
+    wire [NAB*AAW-1:0]  aw_a;             // their addresses
+    wire [NAB*LQW-1:0]  aw_q;             // window stager: per port, the NB-row group of its word
+    wire [NAB*KSW-1:0]  aw_k;             // window stager: per port, the local column of its word
+    reg  [KSW-1:0]      aw_i;             // transposer: local column
     reg                 aw_buf;           // staging buffer (row frame) / entry (window frame)
     reg  [((A_CH > 1) ? $clog2(A_CH) : 1)-1:0] aw_ch;          // staging channel (window frame)
-    reg  [LNABW-1:0]    aw_m;             // A memory
-    reg  [AAW-1:0]      aw_a;             // its address
-    wire                a_unit_end;       // the writer's last word of a staged unit
+    wire                a_unit_end;       // the writer's last cycle of a staged unit
     wire                a_matrix_end;     // ... that completes an A matrix
     reg  [SAW-1:0]      a_wslot;          // the slot being written
     localparam WKW = (W_K > 1) ? $clog2(W_K) : 1;
@@ -241,7 +291,7 @@ module dimm_tile_top #(
             // rows done per buffer, complete flags, the writer (spec §5 transposer)
             reg [$clog2(NB+1)-1:0] cnt0, cnt1;
             reg                    cmp0, cmp1;
-            reg [KSW:0]            wi;                 // 0 idle, else the next word index + 1 ... (counts 1..KS-1)
+            reg [KSW:0]            wi;                 // 0 idle, else the next word index (counts 1..KS-1)
             reg                    qb;                 // the group being emitted: buffer
             reg [WKW-1:0]          qw;                 // its window in the matrix
             integer                ch, nd0, nd1;
@@ -249,7 +299,7 @@ module dimm_tile_top #(
             always @(*) begin
                 nd0 = 0; nd1 = 0;
                 for (ch = 0; ch < A_CH; ch = ch + 1)
-                    if (da_v[ch] && da_c[ch*ACW +: ACW] == LWA - 1) begin
+                    if (da_v[ch] && da_c[ch*PW +: PW] == P - 1) begin             // a row's last plane
                         rowg = (da_n[ch*ANW +: ANW] << LCHA) | ch;          // the row's index (low bits)
                         if ((rowg >> LNB) & 1) nd1 = nd1 + 1; else nd0 = nd0 + 1;
                     end
@@ -257,21 +307,23 @@ module dimm_tile_top #(
             wire start_w = (wi == 0) && (qb ? cmp1 : cmp0);
             wire [KSW-1:0] i_now = (wi == 0) ? {KSW{1'b0}} : wi[KSW-1:0];
             wire last_w = (wi == 0) ? (start_w && KS == 1) : (wi[KSW-1:0] == KS - 1 || KS == 1);
-            assign a_unit_end = (start_w || wi != 0) && last_w;
+            wire we_now = start_w || (wi != 0);
+            assign a_unit_end = we_now && last_w;
             assign a_matrix_end = a_unit_end && (qw == W_K - 1);
-            always @(*) begin
-                aw_we  = start_w || (wi != 0);
-                aw_i   = i_now;
-                aw_q   = 0;
-                aw_buf = qb;
-                aw_ch  = 0;
-            end
             // crossbar f = (w mod NG) | (i << LNG): memory f >> LG, index f mod A_GRP; address {slot, wave, index}
             wire [KSW+LNG:0] f_loc = ({{(LNG+1){1'b0}}, i_now} << LNG) | (qw & (NG - 1));
             wire [WKW:0]     wav   = qw >> LNG;
+            wire [LGW-1:0]   idx   = f_loc[LGW-1:0] & (A_GRP - 1);
+            for (gm = 0; gm < NAB; gm = gm + 1) begin : g_port
+                assign aw_we[gm] = we_now && (NAB == 1 || (f_loc >> LG) == gm);
+                assign aw_a[gm*AAW +: AAW] = {a_wslot, wav[LTW-1:0], idx};
+                assign aw_q[gm*LQW +: LQW] = {LQW{1'b0}};
+                assign aw_k[gm*KSW +: KSW] = i_now;
+            end
             always @(*) begin
-                aw_m = (NAB > 1) ? (f_loc >> LG) : 0;
-                aw_a = {a_wslot, wav[LTW-1:0], f_loc[LGW-1:0]};
+                aw_i   = i_now;
+                aw_buf = qb;
+                aw_ch  = 0;
             end
             always @(posedge clk) begin
                 if (reset) begin
@@ -284,7 +336,7 @@ module dimm_tile_top #(
                     if (cnt1 + nd1 == NB && nd1 != 0) begin cnt1 <= 0; cmp1 <= 1'b1; end
                     else cnt1 <= cnt1 + nd1;
                     // writer
-                    if (aw_we) begin
+                    if (we_now) begin
                         if (last_w) begin
                             wi <= 0;
                             if (qb) cmp1 <= 1'b0; else cmp0 <= 1'b0;
@@ -297,45 +349,71 @@ module dimm_tile_top #(
                 end
             end
         end else begin : g_awc
-            // window stager (spec §5): per channel two entries; windows emitted in global order
+            // window stager (spec §5): per channel two entries; windows written in global order, E_WP cycles each,
+            // every A memory through its own port from one start; port m's e-th word at the window's phase is a table
             reg [A_CH-1:0]         cmp0, cmp1;          // entry 0 / 1 complete, per channel
-            reg [$clog2(EW+1):0]   ei;                  // 0 idle, else the next word + 1
-            reg [((A_CH > 1) ? $clog2(A_CH) : 1)-1:0] wch;   // the window being emitted: channel
+            reg                    wr;                  // a window is being written
+            reg [LEWW-1:0]         ei;                  // its next cycle
+            reg [((A_CH > 1) ? $clog2(A_CH) : 1)-1:0] wch;   // the window being written: channel
             reg                    went;                //   entry
             reg [WPW-1:0]          wl;                  //   window in the matrix
             reg [WKW+1:0]          wbase;               //   its first farm window (wl * NQW)
             integer                ch;
-            wire want = went ? cmp1[wch] : cmp0[wch];
-            wire start_w = (ei == 0) && want;
-            wire [$clog2(EW+1):0] e_idx = (ei == 0) ? 0 : ei;
-            wire last_w = (ei == 0) ? (start_w && EW == 1) : (ei == EW - 1);
-            wire [KSW-1:0] i_now = e_idx & (KS - 1);
-            wire [7:0]     q_now = e_idx >> LKS;
-            assign a_unit_end = (start_w || ei != 0) && last_w;
+            wire want    = went ? cmp1[wch] : cmp0[wch];
+            wire start_w = !wr && want;
+            wire we_now  = start_w || wr;
+            wire [LEWW-1:0] e_now = wr ? ei : {LEWW{1'b0}};
+            wire last_w  = (e_now == E_WP - 1);
+            assign a_unit_end   = we_now && last_w;
             assign a_matrix_end = a_unit_end && (wl == WPMA - 1);
-            wire [WKW+1:0] w_a = wbase + q_now;                      // farm window
-            wire [KSW+LNG:0] f_loc = ({{(LNG+1){1'b0}}, i_now} << LNG) | (w_a & (NG - 1));
-            wire [WKW+1:0] wav = w_a >> LNG;
+            wire [LPHW-1:0] ph = wl[LPHW-1:0] & (NPH - 1);            // the window's phase, wl mod NPH
+            wire [LPHW+LEWW-1:0] ridx = (ph << LEW) | (e_now & (E_WP - 1));
+            for (gm = 0; gm < NAB; gm = gm + 1) begin : g_port
+                wire [NPH*E_WP*SELW-1:0] rom;                          // {valid, q, i} per (phase, cycle)
+                for (gp = 0; gp < NPH; gp = gp + 1) begin : g_ph
+                    for (ge = 0; ge < E_WP; ge = ge + 1) begin : g_e
+                        localparam integer S  = wsel(gm, gp, ge);
+                        localparam integer SV = (S >> 20) & 1, SQ = (S >> 10) & 1023, SI = S & 1023;
+                        assign rom[(gp*E_WP + ge)*SELW +: SELW] = (SV << (LQW + KSW)) | (SQ << KSW) | SI;
+                    end
+                end
+                reg [SELW-1:0] sel;
+                integer j;
+                always @(*) begin
+                    sel = 0;
+                    for (j = 0; j < NPH * E_WP; j = j + 1)
+                        if (ridx == j) sel = rom[j*SELW +: SELW];
+                end
+                wire             v_now = sel[LQW + KSW];
+                wire [LQW-1:0]   q_now = sel[KSW +: LQW];
+                wire [KSW-1:0]   k_now = sel[0 +: KSW];
+                wire [WKW+1:0]   w_a   = wbase + q_now;                 // the word's farm window
+                wire [KSW+LNG:0] f_loc = ({{(LNG+1){1'b0}}, k_now} << LNG) | (w_a & (NG - 1));
+                wire [WKW+1:0]   wav   = w_a >> LNG;
+                wire [LGW-1:0]   idx   = f_loc[LGW-1:0] & (A_GRP - 1);
+                assign aw_we[gm] = we_now && v_now;
+                assign aw_a[gm*AAW +: AAW] = {a_wslot, wav[LTW-1:0], idx};
+                assign aw_q[gm*LQW +: LQW] = q_now;
+                assign aw_k[gm*KSW +: KSW] = k_now;
+            end
             always @(*) begin
-                aw_we  = start_w || (ei != 0);
-                aw_i   = i_now;
-                aw_q   = q_now;
+                aw_i   = 0;
                 aw_buf = went;
                 aw_ch  = wch;
-                aw_m   = (NAB > 1) ? (f_loc >> LG) : 0;
-                aw_a   = {a_wslot, wav[LTW-1:0], f_loc[LGW-1:0]};
             end
             always @(posedge clk) begin
                 if (reset) begin
-                    cmp0 <= 0; cmp1 <= 0; ei <= 0; wch <= 0; went <= 1'b0; wl <= 0; wbase <= 0; a_wslot <= 0;
+                    cmp0 <= 0; cmp1 <= 0; wr <= 1'b0; ei <= 0; wch <= 0; went <= 1'b0; wl <= 0; wbase <= 0;
+                    a_wslot <= 0;
                 end
                 else begin
                     for (ch = 0; ch < A_CH; ch = ch + 1)
-                        if (da_v[ch] && da_c[ch*ACW +: ACW] == LWA - 1) begin
+                        if (da_v[ch] && da_c[ch*PW +: PW] == P - 1) begin              // a window's last plane
                             if (da_n[ch*ANW] == 1'b1) cmp1[ch] <= 1'b1; else cmp0[ch] <= 1'b1;
                         end
-                    if (aw_we) begin
+                    if (we_now) begin
                         if (last_w) begin
+                            wr <= 1'b0;
                             ei <= 0;
                             if (went) cmp1[wch] <= 1'b0; else cmp0[wch] <= 1'b0;
                             if (A_CH == 1 || wch == A_CH - 1) begin wch <= 0; went <= !went; end
@@ -346,7 +424,10 @@ module dimm_tile_top #(
                             end
                             else begin wl <= wl + 1'b1; wbase <= wbase + NQW; end
                         end
-                        else ei <= (ei == 0) ? 1 : ei + 1'b1;
+                        else begin
+                            wr <= 1'b1;
+                            ei <= e_now + 1'b1;
+                        end
                     end
                 end
             end
@@ -377,7 +458,7 @@ module dimm_tile_top #(
             always @(*) begin
                 nd0 = 0; nd1 = 0;
                 for (ch = 0; ch < B_CH; ch = ch + 1)
-                    if (db_v[ch] && db_c[ch*BCW +: BCW] == LWB - 1) begin
+                    if (db_v[ch] && db_c[ch*PW +: PW] == P - 1) begin
                         rowg = (db_n[ch*BNW +: BNW] << LCHB) | ch;
                         if ((rowg >> $clog2(N)) & 1) nd1 = nd1 + 1; else nd0 = nd0 + 1;
                     end
@@ -419,7 +500,7 @@ module dimm_tile_top #(
             end
         end else begin : g_brw
             // two row registers per channel; row t of the stream on channel t mod B_CH, register (t / B_CH) mod 2;
-            // byte n of a row = lane n mod 5 of its word n / 5 (constants)
+            // byte n of a row shifts in bit n of each of the row's planes (LSB first)
             reg  [B_CH*2*N*8-1:0] rr;
             reg  [B_CH-1:0] rdy0, rdy1;
             reg  [((B_CH > 1) ? $clog2(B_CH) : 1)-1:0] tch;   // next row to write: channel
@@ -429,9 +510,10 @@ module dimm_tile_top #(
             for (gch = 0; gch < B_CH; gch = gch + 1) begin : g_rch
                 for (gr = 0; gr < 2; gr = gr + 1) begin : g_rr
                     for (gj = 0; gj < N; gj = gj + 1) begin : g_rb
+                        localparam B0 = ((gch*2 + gr)*N + gj)*8;
                         always @(posedge clk)
-                            if (db_v[gch] && db_c[gch*BCW +: BCW] == (gj / 5) && db_n[gch*BNW] == gr)
-                                rr[((gch*2 + gr)*N + gj)*8 +: 8] <= db_d[gch*BUF + (gj % 5)*8 +: 8];
+                            if (db_v[gch] && db_n[gch*BNW] == gr)
+                                rr[B0 +: 8] <= {db_d[gch*LBL + gj], rr[B0 + 1 +: 7]};
                     end
                 end
             end
@@ -459,7 +541,7 @@ module dimm_tile_top #(
                 end
                 else begin
                     for (ch = 0; ch < B_CH; ch = ch + 1)
-                        if (db_v[ch] && db_c[ch*BCW +: BCW] == LWB - 1) begin
+                        if (db_v[ch] && db_c[ch*PW +: PW] == P - 1) begin             // a row's last plane
                             if (db_n[ch*BNW]) rdy1[ch] <= 1'b1; else rdy0[ch] <= 1'b1;
                         end
                     if (want) begin
@@ -536,103 +618,153 @@ module dimm_tile_top #(
     // =============================================================================================================
     // 5  slices
     // =============================================================================================================
-    wire [NS*CTLW-1:0]       sl_ctl;
-    wire [NS*NG*5*VWS-1:0]   sl_val;
+    wire [NS*CTLW-1:0]    sl_ctl;
+    wire [NS*NG*I*CW-1:0] sl_cnt;
     generate
         for (gs = 0; gs < NS; gs = gs + 1) begin : g_sl
-            // A staging data of this slice -> the A write word
-            wire [NB*8-1:0] a_word;
+            // A staging data of this slice -> the A memory ports' write words
+            wire [NAB*NB*8-1:0] a_word;
             if (A_FRAME == 0) begin : g_ast
-                dimm_xpose_stage #(.G(NB), .KS(KS), .KSW(KSW), .CH(A_CH), .LW(LWA), .CWD(ACW), .NW(ANW),
-                                   .COL0(gs * KS), .BUF(BUF)) u_st (
-                    .clk(clk), .d_v(da_v), .d_d(da_d), .d_c(da_c), .d_n(da_n),
-                    .r_buf(aw_buf), .r_i(aw_i), .r_word(a_word));
+                wire [NB*8-1:0] xw;
+                dimm_xpose_stage #(.G(NB), .KS(KS), .KSW(KSW), .CH(A_CH), .L(A_W), .NW(ANW), .COL0(gs * KS)) u_st (
+                    .clk(clk), .d_v(da_v), .d_d(da_d), .d_n(da_n), .r_buf(aw_buf), .r_i(aw_i), .r_word(xw));
+                assign a_word = {NAB{xw}};
             end else begin : g_awst
-                dimm_wstage #(.ROWS(A_ROWS), .K(K), .KS(KS), .KSW(KSW), .NB(NB), .CH(A_CH), .LW(LWA), .CWD(ACW),
-                              .NW(ANW), .COL0(gs * KS), .BUF(BUF)) u_st (
-                    .clk(clk), .d_v(da_v), .d_d(da_d), .d_c(da_c), .d_n(da_n),
-                    .r_ch(aw_ch), .r_ent(aw_buf), .r_q(aw_q), .r_i(aw_i), .r_word(a_word));
+                dimm_wstage #(.ROWS(A_ROWS), .K(K), .KS(KS), .KSW(KSW), .NB(NB), .CH(A_CH), .NW(ANW),
+                              .COL0(gs * KS), .NP(NAB), .LQW(LQW)) u_st (
+                    .clk(clk), .d_v(da_v), .d_d(da_d), .d_n(da_n),
+                    .r_ch(aw_ch), .r_ent(aw_buf), .r_q(aw_q), .r_i(aw_k), .r_word(a_word));
             end
             // B write word
             wire [N*8-1:0] b_word;
             if (TRANS_B) begin : g_bst
-                dimm_xpose_stage #(.G(N), .KS(KS), .KSW(KSW), .CH(B_CH), .LW(LWB), .CWD(BCW), .NW(BNW),
-                                   .COL0(gs * KS), .BUF(BUF)) u_st (
-                    .clk(clk), .d_v(db_v), .d_d(db_d), .d_c(db_c), .d_n(db_n),
-                    .r_buf(bw_buf), .r_i(bw_i), .r_word(b_word));
+                dimm_xpose_stage #(.G(N), .KS(KS), .KSW(KSW), .CH(B_CH), .L(LBL), .NW(BNW), .COL0(gs * KS)) u_st (
+                    .clk(clk), .d_v(db_v), .d_d(db_d), .d_n(db_n), .r_buf(bw_buf), .r_i(bw_i), .r_word(b_word));
             end else begin : g_brd
                 assign b_word = bw_rd;
             end
-            dimm_slice #(.M(M), .N(N), .R(R), .C(C), .BUF(BUF), .P(P), .XS(XS), .NG(NG), .KS(KS), .T_W(T_W),
-                         .W_K(W_K), .A_GRP(A_GRP), .B_GRP(B_GRP), .A_SLOTS(A_SLOTS), .B_SLOTS(B_SLOTS),
+            dimm_slice #(.M(M), .N(N), .R(R), .C(C), .P(P), .XS(XS), .NG(NG), .KS(KS), .T_W(T_W),
+                         .A_GRP(A_GRP), .B_GRP(B_GRP), .A_SLOTS(A_SLOTS), .B_SLOTS(B_SLOTS),
                          .A_SIGNED(A_SIGNED), .B_SIGNED(B_SIGNED), .SAW(SAW), .SBW(SBW), .AAW(AAW), .BAW(BAW),
-                         .LNABW(LNABW), .LNBMW(LNBMW), .VWS(VWS), .TWW(TWW), .CW(CW)) u_slice (
+                         .NAB(NAB), .LNBMW(LNBMW), .CW(CW), .CTLW(CTLW)) u_slice (
                 .clk(clk), .reset(reset),
-                .a_we(aw_we), .a_wm(aw_m), .a_wa(aw_a), .a_wd(a_word),
+                .a_we(aw_we), .a_wa(aw_a), .a_wd(a_word),
                 .b_we(bw_we && bw_sl[gs]), .b_wm(bw_m), .b_wa(bw_a), .b_wd(b_word),
                 .start(go_q), .a_sel(ja_q), .b_sel(jb_q), .idle(s_idle[gs]),
-                .o_ctl(sl_ctl[gs*CTLW +: CTLW]), .o_val(sl_val[gs*NG*5*VWS +: NG*5*VWS]));
+                .o_ctl(sl_ctl[gs*CTLW +: CTLW]), .o_cnt(sl_cnt[gs*NG*I*CW +: NG*I*CW]));
         end
     endgenerate
 
     // =============================================================================================================
-    // 6  the last log2 NS tree levels (registered), narrowing, the output channels; done
+    // 6  the sum of the NS slice counts (registered once when NS > 1: SHARED_LAT); per group the root accumulators in
+    //    right-shift form (spec §4: u <= 2 n_neg at the n_neg plane, then u <= floor(u/2) + POP_b per plane, -2 n_neg
+    //    at plane 7, the bit shifted out into the 7-bit low register; a = 128 u + low is exact after plane 7), NARROW
+    //    on the exact value, the output word buffer (ROOT_LAT 2); done (DONE_LAT 2)
     // =============================================================================================================
-    wire [CTLW-1:0]     t_ctl;
-    wire [NG*5*VW-1:0]  t_val;
-    dimm_tree #(.NG(NG), .DC(NS), .IW(VWS), .OW(VW), .CTLW(CTLW)) u_top (
-        .clk(clk), .reset(reset), .in_ctl(sl_ctl[0 +: CTLW]), .in_val(sl_val), .out_ctl(t_ctl), .out_val(t_val));
-    wire tv_v = t_ctl[CTLW-1];
-    wire tv_l = t_ctl[CTLW-2];
-    reg  done_q;
-    always @(posedge clk) done_q <= !reset && tv_l;
-    assign done = done_q;
-    assign c_v = {NG{tv_v}};
+    wire [CTLW-1:0]    t_ctl;
+    wire [NG*I*RW-1:0] t_cnt;
+    dimm_ptree #(.NG(NG), .DC(NS), .NE(I), .IW(CW), .CTLW(CTLW)) u_top (
+        .clk(clk), .reset(reset), .in_ctl(sl_ctl[0 +: CTLW]), .in_val(sl_cnt), .out_ctl(t_ctl), .out_val(t_cnt));
+    wire          t_n = t_ctl[CTLW-1];                // the n_neg counts at the root
+    wire          t_v = t_ctl[CTLW-2];                // plane t_b's counts at the root
+    wire [PW-1:0] t_b = t_ctl[1 +: PW];
+    wire          t_l = t_ctl[0];                     // the job's last wave
+    reg           fin, fin_l, ov, ol, dn1, dn2;
+    reg  [PW-1:0] ob;
+    always @(posedge clk) begin
+        fin   <= !reset && t_v && (t_b == P - 1);     // the accumulators hold the wave's exact values
+        fin_l <= t_l;
+        if (reset) begin ov <= 1'b0; ob <= 0; ol <= 1'b0; end
+        else if (fin) begin ov <= 1'b1; ob <= 0; ol <= fin_l; end
+        else if (ov) begin
+            if (ob == P - 1) ov <= 1'b0;
+            ob <= ob + 1'b1;
+        end
+        dn1 <= !reset && ov && (ob == P - 1) && ol;   // the job's last output plane
+        dn2 <= !reset && dn1;
+    end
+    assign done = dn2;
+    assign c_v  = {NG{ov}};
+    localparam AW1 = VW + 1;                          // the value a = 128 u + low (-255 K .. 255 K)
+    localparam UW  = RW + 2;                          // the accumulator u = floor(a / 2^(b+1)) during the planes (-2K .. 2K)
     generate
-        for (gi = 0; gi < NG; gi = gi + 1) begin : g_out
-            for (gj = 0; gj < 5; gj = gj + 1) begin : g_lane
-                wire signed [VW-1:0] v = t_val[(gi*5 + gj)*VW +: VW];
-                if (NARROW > 0) begin : g_nar
-                    wire signed [VW-1:0] sh = v >>> NARROW;
-                    assign c_d[(gi*5 + gj)*EC +: EC] = (sh > 127) ? 8'sd127 : ((sh < -128) ? -8'sd128 : sh[7:0]);
-                end else begin : g_wide
-                    assign c_d[(gi*5 + gj)*EC +: EC] = v;
+        for (gi = 0; gi < NG; gi = gi + 1) begin : g_root
+            reg  [I*UW-1:0]    u;                     // per element: the right-shift accumulator (spec §4)
+            reg  [I*7-1:0]     lo;                    // per element: the finished low bits
+            reg  [I*RW-1:0]    nn;                    // per element: n_neg, for the -2 n_neg term at plane 7
+            reg  [I*8*ECL-1:0] obuf;
+            reg  [I*UW-1:0]    un;                    // per element: the accumulator's next value
+            reg  [I*EC-1:0]    y;                     // per element: the exact value, narrowed
+            reg  [RW-1:0]      cx;
+            reg  signed [UW-1:0] uv, term;
+            reg  signed [AW1-1:0] av, sh;
+            integer e;
+            always @(*) begin
+                for (e = 0; e < I; e = e + 1) begin
+                    cx   = t_cnt[(gi*I + e)*RW +: RW];
+                    uv   = u[e*UW +: UW];
+                    // POP_b, and at plane 7 also -2 n_neg (the -256 n_neg part of the -255 n_neg preload)
+                    term = (t_b == P - 1) ? $signed({{(UW-RW){1'b0}}, cx}) - $signed({{(UW-RW-1){1'b0}}, nn[e*RW +: RW], 1'b0})
+                                          : $signed({{(UW-RW){1'b0}}, cx});
+                    un[e*UW +: UW] = (uv >>> 1) + term;
+                    av   = $signed({uv, lo[e*7 +: 7]});
+                    sh   = av >>> NARROW;
+                    y[e*EC +: EC] = (NARROW > 0) ? ((sh > 127) ? 8'd127 : ((sh < -128) ? 8'h80 : sh[7:0]))
+                                                 : av[EC-1:0];
                 end
             end
+            always @(posedge clk)
+                for (e = 0; e < I; e = e + 1) begin
+                    if (t_n) begin                    // the n_neg counts: u <= 2 n_neg (plane 0 then adds n_neg + POP_0)
+                        u[e*UW +: UW]  <= {{(UW-RW-1){1'b0}}, t_cnt[(gi*I + e)*RW +: RW], 1'b0};
+                        nn[e*RW +: RW] <= t_cnt[(gi*I + e)*RW +: RW];
+                    end
+                    else if (t_v) begin
+                        u[e*UW +: UW] <= un[e*UW +: UW];
+                        lo[e*7 +: 7]  <= {u[e*UW], lo[e*7 + 1 +: 6]};   // the bit shifted out is final (plane 0's is 0)
+                    end
+                    if (fin)      obuf[e*8*ECL +: 8*ECL] <= y[e*EC +: EC];
+                    else if (ov)  obuf[e*8*ECL +: 8*ECL] <= (e + I/8 < I) ? obuf[(e + I/8)*8*ECL +: 8*ECL] : {(8*ECL){1'b0}};
+                end
+            // value words (docs/architecture.md §3.1): word ob of channel g = elements ob*I/8 .. of the window, 8 ECL bits
+            // each, from the low I/8 slots of the buffer, which shifts I/8 elements per word
+            assign c_d[gi*I*ECL +: I*ECL] = obuf[0 +: I*ECL];
         end
     endgenerate
 endmodule
 
 
 // ============================================================================
-// dimm_conv — LOG converter of one int8 input channel: the input word register (CONV_IN_LAT 1) feeding an identity
-// crossbar in LOG mode, extent L x L; its drain is the converted row (reg_full = word valid). `err`: a load strobe
-// while the crossbar is not ready (the producer broke the converter period; simulation probe).
+// dimm_conv — LOG converter of one int8 input channel: the input plane register (CONV_IN_LAT 1) feeding an identity
+// crossbar in LOG mode, extent L x L; its drain planes are the converted row (reg_full = plane valid). `err`: a
+// plane while the crossbar is not ready (the producer broke the converter period; simulation probe).
 // ============================================================================
 module dimm_conv #(
-    parameter R = 64, C = 64, BUF = 40, P = 8, L = 16
+    parameter R = 64, C = 64, P = 8, L = 16
 ) (
-    input  wire           clk,
-    input  wire           reset,
-    input  wire           x_v,
-    input  wire [BUF-1:0] x_d,
-    output wire           s_v,
-    output wire [BUF-1:0] s_d,
-    output wire           err
+    input  wire         clk,
+    input  wire         reset,
+    input  wire         x_v,
+    input  wire [L-1:0] x_d,
+    output wire         s_v,
+    output wire [L-1:0] s_d,
+    output wire         err
 );
-    reg [BUF-1:0] in_q;
-    reg           in_v;
+    reg [L-1:0] in_q;
+    reg         in_v;
     always @(posedge clk) begin
         in_q <= x_d;
         in_v <= !reset && x_v;
     end
     wire rdy;
-    wire [BUF-1:0] dpe_in = in_q;
+    wire [R-1:0] dpe_in = in_q;                                             // rows >= L read 0
+    wire [C-1:0] dpe_out;
     dpe u_dpe (
         .clk(clk), .reset(reset), .data_in(dpe_in), .nl_dpe_control(2'b11),   // LOG
         .shift_add_control(1'b0), .w_buf_en(in_v), .shift_add_bypass(1'b0),
         .load_output_reg(1'b0), .load_input_reg(1'b0),
-        .MSB_SA_Ready(rdy), .data_out(s_d), .dpe_done(), .reg_full(s_v));
+        .MSB_SA_Ready(rdy), .data_out(dpe_out), .dpe_done(), .reg_full(s_v));
+    assign s_d = dpe_out[L-1:0];
     reg err_q;
     always @(posedge clk) err_q <= !reset && (err_q || (in_v && !rdy));
     assign err = err_q;
@@ -641,38 +773,35 @@ endmodule
 
 // ============================================================================
 // dimm_xpose_stage — one slice's transposer staging (spec §5): G-row groups, two buffers, bank = row mod G; the
-// slice's columns COL0 .. COL0 + KS - 1 of every row. Byte (buffer, bank, i) is written from word (COL0 + i) / 5,
-// lane (COL0 + i) mod 5 of a row whose index (low bits) selects that buffer and bank (constants per byte).
-// Read: word i of buffer r_buf = the bytes of banks 0 .. G-1, column i (bank = byte position).
+// slice's columns COL0 .. COL0 + KS - 1 of every row. Byte (buffer, bank, i) shifts in bit COL0 + i of each plane of
+// a row whose index (low bits) selects that buffer and bank, LSB plane first: after the row's 8 planes it holds the
+// element. Read: word i of buffer r_buf = the bytes of banks 0 .. G-1, column i (bank = byte position).
 // ============================================================================
 module dimm_xpose_stage #(
-    parameter G = 4, KS = 8, KSW = 3, CH = 1, LW = 4, CWD = 3, NW = 2, COL0 = 0, BUF = 40
+    parameter G = 4, KS = 8, KSW = 3, CH = 1, L = 16, NW = 2, COL0 = 0
 ) (
     input  wire              clk,
     input  wire [CH-1:0]     d_v,
-    input  wire [CH*BUF-1:0] d_d,
-    input  wire [CH*CWD-1:0] d_c,
+    input  wire [CH*L-1:0]   d_d,
     input  wire [CH*NW-1:0]  d_n,
     input  wire              r_buf,
     input  wire [KSW-1:0]    r_i,
     output reg  [G*8-1:0]    r_word
 );
     localparam LCH = (CH > 1) ? $clog2(CH) : 0;
-    localparam LG  = $clog2(G);
     reg [2*G*KS*8-1:0] st;                           // byte ((buffer*G + bank)*KS + i)
     genvar gb, gk, gi;
     generate
         for (gb = 0; gb < 2; gb = gb + 1) begin : g_buf
             for (gk = 0; gk < G; gk = gk + 1) begin : g_bank
                 for (gi = 0; gi < KS; gi = gi + 1) begin : g_col
-                    localparam WC = (COL0 + gi) / 5, LN = (COL0 + gi) % 5;
                     localparam ROW = gb * G + gk;     // the row's index mod 2G
+                    localparam B0  = ((gb*G + gk)*KS + gi)*8;
                     integer ch;
                     always @(posedge clk)
                         for (ch = 0; ch < CH; ch = ch + 1)
-                            if (d_v[ch] && d_c[ch*CWD +: CWD] == WC
-                                && ((((d_n[ch*NW +: NW] << LCH) | ch) & (2*G - 1)) == ROW))
-                                st[((gb*G + gk)*KS + gi)*8 +: 8] <= d_d[ch*BUF + LN*8 +: 8];
+                            if (d_v[ch] && ((((d_n[ch*NW +: NW] << LCH) | ch) & (2*G - 1)) == ROW))
+                                st[B0 +: 8] <= {d_d[ch*L + COL0 + gi], st[B0 + 1 +: 7]};
                 end
             end
         end
@@ -689,24 +818,24 @@ endmodule
 
 // ============================================================================
 // dimm_wstage — one slice's window staging (window frame, spec §5): per channel two entries of ROWS rows x the
-// slice's KS keys. Element e = r*K + COL0 + i of a window is word e / 5, lane e mod 5 (constants per byte); the
-// entry is the channel's window count mod 2. Read: NB-row group r_q, key r_i of channel r_ch, entry r_ent = NB
-// bytes (rows r_q*NB .. r_q*NB + NB - 1).
+// slice's KS keys. Byte (ch, entry, r, i) = element r*K + COL0 + i of a window whose count selects the entry; it
+// shifts in that bit of each of the window's planes, LSB first. NP read ports (one per A memory): port p reads the
+// NB-row group r_q[p], key r_i[p] of channel r_ch, entry r_ent = NB bytes (rows q*NB .. q*NB + NB - 1).
 // ============================================================================
 module dimm_wstage #(
-    parameter ROWS = 4, K = 16, KS = 8, KSW = 3, NB = 4, CH = 1, LW = 13, CWD = 4, NW = 1, COL0 = 0, BUF = 40
+    parameter ROWS = 4, K = 16, KS = 8, KSW = 3, NB = 4, CH = 1, NW = 1, COL0 = 0, NP = 2, LQW = 1
 ) (
-    input  wire              clk,
-    input  wire [CH-1:0]     d_v,
-    input  wire [CH*BUF-1:0] d_d,
-    input  wire [CH*CWD-1:0] d_c,
-    input  wire [CH*NW-1:0]  d_n,
+    input  wire                 clk,
+    input  wire [CH-1:0]        d_v,
+    input  wire [CH*ROWS*K-1:0] d_d,
+    input  wire [CH*NW-1:0]     d_n,
     input  wire [((CH > 1) ? $clog2(CH) : 1)-1:0] r_ch,
-    input  wire              r_ent,
-    input  wire [7:0]        r_q,
-    input  wire [KSW-1:0]    r_i,
-    output reg  [NB*8-1:0]   r_word
+    input  wire                 r_ent,
+    input  wire [NP*LQW-1:0]    r_q,
+    input  wire [NP*KSW-1:0]    r_i,
+    output reg  [NP*NB*8-1:0]   r_word
 );
+    localparam AW = ROWS * K;
     reg [CH*2*ROWS*KS*8-1:0] st;                     // byte (((ch*2 + entry)*ROWS + r)*KS + i)
     genvar gc, ge, gr, gi;
     generate
@@ -714,46 +843,52 @@ module dimm_wstage #(
             for (ge = 0; ge < 2; ge = ge + 1) begin : g_ent
                 for (gr = 0; gr < ROWS; gr = gr + 1) begin : g_row
                     for (gi = 0; gi < KS; gi = gi + 1) begin : g_key
-                        localparam EL = gr * K + COL0 + gi;
+                        localparam B0 = (((gc*2 + ge)*ROWS + gr)*KS + gi)*8;
                         always @(posedge clk)
-                            if (d_v[gc] && d_c[gc*CWD +: CWD] == (EL / 5) && d_n[gc*NW] == ge)
-                                st[(((gc*2 + ge)*ROWS + gr)*KS + gi)*8 +: 8] <= d_d[gc*BUF + (EL % 5)*8 +: 8];
+                            if (d_v[gc] && d_n[gc*NW] == ge)
+                                st[B0 +: 8] <= {d_d[gc*AW + gr*K + COL0 + gi], st[B0 + 1 +: 7]};
                     end
                 end
             end
         end
     endgenerate
-    integer ch, e, r, i;
+    integer p, ch, e, r, i;
     always @(*) begin
         r_word = 0;
-        for (ch = 0; ch < CH; ch = ch + 1)
-            for (e = 0; e < 2; e = e + 1)
-                for (r = 0; r < ROWS; r = r + 1)
-                    for (i = 0; i < KS; i = i + 1)
-                        if (ch == r_ch && e == r_ent && (r / NB) == r_q && i == r_i)
-                            r_word[(r % NB)*8 +: 8] = st[(((ch*2 + e)*ROWS + r)*KS + i)*8 +: 8];
+        for (p = 0; p < NP; p = p + 1)
+            for (ch = 0; ch < CH; ch = ch + 1)
+                for (e = 0; e < 2; e = e + 1)
+                    for (r = 0; r < ROWS; r = r + 1)
+                        for (i = 0; i < KS; i = i + 1)
+                            if (ch == r_ch && e == r_ent && (r / NB) == r_q[p*LQW +: LQW] && i == r_i[p*KSW +: KSW])
+                                r_word[(p*NB + (r % NB))*8 +: 8] = st[(((ch*2 + e)*ROWS + r)*KS + i)*8 +: 8];
     end
 endmodule
 
 
 // ============================================================================
-// dimm_slice — one slice: the verified v2 tile core (v2/sim/rtl/dimm_tile_top.v) on XS crossbars and KS columns,
-// with one A and one B write port (blocked A memories, A_GRP crossbars each), the window engine copy led by the
-// slice's crossbar 0, and the first log2 KS levels of each group's adder tree. Crossbar f = g + NG*i: column i,
-// group g; window (g + NG*t, i) in wave t.
+// dimm_slice — one slice (spec §4): the A memories (blocked, A_GRP crossbars each, one write port each), the B
+// memories, the wave sequencer, XS crossbars and the first log2 KS levels of each group's per-plane count tree.
+// Crossbar f = g + NG*i: column i, group g; window (g + NG*t, i) in wave t.
+// The feed (spec §4, §5, §10 item 11): wave t's A words are read at t_go + 10t + j into each crossbar's next-word
+// register and load its shift register at t_go + 10t + START_LAT - 1; the job's B words are read in wave 0 straight
+// into each column's rotating register. Plane b of row r of the crossbar's input is bit b of A byte r/N; with X_ADD
+// (R >= 2I) row I + r carries bit b of B byte r mod N and the crossbar's row sum adds them (the identity stacked
+// twice), else a bit-serial full adder per row forms trunc8(A + B) (the carry cleared at plane 0, the carry out of
+// plane 7 dropped). The drain: x = (e & d_on) ^ s_A ^ s_B per plane, the n_neg plane first (e gated off); the tree
+// counts each plane's ones per (group, element).
 // ============================================================================
 module dimm_slice #(
-    parameter M = 64, N = 16, R = 64, C = 64, BUF = 40, P = 8,
-    parameter XS = 16, NG = 2, KS = 8, T_W = 4, W_K = 8, A_GRP = 8, B_GRP = 8,
+    parameter M = 64, N = 16, R = 64, C = 64, P = 8,
+    parameter XS = 16, NG = 2, KS = 8, T_W = 4, A_GRP = 8, B_GRP = 8,
     parameter A_SLOTS = 1, B_SLOTS = 1, A_SIGNED = 1, B_SIGNED = 1,
-    parameter SAW = 1, SBW = 1, AAW = 5, BAW = 4, LNABW = 1, LNBMW = 1, VWS = 12, TWW = 4, CW = 5
+    parameter SAW = 1, SBW = 1, AAW = 5, BAW = 4, NAB = 2, LNBMW = 1, CW = 4, CTLW = 6
 ) (
     input  wire                  clk,
     input  wire                  reset,
-    input  wire                  a_we,
-    input  wire [LNABW-1:0]      a_wm,
-    input  wire [AAW-1:0]        a_wa,
-    input  wire [(((R < C) ? R : C) / N)*8-1:0] a_wd,
+    input  wire [NAB-1:0]        a_we,
+    input  wire [NAB*AAW-1:0]    a_wa,
+    input  wire [NAB*(((R < C) ? R : C) / N)*8-1:0] a_wd,
     input  wire                  b_we,
     input  wire [LNBMW-1:0]      b_wm,
     input  wire [BAW-1:0]        b_wa,
@@ -762,38 +897,32 @@ module dimm_slice #(
     input  wire [SAW-1:0]        a_sel,
     input  wire [SBW-1:0]        b_sel,
     output wire                  idle,
-    output wire [2+CW+TWW-1:0]   o_ctl,
-    output wire [NG*5*VWS-1:0]   o_val
+    output wire [CTLW-1:0]       o_ctl,
+    output wire [NG*((R < C) ? R : C)*CW-1:0] o_cnt
 );
     localparam I    = (R < C) ? R : C;
+    localparam XADD = (R >= 2 * I) ? 1 : 0;       // the add is the crossbar's row sum (spec §10 item 11)
     localparam NB   = I / N;
-    localparam EPS  = BUF / 8;
-    localparam EV   = I;                                     // M*N >= I: every window is full
-    localparam PT   = KS * W_K;                              // windows of this slice per job
-    localparam LCYC = (I * 8 + BUF - 1) / BUF;
     localparam LTW  = (T_W > 1) ? $clog2(T_W) : 1;
-    localparam LXS  = $clog2(XS);
+    localparam TWW  = $clog2(T_W + 1);
     localparam LN   = $clog2(N);
     localparam LNG  = $clog2(NG);
-    localparam MW   = (NB > 1) ? $clog2(NB) : 1;
-    localparam NW   = (N > 1) ? $clog2(N) : 1;
     localparam LG   = $clog2(A_GRP);
     localparam LGW  = (LG > 0) ? LG : 1;
-    localparam NAB  = XS / A_GRP;
-    localparam FR   = (A_GRP == 1) ? 1 : A_GRP + 1;
-    localparam CTLW = 2 + CW + TWW;
+    localparam NBM  = KS / B_GRP;
+    localparam LBG  = $clog2(B_GRP);
+    localparam LBGW = (LBG > 0) ? LBG : 1;
+    localparam PW   = $clog2(P);
 
     function sgn;
         input [7:0] b;
         sgn = b[7] ^ (&b[6:0]);
     endfunction
 
-    // ---- run state (v2) ---------------------------------------------------------------------------------------
-    // The memory read addresses come from this slice's registers only (Fmax, 2026-10-15): `start` crosses the chip
-    // from the job logic, so it must not select an address in the start cycle. The slots load from the job register
-    // (a_sel / b_sel = the top's ja_q / jb_q) while the slice is idle: the top decides only when every slice is idle,
-    // and its job register holds the job through the start cycle. The wave count and the fill index are zero while
-    // idle. Every address in the job's cycles is the same as before.
+    // ---- run state ------------------------------------------------------------------------------------------------
+    // The memory read addresses come from this slice's registers only (Fmax, spec §10 item 7): the slots load from
+    // the job register (a_sel / b_sel = the top's ja_q / jb_q) while the slice is idle; the top decides only when
+    // every slice is idle, and its job register holds the job through the start cycle.
     wire          take_start = start && idle;
     reg [SAW-1:0] a_sel_q;
     reg [SBW-1:0] b_sel_q;
@@ -801,76 +930,35 @@ module dimm_slice #(
         if (reset) begin a_sel_q <= 0; b_sel_q <= 0; end
         else if (idle) begin a_sel_q <= a_sel; b_sel_q <= b_sel; end
     end
-    reg [LGW+1:0] fresh_c;
-    always @(posedge clk)
-        fresh_c <= reset ? 0 : (take_start ? FR : ((fresh_c != 0) ? fresh_c - 1'b1 : 0));
 
-    // ---- window engine (leader = this slice's crossbar 0) -----------------------------------------------------
-    wire              leader_ready, leader_full, leader_done;
-    wire              feed_active, feed_strobe, start_feed, feed_busy, feed_more;
-    wire [TWW-1:0]    feed_t, nst_next, drn_t, dt_next;
-    wire [CW-1:0]     feed_c, drn_c;
-    wire              drn_valid, last_win_done;
-    dimm_tile_ctrl #(.T_W(T_W), .LCYC(LCYC), .TWW(TWW), .CW(CW)) u_ctrl (
+    // ---- the wave sequencer (the drain side follows this slice's crossbar 0) -----------------------------------
+    wire             rd_a, rd_b, ld, fv, d_pre, d_on, d_last;
+    wire [LGW-1:0]   rd_i;
+    wire [TWW-1:0]   rd_t;
+    wire [PW-1:0]    fp, db;
+    wire [XS-1:0]    x_ready, x_full, x_done, x_sad;
+    dimm_tile_ctrl #(.T_W(T_W), .A_GRP(A_GRP), .B_GRP(B_GRP), .P(P), .TWW(TWW), .LGW(LGW)) u_ctrl (
         .clk(clk), .reset(reset), .start(take_start),
-        .leader_ready(leader_ready && fresh_c == 0), .leader_full(leader_full), .leader_done(leader_done),
-        .feed_active(feed_active), .feed_strobe(feed_strobe), .start_feed(start_feed), .feed_busy(feed_busy),
-        .feed_more(feed_more),
-        .feed_t(feed_t), .feed_c(feed_c), .nst_next(nst_next),
-        .drn_valid(drn_valid), .drn_t(drn_t), .drn_c(drn_c), .dt_next(dt_next),
-        .last_win_done(last_win_done), .idle(idle));
-
-    reg           first_q;
-    reg [TWW-1:0] ns_q;
-    reg [CW+3:0]  eb_q;
+        .leader_sad(x_sad[0]), .leader_full(x_full[0]), .leader_done(x_done[0]),
+        .rd_a(rd_a), .rd_b(rd_b), .rd_i(rd_i), .rd_t(rd_t), .ld(ld), .fv(fv), .fp(fp),
+        .d_pre(d_pre), .d_on(d_on), .db(db), .d_last(d_last), .idle(idle));
+    reg            rda_d, rdb_d;                  // a memory read's data this cycle
+    reg [LGW-1:0]  rdi_d;                         // its index
     always @(posedge clk) begin
-        first_q <= !reset && start_feed;
-        eb_q    <= start_feed ? 10 : eb_q + 5;
-        if (reset || idle)   ns_q <= 0;
-        else if (start_feed) ns_q <= ns_q + 1'b1;
-    end
-    wire [TWW-1:0] pf_t = ns_q;
-    wire [TWW-1:0] rw_t = ns_q - 1'b1;
-
-    // ---- lane geometry (v2) -------------------------------------------------------------------------------------
-    wire [EPS-1:0]    rl_valid, dl_valid;
-    wire [EPS*MW-1:0] rl_m, dl_m;
-    wire [EPS*NW-1:0] rl_n, dl_n;
-    genvar gj, gr, gb;
-    generate
-        for (gj = 0; gj < EPS; gj = gj + 1) begin : g_lane
-            wire [CW+3:0] er = eb_q + gj;
-            wire [CW+3:0] ed = {drn_c, 2'b00} + drn_c + gj;
-            assign rl_valid[gj] = er < EV;
-            assign dl_valid[gj] = ed < EV;
-            assign rl_m[gj*MW +: MW] = (NB > 1) ? (er >> LN) : {MW{1'b0}};
-            assign dl_m[gj*MW +: MW] = (NB > 1) ? (ed >> LN) : {MW{1'b0}};
-            assign rl_n[gj*NW +: NW] = (N > 1) ? er[NW-1:0] : {NW{1'b0}};
-            assign dl_n[gj*NW +: NW] = (N > 1) ? ed[NW-1:0] : {NW{1'b0}};
-        end
-    endgenerate
-
-    // ---- fill index (v2) ---------------------------------------------------------------------------------------
-    reg  [LGW-1:0]       fi_q, fi_d;
-    wire [LGW-1:0]       fi_rd = (A_GRP == 1) ? {LGW{1'b0}} : fi_q;
-    always @(posedge clk) begin
-        fi_q <= (idle && !take_start) ? {LGW{1'b0}} : fi_rd + 1'b1;   // 0 in the start cycle, then 1, 2, ...
-        fi_d <= fi_rd;
+        rda_d <= !reset && rd_a;
+        rdb_d <= !reset && rd_b;
+        rdi_d <= rd_i;
     end
 
-    // ---- B memories (B_GRP columns each, word {slot, index}) --------------------------------------------------
-    localparam NBM   = KS / B_GRP;
-    localparam LBG   = $clog2(B_GRP);
-    localparam LBGW  = (LBG > 0) ? LBG : 1;
-    wire [LBGW-1:0]    bi_rd = fi_rd[LBGW-1:0] & (B_GRP - 1);
-    wire [LBGW-1:0]    bi_d  = fi_d[LBGW-1:0] & (B_GRP - 1);
+    // ---- B memories (B_GRP columns each, word {slot, index}); read in wave 0 (once per job) ---------------------
+    wire [LBGW-1:0]    bi_rd = rd_i[LBGW-1:0] & (B_GRP - 1);
     wire [NBM*N*8-1:0] bm_rd;
     genvar gm;
     generate
         for (gm = 0; gm < NBM; gm = gm + 1) begin : g_bm
             reg [N*8-1:0] mem [0:(B_SLOTS << LBGW) - 1];
             reg [N*8-1:0] rq;
-            wire [SBW+LBGW-1:0] ra = ({{LBGW{1'b0}}, b_sel_q} << LBGW) | bi_rd;
+            wire [SBW+LBGW-1:0] ra = {b_sel_q, bi_rd};
             always @(posedge clk) begin
                 if (b_we && (NBM == 1 || b_wm == gm)) mem[b_wa] <= b_wd;
                 rq <= mem[ra];
@@ -879,310 +967,246 @@ module dimm_slice #(
         end
     endgenerate
 
-    // ---- B words per column: feed lanes (bytes), signs (drain lanes) (v2) --------------------------------------
-    wire [KS*EPS*8-1:0] b_f0, b_f1, b_fr;
-    wire [KS*EPS-1:0]   b_sign;
-    genvar gs;
-    generate
-        for (gs = 0; gs < KS; gs = gs + 1) begin : g_b
-            localparam BM = gs >> LBG;
-            localparam BI = gs & (B_GRP - 1);
-            reg  [N*8-1:0] nxt_c;
-            wire [N*8-1:0] nxt = (B_GRP == 1) ? bm_rd[BM*N*8 +: N*8] : nxt_c;
-            always @(posedge clk)
-                if (B_GRP > 1 && bi_d == BI) nxt_c <= bm_rd[BM*N*8 +: N*8];
-            reg  [N*8-1:0] rb;
-            for (gb = 0; gb < N; gb = gb + 1) begin : g_rb
-                always @(posedge clk)
-                    rb[gb*8 +: 8] <= feed_more ? rb[((gb + 5) % N)*8 +: 8] : nxt[((gb + 10) % N)*8 +: 8];
-            end
-            for (gj = 0; gj < EPS; gj = gj + 1) begin : g_l
-                localparam N0 = gj & (N - 1), N1 = (gj + 5) & (N - 1);
-                assign b_f0[(gs*EPS + gj)*8 +: 8] = nxt[N0*8 +: 8];
-                assign b_f1[(gs*EPS + gj)*8 +: 8] = nxt[N1*8 +: 8];
-                assign b_fr[(gs*EPS + gj)*8 +: 8] = rb[(gj % N)*8 +: 8];
-            end
-            wire [N-1:0] sd;
-            for (gb = 0; gb < N; gb = gb + 1) begin : g_s
-                assign sd[gb] = (B_SIGNED != 0) && sgn(nxt[gb*8 +: 8]);
-            end
-            for (gj = 0; gj < EPS; gj = gj + 1) begin : g_d
-                assign b_sign[gs*EPS + gj] = sd[dl_n[gj*NW +: NW]];
-            end
-        end
-    endgenerate
-
-    // ---- A memories (blocked: crossbar f in memory f >> LG at index f mod A_GRP) -------------------------------
-    wire [LTW+SAW+LGW-1:0] a_ra = ({{LGW{1'b0}}, a_sel_q, pf_t[LTW-1:0]} << LGW) | fi_rd;
-    wire [NAB*NB*8-1:0] ab_rd;
+    // ---- A memories (blocked: crossbar f in memory f >> LG at index f mod A_GRP; each with its own write port) --
+    wire [SAW+LTW+LGW-1:0] a_ra = {a_sel_q, rd_t[LTW-1:0], rd_i};
+    wire [NAB*NB*8-1:0]    ab_rd;
     genvar gk;
     generate
         for (gk = 0; gk < NAB; gk = gk + 1) begin : g_a
             reg [NB*8-1:0] mem [0:(A_SLOTS << (LTW + LGW)) - 1];
             reg [NB*8-1:0] rq;
             always @(posedge clk) begin
-                if (a_we && (NAB == 1 || a_wm == gk)) mem[a_wa] <= a_wd;
+                if (a_we[gk]) mem[a_wa[gk*AAW +: AAW]] <= a_wd[gk*NB*8 +: NB*8];
                 rq <= mem[a_ra];
             end
             assign ab_rd[gk*NB*8 +: NB*8] = rq;
         end
     endgenerate
 
-    // ---- crossbars: feed u = A + B (trunc8), dpe EXP, signed drain value (v2) -------------------------------------
-    wire [XS-1:0]       x_ready, x_full, x_done;
-    wire [XS*EPS*9-1:0] x_val;
-    genvar gf;
+    // ---- per column: the job's B word (loaded once per job, rotated per byte while feeding) and its signs --------
+    wire [KS*N-1:0] b_bit;                        // column i, byte n: this plane's bit (the byte's bit 0)
+    wire [KS*N-1:0] b_sgn;                        // column i, byte n: the sign of LB[k][n]
+    genvar gs, gb;
     generate
-        for (gf = 0; gf < XS; gf = gf + 1) begin : g_x
-            localparam SLOT = gf >> LNG;
-            localparam BS   = SLOT;
-            localparam GB   = gf >> LG;
-            localparam GI   = gf & (A_GRP - 1);
-            reg  [NB*8-1:0] nxt_c, cur;
-            wire [NB*8-1:0] nxt = (A_GRP == 1) ? ab_rd[GB*NB*8 +: NB*8] : nxt_c;
+        for (gs = 0; gs < KS; gs = gs + 1) begin : g_b
+            localparam BM = gs >> LBG;
+            localparam BI = gs & (B_GRP - 1);
+            reg [N*8-1:0] sb;                         // the job's B word: loaded from the read in wave 0 (before the
+            reg [N-1:0]   sg;                         //   feed), rotated per byte while feeding (spec §4)
+            integer j;
             always @(posedge clk) begin
-                if (A_GRP > 1 && fi_d == GI) nxt_c <= ab_rd[GB*NB*8 +: NB*8];
-                if (start_feed) cur <= nxt;
-            end
-            wire [TWW+LXS:0] g_feed = gf + ({{(LXS+1){1'b0}}, feed_t} << LXS);
-            wire [TWW+LXS:0] g_drn  = gf + ({{(LXS+1){1'b0}}, drn_t} << LXS);
-            wire act_f = g_feed < PT;
-            wire act_d = g_drn < PT;
-            wire [BUF-1:0] f0_w, f1_w, fr_w;
-            reg  [BUF-1:0] f1_q, fn_q;
-            for (gj = 0; gj < EPS; gj = gj + 1) begin : g_fl
-                localparam V0 = gj < EV, V1 = gj + 5 < EV;
-                localparam M0 = V0 ? (gj >> LN) : 0, M1 = V1 ? ((gj + 5) >> LN) : 0;
-                assign f0_w[gj*8 +: 8] = V0 ? (nxt[M0*8 +: 8] + b_f0[(BS*EPS + gj)*8 +: 8]) : 8'd0;
-                assign f1_w[gj*8 +: 8] = V1 ? (nxt[M1*8 +: 8] + b_f1[(BS*EPS + gj)*8 +: 8]) : 8'd0;
-                assign fr_w[gj*8 +: 8] = rl_valid[gj]
-                    ? (cur[rl_m[gj*MW +: MW]*8 +: 8] + b_fr[(BS*EPS + gj)*8 +: 8]) : 8'd0;
-            end
-            always @(posedge clk) begin
-                f1_q <= f1_w;
-                fn_q <= feed_more ? fr_w : f0_w;
-            end
-            wire [BUF-1:0] feed_bytes = first_q ? f1_q : fn_q;
-            wire [BUF-1:0] dpe_in = feed_bytes;
-            wire [BUF-1:0] dpe_out;
-            dpe u_dpe (
-                .clk(clk), .reset(reset), .data_in(dpe_in), .nl_dpe_control(2'b10),   // EXP
-                .shift_add_control(1'b0), .w_buf_en(feed_strobe && act_f), .shift_add_bypass(1'b0),
-                .load_output_reg(1'b0), .load_input_reg(1'b0),
-                .MSB_SA_Ready(x_ready[gf]), .data_out(dpe_out), .dpe_done(x_done[gf]),
-                .reg_full(x_full[gf]));
-            wire [4*NB-1:0] ring;
-            for (gr = 0; gr < 4; gr = gr + 1) begin : g_r
-                reg [NB-1:0] s;
-                for (gb = 0; gb < NB; gb = gb + 1) begin : g_s
-                    always @(posedge clk)
-                        if (first_q && rw_t[1:0] == gr) s[gb] <= (A_SIGNED != 0) && sgn(cur[gb*8 +: 8]);
+                if (rdb_d && rdi_d[LBGW-1:0] == BI) begin
+                    sb <= bm_rd[BM*N*8 +: N*8];
+                    for (j = 0; j < N; j = j + 1) sg[j] <= (B_SIGNED != 0) && sgn(bm_rd[BM*N*8 + j*8 +: 8]);
                 end
-                assign ring[gr*NB +: NB] = s;
+                else if (fv)                          // plane b: bit b of every byte at the byte's bit 0
+                    for (j = 0; j < N; j = j + 1) sb[j*8 +: 8] <= {sb[j*8], sb[j*8 + 1 +: 7]};
             end
-            reg  [NB-1:0] sd;
-            always @(*)
-                case (drn_t[1:0])
-                    2'd0:    sd = ring[0 +: NB];
-                    2'd1:    sd = ring[NB +: NB];
-                    2'd2:    sd = ring[2*NB +: NB];
-                    default: sd = ring[3*NB +: NB];
-                endcase
-            for (gj = 0; gj < EPS; gj = gj + 1) begin : g_dl
-                wire       sa = sd[dl_m[gj*MW +: MW]];
-                wire [8:0] e9 = {1'b0, dpe_out[gj*8 +: 8]};
-                reg  [8:0] vq;
-                always @(posedge clk)
-                    vq <= (reset || !(drn_valid && act_d && dl_valid[gj])) ? 9'd0
-                        : ((sa ^ b_sign[BS*EPS + gj]) ? (9'd0 - e9) : e9);
-                assign x_val[(gf*EPS + gj)*9 +: 9] = vq;
+            for (gb = 0; gb < N; gb = gb + 1) begin : g_n
+                assign b_bit[gs*N + gb] = sb[gb*8];
+                assign b_sgn[gs*N + gb] = sg[gb];
             end
         end
     endgenerate
-    assign leader_ready = x_ready[0];
-    assign leader_full  = x_full[0];
-    assign leader_done  = x_done[0];
 
-    // ---- drain register + the slice's tree levels ---------------------------------------------------------------
-    reg           d_valid, d_last;
-    reg [CW-1:0]  d_c;
-    reg [TWW-1:0] d_t;
-    always @(posedge clk) begin
-        d_valid <= !reset && drn_valid;
-        d_last  <= !reset && last_win_done;
-        d_c     <= drn_c;
-        d_t     <= drn_t;
-    end
-    dimm_tree #(.NG(NG), .DC(KS), .IW(9), .OW(VWS), .CTLW(CTLW)) u_tree (
-        .clk(clk), .reset(reset), .in_ctl({d_valid, d_last, d_c, d_t}), .in_val(x_val),
-        .out_ctl(o_ctl), .out_val(o_val));
+    // ---- per crossbar f = g + NG*i: the wave's A word, its shift register and signs; the crossbar's input (X_ADD:
+    //      rows r and I + r; else the I bit-serial adders); the crossbar (EXP); the drain's sign XOR -------------
+    wire [XS*I-1:0] x_all;
+    genvar gf, gr;
+    generate
+        for (gf = 0; gf < XS; gf = gf + 1) begin : g_x
+            localparam COL = gf >> LNG;
+            localparam GB  = gf >> LG;
+            localparam GI  = gf & (A_GRP - 1);
+            reg  [NB*8-1:0] na, sa;
+            reg  [NB-1:0]   sga, sda;                 // the A signs of the wave being fed / drained
+            integer j;
+            always @(posedge clk) begin
+                if (rda_d && rdi_d == GI) na <= ab_rd[GB*NB*8 +: NB*8];
+                if (ld) begin
+                    sa <= na;
+                    for (j = 0; j < NB; j = j + 1) sga[j] <= (A_SIGNED != 0) && sgn(na[j*8 +: 8]);
+                end
+                else if (fv) sa <= sa >> 1;
+                if (fv && fp == P - 1) sda <= sga;    // the MSB plane: the signs of the wave about to drain (spec §4)
+            end
+            // row r = element r of the window: A byte r / N, B byte r mod N of the column
+            wire [I-1:0] fa, fb, s_d, s_b;
+            for (gr = 0; gr < I; gr = gr + 1) begin : g_r
+                assign fa[gr]  = sa[(gr >> LN) << 3];
+                assign fb[gr]  = b_bit[COL*N + (gr & (N - 1))];
+                assign s_d[gr] = sda[gr >> LN];
+                assign s_b[gr] = b_sgn[COL*N + (gr & (N - 1))];
+            end
+            wire [R-1:0] x_in;                         // the crossbar's plane: rows past the extent read 0
+            if (XADD) begin : g_xadd                   // the add is the crossbar's row sum: rows r (L_A), I + r (L_B)
+                assign x_in[I-1:0]   = fa;
+                assign x_in[2*I-1:I] = fb;
+                if (R > 2*I) begin : g_z
+                    assign x_in[R-1:2*I] = {(R-2*I){1'b0}};
+                end
+            end else begin : g_fadd                    // a square array: I bit-serial adders, the carry cleared at plane 0
+                reg  [I-1:0] cy;
+                wire [I-1:0] cin = (fp == 0) ? {I{1'b0}} : cy;
+                always @(posedge clk) if (fv) cy <= (fa & fb) | (fa & cin) | (fb & cin);
+                assign x_in[I-1:0] = fa ^ fb ^ cin;
+                if (R > I) begin : g_z
+                    assign x_in[R-1:I] = {(R-I){1'b0}};
+                end
+            end
+            wire [R-1:0] dpe_in = x_in;
+            wire [C-1:0] dpe_out;
+            dpe u_dpe (
+                .clk(clk), .reset(reset), .data_in(dpe_in), .nl_dpe_control(2'b10),   // EXP
+                .shift_add_control(1'b0), .w_buf_en(fv), .shift_add_bypass(1'b0),
+                .load_output_reg(1'b0), .load_input_reg(1'b0),
+                .MSB_SA_Ready(x_ready[gf]), .data_out(dpe_out), .dpe_done(x_done[gf]), .reg_full(x_full[gf]),
+                .shift_add_done(x_sad[gf]));
+            // the drain: x = (e & d_on) ^ s_A ^ s_B straight into the slice's count tree (its one register is
+            // SLICE_LAT): the n_neg plane (d_pre; e gated off) counts the signs, the 8 drain planes count e ^ s; the
+            // tree's input while idle is ignored (its control carries no valid)
+            assign x_all[gf*I +: I] = (dpe_out[I-1:0] & {I{d_on}}) ^ s_d ^ s_b;
+        end
+    endgenerate
+
+    // ---- the slice's count tree: per group g, element r, the KS crossbars g + NG*i, registered once ----------------
+    wire [CTLW-1:0] cx = {d_pre, d_on, d_on ? db : {PW{1'b0}}, d_last};   // the drain control: {n_neg, valid, plane, last}
+    dimm_ptree #(.NG(NG), .DC(KS), .NE(I), .IW(1), .CTLW(CTLW), .OREG(1)) u_tree (
+        .clk(clk), .reset(reset), .in_ctl(cx), .in_val(x_all), .out_ctl(o_ctl), .out_val(o_cnt));
 endmodule
 
 
 // ============================================================================
-// dimm_tile_ctrl — the window engine (v2 verbatim): take-now acceptance, feed overlapping the previous drain,
-// depth-2 drain queue, driven by the leader crossbar's status.
+// dimm_tile_ctrl — the wave sequencer of a slice (spec §5 Core). From the start cycle t_go (period 0, cycle 0), each
+// wave t owns the 10-cycle period t: its A memory reads at cycles 0 .. A_GRP-1 (the B words in period 0, cycles
+// 0 .. B_GRP-1), the shift-register load at cycle START_LAT - 1 (START_LAT = A_GRP + 2), then its P feed planes.
+// The drain side follows the leader crossbar: the n_neg plane at its shift_add_done (the cycle before the first
+// drain plane), the P drain planes under its reg_full, the wave's end at its dpe_done. The slice is idle again from
+// the job's last dpe_done + 1 (= the last drain plane + IDLE_LAT).
 // ============================================================================
 module dimm_tile_ctrl #(
-    parameter T_W  = 4,
-    parameter LCYC = 13,
-    parameter TWW  = 4,
-    parameter CW   = 5
-) (
-    input  wire           clk,
-    input  wire           reset,
-    input  wire           start,
-    input  wire           leader_ready,
-    input  wire           leader_full,
-    input  wire           leader_done,
-    output wire           feed_active,
-    output wire           feed_strobe,
-    output wire           start_feed,
-    output wire           feed_busy,
-    output wire           feed_more,
-    output wire [TWW-1:0] feed_t,
-    output wire [CW-1:0]  feed_c,
-    output wire [TWW-1:0] nst_next,
-    output wire           drn_valid,
-    output wire [TWW-1:0] drn_t,
-    output wire [CW-1:0]  drn_c,
-    output wire [TWW-1:0] dt_next,
-    output wire           last_win_done,
-    output wire           idle
-);
-    reg           run;
-    reg [TWW-1:0] iss_t, nst, drained, ft, lat_t, dt, que_t;
-    reg [CW-1:0]  feed_cnt, drn_cnt;
-    reg           feeding, have_win, draining, que_valid;
-
-    wire request  = run && (iss_t < T_W);
-    wire win_busy = feeding || have_win;
-    wire accept   = request && !win_busy;
-    wire take_now = accept && leader_ready;
-    wire [TWW-1:0] start_t = take_now ? iss_t : lat_t;
-    assign start_feed  = take_now || (have_win && !feeding && leader_ready);
-    assign feed_active = feeding || start_feed;
-    assign feed_t      = start_feed ? start_t : ft;
-    assign feed_c      = start_feed ? {CW{1'b0}} : feed_cnt;
-    assign feed_strobe = feed_active && leader_ready;
-    assign feed_busy   = feeding;
-    assign feed_more   = feeding && (feed_cnt != LCYC - 1);
-    wire feed_done_w   = start_feed ? (LCYC == 1) : (feeding && leader_ready && (feed_cnt == LCYC - 1));
-    wire [TWW-1:0] feed_done_t = start_feed ? start_t : ft;
-    wire drain_done_w  = draining && leader_done;
-
-    assign drn_valid = draining && leader_full;
-    assign drn_t     = dt;
-    assign drn_c     = drn_cnt;
-    assign last_win_done = drain_done_w && (drained == T_W - 1);
-    assign idle      = !run;
-    assign nst_next  = start ? {TWW{1'b0}} : (start_feed ? nst + 1'b1 : nst);
-    assign dt_next   = drain_done_w ? (que_valid ? que_t : (feed_done_w ? feed_done_t : dt))
-                     : ((feed_done_w && !draining) ? feed_done_t : dt);
-
-    always @(posedge clk) begin
-        if (reset) begin
-            run <= 1'b0; iss_t <= 0; nst <= 0; drained <= 0; ft <= 0; lat_t <= 0;
-            feed_cnt <= 0; feeding <= 1'b0; have_win <= 1'b0;
-            dt <= 0; que_t <= 0; drn_cnt <= 0; draining <= 1'b0; que_valid <= 1'b0;
-        end
-        else begin
-            nst <= nst_next;
-            dt  <= dt_next;
-            if (start) begin
-                run <= 1'b1;
-                iss_t <= 0;
-                drained <= 0;
-            end
-            if (accept) iss_t <= iss_t + 1'b1;
-            if (accept && !leader_ready) begin
-                lat_t <= iss_t;
-                have_win <= 1'b1;
-            end
-            if (start_feed) begin
-                have_win <= 1'b0;
-                if (LCYC == 1) feeding <= 1'b0;
-                else begin feeding <= 1'b1; ft <= start_t; feed_cnt <= 1; end
-            end
-            else if (feeding && leader_ready && (feed_cnt != LCYC - 1)) feed_cnt <= feed_cnt + 1'b1;
-            else if (feeding && leader_ready) feeding <= 1'b0;
-            if (drain_done_w) begin
-                drained <= drained + 1'b1;
-                drn_cnt <= 0;
-                if (que_valid) begin
-                    que_t <= feed_done_t;
-                    que_valid <= feed_done_w;
-                end
-                else if (!feed_done_w) draining <= 1'b0;
-            end
-            else if (feed_done_w) begin
-                if (draining) begin que_t <= feed_done_t; que_valid <= 1'b1; end
-                else begin draining <= 1'b1; drn_cnt <= 0; end
-            end
-            if (draining && leader_full && (drn_cnt != LCYC - 1)) drn_cnt <= drn_cnt + 1'b1;
-            if (drain_done_w && (drained == T_W - 1)) run <= 1'b0;
-        end
-    end
-endmodule
-
-
-// ============================================================================
-// dimm_tree — registered adder trees, one per group, with the control pipeline (v2 dimm_tile_out generalized).
-// Input index g + d*NG (group g, term d = 0 .. DC-1), IW-bit signed values, 5 lanes each; TL = log2 DC registered
-// levels; OW-bit outputs. DC = 1: no level (the input passes through).
-// ============================================================================
-module dimm_tree #(
-    parameter NG = 2, DC = 2, IW = 9, OW = 10, CTLW = 11
+    parameter T_W = 4, A_GRP = 8, B_GRP = 8, P = 8, TWW = 3, LGW = 3
 ) (
     input  wire                 clk,
     input  wire                 reset,
-    input  wire [CTLW-1:0]      in_ctl,
-    input  wire [DC*NG*5*IW-1:0] in_val,
-    output wire [CTLW-1:0]      out_ctl,
-    output wire [NG*5*OW-1:0]   out_val
+    input  wire                 start,
+    input  wire                 leader_sad,
+    input  wire                 leader_full,
+    input  wire                 leader_done,
+    output wire                 rd_a,
+    output wire                 rd_b,
+    output wire [LGW-1:0]       rd_i,
+    output wire [TWW-1:0]       rd_t,
+    output wire                 ld,
+    output reg                  fv,
+    output reg  [$clog2(P)-1:0] fp,
+    output wire                 d_pre,
+    output wire                 d_on,
+    output reg  [$clog2(P)-1:0] db,
+    output wire                 d_last,
+    output wire                 idle
+);
+    localparam SL = A_GRP + 2;                    // START_LAT
+    localparam PH = P + 2;                        // a wave every P + 2 cycles
+    reg           run;
+    reg [3:0]     ph;                             // the cycle in the period
+    reg [TWW-1:0] pc;                             // the period: the wave whose reads and load run in it (<= T_W)
+    reg [TWW-1:0] dw;                             // the waves drained in this job
+    wire           on   = start || run;
+    wire [3:0]     ph_n = run ? ph : 4'd0;        // the start cycle is cycle 0 of period 0
+    wire [TWW-1:0] pc_n = run ? pc : {TWW{1'b0}};
+    wire           feed = on && (pc_n < T_W);
+    assign rd_a   = feed && (ph_n < A_GRP);
+    assign rd_b   = rd_a && (pc_n == 0) && (ph_n < B_GRP);
+    assign rd_i   = ph_n[LGW-1:0];
+    assign rd_t   = pc_n;
+    assign ld     = feed && (ph_n == SL - 1);
+    assign d_pre  = leader_sad;
+    assign d_on   = leader_full;
+    assign d_last = (dw == T_W - 1);
+    assign idle   = !run;
+    always @(posedge clk) begin
+        if (reset) begin
+            run <= 1'b0; ph <= 0; pc <= 0; dw <= 0; fv <= 1'b0; fp <= 0; db <= 0;
+        end
+        else begin
+            if (start) run <= 1'b1;
+            if (on) begin
+                ph <= (ph_n == PH - 1) ? 4'd0 : ph_n + 1'b1;
+                pc <= (ph_n == PH - 1 && pc_n < T_W) ? pc_n + 1'b1 : pc_n;
+            end
+            if (ld) begin fv <= 1'b1; fp <= 0; end
+            else if (fv) begin
+                if (fp == P - 1) fv <= 1'b0;
+                fp <= fp + 1'b1;
+            end
+            if (d_pre) db <= 0;
+            else if (d_on) db <= db + 1'b1;
+            if (leader_done) begin
+                dw <= (dw == T_W - 1) ? {TWW{1'b0}} : dw + 1'b1;
+                if (dw == T_W - 1) run <= 1'b0;
+            end
+        end
+    end
+endmodule
+
+
+// ============================================================================
+// dimm_ptree — per-plane count trees, one per (group, element): log2 DC levels of adders, a balanced tree computed in a
+// function on the element's own terms (one net per element, so a simulator wakes each tree only for its inputs), and
+// the result registered once with its control (the trims of 2026-10-23; until then every level registered). Input
+// index g + d*NG (group g, term d = 0 .. DC-1), NE elements of IW-bit unsigned counts each; outputs IW + log2 DC bits.
+// DC = 1: no level; the input is registered when OREG = 1, else it passes through.
+// ============================================================================
+module dimm_ptree #(
+    parameter NG = 2, DC = 2, NE = 64, IW = 1, CTLW = 6, OREG = 0
+) (
+    input  wire                             clk,
+    input  wire                             reset,
+    input  wire [CTLW-1:0]                  in_ctl,
+    input  wire [DC*NG*NE*IW-1:0]           in_val,
+    output wire [CTLW-1:0]                  out_ctl,
+    output wire [NG*NE*(IW+$clog2(DC))-1:0] out_val
 );
     localparam TL = $clog2(DC);
-    function integer lvl_off;
-        input integer l;
-        integer i;
+    localparam OW = IW + TL;
+    // the sum of DC IW-bit terms as a balanced tree, reduced in place: level l adds the pairs of level l - 1
+    function [OW-1:0] tsum;
+        input [DC*IW-1:0] v;
+        reg   [DC*OW-1:0] t;
+        integer k, l;
         begin
-            lvl_off = 0;
-            for (i = 0; i < l; i = i + 1) lvl_off = lvl_off + NG * 5 * (DC >> i) * OW;
+            for (k = 0; k < DC; k = k + 1) t[k*OW +: OW] = v[k*IW +: IW];
+            for (l = 0; l < TL; l = l + 1)
+                for (k = 0; k < (DC >> (l + 1)); k = k + 1)
+                    t[k*OW +: OW] = t[2*k*OW +: OW] + t[(2*k + 1)*OW +: OW];
+            tsum = t[0 +: OW];
         end
     endfunction
-    wire [lvl_off(TL + 1)-1:0] tree;
-    wire [(TL+1)*CTLW-1:0]     ctl;
-    genvar ga, gi, gj, gl;
+    wire [NG*NE*OW-1:0] sum;                      // (group g, element e) at ((g*NE + e)*OW) +: OW
+    genvar ga, gd, ge;
     generate
-        for (ga = 0; ga < NG; ga = ga + 1) begin : g_in_a
-            for (gi = 0; gi < DC; gi = gi + 1) begin : g_in_i
-                for (gj = 0; gj < 5; gj = gj + 1) begin : g_in_j
-                    wire [IW-1:0] v = in_val[((ga + gi*NG)*5 + gj)*IW +: IW];
-                    assign tree[((ga*DC + gi)*5 + gj)*OW +: OW] = {{(OW-IW){v[IW-1]}}, v};
+        for (ga = 0; ga < NG; ga = ga + 1) begin : g_a
+            for (ge = 0; ge < NE; ge = ge + 1) begin : g_e
+                wire [DC*IW-1:0] v;                // the element's DC terms
+                for (gd = 0; gd < DC; gd = gd + 1) begin : g_d
+                    assign v[gd*IW +: IW] = in_val[((ga + gd*NG)*NE + ge)*IW +: IW];
                 end
+                assign sum[(ga*NE + ge)*OW +: OW] = tsum(v);
             end
         end
-        assign ctl[0 +: CTLW] = in_ctl;
-        for (gl = 0; gl < TL; gl = gl + 1) begin : g_lvl
-            localparam OI = lvl_off(gl);
-            localparam OO = lvl_off(gl + 1);
-            localparam NO = DC >> (gl + 1);
-            reg [CTLW-1:0] cq;
-            for (ga = 0; ga < NG; ga = ga + 1) begin : g_a
-                for (gi = 0; gi < NO; gi = gi + 1) begin : g_b
-                    for (gj = 0; gj < 5; gj = gj + 1) begin : g_j
-                        reg [OW-1:0] r;
-                        always @(posedge clk)
-                            r <= tree[OI + ((ga*2*NO + 2*gi)*5 + gj)*OW +: OW]
-                               + tree[OI + ((ga*2*NO + 2*gi + 1)*5 + gj)*OW +: OW];
-                        assign tree[OO + ((ga*NO + gi)*5 + gj)*OW +: OW] = r;
-                    end
-                end
+        if (TL > 0 || OREG != 0) begin : g_reg                // the one register of the tree (SLICE_LAT / SHARED_LAT)
+            reg [NG*NE*OW-1:0] oq;
+            reg [CTLW-1:0]     cq;
+            always @(posedge clk) begin
+                oq <= sum;
+                cq <= reset ? {CTLW{1'b0}} : in_ctl;
             end
-            always @(posedge clk) cq <= reset ? {CTLW{1'b0}} : ctl[gl*CTLW +: CTLW];
-            assign ctl[(gl+1)*CTLW +: CTLW] = cq;
+            assign out_val = oq;
+            assign out_ctl = cq;
+        end else begin : g_pass
+            assign out_val = sum;
+            assign out_ctl = in_ctl;
         end
     endgenerate
-    assign out_ctl = ctl[TL*CTLW +: CTLW];
-    assign out_val = tree[lvl_off(TL) +: NG*5*OW];
 endmodule

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """dataflow.py — the animated dataflow board of the brief (stages_brief.py): one attention head on NL-DPE crossbars,
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 animated from the simulator's crossbar passes (dse/results/stages/stages.json, the DIAGRAMS arrays, `events`).
 
 One board per array, the boards on one clock (play, speed, a scrubber), three panels and a time strip:
   projections   one token at a time: x_t is broadcast to the W_Q, W_K and W_V tiles, drawn to one scale with their
                 weights inside the R x C array; each tile's input bar fills with the used rows during the load through
-                its 40-bit port, the weights light up for the 8 bit-slices, the output bar under the tile sweeps all
+                its pre-bit-plane port, the weights light up for the 8 bit-slices, the output bar under the tile sweeps all
                 C columns during the drain (the used ones coloured), and q_t, k_t, v_t leave for their stores
   stores        Q, K and V filling row by row (kept as logs, so the products are adds); the run's queries and the key
                 and value block in use are outlined
@@ -214,7 +216,7 @@ SCRIPT = r"""
     });
     const miniBottom = TOP + 12 + a.V * (mh + 3);
     el("text", {x: MX, y: miniBottom + 16, class: "ft fts"}, svg, `${3 * a.V} tiles of ${a.R} × ${a.C}`);
-    el("text", {x: MX, y: miniBottom + 32, class: "ft fts"}, svg, "one 40-bit port each");
+    el("text", {x: MX, y: miniBottom + 32, class: "ft fts"}, svg, "one pre-bit-plane port each");
     // the lines under the projections
     const L1 = BY + BH + 50;
     el("text", {x: 16, y: L1, class: "ft fts"}, svg, `a tile holds ${usedRows} × ${d} weights in its ${a.R} × ${a.C} array`);
@@ -869,7 +871,7 @@ def section(res: dict, script: str | None = None) -> str:
     payload = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
     return f"""<section aria-labelledby="h_flow">
   <h2 id="h_flow">2. The head in time</h2>
-  <p>One head, animated from the simulator's crossbar passes. <b>Projections:</b> each token x<sub>t</sub> goes to every W<sub>Q</sub>, W<sub>K</sub> and W<sub>V</sub> tile at once. The enlarged tile shows one pass: the bar on its left fills as the token's rows load through the tile's 40-bit port, the weights light up for the 8 bit-slices, and the bar underneath sweeps all the columns as the result drains out, the useful ones in blue. All the tiles, drawn beside it to one scale, do the same in lock-step. q<sub>t</sub>, k<sub>t</sub> and v<sub>t</sub> then go to the stores. <b>Attention:</b> each key block of 16 runs through four steps, drawn as matrices of their true shapes, each board to its own scale: the scores S<sub>b</sub>, the softmax reading them at 5 per cycle, the block's output O<sub>b</sub>, and the running output o. O is written at the end of each run. <b>How a block is computed:</b> the bottom panel is the log-domain mapping. Every product is an add of two logs in soft logic; the identity crossbars only convert, EXP down into the linear domain and LOG up out of it; the sums are adder trees in the linear domain. A score is already a log, so the softmax needs no conversion before its EXP, and the divide at the end is a subtract. Each operation lights in the phase of the pass that performs it: the adds during the load, the conversion during the 8 bit-slices, the trees during the drain. The two arrays, {cfgs}, run on one clock.</p>
+  <p>One head, animated from the simulator's crossbar passes. <b>Projections:</b> each token x<sub>t</sub> goes to every W<sub>Q</sub>, W<sub>K</sub> and W<sub>V</sub> tile at once. The enlarged tile shows one pass: the bar on its left fills as the token's rows load through the tile's pre-bit-plane port, the weights light up for the 8 bit-slices, and the bar underneath sweeps all the columns as the result drains out, the useful ones in blue. All the tiles, drawn beside it to one scale, do the same in lock-step. q<sub>t</sub>, k<sub>t</sub> and v<sub>t</sub> then go to the stores. <b>Attention:</b> each key block of 16 runs through four steps, drawn as matrices of their true shapes, each board to its own scale: the scores S<sub>b</sub>, the softmax reading them at 5 per cycle, the block's output O<sub>b</sub>, and the running output o. O is written at the end of each run. <b>How a block is computed:</b> the bottom panel is the log-domain mapping. Every product is an add of two logs in soft logic; the identity crossbars only convert, EXP down into the linear domain and LOG up out of it; the sums are adder trees in the linear domain. A score is already a log, so the softmax needs no conversion before its EXP, and the divide at the end is a subtract. Each operation lights in the phase of the pass that performs it: the adds during the load, the conversion during the 8 bit-slices, the trees during the drain. The two arrays, {cfgs}, run on one clock.</p>
   <div class="flow">
     <div class="flowctl">
       <label>head <select id="flowHead">{options}</select></label>

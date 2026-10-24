@@ -18,7 +18,7 @@ start the cycle after the ACAM (one accumulator, one output register):
     drain_end     = acam_done + P
 So a pass alone takes 2P + 2 = 18 cycles and back-to-back passes start every P + 2 = 10, on every array and at any
 extent. The extent (ROWS_USED, COLS_USED) sets the values and the energy only. Until 2026-10-22 the crossbar had a
-40-bit port each way (LOAD = ceil(8 ROWS_USED / 40), OUTPUT = ceil(8 C / 40) words).
+pre-bit-plane port each way (LOAD = ceil(8 ROWS_USED / 40), OUTPUT = ceil(8 C / 40) words).
 
 Values (the certified integer math; the oracle stays independent):
     y        = x @ W exactly (int32), input rows >= ROWS_USED read as zero (P29)

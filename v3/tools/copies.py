@@ -125,20 +125,16 @@ COPIES = [
     *[(f"oracle/{f}", f"{S}/oracle/{f}", ()) for f in ORACLES],
     *[(f"oracle/v2_kernels/{f}", f"{S}/simulator/kernels/{f}", ()) for f in KERNELS],
     # the platform code (platforms.py, cost.py) is no longer a copy: simulator/platform/ is v3's own (2026-10-17, the
-    # refactor's decision 4); the two configs stay verbatim copies
-    ("simulator/platform/nl_dpe.json", f"{S}/simulator/configs/nl_dpe.json", ()),
+    # refactor's decision 4); azure_lily.json stays a verbatim copy; nl_dpe.json forked 2026-10-23 (the row-parallel
+    # port, FORKED below)
     ("simulator/platform/azure_lily.json", f"{S}/simulator/configs/azure_lily.json", ()),  # data only
     # crossbar primitive
-    ("ip/xbar/rtl/sim/dpe_nldpe.v", f"{S}/rtl/dpe_nldpe.v", ()),
-    ("ip/xbar/rtl/vtr/dpe_blackbox.v", f"{X}/rtl/dpe_blackbox.v", ()),
-    ("ip/xbar/tb/tb_dpe_nldpe.v", f"{S}/tb/tb_dpe_nldpe.v", ()),
-    ("ip/xbar/tb/gen_cases.py", f"{S}/smoke/gen_cases.py", GEN_DPE),
-    ("ip/xbar/tb/run_dpe_rtl.py", f"{S}/smoke/run_dpe_rtl.py", RUN_DPE),
+    # the crossbar's two files: forked 2026-10-23 for the bit-plane interface (FORKED below)
+    # the crossbar's pre-bit-plane test harness: retired 2026-10-23 (FORKED below; tools/cleanup_bitplane.sh removes it)
     # GEMM
     # gemm_top.v: v3-owned since F4 (2026-10-14: out_valid made a port; see FORKED below)
-    ("ip/gemm/tb/tb_gemm_top.v", f"{S}/tb/tb_gemm_top.v", ()),
-    ("ip/gemm/tb/gen_gemm_cases.py", f"{S}/smoke/gen_gemm_cases.py", GEN_GEMM),
-    ("ip/gemm/tb/run_gemm_rtl.py", f"{S}/smoke/run_gemm_rtl.py", RUN_GEMM),
+    # tb_gemm_top.v and the twin baseline gemm.diff: forked 2026-10-23 for the bit-plane interface (FORKED below)
+    # the GEMM's v2 harness scripts: retired 2026-10-23 (FORKED below; the GATE-2 harness replaces them)
     # tiled DIMM: v3-owned since F3 / phase A (2026-10-14; see FORKED below)
     # online softmax: v3-owned since F3 / phase B (2026-10-14; see FORKED below)
     # its accumulator: v3-owned since F3 / phase C (2026-10-14; softmax_online_acc, see FORKED below)
@@ -150,8 +146,7 @@ COPIES = [
     *[(f"vtr/arch/{f}", f"{X}/arch/{f}", ()) for f in ARCHS],
     ("vtr/run_vtr.py", f"{X}/vtr/run_vtr.py", ()),
     ("vtr/clock.sdc", f"{X}/vtr/clock.sdc", ()),
-    # twin-diff baselines recorded in v2 (the copied twins must reproduce them)
-    *[(f"tools/twin_baseline/{k}.diff", f"{X}/rtl/split_baseline/{k}.diff", ()) for k in ("gemm",)],
+    # twin-diff baselines recorded in v2: the last one (gemm.diff) forked 2026-10-23 (FORKED below)
     # v2's FC results (user 2026-10-13: the FC rows are reused, not re-run; the attention rows in these files are the
     # earlier attention DSE, which is not a valid experiment): the regression reference of simulator/tests/testFcRows.py
     # (in dse/fc_snapshot/ until 2026-10-17; the current FC results are dse/results/fc_*_results.csv)
@@ -161,6 +156,7 @@ COPIES = [
 # copies v3 has since edited or replaced: (path under v3/, the v2 source it started from). They are v3 files now; the
 # lock keeps the source's sha256 as the record of the starting point (LEDGER.md log).
 FORKED = [
+    ("simulator/platform/nl_dpe.json", f"{S}/simulator/configs/nl_dpe.json"),       # the port priced per bit (2026-10-23)
     ("ip/dimm/rtl/sim/dimm_tile_top.v", f"{S}/rtl/dimm_tile_top.v"),
     ("ip/dimm/rtl/vtr/dimm_tile_top.v", f"{X}/rtl/dimm_tile_top.v"),
     ("ip/dimm/tb/tb_dimm_tile_top.v", f"{S}/tb/tb_dimm_tile_top.v"),
@@ -193,6 +189,17 @@ FORKED = [
     ("dse/plot_dse.py", "v2/work/dse_v1/combined/plot_pareto.py"),          # the FC x attention cross score
     # the FC VTR table of the results (2026-10-17): the 48 family == gemm rows of v2's vtr_results.csv, verbatim lines
     ("dse/results/fc_vtr_results.csv", f"{X}/dse/results/vtr_results.csv"),
+    # the bit-plane interface (2026-10-23, user's go): R-bit data_in, C-bit data_out, 10-cycle pass (ip/xbar/spec.md)
+    ("ip/xbar/rtl/sim/dpe_nldpe.v", f"{S}/rtl/dpe_nldpe.v"),
+    ("ip/xbar/rtl/vtr/dpe_blackbox.v", f"{X}/rtl/dpe_blackbox.v"),
+    ("ip/gemm/tb/tb_gemm_top.v", f"{S}/tb/tb_gemm_top.v"),            # the GATE-2 testbench (preload, plane words)
+    ("tools/twin_baseline/gemm.diff", f"{X}/rtl/split_baseline/gemm.diff"),   # the bit-plane twins' difference
+    # retired 2026-10-23 with the bit-plane pass (tools/cleanup_bitplane.sh removes them; the lock keeps the record)
+    ("ip/xbar/tb/tb_dpe_nldpe.v", f"{S}/tb/tb_dpe_nldpe.v"),
+    ("ip/xbar/tb/gen_cases.py", f"{S}/smoke/gen_cases.py"),
+    ("ip/xbar/tb/run_dpe_rtl.py", f"{S}/smoke/run_dpe_rtl.py"),
+    ("ip/gemm/tb/gen_gemm_cases.py", f"{S}/smoke/gen_gemm_cases.py"),
+    ("ip/gemm/tb/run_gemm_rtl.py", f"{S}/smoke/run_gemm_rtl.py"),
 ]
 
 # ---------------------------------------------------------------------------------------------------------------------

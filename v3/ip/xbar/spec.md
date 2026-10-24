@@ -1,9 +1,9 @@
 # `dpe` — the NL-DPE crossbar, row-parallel interface (v3 charter)
 
 Status: 2026-10-22, written for the bit-plane pass (user decisions of 2026-10-21/22, `LEDGER.md`). The simulator's
-crossbar model (`simulator/core/crossbar.py`) implements it. Both RTL files (`rtl/sim/dpe_nldpe.v`, the behavior
-model, and `rtl/vtr/dpe_blackbox.v`, the VTR port contract) still have v2's 40-bit interface. They change in the RTL
-pass, on your go (both are copied files, `tools/copies.py`).
+crossbar model (`simulator/core/crossbar.py`) implements it. 2026-10-23: both RTL files implement it
+(`rtl/sim/dpe_nldpe.v`, the behavior model, and `rtl/vtr/dpe_blackbox.v`, the VTR port contract; forked from v2 on your
+go, `tools/copies.py` FORKED).
 
 This charter replaces v2's interface and timing (`git show v2-final:v2/sim/spec/dpe_nldpe.md` §4–§5). It keeps v2's
 numeric contract unchanged (§2 and §6 there): int8 stationary weights, int8 inputs, an exact integer MAC into an
@@ -21,6 +21,9 @@ $$
   EXP $\mathrm{trunc8}(1 + y + \lfloor y^2/2 \rfloor)$, LOG $\mathrm{trunc8}(y - 1)$.
 - **Extent:** rows $\ge$ `ROWS_USED` read as zero. Columns $\ge$ `COLS_USED` drain as zero bytes; the first
   `COLS_USED` bytes are the pass's window.
+- **Two rows per column:** the DIMM (`ip/dimm/spec.md` §4, 2026-10-23) preloads the identity stacked twice where
+  $R \ge 2I$ (rows $r$ and $I + r$ to column $r$, `ROWS_USED` = $2I$), so the pass's row sum adds its two log
+  operands before EXP; the EXP form has period 256 in $y$, so the byte equals the one from the truncated sum.
 - **Values:** unchanged from v2. Only the interface and the timing are new.
 
 ## 2 Parameters
@@ -121,9 +124,11 @@ The model's closed form, used by its tests, is:
 
 ## 6 Energy and area
 
-- **Energy per pass:** v2's prices, unchanged (`simulator/platform/prices.py`). The whole array fires; the input
-  buffer is charged per row used (P29); the output buffer and the drain per column. The port traffic stays priced
-  per byte moved, which the wider pins do not change.
+- **Energy per pass:** v2's prices (`simulator/platform/prices.py`). The whole array fires; the input buffer is
+  charged per row used (P29); the output buffer and the drain per column. **The port traffic** (2026-10-23, user):
+  the port is $R$ bits in and $C$ bits out per cycle, so a pass moves $P$ planes of the rows in use in and $P$ planes
+  of every column out, priced per bit (`nl_dpe.json` `port`: the block-RAM access price per bit of its 40-bit port,
+  0.0495 / 40 pJ, so the term is continuous with the pre-bit-plane 40-bit words without their rounding).
 - **Area:** the row-parallel tile (`docs/experiment.md` §5.1): the height from the $R + 7$ / $C + 5$ pins, the width
   from the logic plus COFFE's local input crossbar.
 
@@ -152,4 +157,5 @@ The model's closed form, used by its tests, is:
   - the extent leaving the time unchanged.
 - **GATE 2:** the modules' 64×64 corpora exercise every crossbar. A few crossbar-only cases at 64×64 and 128×64
   are your call at the docs review.
-- **VTR:** the head smoke at 256×128 with `vtr/arch_rowpar/` (the crossbar count, Fmax, CLB, memory).
+- **VTR:** the head smoke at 128×64 with `vtr/arch_rowpar/` (the crossbar count, Fmax, CLB, memory; 256×128 until
+  2026-10-23).

@@ -8,7 +8,7 @@
              COFFE's logic_um2 (coffe_flow_22nm/sweep_summary_full.csv, quoted below, to its 0.1 um^2)
   xbar       localCrossbarUm2 equals the CSV's total_um2 for R = 64, 128, 256, 512; any other R is refused
   pins       the tile's 7 control and 5 status pins are the dpe block's ports besides data, clock and reset (the arch
-             XML's nl_dpe pb_type and its wc tile: I = 40 + 7, O = 40 + 5 at today's 40-bit data)
+             XML's nl_dpe pb_type and its wc tile: I = 40 + 7, O = 40 + 5, the pre-bit-plane data width)
   footprint  the 9 row-parallel tiles worked out by hand, and again from the quoted CSV with integer pin arithmetic;
              C > R (the outputs set H); the 12 legacy tiles (v2's arch XMLs); an unknown rule or array is refused;
              areaWcMwta and withVtr price count x W x H x 66,117 MWTA under both rules

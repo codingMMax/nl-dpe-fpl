@@ -9,8 +9,13 @@ validated modules (`ip/gemm`, `ip/dimm/spec.md`, `ip/softmax/spec.md`, `ip/softm
 `docs/architecture.md` §4.1, §4.7 and §5. Refinements of §4.7 made while writing this spec are listed in §10.
 
 **2026-10-22, the bit-plane pass** (§10 item 6): X and $O_8$ move as bit planes, and a token burst is 8 plane words
-(`ip/xbar/spec.md`, `docs/architecture.md` §3.1). The behavior models implement this version. The RTL twins still
-have the 40-bit version and follow in the RTL pass, so gate H pins this version only after that.
+(`ip/xbar/spec.md`, `docs/architecture.md` §3.1). The behavior models implement this version. 2026-10-23: both RTL
+twins implement it (`LOADX` = 8, `BUF` removed); gate H 6/6 and the bring-up 5/5 at 64×64.
+
+**2026-10-23, the soft-logic trims** (your go): E4 and E8 carry value words (`docs/architecture.md` §3.1), the DIMM
+drain registers each count once, and the accumulator's corner-turns are single buffers
+(`ip/dimm/spec.md` §10 item 10, `ip/softmax/spec.md` §10 item 8, `ip/softmax/acc_spec.md` §10 item 10). The wiring
+and every port width are unchanged.
 
 ## 1 Function
 
@@ -43,7 +48,7 @@ Derived (no free numbers):
 | $R_b$, $B$ | $n/S$ runs; $n/B_{kv}$ key blocks |
 | $V$, $ROWS_X$, $LOADX$ | $\lceil d_m/R \rceil$ GEMM row tiles; $\min(d_m, R)$ rows in use (P29); $P$ = 8 plane words per token burst (until 2026-10-22 $\lceil 8\,ROWS_X/40 \rceil$ words) |
 | $LN = SO$ | $\log_2 n$ |
-| $NG_{QK}$, $NG_{PV}$ | $N_E/d$, $N_{EP}/B_{kv}$: the DIMMs' output channels |
+| $NG_{QK}$, $NG_{PV}$ | $N_E/d$, $N_{EP}/B_{kv}$: the DIMMs' output channels (1 and $2d/B_{kv}$ at the fixed mapping: $N_E = d$ since 2026-10-23, $N_{EP} = 2d$) |
 | $NB_A$ | $I/B_{kv}$: rows per QK A staging group |
 | $T_X$ | $n/P_{proj}$ tokens per copy |
 
@@ -55,7 +60,7 @@ The modules' parameters:
 | `qk` | `dimm_tile_top` | `ip/dimm/cases.py` `qk_params`$(S, d, B_{kv}, R, C, N_E, P_{proj}, R_b, B)$: A int8 row frame, `A_CH` = $P_{proj}$, `A_SLOTS` = $R_b$; B int8, `TRANS_B` = 1, `B_CH` = $P_{proj}$, `B_SLOTS` = $B$; `NARROW` = 5 |
 | `sm` | `softmax_online_top` | $S$, $B_{kv}$, $N = n$, `R`, `C`, $N_{EXP}$, `S_CH` = $NG_{QK}$, `LP_CAP` = 2, `LA_CAP` = 2, `LL_CAP` = 1 |
 | `pv` | `dimm_tile_top` | `pv_params`$(S, d, B_{kv}, R, C, N_{EP}, N_{EXP}, P_{proj}, B)$: A log, window frame, `A_CH` = $N_{EXP}$, `A_SLOTS` = 2, released; B int8, `TRANS_B` = 0, `B_CH` = $P_{proj}$, `B_SLOTS` = $B$ |
-| `acc` | `softmax_online_acc` | $S$, $D = d$, `R`, `C`, $N_{OC}$, `NBLK` = $B$, `SO` = `LN` = $\log_2 n$, `P_CH` = $NG_{PV}$, `VWP` = 13; $N_{OC}$ by the floor rule held at its 40-bit form (`acc_spec.md` §9) |
+| `acc` | `softmax_online_acc` | $S$, $D = d$, `R`, `C`, $N_{OC}$, `NBLK` = $B$, `SO` = `LN` = $\log_2 n$, `P_CH` = $NG_{PV}$, `VWP` = 13; $N_{OC}$ by the floor rule held at its pre-bit-plane form (`acc_spec.md` §9) |
 | `ctrl` | `att_ctrl` | `NSEQ`, `S`, `BKV`, `I`, `P_PROJ`, `LOADX` |
 
 Guards: every module's guard holds, plus:
@@ -71,7 +76,7 @@ Guards: every module's guard holds, plus:
 | port | width | dir | discipline | unit |
 |---|---|---|---|---|
 | `x_rdy` | $P_{proj}$ | out | burst on ready | copy $p$ may start its next token burst in this cycle |
-| `x_v`, `x_d` | $P_{proj}$, $P_{proj} V R$ | in | | copy $p$'s token burst: $LOADX$ = 8 plane words, lane $v$ = rows $vR \ldots vR + ROWS_X - 1$ of the token; tokens $t \equiv p \pmod{P_{proj}}$ in order; across copies in token order (token $t$'s burst starts no earlier than token $t - 1$'s; bursts may share a cycle) |
+| `x_v`, `x_d` | $P_{proj}$, $P_{proj} V \cdot ROWS_X$ | in | | copy $p$'s token burst: $LOADX$ = 8 plane words, lane $v$ = rows $vR \ldots vR + ROWS_X - 1$ of the token ($ROWS_X$ bits); tokens $t \equiv p \pmod{P_{proj}}$ in order; across copies in token order (token $t$'s burst starts no earlier than token $t - 1$'s; bursts may share a cycle) |
 | `o_v`, `o_d` | 1, $N_{OC} I$ | out | push | E9: the final $O_8$ values, one plane window of $N_{OC} I$ elements per epilogue wave (`acc_spec.md` §3); the O projection reads them |
 | `start` / `busy`, `done` | 1 / 1, 1 | in / out | burst on ready | one run of the head per reset; `busy` falling is the start port's credit |
 | `weight_in`, `weight_en` | 8, 1 | in | | simulation twin only (the testbench preloads every crossbar, `PLAN.md` R8) |
@@ -106,12 +111,12 @@ Guards: every module's guard holds, plus:
 | `qk.a_cr`, `qk.b_cr`, `pv.b_cr` | `ctrl.qa_cr`, `qb_cr`, `pb_cr` | E1–E3 credits |
 | `ctrl.qj_*` / `qk.j_rdy` | `qk.j_*` / `ctrl.qj_rdy` | QK jobs |
 | `ctrl.pj_*` / `pv.j_rdy` | `pv.j_*` / `ctrl.pj_rdy` | PV jobs |
-| `qk.c_v`, `c_d` / `sm.s_cr` | `sm.s_v`, `s_d` / `qk.c_cr` | E4 |
+| `qk.c_v`, `c_d` / `sm.s_cr` | `sm.s_v`, `s_d` / `qk.c_cr` | E4 (value words) |
 | `ctrl.sm_start` / `sm.busy` | `sm.start` / `ctrl.sm_busy` | softmax runs |
 | `sm.lp_v`, `lp_d` / `pv.a_cr` | `pv.a_v`, `a_d` / `sm.lp_cr` | E5 |
 | `sm.la_*` / `acc.la_cr` | `acc.la_*` / `sm.la_cr` | E6 |
 | `sm.ll_*` / `acc.ll_cr` | `acc.ll_*` / `sm.ll_cr` | E7 |
-| `pv.c_v`, `c_d` / `acc.p_cr` | `acc.p_v`, `p_d` / `pv.c_cr` | E8 |
+| `pv.c_v`, `c_d` / `acc.p_cr` | `acc.p_v`, `p_d` / `pv.c_cr` | E8 (value words) |
 | `acc.o_v`, `o_d` | `o_v`, `o_d` | E9 |
 | `acc.run_done` | `ctrl.run_done` | |
 | `start` / `ctrl.busy`, `ctrl.done` | `ctrl.start` / `busy`, `done` | |
@@ -221,15 +226,17 @@ rule, $X_S = 16$).
 4. **One start per reset.** A second run per reset would also need the DIMMs' slots cleared.
 5. **PV B credit: 4 rows per copy, with X in token order** (user, 2026-10-15; `architecture.md` §5.2). The credit is
    taken when the token enters the GEMM, so its loop includes the GEMM. With 2 rows it bound the X stream on 176 of
-   the 432 DSE builds (up to 8.9 % of the cycles); with 4 it binds on none (the 40-bit timing). The PV DIMM writes V
+   the 432 DSE builds (up to 8.9 % of the cycles); with 4 it binds on none (the pre-bit-plane timing). The PV DIMM writes V
    rows in row order, so the copies' bursts must start in token order (§3); a starved copy would otherwise let the
    other copies' rows overrun their row registers. The model raises on a violation (the PV DIMM's B port check).
 6. **The bit-plane pass** (user, 2026-10-21/22; `ip/xbar/spec.md`).
-   - **X:** a token burst is 8 plane words of $V R$ bits per copy (`x_d` $P_{proj} V R$ bits), so `LOADX` = $P$ for
+   - **X:** a token burst is 8 plane words of $V \cdot ROWS_X$ bits per copy (`x_d` $P_{proj} V \cdot ROWS_X$ bits;
+     `ROWS_X` is a derived header parameter of `att_head`, since a port width cannot use a body localparam), so
+     `LOADX` = $P$ for
      every array. `BUF` is removed.
    - **$O_8$:** E9 is one plane window of $N_{OC} I$ elements per epilogue wave (`o_d` $N_{OC} I$ bits).
    - **Admission:** the GEMMs' `MSB_SA_Ready` rises at `acam_done` + 1. A copy's row period is the pass period (10
      cycles) on every array.
-   - **Held:** the mapping ($N_{OC}$ by the 40-bit floor rule) and the credit sizes, including `PB_CAP` = 4. Its loop
+   - **Held:** the mapping ($N_{OC}$ by the pre-bit-plane floor rule) and the credit sizes, including `PB_CAP` = 4. Its loop
      (the token's burst, the GEMM's pass and drain, the DIMM's row write and credit) is about 33 cycles against the
      4 rows × 10 cycles of the copy's row period.

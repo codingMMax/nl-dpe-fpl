@@ -4,7 +4,7 @@
 
   corpus   the v2 crossbar corpora (default 96 cases, P29 162; GATE-2-certified on the v2 RTL): the values equal the
            expected files (int32 y, every output byte, the drained window). The timing is the charter's closed form
-           (below): v2's kernels time the 40-bit pass and stay value witnesses only (since 2026-10-22)
+           (below): v2's kernels time the pre-bit-plane pass and stay value witnesses only (since 2026-10-22)
   closed   the charter's closed form, written here by hand (ip/xbar/spec.md §5): back to back from cycle 0,
            load_start_m = (P + 2) m, every event at its offset, T(M) = (P + 2) M + P, over R, C, the extent, M
   gated    passes with readiness gaps: load_start_m = max(t_m, load_start_{m-1} + P + 2)
@@ -50,7 +50,7 @@ def schedule(ready: list, P: int = 8) -> list:
 
 
 def loadCase(d: Path, cj: dict) -> tuple:
-    """The v2 corpus case's weights and inputs (its stimuli are 40-bit words: they are only data here). The rows past
+    """The v2 corpus case's weights and inputs (its stimuli are pre-bit-plane words: they are only data here). The rows past
     the extent carry nonzero bytes: the model must read them as zero (P29), which the expected values assume."""
     R, C, M, ru = cj["R"], cj["C"], cj["M"], cj["rows_used"]
     W = corpus.readWords(d / "weights.mem").astype(np.uint8).view(np.int8).reshape(R, C)

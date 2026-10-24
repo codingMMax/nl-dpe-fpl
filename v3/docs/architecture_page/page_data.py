@@ -14,8 +14,8 @@ from simulator.core.engine import run  # noqa: E402
 from simulator.models.attentionHead import attentionHead, headParams  # noqa: E402
 
 HEAD_KEYS = ("I", "S", "RB", "B", "V", "ROWS_X", "LOADX", "LN", "NG_QK", "NG_PV", "N_OC", "N_EXP", "BKV")
-KEEP = {"qk": ("NB", "W_K", "NG", "T_W", "LW", "XS", "NS", "KS", "A_GRP", "B_GRP", "START_LAT", "TREE_LEVELS"),
-        "pv": ("NB", "W_K", "NG", "T_W", "LW", "XS", "NS", "KS", "A_GRP", "B_GRP", "START_LAT", "TREE_LEVELS", "EW"),
+KEEP = {"qk": ("NB", "W_K", "NG", "T_W", "LW", "XS", "NS", "KS", "A_GRP", "B_GRP", "START_LAT", "SHARED_LAT"),
+        "pv": ("NB", "W_K", "NG", "T_W", "LW", "XS", "NS", "KS", "A_GRP", "B_GRP", "START_LAT", "SHARED_LAT", "EW"),
         "sm": ("NWB", "NB", "T_W", "DF", "STREAM"),
         "acc": ("P_OC", "RPW", "W", "FD")}
 

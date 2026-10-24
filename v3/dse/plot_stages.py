@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """plot_stages.py — the figures of the stage analysis (dse/stage_analysis.py's results/stages/stages.json):
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 
   stages_gantt_<case>.png   the pipelined time diagram of one case-study head at the two extreme arrays (128x64 and
                             512x256): one lane per stage (projections, tiled QK, online softmax, tiled PV, output

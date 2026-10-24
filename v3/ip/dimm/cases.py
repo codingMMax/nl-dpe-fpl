@@ -23,7 +23,7 @@ import attention_ref as aref  # noqa: E402  (the oracle: used here only, never b
 from simulator.core.engine import portWords, run  # noqa: E402
 from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
-from simulator.core.records import planeWords  # noqa: E402
+from simulator.core.records import planeWords, valueWords  # noqa: E402
 from simulator.models.dimmTile import DimmTile, DimmTileParams  # noqa: E402
 
 
@@ -195,8 +195,8 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
         for j in range(len(case.jobs)):
             ws = sorted((w for w in sink.received if w.unit == j), key=lambda w: w.window)
             assert [w.window for w in ws] == list(range(d.W_K))
-            for w in ws:                                          # a window's 8 plane words, one per line
-                f.write("".join(f"{x:x}\n" for x in planeWords(w.values, d.EC, d.I, dimm.p.P)))
+            for w in ws:                                          # a window's 8 value words, one per line
+                f.write("".join(f"{x:x}\n" for x in valueWords(w.values, d.EC, d.I, dimm.p.P)))
     images = dimm.math.memoryImages()
     with open(out / "mem.txt", "w") as f:
         for (s_, kind, m, addr), byts in sorted(images.items()):

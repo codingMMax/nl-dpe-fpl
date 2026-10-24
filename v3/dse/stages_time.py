@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """stages_time.py — the page "Attention head in time" (for sharing): the log-domain mapping of one attention head on
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 NL-DPE crossbars, animated from the simulator's crossbar passes (dse/dataflow.py `map_section`): three bands (the
 log domain, the crossbars, the linear domain), one column per operation, every edge labelled with the data it
 carries, a block's packets moving along the edges at the real hand-over times, each operation lit while its passes

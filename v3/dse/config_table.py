@@ -16,7 +16,7 @@ ctrl) and the kind of wait:
   DPE load     a pass's input burst (ceil(8 ROWS_USED / BUF) words into a crossbar)
   DPE compute  the P bit-slices, the shift-accumulate, the ACAM, the hand-overs to the next burst
   DPE drain    the first output word, and the drain words a consumer takes
-  stream       the words of a port, or a FIFO read one word per cycle: the 40-bit paths between modules
+  stream       the words of a port, or a FIFO read one word per cycle: the pre-bit-plane paths between modules
   logic        every other named latency: trees, registers, decisions, the writers (and the start's cycle)
 The parts are geometric means too, so they come close to their total but do not add up to it exactly.
 
@@ -98,7 +98,7 @@ def checkPath(b: dict) -> dict:
 
 def attentionPath(name: str, n: int, dm: int, d: int, R: int, C: int) -> dict:
     """One head's critical path (timing only)."""
-    g, parts = attentionHead(headParams(n, dm, d, R, C), withValues=False)
+    g, parts = attentionHead(headParams(n, dm, d, R, C, N_E=2 * d), withValues=False)   # the 2026-10-16 run's mapping (N_E = 2d) until stage 5
     run(g)
     ctrl = parts["ctrl"]
     return checkPath(dict(family="attention", workload=name, config=f"{R}x{C}", n=n, d_model=dm, d=d,
@@ -280,7 +280,7 @@ exactly: latency = cycles ÷ Fmax, ADP = area × latency, EDAP = energy × ADP. 
 Area: VPR counts (crossbar tiles, CLBs, BRAM blocks at 2 cells). Energy: the priced ledger. Cycles: the head's critical
 path by kind (the chain of waits that set the head's done; its segments add up to T exactly): DPE load = a pass's
 input burst, DPE compute = the bit-slices, the shift-accumulate, the ACAM and the hand-overs, DPE drain = the first
-output word and the drain words a consumer takes, stream = a port's words or a FIFO read one word per cycle (the 40-bit
+output word and the drain words a consumer takes, stream = a port's words or a FIFO read one word per cycle (the pre-bit-plane
 paths between modules), logic = every other named latency. Fmax: VTR, the mean of seeds {{11, 13, 17}}. The parts are
 geometric means too, so they come close to their total but do not add up to it exactly.
 

@@ -62,7 +62,7 @@ def pulsePort(name: str, unit: str) -> PortSpec:
 class AttCtrl(Module):
     NAME = "att_ctrl"
     PARAMS_CLASS = AttCtrlParams
-    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was gate H-pinned 2026-10-15
+    BASIS = "rtl-pinned"           # the bit-plane RTL: the head's GATE 2 at 64x64, 5/5 + 6/6 (2026-10-23)
 
     @staticmethod
     def derive(p: AttCtrlParams) -> AttCtrlDerived:

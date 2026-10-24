@@ -44,10 +44,11 @@ sys.path.insert(0, str(V3))
 from dse import data  # noqa: E402
 from dse.space import CONFIGS  # noqa: E402
 
-RESULTS = V3 / "dse" / "results"
+RESULTS = data.RESULTS
 EDAP = RESULTS / "edap"            # the earlier view: energy x delay x area product ranking
 ADP = RESULTS / "adp"              # the current view: latency vs area per family, area-delay product across them
 OKABE = {"E": "#0072B2", "D": "#E69F00", "A": "#009E73"}
+DIFFERS = sum(r["mem_check"] == "DIFFERS" for r in data.attentionRows())   # builds priced from VPR's memory count
 RS, CS = tuple(sorted({r for r, _ in CONFIGS})), tuple(sorted({c for _, c in CONFIGS}))   # the map's axes; C <= R
 NOTES = {
     "fc": ("FC — crossbar ranking by EDAP",
@@ -55,9 +56,9 @@ NOTES = {
            "by the v3 model)"),
     "attention": ("Attention head — crossbar ranking by EDAP",
                   "one head, (n, d_model, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), "
-                  "BERT-Tiny (128, 128, 64),\nJetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). The "
-                  f"{sum(r['mem_check'] == 'DIFFERS' for r in data.attentionRows())} builds of the d = 64 shapes at "
-                  "C = 64 are priced from VPR's memory count (5–8 blocks above the simulator's prediction)."),
+                  "BERT-Tiny (128, 128, 64),\nJetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16)."
+                  + (f" The {DIFFERS} builds of the d = 64 shapes at C = 64 are priced from VPR's memory count (5–8 "
+                     "blocks above the simulator's prediction)." if DIFFERS else "")),
 }
 
 
@@ -202,6 +203,9 @@ def place_labels(fig, ax):
     y0, y1 = ax.get_ylim()
     taken = [tuple(tr.transform((px, py))) + (0,) for _, px, py, _ in ax._lab]
     boxes = []
+    if ax.get_legend() is not None:                   # a legend drawn before the labels (cross): keep them off it
+        boxes.append(tuple(ax.get_legend().get_window_extent(fig.canvas.get_renderer()).extents))
+    ax._boxes = boxes                                 # the label boxes, for a legend drawn after them (clear_legend)
     dpi = fig.dpi / 72
 
     def hit(b):
@@ -231,6 +235,27 @@ def place_labels(fig, ax):
             ax.text(x1 / 1.01, yr, f"{m:g}×", fontsize=8, ha="right", va="bottom", color=col)
 
 
+LEGEND_LOCS = ("upper right", "lower right", "upper left", "lower left", "center right", "center left", "upper center",
+               "lower center")
+
+
+def clear_legend(fig, ax, loc: str, bbox_to_anchor=None, **kw):
+    """The legend at loc; where it would cover a point or a point's label (ax._lab, ax._boxes), at the first place in
+    LEGEND_LOCS that covers none, else matplotlib's "best" (a fixed place suits one data set only). It reads the layout
+    of the figure's last draw and draws nothing itself: one more draw moves the constrained layout by a fraction of a
+    pixel, and a figure whose legend stays put must come out byte-identical."""
+    rend = fig.canvas.get_renderer()
+    pts = [tuple(ax.transData.transform((px, py))) for _, px, py, _ in ax._lab]
+    boxes = getattr(ax, "_boxes", [])
+    for k, where in enumerate((loc,) + tuple(w for w in LEGEND_LOCS if w != loc)):
+        leg = ax.legend(loc=where, bbox_to_anchor=bbox_to_anchor if k == 0 else None, **kw)
+        b = leg.get_window_extent(rend)
+        if not (any(b.x0 - 4 < x < b.x1 + 4 and b.y0 - 4 < y < b.y1 + 4 for x, y in pts) or
+                any(not (x1 < b.x0 or x0 > b.x1 or y1 < b.y0 or y0 > b.y1) for x0, y0, x1, y1 in boxes)):
+            return leg
+    return ax.legend(loc="best", **kw)
+
+
 def pareto(fams: list) -> list:
     fig = plt.figure(figsize=(14, 6.4), constrained_layout=True)
     axs = [fig.add_subplot(1, 2, k + 1) for k in range(len(fams))]
@@ -245,7 +270,7 @@ def pareto(fams: list) -> list:
           Line2D([], [], color="white", lw=0, marker="o", ms=8, mec="black", mew=1.8, label="EDAP #1"),
           Line2D([], [], color="#2ca02c", lw=1.0, label="equal EDAP to #1"),
           Line2D([], [], color="#999999", lw=.7, ls=":", label="1.25× … 3× its EDAP")]
-    axs[0].legend(handles=hs, loc="upper right", fontsize=8, framealpha=.9)
+    clear_legend(fig, axs[0], "upper right", handles=hs, fontsize=8, framealpha=.9)
     fig.suptitle("Crossbar configs per family: G_D against G_E × G_A (each value ÷ the worst on the workload, geomean; "
                  "lower is better)", fontsize=13)
     EDAP.mkdir(parents=True, exist_ok=True)
@@ -295,9 +320,10 @@ def cross(cr: dict, n_fc: int, n_att: int) -> tuple:
           Line2D([], [], color="white", lw=0, marker="o", ms=8, mec="black", mew=1.6, label="closest to the origin"),
           Line2D([], [], color="#2ca02c", lw=1.3, label=f"d = {r0:.3f}: nothing closer"),
           Line2D([], [], color="#9a9a9a", lw=.7, ls=":", label="equal distance d")]
-    ax.legend(handles=hs, loc="center right", bbox_to_anchor=(1.0, 0.5), fontsize=8.5, framealpha=.92)
     ax._lab = [(c, p["G_FC"], p["G_ATT"], c in front) for c, p in cs.items()]
     ax._iso = []
+    fig.canvas.draw()                                  # the layout, for the legend's place (before the labels)
+    clear_legend(fig, ax, "center right", (1.0, 0.5), handles=hs, fontsize=8.5, framealpha=.92)
     place_labels(fig, ax)
     EDAP.mkdir(parents=True, exist_ok=True)
     for ext in ("png", "pdf"):
@@ -441,8 +467,8 @@ def latency_area(la: dict, bd: dict) -> dict:
         fn(ax)
     for ax in axs:
         place_labels(fig, ax)
-    axs[0].legend(handles=hs, loc="upper right", fontsize=9, framealpha=.9)
-    axs[2].legend(handles=hs + axs[2]._extra, loc="lower right", fontsize=8.5, framealpha=.92)
+    clear_legend(fig, axs[0], "upper right", handles=hs, fontsize=9, framealpha=.9)
+    clear_legend(fig, axs[2], "lower right", handles=hs + axs[2]._extra, fontsize=8.5, framealpha=.92)
     fig.suptitle("Crossbar configs (R × C): score = the config's value ÷ the worst config's value on the workload "
                  "(1 = worst, lower is better); G = geomean over the workloads", fontsize=12.5)
     ADP.mkdir(parents=True, exist_ok=True)
@@ -469,7 +495,7 @@ def latency_area(la: dict, bd: dict) -> dict:
                         f"(c) {name[fam]}: energy split per config\n({how[fam]})", ENERGY_SPLIT,
                         "share of the energy (%)")
         place_labels(fig, ax)
-        ax.legend(handles=hs + getattr(ax, "_extra", []), loc=loc, fontsize=8.5, framealpha=.92)
+        clear_legend(fig, ax, loc, handles=hs + getattr(ax, "_extra", []), fontsize=8.5, framealpha=.92)
         fig.savefig(ADP / f"{stem}.png", dpi=160)
         plt.close(fig)
     return dict(fc=[c["config"] for c in la["fc"]["configs"] if c["front"]],
@@ -481,8 +507,12 @@ def main() -> None:
     fronts = latency_area(json.loads((ADP / "latency_area.json").read_text()),
                           json.loads((RESULTS / "breakdown.json").read_text()))
     print(f"wrote {ADP / 'dse_la.png'} and .pdf, dse_la_fc.png, dse_la_attention.png, dse_adp_cross.png | fronts {fronts}")
-    critical_path(json.loads((RESULTS / "critical_path.json").read_text()), fronts)
-    print(f"wrote {ADP / 'dse_critical_path.png'} and .pdf")
+    cp = RESULTS / "critical_path.json"               # dse/config_table.py's; a projection folder has none
+    if cp.exists():
+        critical_path(json.loads(cp.read_text()), fronts)
+        print(f"wrote {ADP / 'dse_critical_path.png'} and .pdf")
+    else:
+        print(f"no {cp}: no critical-path figure")
     res = {name: json.loads((EDAP / f"ranking_{name}.json").read_text()) for name in ("fc", "attention")}
     cr = json.loads((EDAP / "ranking_cross.json").read_text())
     front, pick = cross(cr, len(res["fc"]["workloads"]), len(res["attention"]["workloads"]))

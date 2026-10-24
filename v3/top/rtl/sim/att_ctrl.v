@@ -3,7 +3,7 @@
 // in both twins (no `dpe`).
 //   admission  copy c may start its next token burst (x_rdy[c]) when the head runs, the copy has no burst in progress,
 //              its three GEMMs have MSB_SA_Ready, a token is left, and the staging of the QK A, QK B and PV B ports
-//              holds the token (freed + CAP > the token's unit); a burst starts when x_v rises, LOADX words
+//              holds the token (freed + CAP > the token's unit); a burst starts when x_v rises, LOADX planes
 //   jobs       QK job j = (A slot j / NBLK, B slot j mod NBLK), PV job j = (A slot j mod 2 released, B slot j mod NBLK),
 //              offered from the run start and taken in the first cycle with the DIMM's j_rdy
 //   runs       softmax run r starts in the first cycle with sm_busy low; done one cycle after the last run's run_done;
@@ -17,7 +17,7 @@ module att_ctrl #(
     parameter BKV    = 16,
     parameter I      = 64,
     parameter P_PROJ = 1,
-    parameter LOADX  = 26,
+    parameter LOADX  = 8,                               // plane words per token burst (P)
     // derived (port widths; do not override)
     parameter RB     = NSEQ / S,
     parameter NBLK   = NSEQ / BKV,
@@ -88,12 +88,12 @@ module att_ctrl #(
         end
     end
 
-    // ---- admission per copy: token tok = c, c + P_PROJ, ...; a burst of LOADX words starts when x_v rises -------
+    // ---- admission per copy: token tok = c, c + P_PROJ, ...; a burst of LOADX planes starts when x_v rises ------
     genvar gc;
     generate
         for (gc = 0; gc < P_PROJ; gc = gc + 1) begin : g_cp
             reg  [TW-1:0]  tok;                         // the copy's next token
-            reg  [LXW-1:0] wc;                          // words of the burst in progress (0: none)
+            reg  [LXW-1:0] wc;                          // planes of the burst in progress (0: none)
             wire           bstart = x_v[gc] && (wc == 0);
             always @(posedge clk) begin
                 if (reset) begin tok <= gc; wc <= 0; end

@@ -42,11 +42,11 @@ def fcRow(R: int, C: int, shape: tuple, platform: Platform, vtr: dict | None = N
 
 
 def attentionRow(name: str, nseq: int, dModel: int, d: int, R: int, C: int, vtr: dict | None = None,
-                 tileRule: str = "row_parallel") -> dict:
+                 tileRule: str = "row_parallel", nE: int | None = None) -> dict:
     """One attention DSE row at the fixed mapping (headParams defaults): the head's compute cycles (done - start),
     energy in total and per role, crossbars, the memory inventory and its predicted blocks; with VTR metrics also the
     total area, latency and EDAP (experiment.md §5). tileRule as fcRow."""
-    hp = headParams(nseq, dModel, d, R, C)
+    hp = headParams(nseq, dModel, d, R, C, N_E=nE)       # nE None: the fixed mapping (N_E = d since 2026-10-23)
     g, parts = attentionHead(hp, withValues=False)
     rep = run(g)
     platform = Platform("nl_dpe", rows=R, cols=C)

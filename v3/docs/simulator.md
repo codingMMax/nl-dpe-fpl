@@ -186,7 +186,7 @@ have is rejected. One call, `run(x, tReady)`, does all of this:
 
   So a pass alone takes $2P + 2$ = 18 cycles and back-to-back passes start every $P + 2$ = 10, on every array and at
   any extent: the extent sets the values and the energy only. `P` comes from the platform (8 on NL-DPE). Until
-  2026-10-22 the crossbar had a 40-bit port each way: LOAD $= \lceil 8\,rows/40 \rceil$ and OUTPUT
+  2026-10-22 the crossbar had a pre-bit-plane port each way: LOAD $= \lceil 8\,rows/40 \rceil$ and OUTPUT
   $= \lceil 8C/40 \rceil$ words, the certified pass grammar of `pass_engine`.
 
 - **Result:** the output window (values, time `drain_start`) and the pass events, plus one pass added to the counts.
@@ -227,7 +227,7 @@ the softmax's 5-byte packer, was dropped with the bit-plane pass (2026-10-22).
 | source, sink | X source (one burst on `x_rdy`), $O_8$ sink (takes every word) | the head's environment | new | — |
 
 Each model starts from the certified v2 kernel named in the table for its values. Until 2026-10-22 it also
-reproduced that kernel's RTL-pinned timing (the 40-bit pass). Since the bit-plane pass, "must reproduce" is the
+reproduced that kernel's RTL-pinned timing (the pre-bit-plane pass). Since the bit-plane pass, "must reproduce" is the
 module spec's closed form, written by hand in the model's test; the RTL pass pins the latencies again by GATE 2.
 
 ### 4.5 Graphs and workloads

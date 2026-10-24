@@ -65,11 +65,11 @@ def family_table(res: dict, tid: str) -> str:
             f'<th title="area ÷ the worst">G<sub>A</sub></th></tr></thead><tbody>{rows}</tbody></table></div>')
 
 
-def cross_table(cr: dict) -> str:
+def cross_table(cr: dict, tid: str = "t_cross") -> str:
     rows = "".join(f'<tr{" class=\"top\"" if c["rank"] == 1 else ""}><td>{c["rank"]}</td><td>{cx(c["config"])}</td>'
                    f'<td>{c["G_FC"]:.3f}</td><td>{c["G_ATT"]:.3f}</td>'
                    f'<td>{c["d"]:.3f}</td><td>{"yes" if c["front"] else ""}</td></tr>' for c in cr["configs"])
-    return ('<div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>EDAP</sub></th>'
+    return (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>EDAP</sub></th>'
             '<th>attention G<sub>EDAP</sub></th><th>d</th><th>front</th>'
             f'</tr></thead><tbody>{rows}</tbody></table></div>')
 
@@ -164,12 +164,12 @@ def front_text(rows: list, key: str = "G_A") -> str:
     return ", ".join(cx(c["config"]) for c in sorted(fr, key=lambda c: c[key]))
 
 
-def adp_table(rows: list) -> str:
+def adp_table(rows: list, tid: str = "t_cross") -> str:
     body = "".join(f'<tr{" class=\"top\"" if c["front"] else ""}><td>{c["rank"]}</td><td>{cx(c["config"])}</td>'
                    f'<td>{c["G_FC"]:.3f}</td><td>{c["G_ATT"]:.3f}</td><td>{c["d"]:.3f}</td>'
                    f'<td>{c["G_E_FC"]:.3f}</td><td>{c["G_E_ATT"]:.3f}</td>'
                    f'<td>{"yes" if c["front"] else ""}</td></tr>' for c in rows)
-    return ('<div class="tablewrap"><table id="t_cross"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>ADP</sub></th>'
+    return (f'<div class="tablewrap"><table id="{tid}"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>ADP</sub></th>'
             '<th>attention G<sub>ADP</sub></th><th>d</th><th>FC G<sub>E</sub></th><th>attention G<sub>E</sub></th>'
             f'<th>front</th></tr></thead><tbody>{body}</tbody></table></div>')
 
@@ -232,12 +232,13 @@ def critical_path_section() -> str:
     at, fc = cp["attention"], cp["fc"]
     c64 = [c for c in CP_ORDER if c.endswith("x64")]
     c256 = [c for c in CP_ORDER if c.endswith("x256")]
-    drain256 = -(-8 * 256 // 40) + 1                  # a projection pass's drain of all 256 columns
+    drain256 = -(-8 * 256 // 40) + 1                  # a projection pass's drain of all 256 columns (pre-bit-plane
+    #   closed forms: the page describes the 2026-10-16 run until stage 5)
     load192 = -(-8 * 192 // 40) + 8                   # the load of the largest d_model <= 192 (DeiT-T)
     assert all(at[c]["shares"]["dpe_drain"] > at[c]["shares"]["dpe_load"] for c in c256), "C = 256 is not drain-led"
     return figure("cp", "Critical path: where the cycles go", "dse_critical_path.png",
                   "Stacked bars per crossbar config: the attention head's cycles on the critical path by kind of wait and by module, and the FC rows' by kind",
-                  "Each build is run in the simulator, whose times carry their history: every decision keeps the input that bound it and every added latency is a labeled segment, so the head's done carries the one chain of waits that set it, from the start to the last output word, and the chain's cycles add up to the latency exactly. (a) and (c): the chain by kind of wait, DPE load = a pass's input burst into a crossbar, DPE compute = the bit-slices, the shift-accumulate, the ACAM and the hand-overs, DPE drain = the first output word and the drain words a consumer takes, stream = a port's words or a FIFO read one word per cycle (the 40-bit paths between modules), logic = every other named latency. (b): the same chain by the module whose wait it is. Shares of the cycles, the mean over the family's workloads; front configs in bold.") + f"""  <div class="families">
+                  "Each build is run in the simulator, whose times carry their history: every decision keeps the input that bound it and every added latency is a labeled segment, so the head's done carries the one chain of waits that set it, from the start to the last output word, and the chain's cycles add up to the latency exactly. (a) and (c): the chain by kind of wait, DPE load = a pass's input burst into a crossbar, DPE compute = the bit-slices, the shift-accumulate, the ACAM and the hand-overs, DPE drain = the first output word and the drain words a consumer takes, stream = a port's words or a FIFO read one word per cycle (the pre-bit-plane paths between modules), logic = every other named latency. (b): the same chain by the module whose wait it is. Shares of the cycles, the mean over the family's workloads; front configs in bold.") + f"""  <div class="families">
   <div class="family">
     <h2>Attention head: by kind, then by module</h2>
     {cp_table(at, "t_cp_att", CP_KINDS + CP_ROLES)}
@@ -287,9 +288,9 @@ def analysis_section() -> str:
   <div class="notes">
     <p><b>Architecture.</b> FC is a weight-stationary GEMV: the crossbars store the weights, 1 to 64 tiles per build. Attention multiplies activations by activations, so its crossbars act as EXP and LOG converters with identity weights on one I-wide window per pass. Their number follows the head dimension (78, 146 or 278–297 crossbars for d = 16, 32, 64) and hardly changes with the array size; at {cx(sparse)} only {100 * at[sparse]['used_cells']:.1f} % of a converter's cells are in use.</p>
     <p><b>Area.</b> FC area is crossbar tiles ({share(fcb, 'dpe')[0]:.0f}–{share(fcb, 'dpe')[1]:.0f} %), and a larger tile stores a weight in less area ({fcb[large]['tile_cells'] / fcb[small]['tile_cells']:.0f}× the grid area for {math.prod(rc(large)) / math.prod(rc(small)):.0f}× the cells), so FC area falls from {cx(small)} (G<sub>A</sub> {la['fc'][small]['G_A']:.2f}) to {cx(large)} ({la['fc'][large]['G_A']:.2f}). Not at every step: at C = 64 and 128, R = 512 takes more area than R = 256 (G<sub>A</sub> {la['fc']['256x64']['G_A']:.2f} → {la['fc']['512x64']['G_A']:.2f} and {la['fc']['256x128']['G_A']:.2f} → {la['fc']['512x128']['G_A']:.2f}): its 519 input pins make the tile 9 cells tall, its local input crossbar adds {100 * area.localCrossbarUm2(512) / area.logicAreaUm2(512, 64):.0f} % and {100 * area.localCrossbarUm2(512) / area.logicAreaUm2(512, 128):.0f} % to the logic, and the area then needs just over one or two columns, so the last column is mostly empty ({100 * used('512x64'):.0f} % and {100 * used('512x128'):.0f} % of the tile used; the tile rule, experiment.md §5.1). Attention area is soft logic ({share(at, 'clb')[0]:.0f}–{share(at, 'clb')[1]:.0f} % CLB: about {clbAt(64):.1f}k CLBs at C = 64, {clbAt(128):.1f}k at 128, {clbAt(256):.1f}k at 256), plus crossbar tiles ({share(at, 'dpe')[0]:.0f}–{share(at, 'dpe')[1]:.0f} %) that grow with the array.</p>
-    <p><b>Latency.</b> FC is one pass per tile, {rng(fcb, 'cycles')[0]:.0f}–{rng(fcb, 'cycles')[1]:.0f} cycles at {rng(fcb, 'fmax_mhz')[0]:.0f}–{rng(fcb, 'fmax_mhz')[1]:.0f} MHz. Attention takes {rng(at, 'cycles', 1e-3)[0]:.0f}k–{rng(at, 'cycles', 1e-3)[1]:.0f}k cycles at {rng(at, 'fmax_mhz')[0]:.0f}–{rng(at, 'fmax_mhz')[1]:.0f} MHz. Its projections stream every token through one GEMM copy and end at n × max(⌈min(d<sub>model</sub>, R)/5⌉ + 8, ⌈8C/40⌉ + 1) cycles (the X load, or the drain of all C columns), which grows with R only while d<sub>model</sub> &gt; R. The rest is bound by the score stream into the softmax (one 40-bit port, about n²/5 cycles), whatever the array size. Where the cycles go, exactly, is the critical-path section below: DPE compute is {cp_range(cp, 'dpe_compute', CP_ORDER)} of them everywhere.</p>
+    <p><b>Latency.</b> FC is one pass per tile, {rng(fcb, 'cycles')[0]:.0f}–{rng(fcb, 'cycles')[1]:.0f} cycles at {rng(fcb, 'fmax_mhz')[0]:.0f}–{rng(fcb, 'fmax_mhz')[1]:.0f} MHz. Attention takes {rng(at, 'cycles', 1e-3)[0]:.0f}k–{rng(at, 'cycles', 1e-3)[1]:.0f}k cycles at {rng(at, 'fmax_mhz')[0]:.0f}–{rng(at, 'fmax_mhz')[1]:.0f} MHz. Its projections stream every token through one GEMM copy and end at n × max(⌈min(d<sub>model</sub>, R)/5⌉ + 8, ⌈8C/40⌉ + 1) cycles (the X load, or the drain of all C columns), which grows with R only while d<sub>model</sub> &gt; R. The rest is bound by the score stream into the softmax (one pre-bit-plane port, about n²/5 cycles), whatever the array size. Where the cycles go, exactly, is the critical-path section below: DPE compute is {cp_range(cp, 'dpe_compute', CP_ORDER)} of them everywhere.</p>
     <p><b>Energy.</b> A crossbar pass fires the whole array (the cells, the ACAM on every column, the output buffer) and reads only the rows in use, so an attention pass costs {paid(small):.1f} pJ at {cx(small)} and {paid(large):.1f} pJ at {cx(large)} on average (the full array would be {at[small]['pass_price_full_pj']:.1f} and {at[large]['pass_price_full_pj']:.1f}). FC needs fewer passes as the array grows (30 to 2), so its energy falls with size. Attention's pass count depends on I only (about {kp('128x64')}, {kp('128x128')}, {kp('256x256')} at I = 64, 128, 256), and the price still grows with R through the cells and the ACAM, so at a fixed I its energy rises with R.</p>
-    <p><b>Assumptions behind it.</b> The fixed attention mapping (the crossbar count does not follow the array size), the pass price (the whole array fires; only the rows in use are read), one projection copy, the 40-bit ports in the cycles (the row-parallel tile of 2026-10-22 is in the area only), and FC as a single GEMV. Changing any of them could move the attention ranking.</p>
+    <p><b>Assumptions behind it.</b> The fixed attention mapping (the crossbar count does not follow the array size), the pass price (the whole array fires; only the rows in use are read), one projection copy, the pre-bit-plane ports in the cycles (the row-parallel tile of 2026-10-22 is in the area only), and FC as a single GEMV. Changing any of them could move the attention ranking.</p>
   </div>
 </section>
 """

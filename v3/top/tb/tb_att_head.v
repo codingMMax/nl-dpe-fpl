@@ -5,14 +5,17 @@
 // The testbench is the head workload's environment (sim/workloads/attention_head.py):
 //   X sources    every copy's token bursts at the cycles the model planned (x_rdy must be high in the first cycle)
 //   start        the start pulse at its planned cycle
-//   O sink       takes every E9 window (o_win.txt: one window per epilogue wave, LW words of N_OC x 40 bits),
+//   O sink       takes every E9 window (o_win.txt: one window per epilogue wave, 8 plane words of N_OC*I bits),
 //                checks every value, no gap inside a window
+// The bit-plane pass (2026-10-23): every stream carries 8 plane words per window; a token burst is 8 planes of
+// V*ROWS_X bits per copy.
 // Logged (EV lines, the model's format) on every edge of the netlist (spec §4): windows by their first word, numbered
 // by the stream rule (channel ch's k-th window is window ch + L k of the stream), and credits / pulses: the GEMMs'
 // MSB_SA_Ready rising, x_rdy rising (after the first), the staging and stream credits, the job takes and j_rdy rising,
 // the softmax starts and busy falling, run_done, the head's busy falling. Also checked: done at the model's cycle,
 // the word counts, a watchdog.
-// Weights: preloaded at zero time after reset (PLAN R8): the projections from wq / wk / wv.mem, identity elsewhere.
+// Weights: preloaded at zero time after reset (PLAN R8): the projections from wq / wk / wv.mem, identity elsewhere
+// (the DIMM farms' identity stacked twice where R >= 2I, ip/dimm/spec.md §10 item 11).
 // Cycle 0 is the first cycle after reset.
 // ============================================================================
 `timescale 1ns / 1ps
@@ -107,7 +110,7 @@ module tb_mon_cr #(parameter MODE = 0, parameter SKIP = 0, parameter PRE = "x", 
 endmodule
 
 module tb_att_head;
-    localparam NSEQ = `NSEQ_TB, DM = `DM_TB, D = `D_TB, BKV = `BKV_TB, R = `R_TB, C = `C_TB, BUF = 40, P = 8;
+    localparam NSEQ = `NSEQ_TB, DM = `DM_TB, D = `D_TB, BKV = `BKV_TB, R = `R_TB, C = `C_TB, P = 8;
     localparam N_EXP = `NEXP_TB, N_E = `NE_TB, N_EP = `NEP_TB, N_OC = `NOC_TB, P_PROJ = `PP_TB, X_S = `XS_TB;
     localparam I     = (R < C) ? R : C;
     localparam S     = (NSEQ < I) ? NSEQ : I;
@@ -115,11 +118,11 @@ module tb_att_head;
     localparam NBLK  = NSEQ / BKV;
     localparam V     = (DM + R - 1) / R;
     localparam ROWSX = (V == 1) ? DM : R;
-    localparam LOADX = (ROWSX * 8 + BUF - 1) / BUF;
+    localparam LOADX = P;                               // plane words per token burst
     localparam NGQ   = N_E / D;
     localparam NGP   = N_EP / BKV;
-    localparam LW    = (I * 8 + BUF - 1) / BUF;
-    localparam NWO   = (D + 4) / 5;
+    localparam LW    = P;                               // plane words per window, every stream
+    localparam NWO   = P;
     localparam NWB   = (S * BKV) / I;                   // QK windows per job = softmax windows per block
     localparam WKP   = (S * D) / I;                     // PV windows per job
     localparam P_OC  = (S * D) / I;                     // accumulator windows per run
@@ -135,12 +138,12 @@ module tb_att_head;
 
     reg                     start = 1'b0;
     reg  [P_PROJ-1:0]       x_v = 0;
-    reg  [P_PROJ*V*BUF-1:0] x_d = 0;
+    reg  [P_PROJ*V*ROWSX-1:0] x_d = 0;
     wire                    busy, done, o_v;
     wire [P_PROJ-1:0]       x_rdy;
-    wire [N_OC*BUF-1:0]     o_d;
+    wire [N_OC*I-1:0]       o_d;
 
-    att_head #(.NSEQ(NSEQ), .DM(DM), .D(D), .BKV(BKV), .R(R), .C(C), .BUF(BUF), .P(P), .N_EXP(N_EXP), .N_E(N_E),
+    att_head #(.NSEQ(NSEQ), .DM(DM), .D(D), .BKV(BKV), .R(R), .C(C), .P(P), .N_EXP(N_EXP), .N_E(N_E),
                 .N_EP(N_EP), .N_OC(N_OC), .P_PROJ(P_PROJ), .X_S(X_S)) dut (
         .clk(clk), .reset(reset), .start(start), .busy(busy), .done(done), .x_rdy(x_rdy), .x_v(x_v), .x_d(x_d),
         .o_v(o_v), .o_d(o_d));
@@ -150,10 +153,10 @@ module tb_att_head;
     integer fd, rc, i, k, nbur, tmax, t_start, t_done, nowin, ot_i, ou_i, ow_i, bad_o = 0;
     reg [7:0] wq_m [0:DM*D-1], wk_m [0:DM*D-1], wv_m [0:DM*D-1];
     integer bt [0:MAXB-1], bc [0:MAXB-1], bk [0:MAXB-1];
-    reg [BUF-1:0] bd [0:MAXB*V*LOADX-1];
-    reg [N_OC*BUF-1:0] ox [0:MAXO*LW-1];
-    reg [BUF-1:0] word;
-    reg [N_OC*BUF-1:0] oword;
+    reg [ROWSX-1:0] bd [0:MAXB*V*LOADX-1];
+    reg [N_OC*I-1:0] ox [0:MAXO*LW-1];
+    reg [ROWSX-1:0] word;
+    reg [N_OC*I-1:0] oword;
     task load;
         begin
             $sformat(fn, "%0s/wq.mem", vdir); $readmemh(fn, wq_m);
@@ -166,7 +169,7 @@ module tb_att_head;
                 for (k = 0; k < V * LOADX; k = k + 1) begin rc = $fscanf(fd, "%h", word); bd[i*V*LOADX + k] = word; end
             end
             $fclose(fd);
-            $sformat(fn, "%0s/o_win.txt", vdir);             // per line: t run wave, then LW words
+            $sformat(fn, "%0s/o_win.txt", vdir);             // per line: t run wave, then LW plane words
             fd = $fopen(fn, "r");
             for (i = 0; i < nowin; i = i + 1) begin
                 rc = $fscanf(fd, "%d %d %d", ot_i, ou_i, ow_i);
@@ -216,7 +219,7 @@ module tb_att_head;
                 integer wk;
                 always @(preload) begin
                     for (wk = 0; wk < R*C; wk = wk + 1)
-                        dut.u_qk.g_sl[gs].u_slice.g_x[gf].u_dpe.weights[wk] = ((wk / C) == (wk % C)) ? 8'sd1 : 8'sd0;
+                        dut.u_qk.g_sl[gs].u_slice.g_x[gf].u_dpe.weights[wk] = ((wk / C) == (wk % C) || (R >= 2*I && (wk / C) == (wk % C) + I)) ? 8'sd1 : 8'sd0;   // the identity, stacked twice with X_ADD
                     dut.u_qk.g_sl[gs].u_slice.g_x[gf].u_dpe.mode_q = 2'b10;  // EXP
                 end
             end
@@ -226,7 +229,7 @@ module tb_att_head;
                 integer wk;
                 always @(preload) begin
                     for (wk = 0; wk < R*C; wk = wk + 1)
-                        dut.u_pv.g_sl[gs].u_slice.g_x[gf].u_dpe.weights[wk] = ((wk / C) == (wk % C)) ? 8'sd1 : 8'sd0;
+                        dut.u_pv.g_sl[gs].u_slice.g_x[gf].u_dpe.weights[wk] = ((wk / C) == (wk % C) || (R >= 2*I && (wk / C) == (wk % C) + I)) ? 8'sd1 : 8'sd0;   // the identity, stacked twice with X_ADD
                     dut.u_pv.g_sl[gs].u_slice.g_x[gf].u_dpe.mode_q = 2'b10;  // EXP
                 end
             end
@@ -291,9 +294,9 @@ module tb_att_head;
     tb_mon_cr  #(.MODE(2), .PRE("sm.go"))          m_gb (clk, running, tcw, dut.sm_busy);
     tb_mon_win #(.L(N_EXP), .WORDS(LW), .WPU(NWB), .PRE("sm.lp")) m_lp (clk, running, tcw, dut.lp_v);
     tb_mon_cr  #(.PRE("pv.a"))                     m_pa (clk, running, tcw, dut.lp_cr);
-    tb_mon_win #(.WPU(S), .PRE("sm.la"))           m_la (clk, running, tcw, dut.la_v);
+    tb_mon_win #(.WORDS(LW), .PRE("sm.la"))        m_la (clk, running, tcw, dut.la_v);
     tb_mon_cr  #(.PRE("acc.la"))                   m_ac (clk, running, tcw, dut.la_cr);
-    tb_mon_win #(.WORDS(S), .PRE("sm.ll"))         m_ll (clk, running, tcw, dut.ll_v);
+    tb_mon_win #(.WORDS(LW), .PRE("sm.ll"))        m_ll (clk, running, tcw, dut.ll_v);
     tb_mon_cr  #(.PRE("acc.ll"))                   m_lc (clk, running, tcw, dut.ll_cr);
     tb_mon_win #(.L(NGP), .WORDS(LW), .WPU(WKP), .PRE("pv.c")) m_pc (clk, running, tcw, dut.p_v);
     tb_mon_cr  #(.PRE("acc.p"))                    m_ap (clk, running, tcw, dut.p_cr);
@@ -351,13 +354,13 @@ module tb_att_head;
                 if (bw[c] >= 0) begin
                     x_v[c] = 1'b1;
                     for (ln = 0; ln < V; ln = ln + 1)
-                        x_d[(c*V + ln)*BUF +: BUF] = bd[(bp[c]*V + ln)*LOADX + bw[c]];
+                        x_d[(c*V + ln)*ROWSX +: ROWSX] = bd[(bp[c]*V + ln)*LOADX + bw[c]];
                     bw[c] = bw[c] + 1;
                     if (bw[c] == LOADX) bw[c] = -1;
                 end
                 else begin
                     x_v[c] = 1'b0;
-                    x_d[c*V*BUF +: V*BUF] = 0;
+                    x_d[c*V*ROWSX +: V*ROWSX] = 0;
                 end
             end
         end
@@ -389,7 +392,7 @@ module tb_att_head;
         #4;
         if (tc >= tmax) begin $display("[tb_head] ERROR: watchdog (tc %0d, windows out %0d of %0d)", tc, owin, nowin);
                               errors = errors + 1; end
-        if (n_ow != nowin * LW) begin $display("[tb_head] ERROR: %0d O words, expected %0d", n_ow, nowin * LW);
+        if (n_ow != nowin * LW) begin $display("[tb_head] ERROR: %0d O planes, expected %0d", n_ow, nowin * LW);
                                       errors = errors + 1; end
         if (n_done != 1) begin $display("[tb_head] ERROR: %0d done pulses", n_done); errors = errors + 1; end
         $display("[tb_head] %0s %0s errors=%0d (O values %0d, bursts without x_rdy %0d) o_words=%0d end=%0d",

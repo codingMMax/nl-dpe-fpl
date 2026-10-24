@@ -20,7 +20,7 @@ from simulator.core.cycleMath import ceilDiv
 from simulator.platform.platform import MWTA_UM2, Platform
 
 V3 = Path(__file__).resolve().parents[2]
-ARCH_DIR = V3 / "vtr" / "arch"
+ARCH_DIR = V3 / "vtr" / "arch_rowpar"       # the live XMLs (the memory block is the same in v2's vtr/arch/)
 TILE = json.loads((Path(__file__).resolve().parent / "nl_dpe_tile.json").read_text(encoding="utf-8"))
 MWTA_PER_CELL = 66117
 MEM_TILE_CELLS = 2
@@ -92,7 +92,7 @@ def predictedMemBlocks(resources, R: int, C: int) -> int:
     """The memory blocks VTR places for these Resources (an iterable): each memory in its cheapest dual-port mode, and
     a group of copies with the same addresses and write enables (Resources.memShared) packed by its summed width.
     Checked against VPR's packed netlist at the head smoke point (BERT-Tiny 128x128: 70 memories, 376 blocks; the
-    40-bit RTL, 2026-10-15). The bit-plane model predicts 593 blocks there (2026-10-22), not yet checked by VPR."""
+    pre-bit-plane RTL, 2026-10-15). The bit-plane model predicts 593 blocks there (2026-10-22), not yet checked by VPR."""
     modes, n = memModes(R, C), 0
     for r in resources:
         for (words, bits), k in r.memories.items():

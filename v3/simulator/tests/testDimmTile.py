@@ -7,7 +7,7 @@ pass (2026-10-22).
              zeros / extremes, crossbars 64x64, 128x64, 256x128
   closed     a job with early operands: every wave's burst, every output window (time and channel), done and idle
              relative to t_go equal spec §5's closed form, written here by hand; back-to-back jobs decide at t_idle
-             (until 2026-10-22 the witness was v2's `dimm_tile_sim.tile_cycle_model`, which times the 40-bit pass)
+             (until 2026-10-22 the witness was v2's `dimm_tile_sim.tile_cycle_model`, which times the pre-bit-plane pass)
   rules      the decision binds on each of its terms (job offer, A / B valid, idle, output credit) exactly as spec §5
   staging    transposer, window stager (E_WP cycles per window over the A memory ports), row writer: write times and
              credits by spec §5, overruns raise
@@ -15,11 +15,10 @@ pass (2026-10-22).
              domain for both instances; every head PV instance has E_WP = 4 (8 words over 2 memories), so the
              window-frame rate is 0.8; out-of-domain sets are rejected
   timing     values off: identical events and counts; random step orders: identical Report
-  mutants    a latency + 1 (DEC_LAT, CR_LAT, IDLE_LAT, EMIT_LAT, DIST_LAT, DONE_LAT, DRAIN_REG, ROOT_LAT), an early
+  mutants    a latency + 1 (DEC_LAT, CR_LAT, IDLE_LAT, EMIT_LAT, DIST_LAT, DONE_LAT, SLICE_LAT, ROOT_LAT), an early
              release, a dropped credit, a value mutant: each fails a check
-  memories   spec §6 by hand: with the 40-bit A_GRP it reproduces the memories Yosys inferred from the 40-bit RTL
-             (pinned from v3/dse/vtr_dse.py's elaboration, 2026-10-15; I = 128 and 256), and with A_GRP = 8 it is
-             the model's list (the by-design difference; the Yosys pin returns with the RTL pass)
+  memories   spec §6 by hand == the memories Yosys inferred from the bit-plane RTL (pinned from v3/dse/vtr_dse.py's
+             elaboration of the 80 builds, 2026-10-23; I = 64, 128, 256) == the model's list
 Run: python3 v3/simulator/tests/testDimmTile.py
 """
 from __future__ import annotations
@@ -100,14 +99,15 @@ def closedForm(p: dict) -> dict:
     """Spec §5 by hand, one job from t_go, the operands early and the farm idle:
       A_GRP = the largest power of two <= min(P, X_S'), START_LAT = A_GRP + 2;
       wave t's burst at START_LAT + 10 t (the pass period P + 2), its drain_start 10 later (P + 2);
-      its output planes from drain_start + OUT_LAT, OUT_LAT = 1 (sign XOR) + log2 K (trees) + 7 (the drain planes)
-      + 2 (root, output buffer); done = the last output plane + 2; idle = the last drain plane (drain_start + 7) + 2."""
+      its output words from drain_start + OUT_LAT, OUT_LAT = 1 (the sign XOR and the slice popcount) + [n_s > 1]
+      (the sum across the slices) + 7 (the drain planes) + 2 (root, output buffer); done = the last output word + 2;
+      idle = the last drain plane (drain_start + 7) + 2."""
     I = min(p["R"], p["C"])
     NG = p["N_E"] // p["K"]
     T_W = p["M"] * p["N"] // I // NG
     XS = min(p.get("X_S", 16), p["N_E"])
     start = powerOfTwoFloor(min(P, XS)) + 2
-    outLat = 1 + (p["K"].bit_length() - 1) + (P - 1) + 2
+    outLat = 1 + int(p["N_E"] // XS > 1) + (P - 1) + 2
     burst = [start + (P + 2) * t for t in range(T_W)]
     drain = [b + P + 2 for b in burst]
     out = [ds + outLat for ds in drain]
@@ -334,7 +334,7 @@ def testMutants(rng) -> tuple:
     ref = {c.name: run(build(c, withValues=False)[0]).events for c in (qk, pv)}
     caught, total = 0, 0
     for name, delta in (("DEC_LAT", 1), ("CR_LAT", 1), ("IDLE_LAT", 1), ("EMIT_LAT", 1), ("DIST_LAT", 1),
-                        ("DONE_LAT", 1), ("DRAIN_REG", 1), ("ROOT_LAT", 1),
+                        ("DONE_LAT", 1), ("SLICE_LAT", 1), ("ROOT_LAT", 1),
                         ("REL_LAT", -1)):                                        # REL_LAT - 1: released early
         old = getattr(dimmTile, name)
         setattr(dimmTile, name, old + delta)
@@ -356,6 +356,25 @@ def testMutants(rng) -> tuple:
     except Deadlock:
         caught += 1
     total += 1
+    # a value mutant: the X_ADD farm without its second identity block (the crossbar then exponentiates log a alone)
+    # -> GATE 1 fails on a 128x64 QK case
+    xa = randomCase("mut_xadd", qkParams(64, 32, 16, 128, 64, 32, pProj=1, runs=1, blocks=1), 1, 1, jobsQk(1, 1),
+                    rng, aPeriod=convPeriod(), bPeriod=convPeriod())
+    assert DimmTile.derive(DimmTileParams(**completeParams(xa.params))).XADD == 1
+    oldW = dimmTile.stackedIdentity
+
+    def plainIdentity(nE, R, C, I):
+        W = oldW(nE, R, C, I)
+        W[:, I:2 * I, :] = 0
+        return W
+    dimmTile.stackedIdentity = plainIdentity
+    try:
+        runCase(xa)
+    except RuntimeError as e:
+        caught += "GATE 1" in str(e)
+    finally:
+        dimmTile.stackedIdentity = oldW
+    total += 1
     # a value mutant: the operand sign rule off by one bit -> GATE 1 fails
     old = dimmTile.signOfLog
     dimmTile.signOfLog = lambda L: old(np.asarray(L) ^ 1)
@@ -370,13 +389,15 @@ def testMutants(rng) -> tuple:
     return caught, total
 
 
-# Yosys's memories (words, bits): count of u_qk / u_pv, from each build's elab/mems.txt (vtr_dse.py --elab-only,
-# 2026-10-15: the 40-bit RTL), builds (n, d_model, d, R, C)
-YOSYS_MEMS_40BIT = {
-    (128, 128, 64, 128, 256): ({(64, 128): 8, (128, 64): 8}, {(16, 512): 8, (256, 16): 8}),     # BERT-Tiny, I = 128
-    (128, 128, 64, 256, 256): ({(64, 128): 16}, {(16, 512): 8, (128, 32): 8}),                 # A and B both 64 x 128
-    (32, 64, 32, 256, 256): ({(16, 128): 4, (32, 128): 4}, {(8, 256): 4, (64, 64): 4}),        # T_W = 1: 1-bit field
-    (128, 128, 16, 256, 256): ({(64, 128): 4}, {(64, 128): 2, (128, 128): 2}),                 # JetFormer-JetClass
+# Yosys's memories (words, bits): count of u_qk / u_pv, from each build's elab/elab.json (vtr_dse.py --elab-only,
+# 2026-10-23: the bit-plane RTL), builds (n, d_model, d, R, C)
+YOSYS_MEMS = {
+    (128, 128, 64, 128, 64): ({(64, 128): 8, (128, 32): 16}, {(16, 512): 8, (128, 8): 16}),    # BERT-Tiny, I = 64
+    (128, 128, 64, 256, 128): ({(64, 64): 16, (64, 128): 8}, {(16, 512): 8, (128, 16): 16}),   # I = 128, R != C
+    (128, 128, 64, 256, 256): ({(32, 128): 16, (64, 128): 8}, {(16, 512): 8, (64, 32): 16}),   # I = 256
+    (32, 64, 32, 256, 256): ({(16, 128): 12}, {(8, 256): 4, (32, 64): 8}),                     # A and B both 16 x 128
+    (128, 128, 16, 256, 256): ({(32, 128): 4, (64, 128): 2}, {(64, 128): 6}),                  # JetFormer-JetClass
+    (256, 768, 64, 512, 128): ({(128, 64): 16, (128, 128): 8}, {(32, 512): 8, (128, 16): 16}), # ViT-B/16, R = 512
 }
 
 
@@ -396,20 +417,51 @@ def specMemories(p: dict, aGrp: int) -> dict:
     return dict(mems)
 
 
+def testXadd(rng) -> int:
+    """Spec §10 item 11: X_ADD = [R >= 2I]; with it the EXP passes use 2I rows and the pairing adds leave the CLB
+    count; the C values are the same on both branches (GATE 1 holds both; here the two geometries' outputs are
+    compared on the same operands)."""
+    n = 0
+    for (R, C), xadd in (((64, 64), 0), ((128, 128), 0), ((128, 64), 1), ((256, 128), 1), ((512, 256), 1), ((256, 64), 1)):
+        I = min(R, C)
+        p = completeParams(qkParams(64, 32, 16, R, C, 32))
+        d = DimmTile.derive(DimmTileParams(**p))
+        assert d.XADD == xadd, (R, C, d.XADD)
+        c = randomCase(f"xadd_{R}x{C}", p, 1, 1, jobsQk(1, 1), rng, aPeriod=convPeriod(), bPeriod=convPeriod())
+        g, dimm, _ = build(c, withValues=False)
+        rep = run(g)
+        rows = 2 * I if xadd else I
+        assert rep.totalCounts.passes.get(("EXP", rows, I), 0) == p["N_E"] * d.T_W, rep.totalCounts.passes
+        adds = d.W_K * (p["K"] - 1) * I + (0 if xadd else p["K"] * p["M"] * p["N"])
+        assert rep.totalCounts.clbAdd == adds, (rep.totalCounts.clbAdd, adds)
+        assert list(dimm.resources.crossbars) and ("EXP", rows, I) in dimm.resources.crossbars
+        n += 1
+    # the same operands through a square and a tall array give the same C (the adder and the row-sum branches)
+    seedA, seedB = np.random.default_rng(7), np.random.default_rng(7)
+    cA = randomCase("xadd_sq", qkParams(64, 32, 16, 64, 64, 32), 1, 1, jobsQk(1, 1), seedA, aPeriod=convPeriod(),
+                    bPeriod=convPeriod())
+    cB = randomCase("xadd_tall", qkParams(64, 32, 16, 128, 64, 32), 1, 1, jobsQk(1, 1), seedB, aPeriod=convPeriod(),
+                    bPeriod=convPeriod())
+    runA, runB = build(cA), build(cB)
+    run(runA[0]); run(runB[0])
+    oa, ob = runA[1].math.outputs, runB[1].math.outputs
+    assert oa and ob and all(np.array_equal(oa[j], ob[j]) for j in oa), "the two branches differ"
+    n += 1
+    return n
+
+
 def testMemories() -> int:
     n = 0
-    for (nseq, dModel, d, R, C), want40 in YOSYS_MEMS_40BIT.items():
+    for (nseq, dModel, d, R, C), want in YOSYS_MEMS.items():
         I = min(R, C)
         S = min(nseq, I)
         qk = completeParams(qkParams(S, d, 16, R, C, 2 * d, pProj=1, runs=nseq // S, blocks=nseq // 16))
         pv = completeParams(pvParams(S, d, 16, R, C, 2 * d, nExp=2, pProj=1, blocks=nseq // 16))
-        for p, yosys in zip((qk, pv), want40):
-            XS = min(p["X_S"], p["N_E"])
-            aGrp40 = powerOfTwoFloor(min(-(-8 * I // 40), XS))           # the 40-bit rule: ceil(8 I / 40) words
-            assert specMemories(p, aGrp40) == yosys, (p, specMemories(p, aGrp40), yosys)
+        for p, yosys in zip((qk, pv), want):
+            spec = specMemories(p, powerOfTwoFloor(min(P, min(p["X_S"], p["N_E"]))))
+            assert spec == yosys, (p, spec, yosys)
             model = DimmTile("m", DimmTileParams(**p), nA=1, nB=1, nJobs=1, withValues=False)
-            got = dict(model.resources.memories)
-            assert got == specMemories(p, powerOfTwoFloor(min(P, XS))), (p, got)
+            assert dict(model.resources.memories) == yosys, (p, dict(model.resources.memories), yosys)
             n += 1
     return n
 
@@ -428,8 +480,8 @@ def main() -> int:
     print("  timing   PASS  (values off: same events, counts; 4 random step orders: same Report)")
     caught, total = testMutants(rng)
     print(f"  mutants  PASS  {caught}/{total} caught")
-    print(f"  memories PASS  {testMemories()} instances: spec §6 == Yosys with the 40-bit A_GRP, == the model with "
-          "A_GRP = 8")
+    print(f"  xadd     PASS  {testXadd(rng)} checks: X_ADD = [R >= 2I], 2I-row EXP passes, no pairing adds, equal C")
+    print(f"  memories PASS  {testMemories()} instances: spec §6 == Yosys (the bit-plane RTL) == the model")
     print("dimm model: ALL PASS")
     return 0
 

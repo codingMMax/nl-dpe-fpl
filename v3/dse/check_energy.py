@@ -5,7 +5,8 @@ The rule, restated here from the raw price table (simulator/platform/nl_dpe.json
 crossbar pass fires the whole R x C array every time and reads only the rows in use (user, 2026-10-17):
 
   pass energy  = P x cell_pj x R x C + acam_pj x C + 3 x rows_used x in_byte_pj + 2 x C x out_byte_pj
-  port traffic = (ceil(8 rows_used / port) + ceil(8 C / port)) x bram_pj          inputs by the rows in use, outputs full
+  port traffic = (rows_used + C) x P x port_pj_per_bit     P planes of the rows in use in, P planes of every column out, per
+                                                           bit (2026-10-23, user: the row-parallel port, R bits in and C out)
   CLB adds / compares = count x add_pj / compare_pj;   memory = ceil(8 bytes / port) x bram_pj per direction
 
 Checks (every failure is listed; the exit status is 1 if there is one):
@@ -16,7 +17,9 @@ Checks (every failure is listed; the exit status is 1 if there is one):
      workload, priced by the formula, equals the row's energy terms (the attention terms are stored to 0.01 pJ, the FC
      terms exactly) and its pass count; an attention row's role columns equal the formula per role
   3  how far the rule moved the rows: the same ledger priced with every pass reading all R rows
-Usage: python3 v3/dse/check_energy.py
+Usage: python3 v3/dse/check_energy.py [--prices-only]
+  --prices-only: check 1 alone. Until stage 5 regenerates the tables, check 2 fails by design: the published rows carry
+  the pre-2026-10-23 traffic price (40-bit port words).
 """
 from __future__ import annotations
 
@@ -40,7 +43,7 @@ from simulator.platform.platform import Platform  # noqa: E402
 
 TABLE = json.loads((V3 / "simulator" / "platform" / "nl_dpe.json").read_text())
 TILE, FABRIC = TABLE["compute_tile"], TABLE["fabric"]
-P, PORT = TILE["input_bit_slices"], TILE["port_width_bits"]
+P, PORT_PJ_BIT = TILE["input_bit_slices"], TILE["port"]["energy_pj_per_bit"]    # the row-parallel port, priced per bit
 CELL, ACAM = TILE["crossbar"]["energy_pj_per_cell"], TILE["acam"]["energy_pj_per_col"]
 IN_BYTE, OUT_BYTE = TILE["input_buffer"]["energy_pj_per_byte"], TILE["output_buffer"]["energy_pj_per_byte"]
 BRAM, BRAM_BITS = FABRIC["block_ram"]["energy_pj_per_access"], FABRIC["block_ram"]["port_width_bits"]
@@ -61,7 +64,7 @@ def pass_pj(R: int, C: int, rows: int) -> float:
 
 
 def traffic_pj(R: int, C: int, rows: int) -> float:
-    return (words(rows, PORT) + words(C, PORT)) * BRAM
+    return (rows + C) * P * PORT_PJ_BIT            # P planes of the rows in use in, P planes of every column out
 
 
 def priced(counts: Counts, R: int, C: int, full: bool = False) -> dict:
@@ -170,6 +173,10 @@ def report(family: str, res: dict, n: int) -> None:
 def main() -> int:
     fails: list = []
     nb = check_boundaries(fails)
+    if "--prices-only" in sys.argv[1:]:
+        print(f"check_energy: {nb} boundary cases on {len(CONFIGS)} configs; "
+              f"{'ALL PASS (prices.py equals the formula)' if not fails else f'FAIL, {len(fails)} difference(s), first {fails[:6]}'}")
+        return 1 if fails else 0
     fc_rows, att_rows = data.fcRows(), data.attentionRows()
     fcRes = check_rows("fc", fc_rows, fc_run, None, fails)
     attRes = check_rows("attention", att_rows, attention_run, 0.0051, fails)

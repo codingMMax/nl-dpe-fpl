@@ -90,6 +90,28 @@ def planePort(name: str, direction: str, discipline: str, E: int, W: int, L: int
     return PortSpec(name, direction, discipline, E, W, W, L, unit, planes=P, **kw)
 
 
+def valuePort(name: str, direction: str, discipline: str, E: int, W: int, L: int, unit: str, P: int = 8,
+              **kw) -> PortSpec:
+    """A value-framed data port (architecture.md §3.1, 2026-10-23: E4 and E8): W elements of E bits per window in P
+    words of W / P elements, each element in 8 ceil(E / 8) bits."""
+    if W % P:
+        raise ValueError(f"port {name}: a value-framed window of {W} elements does not split into {P} words")
+    return PortSpec(name, direction, discipline, E, W // P, W, L, unit, **kw)
+
+
+def valueWords(values, E: int, W: int, P: int = 8) -> list:
+    """A window's P value words (architecture.md §3.1) as ints: element i at bit 8 ceil(E / 8) (i mod Q) of word
+    i // Q, Q = W / P (E-bit two's complement); elements past the values and bits >= E are 0 (W2)."""
+    v = [int(x) & ((1 << E) - 1) for x in values]
+    if len(v) > W or W % P:
+        raise ValueError(f"valueWords: {len(v)} values in a window of {W} ({P} words)")
+    Q, slot = W // P, 8 * ceilDiv(E, 8)
+    words = [0] * P
+    for i, x in enumerate(v):
+        words[i // Q] |= x << (slot * (i % Q))
+    return words
+
+
 def planeWords(values, E: int, W: int, P: int = 8) -> list:
     """A window's P plane words (architecture.md §3.1) as ints: bit l*W + i of word b = bit 8l + b of element i (E-bit
     two's complement), for the lanes l < ceil(E / 8); elements past the values and bits >= E are 0 (W2)."""

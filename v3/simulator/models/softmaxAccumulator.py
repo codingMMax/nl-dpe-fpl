@@ -1,13 +1,15 @@
 """softmaxAccumulator.py — behavior model of `softmax_online_acc` (the online softmax's accumulator), contract
-`ip/softmax/acc_spec.md` (the bit-plane pass, 2026-10-22: plane words on every port; the LOG feed corner-turns, the EXP
-feeds add bit-serially; lo_mem and e_mem hold plane words; E9 is one plane window per epilogue wave).
+`ip/softmax/acc_spec.md` (the bit-plane pass, 2026-10-22: the LOG feed corner-turns, the EXP feeds add bit-serially;
+lo_mem and e_mem hold plane words; E9 is one plane window per epilogue wave; the trims of 2026-10-23: E8 carries value
+words read straight into the LOG arithmetic, and single feed buffers space a group's jobs by LOG_GAP / EXP_GAP).
 
 One execution gives the values, the cycle of every port event and the counts (docs/simulator.md §1). The model is the
 blocks of spec §4, two crossbar groups (simulator/core/crossbar.py):
   logGroup, expGroup   the LOG and EXP groups: N_OC identity crossbars each, in lock-step from crossbar 0 (I x I)
 A job is decided at the first cycle it is ready from which its pass, PRE_LOG / PRE_EXP cycles later, finds the
-group's leader ready (spec §5): the feed is prepared while the previous pass runs. The job rules are the v2 station's
-(v2 `ocarry_sim.OcStation`) with stream inputs.
+group's leader ready, and at least LOG_GAP / EXP_GAP after the group's previous decision (spec §5): the feed is
+prepared while the previous pass runs. The job rules are the v2 station's (v2 `ocarry_sim.OcStation`) with stream
+inputs.
 Processes (one step per unit):
   blk    a block: the rescale jobs (b >= 1) and the LOG jobs, wave by wave; p_cr, la_cr
   run    a run's end: the epilogue jobs and their O8 windows on E9, ll_cr, run_done
@@ -22,20 +24,22 @@ import numpy as np
 
 from simulator.core.cycleMath import ceilDiv, clog2, isPowerOfTwo, readyAt
 from simulator.core.module import Module, Need, checkRules
-from simulator.core.records import PortSpec, Step, planePort
+from simulator.core.records import PortSpec, Step, planePort, valuePort
 from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, CrossbarGroup
 
 # named latencies (spec §5)
-FIFO_LAT = 1        # an E8 plane valid at t is counted in its FIFO from t + 1
+FIFO_LAT = 1        # an E8 word valid at t is counted in its FIFO from t + 1
 LA_LAT = 1          # an E6 unit's last plane at t: the unit is present from t + 1
 LL_LAT = 1          # an E7 unit's last plane at t: the unit is present from t + 1
-PRE_LOG = 17        # a LOG job decided at d: its burst at d + 2P + 1 (8 plane reads, the registered read, the 8 groups
-#                     of I/8 elements from corner-turn A into corner-turn B)
+PRE_LOG = 17        # a LOG job decided at d: its burst at d + 2P + 1 (8 e / so plane reads, the registered read, the
+#                     8 groups of I/8 elements with their o_part words, read at d + 8 .., into corner-turn B)
+LOG_GAP = 16        # a group's next LOG job decides at >= d + 2P (corner-turn A shifted until d + 16, B until d + 24)
 PRE_EXP = 10        # an EXP job decided at d: its burst at d + P + 2 (8 lo plane reads, the registered read, the clamp
 #                     flags register)
+EXP_GAP = 17        # a group's next EXP job decides at >= d + 2P + 1 (the single hold bursts until d + 17)
 JOB_DONE_LAT = 1    # a job's last drain plane at t counts for the other group's readiness from t + 1
-P_CR_LAT = 1        # p_cr one cycle after the last plane read of a block's last LOG job (d + P - 1)
+P_CR_LAT = 1        # p_cr one cycle after the last o_part word read of a block's last LOG job (d + 2P - 1)
 LA_CR_LAT = 2       # la_cr two cycles after the last lo plane read of the unit's last rescale job
 LL_CR_LAT = 2       # ll_cr two cycles after the last lo plane read of the run's last epilogue job
 RESTART_LAT = 1     # the next run's LOG jobs may decide from t_o8 + 1
@@ -69,9 +73,9 @@ class SoftmaxAccDerived:
     RPW: int          # rows per window, I / D
     W: int            # waves per block, ceil(P_OC / N_OC)
     LWC: int          # crossbars active in the last wave
-    LANES: int        # lanes of an E8 plane word, ceil(VWP / 8)
+    LANES: int        # bytes per E8 element (its value-word slot), ceil(VWP / 8)
     T_W: int          # windows per input channel, P_OC / P_CH
-    FD: int           # the o_part FIFO's depth in plane words (a power of two >= 2 T_W P)
+    FD: int           # the o_part FIFO's depth in words (a power of two >= 2 T_W P)
     NJ: int           # LOG jobs per run, NBLK W
     SHL: int          # the epilogue's left shift, max(SO - LN, 0)
     SHR: int          # the epilogue's right shift, max(LN - SO, 0)
@@ -219,7 +223,7 @@ class AccumulatorMath:
 class SoftmaxOnlineAcc(Module):
     NAME = "softmax_online_acc"
     PARAMS_CLASS = SoftmaxAccParams
-    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was GATE 2-pinned 2026-10-14
+    BASIS = "rtl-pinned"           # the bit-plane RTL: GATE 2 at 64x64, 19/19 + 5/5 (2026-10-23)
     STEP_METHODS = {"blk": "stepBlock", "run": "stepRunEnd"}
 
     @staticmethod
@@ -265,6 +269,7 @@ class SoftmaxOnlineAcc(Module):
                                       withValues=withValues)
         # what the steps record
         self.jobs = {}                             # (run, kind, b, w) -> job events; kind log | rescale | epilogue
+        self.lastDecide = {}                       # group mode -> its previous job's decision (the gap rule)
         self.runEndAt, self.runDoneAt = {}, {}     # run -> t_o8, run_done
         self.resources.crossbars[("LOG", I, I)] += n
         self.resources.crossbars[("EXP", I, I)] += n
@@ -279,7 +284,7 @@ class SoftmaxOnlineAcc(Module):
     def ports(self) -> dict:
         p, d = self.p, self.d
         return {
-            "p": planePort("p", "in", "push+credit", p.VWP, d.I, p.P_CH, "tile", p.P, CAP=2,
+            "p": valuePort("p", "in", "push+credit", p.VWP, d.I, p.P_CH, "tile", p.P, CAP=2,
                            signals=("p_d", "p_v", "p_cr")),
             "la": planePort("la", "in", "push+credit", 9, p.S, 1, "block b >= 1", p.P, CAP=2,
                             signals=("la_d", "la_v", "la_cr")),
@@ -307,11 +312,14 @@ class SoftmaxOnlineAcc(Module):
         n = self.p.N_OC
         return range(w * n, min((w + 1) * n, self.d.P_OC))
 
-    def _job(self, group: CrossbarGroup, key: tuple, ready: int, feed, active: int, pre: int) -> tuple:
-        """Decide a job: the first cycle it is ready from which its pass, `pre` cycles later, finds the leader ready
-        (decide = max(ready, leader ready - pre)); the pass loads at decide + pre."""
-        loadStart = readyAt(ready + pre, group.readyAt())
+    def _job(self, group: CrossbarGroup, key: tuple, ready: int, feed, active: int, pre: int, gap: int) -> tuple:
+        """Decide a job: the first cycle it is ready from which its pass, `pre` cycles later, finds the leader ready,
+        and at least `gap` after the group's previous decision (decide = max(ready, leader ready - pre, previous +
+        gap)); the pass loads at decide + pre."""
+        prev = self.lastDecide.get(group.mode)
+        loadStart = readyAt(ready + pre, group.readyAt(), None if prev is None else prev + gap + pre)
         decide = loadStart - pre
+        self.lastDecide[group.mode] = decide
         xbarPass = group.run(feed, loadStart)
         group.passes.clear()
         I = self.d.I
@@ -324,6 +332,11 @@ class SoftmaxOnlineAcc(Module):
         """The last of a job's P planes, read one per cycle from its decision."""
         with label("stream"):
             return decide + self.p.P - 1
+
+    def lastWordRead(self, decide):
+        """The last of a LOG job's P o_part words, read one per cycle from decide + P (spec §5 PRE_LOG)."""
+        with label("stream"):
+            return decide + 2 * self.p.P - 1
 
     def block(self, j: int, tLast: list, tAlpha: int | None = None) -> dict:
         """Block j's jobs (spec §5), wave by wave: rescale (b, w) for b >= 1, then LOG (b, w). tLast[q] = the last
@@ -339,7 +352,8 @@ class SoftmaxOnlineAcc(Module):
                 # rescale (b, w): t = clamp8(log a + lo) -> e
                 ready = readyAt(tAlpha + LA_LAT, self.jobs[(run, "log", b - 1, w)]["drain_end"] + JOB_DONE_LAT)
                 events, xbarPass = self._job(self.expGroup, (run, "rescale", b, w), ready,
-                                             math.rescaleInput(run, j, wave) if math else None, len(wave), PRE_EXP)
+                                             math.rescaleInput(run, j, wave) if math else None, len(wave), PRE_EXP,
+                                             EXP_GAP)
                 if math:
                     math.collectRescale(run, wave, xbarPass.out)
                 if w == d.W - 1:
@@ -349,11 +363,12 @@ class SoftmaxOnlineAcc(Module):
                             self.jobs[(run, "rescale", b, w)]["drain_end"] + JOB_DONE_LAT if b else None,
                             self.runEndAt[run - 1] + RESTART_LAT if (b == 0 and run) else None)
             events, xbarPass = self._job(self.logGroup, (run, "log", b, w), ready,
-                                         math.logInput(run, j, b, wave) if math else None, len(wave), PRE_LOG)
+                                         math.logInput(run, j, b, wave) if math else None, len(wave), PRE_LOG,
+                                         LOG_GAP)
             if math:
                 math.collectLog(run, wave, xbarPass.window)
             if w == d.W - 1:
-                out["p_cr"] = self.lastRead(events["decide"]) + P_CR_LAT
+                out["p_cr"] = self.lastWordRead(events["decide"]) + P_CR_LAT
         if math:
             math.finishBlock(run)
         # counts (spec §7)
@@ -363,7 +378,7 @@ class SoftmaxOnlineAcc(Module):
         self.counts.memWriteBytes += memoryBytes * (2 if b else 1)
         self.counts.memReadBytes += memoryBytes * (2 if b else 0)
         self.counts.fifoWords += d.P_OC * p.P
-        fifoBytes = d.P_OC * p.P * d.LANES * d.I // 8                   # FIFO traffic: each plane written once, read once
+        fifoBytes = d.P_OC * p.P * d.LANES * d.I // 8                   # FIFO traffic: each word written once, read once
         self.counts.memWriteBytes += fifoBytes
         self.counts.memReadBytes += fifoBytes
         return out
@@ -380,7 +395,8 @@ class SoftmaxOnlineAcc(Module):
             wave = self.wave(w)
             ready = readyAt(tLogL + LL_LAT, self.jobs[(run, "log", B - 1, w)]["drain_end"] + JOB_DONE_LAT)
             events, xbarPass = self._job(self.expGroup, (run, "epilogue", B - 1, w), ready,
-                                         math.epilogueInput(run, wave) if math else None, len(wave), PRE_EXP)
+                                         math.epilogueInput(run, wave) if math else None, len(wave), PRE_EXP,
+                                         EXP_GAP)
             if math:
                 math.collectEpilogue(run, wave, xbarPass.out)
             if w == d.W - 1:

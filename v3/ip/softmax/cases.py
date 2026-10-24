@@ -24,7 +24,7 @@ import softmax_online_ref as oref  # noqa: E402  (the oracle: used here only, ne
 from simulator.core.engine import portWords, run  # noqa: E402
 from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
-from simulator.core.records import planeWords  # noqa: E402
+from simulator.core.records import planeWords, valueWords  # noqa: E402
 from simulator.models.softmaxOnline import SoftmaxOnline, SoftmaxOnlineParams  # noqa: E402
 
 STAGES = ("m_blk", "m_new", "log_a", "logp", "sp", "t", "e", "lprime", "lq", "log_l", "m", "log_l_final")
@@ -151,7 +151,8 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
     sRows = sorted(sent.get("s_src.s", []), key=lambda x: (x[2], x[3]))
     with open(out / "s_win.txt", "w") as f:
         for (t, ch, u, w) in sRows:
-            f.write(f"{t} {ch} {u} {w} " + " ".join(planes(tiles[u].reshape(-1)[w * I:(w + 1) * I], 8, I)) + "\n")
+            f.write(f"{t} {ch} {u} {w} " + " ".join(f"{x:x}" for x in valueWords(tiles[u].reshape(-1)[w * I:(w + 1) * I],
+                                                                              8, I, p.P)) + "\n")
     goRows = sorted(sent.get("go_src.go", []), key=lambda x: x[2])
     (out / "go.txt").write_text("".join(f"{t}\n" for (t, _, _, _) in goRows))
     with open(out / "lp_exp.txt", "w") as f:                     # per block, window-major: 8 plane words each

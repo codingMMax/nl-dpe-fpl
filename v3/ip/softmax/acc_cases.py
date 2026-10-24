@@ -24,7 +24,7 @@ import attention_ref as aref  # noqa: E402  (the oracle: used here only, never b
 from simulator.core.engine import portWords, run  # noqa: E402
 from simulator.core.environment import Sink, Source  # noqa: E402
 from simulator.core.graph import Graph  # noqa: E402
-from simulator.core.records import planeWords  # noqa: E402
+from simulator.core.records import planeWords, valueWords  # noqa: E402
 from simulator.models.softmaxAccumulator import SoftmaxAccParams, SoftmaxOnlineAcc  # noqa: E402
 
 STAGES = ("t", "e", "o_new", "oq", "so", "lo")
@@ -138,11 +138,11 @@ def writeTbFiles(case: Case, outDir: Path) -> dict:
 
     def planes(values, E, W):                                     # a window's 8 plane words, hex
         return " ".join(f"{x:x}" for x in planeWords(values, E, W, p.P))
-    with open(out / "p_win.txt", "w") as f:                        # t ch unit window, then 8 plane words (2 lanes)
+    with open(out / "p_win.txt", "w") as f:                        # t ch unit window, then 8 value words (2 bytes each)
         for (t, ch, u, w) in sorted(sent.get("p_src.p", []), key=lambda x: (x[2], x[3])):
             rr, b = divmod(u, B)
             v = np.asarray(case.runs[rr]["o_part"][b], dtype=np.int64).reshape(-1)[w * I:(w + 1) * I]
-            f.write(f"{t} {ch} {u} {w} " + planes(v, VWP, I) + "\n")
+            f.write(f"{t} {ch} {u} {w} " + " ".join(f"{x:x}" for x in valueWords(v, VWP, I, p.P)) + "\n")
     with open(out / "la_win.txt", "w") as f:                       # t unit, then 8 plane words (9-bit log a, 2 lanes)
         for (t, ch, u, w) in sorted(sent.get("la_src.la", []), key=lambda x: x[2]):
             rr, b1 = divmod(u, B - 1)

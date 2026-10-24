@@ -4,7 +4,7 @@ Part 1, the 72 DSE rows at N_E = N_EP = 2d, P_PROJ 1 and 4:
   front  = the first QK output window (the run's Q and K block 0 projected, plus one QK job)
   period = the median gap between successive QK jobs' first output windows (the core's block period)
   tail   = cycles after the last PV output window (the accumulator's last jobs, normalize, O read-out)
-  floor  = the score stream ceil(S * B_kv / 5) cycles per block (one 40-bit port into the online softmax)
+  floor  = the score stream ceil(S * B_kv / 5) cycles per block (one pre-bit-plane port into the online softmax)
   stage estimates per block (pass grammar: fill 2 LW + 10, steady LW + 8, LW = ceil(I / 5)):
      QK = fill + (T_W - 1) steady + A_GRP + 2 + log2 d + 4, T_W = (S B_kv / I) / (N_E / d)
      PV = the same with T_W = (S d / I) / (N_EP / B_kv), log2 B_kv

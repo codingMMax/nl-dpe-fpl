@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """stages_brief.py — the one-page brief "Why an attention head wants the small crossbar", for discussion with readers
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 who do not need the model (the stage page): the head as stages with their work and their crossbar counts, what one
 crossbar delivers and costs, the cost of every stage on the 12 arrays (the simulator's critical path, energy and area:
 results/stages/stages_costs.png), why the mapping knobs cannot reverse the ranking (results/mapping_optimum.json), and
@@ -296,16 +298,16 @@ table.ranks th:nth-child(n+2) {{ text-align: left; }}
   <h2>1. The head in five stages</h2>
   <p>Every stage works in passes of one crossbar. The work of a stage is fixed by the head; the mapping decides how many crossbars share it.</p>
 {stage_table(res)}
-  <p class="rule">The projections' crossbar count is set by capacity: a bigger tile holds more of the matrix, so fewer tiles are needed. Every other stage's count is set by bandwidth: the number of ports needed to keep pace with the score stream. A bigger crossbar has the same 40-bit port, so those counts do not change with the array.</p>
+  <p class="rule">The projections' crossbar count is set by capacity: a bigger tile holds more of the matrix, so fewer tiles are needed. Every other stage's count is set by bandwidth: the number of ports needed to keep pace with the score stream. A bigger crossbar has the same pre-bit-plane port, so those counts do not change with the array.</p>
 </section>
 
 {flow_section(res)}
 {time_section(res)}
 <section>
   <h2>3. What one crossbar delivers, and what it costs</h2>
-  <p>A pass loads I = min(R, C) rows of 8-bit values through the 40-bit port, 5 bytes per cycle, then runs the 8 bit-slices, one bit plane of the input per cycle. The C output columns drain at ⌈8C / 40⌉ + 1 cycles; the drain overlaps the next load and binds only when C is wider than the rows loaded, which happens to the projections of a small head, not to these passes. A pass converts I values, one per row loaded, because the stored weights are identity blocks. So the pass period is τ(I) = ⌈8I / 40⌉ + 8, and the time per value is 1/5 + 8/I cycles: the 1/5 is the port and never changes, the 8/I is the pipeline spread over the rows of one pass.</p>
+  <p>A pass loads I = min(R, C) rows of 8-bit values through the pre-bit-plane port, 5 bytes per cycle, then runs the 8 bit-slices, one bit plane of the input per cycle. The C output columns drain at ⌈8C / 40⌉ + 1 cycles; the drain overlaps the next load and binds only when C is wider than the rows loaded, which happens to the projections of a small head, not to these passes. A pass converts I values, one per row loaded, because the stored weights are identity blocks. So the pass period is τ(I) = ⌈8I / 40⌉ + 8, and the time per value is 1/5 + 8/I cycles: the 1/5 is the port and never changes, the 8/I is the pipeline spread over the rows of one pass.</p>
 {crossbar_table()}
-  <p>The two constants are the hard block's, not the mapping's: a 40-bit port and 8 bit-slices in every array. The simulator's pass period is gated against the RTL on the 64 × 64 cases. A pass fires all R × C cells whatever it uses, and a crossbar's area is its R × C tile plus soft logic sized by its window I.</p>
+  <p>The two constants are the hard block's, not the mapping's: a pre-bit-plane port and 8 bit-slices in every array. The simulator's pass period is gated against the RTL on the 64 × 64 cases. A pass fires all R × C cells whatever it uses, and a crossbar's area is its R × C tile plus soft logic sized by its window I.</p>
   <p class="rule">From {small} to {large} a crossbar fires {cells(LARGE) // cells(SMALL)}× the cells and converts {rate(Il) / rate(Is):.1f}× the values per cycle. Bandwidth is bought per crossbar, and a crossbar costs R × C cells. So a unit of bandwidth costs about {bandwidthPrice:.0f}× more cells on the large array.</p>
 </section>
 

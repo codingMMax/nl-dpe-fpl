@@ -36,15 +36,19 @@ config and mapping are all build-time parameters, so each row is one VTR circuit
   $C \le R$, and the COFFE local-crossbar sweep stops at $R = 512$.
   - 64×64 is the size of the RTL's functional validation (GATE 2) only. Its tile is in the area model (§5.1), but it
     has no DSE row.
-  - 256×128 is the VTR smoke point.
+  - The VTR smoke point is 128×64 since 2026-10-23 (user: the smallest array with the add in the crossbar's rows,
+    $R = 2C$, the same $I$ as 64×64); it was 256×128 until then (that smoke of the trimmed bit-plane RTL was stopped in
+    ABC). 64×64 has its arch XML too (`vtr/gen_arch.py` `SMOKE`) for a smoke of the adder branch.
   - Until 2026-10-22: $R \in \{128, 256, 512, 1024\} \times C \in \{64, 128, 256\}$, 12 configs (the results of
     §8–§9 as of 2026-10-16).
-- Arch XMLs: `vtr/arch/nl_dpe_{R}x{C}_auto.xml`, v2's, with the 40-bit ports and the legacy tiles; VTR uses them until
-  the RTL gets the row-parallel ports. The row-parallel XMLs are staged in `vtr/arch_rowpar/` (`vtr/gen_arch.py`).
+- Arch XMLs: `vtr/arch_rowpar/nl_dpe_{R}x{C}_auto.xml` (`vtr/gen_arch.py`, `--check`): the row-parallel tiles, no
+  swappable pins (VPR's post-route pin fix-up aborts on them, 2026-10-23). v2's `vtr/arch/` (the pre-bit-plane port
+  and the legacy tiles) served the 2026-10-16 run and stays as a locked copy.
   The auto layout grows the grid to fit the circuit. The area is a resource sum (§5), so grid growth does not enter
   the metric.
-- Platform constants: `BUF` = 40 bits, i.e. a crossbar loads 5 B per cycle; `P` = 8. The row-parallel interface
-  ($R$ bits in and $C$ bits out per cycle) is priced in the area only so far (§5.1); the cycles still use `BUF` = 40.
+- Platform constants: the row-parallel interface, $R$ bits in and $C$ bits out per cycle as bit planes, `P` = 8 planes
+  per window, a pass every 10 cycles (`ip/xbar/spec.md`). The pre-bit-plane design loaded 5 bytes per cycle (`BUF` = 40,
+  gone since 2026-10-22). §8's rows are still the previous head's (pre-bit-plane cycles) until the DSE VTR run.
 
 ### 2.2 Row unit
 
@@ -60,7 +64,7 @@ config and mapping are all build-time parameters, so each row is one VTR circuit
 
 ## 3 Workloads
 
-### 3.1 FC (snapshot from the 2026-10-10 run, not re-run)
+### 3.1 FC (snapshot from the 2026-10-10 run; re-synthesized with the bit-plane RTL, user 2026-10-23)
 
 | shape $(K, N)$ | provenance |
 |---|---|
@@ -76,8 +80,10 @@ config and mapping are all build-time parameters, so each row is one VTR circuit
     (the regression reference of `testFcRows.py`); the FC results of this experiment are `dse/results/fc_vtr_results.csv`
     (the 48 FC rows of v2's VTR table) and `dse/results/fc_priced_results.csv` (the v3 model's rows on them,
     `dse/fc_rows.py`; 2026-10-17).
-- The snapshot stays valid while the FC shapes, `gemm_top`, the prices and the area formula are unchanged. The v3
-  model must reproduce its cycles and energy row by row (§6).
+- The snapshot stayed valid while the FC shapes, `gemm_top`, the prices and the area formula were unchanged. The
+  bit-plane pass changes `gemm_top` (`ip/gemm/spec.md`), so the 32 FC builds of the 8 configs are synthesized again with
+  the new RTL and the row-parallel arch XMLs (user, 2026-10-23), next to the 48 attention builds. v2's rows stay the
+  regression reference of the model's energy and area (`testFcRows.py`).
 - Optional open item: these are the Round-1 FC shapes, not the FFNs of the six attention models.
 
 ### 3.2 Attention: six shapes (user, 2026-10-13)
@@ -137,7 +143,7 @@ So the FC mapping space has exactly one point, and that point is the snapshot.
 | parameter | value | rule | the alternatives (head model, 72 rows, 2026-10-15) |
 |---|---|---|---|
 | $P_{proj}$ | 1 | The configuration the head's VTR smoke synthesized (user, 2026-10-15: no further VTR runs before the DSE). | 2 or 4 copies shorten the front phase (at $N_E = d$, 1 copy cost +41–48 % cycles against 4), but they were never synthesized |
-| $N_E$ (QK farm) | $2d$ | The same: the synthesized configuration. | $d$: $d$ fewer crossbars and half the QK slices, for more cycles (1–15 % at $P_{proj} = 4$) |
+| $N_E$ (QK farm) | $d$ (2026-10-23; $2d$ before) | One QK group per wave. The QK DIMM holds 0.2–14.5 % of the head's critical path (median 0.9 %), so $d$ fewer crossbars and half the QK slices cost +0.7–7.1 % cycles (median +2.0 %; the model on the 48 builds) and remove about a third of the QK DIMM's logic (user, 2026-10-23, with the DIMM revision of `ip/dimm/spec.md` §10 item 11). | $2d$: the configuration the 2026-10-15/16 VTR runs synthesized |
 | $N_{EP}$ (PV farm) | $2d$ | With $d$ the accumulator would need $N_{OC} \le N_{EP}/16$, below the floor rule, and the PV $\log P$ staging overruns at $I = 64$. | — |
 | $N_{EXP}$ | 2 | The smallest power of two whose EXP stage keeps up with the score stream. | 4: −6 % cycles (median), but outside the RTL on 20 of the 72 rows (the PV $\log P$ write rate) |
 | $N_{OC}$ | the floor rule, 2–8 | The smallest group that keeps up with the score stream (`architecture.md` §5.2). | — |
@@ -171,7 +177,7 @@ configs and 64×64).
 
 ### 4.4 Latency model (for reading the results)
 
-**The bit-plane pass (2026-10-22, model only; §8 still carries the 40-bit cycles).** Every crossbar pass takes 10
+**The bit-plane pass (2026-10-22, model only; §8 still carries the pre-bit-plane cycles).** Every crossbar pass takes 10
 cycles back to back on every array, and every stream moves a window in 8 cycles. Measured on the model's 48 builds
 [model, 2026-10-22]:
 - front: the X stream, one token per pass period per copy, so $10 n / P_{proj}$ cycles ($n = 128$: 1,279);
@@ -182,7 +188,7 @@ cycles back to back on every array, and every stream moves a window in 8 cycles.
 - the array's rows no longer change the time, except through the GEMM tree's depth (one cycle per level): $T$
   depends on $I = C$. Example: ViT-B/16 takes 12,481 / 7,347 / 5,708 cycles at $C$ = 64 / 128 / 256, whatever $R$.
 
-**Until 2026-10-22 (the 40-bit pass).** This first-order model explained the cycles (checked on the 72 rows,
+**Until 2026-10-22 (the pre-bit-plane pass).** This first-order model explained the cycles (checked on the 72 rows,
 2026-10-15):
 
 $$
@@ -193,7 +199,7 @@ $$
   row period: the X load of $\min(d_m, R)$ rows, or the GEMM's drain of all $C$ columns (2026-10-18), whichever is
   longer; the drain wins where $d_m$ is small and $C$ large (JetFormer-150P at $C \ge 128$, every shape at
   $C = 256$ with $d_m \le 128$).
-- core: $R_b B$ key blocks, each at least the score stream $\lceil S B_{kv}/5 \rceil$ (one 40-bit port into the online
+- core: $R_b B$ key blocks, each at least the score stream $\lceil S B_{kv}/5 \rceil$ (one pre-bit-plane port into the online
   softmax). The mapping above keeps every stage at that floor on most rows: the measured block period is 1.02× the
   estimate (median). Summed, the core's floor is about $n^2/5$ cycles, whatever the crossbar size.
 - With $P_{proj} = 4$ the front was 3–45 % of the cycles (median 15 %) and the core 30–92 % (median 67 %); at the
@@ -203,8 +209,8 @@ $$
 
 | quantity | definition |
 |---|---|
-| cycles $T$ | The v3 model: the composition of the module models (`architecture.md` §6). Each module is pinned to its RTL at its gate, and the head's events equal the RTL on 64×64 (gate H, `architecture.md` §7). Compute cycles, cold, weights preloaded (user, 2026-10-15): $T = t_{done} - t_{start}$, the head's `done` in the model and in the RTL. `done` comes two cycles after the last run's last $O_8$ plane leaves the accumulator on E9 ($t_{o8} + 2$). There is no O read-out: the head outputs the final $O_8$ values as they are computed (`o_v`, `o_d`: one plane window of $N_{OC} I$ values per wave) and the O projection reads them (user, 2026-10-15: the old read-out was set by the 40-bit port, not by the crossbars or the mapping; `acc_spec.md` §10 item 7). **Since 2026-10-22** the models follow the bit-plane pass (`ip/xbar/spec.md`), model-only until the RTL pass pins them again; the results of §8 still carry the 40-bit cycles until they are regenerated (`LEDGER.md`). |
-| energy $E$ | Frozen per-operation prices (`cost.py` + `Platform("nl_dpe", rows=R, cols=C)`), counted per module: crossbar passes, CLB adds and compares, memory bytes. **The pass price (user, 2026-10-17):** the whole array fires on every pass, so the $R \times C$ cells, the ACAM on every column, the output buffer and the output drain are charged in full; only the rows in use are read, so the input-buffer bytes and the input port words follow `ROWS_USED` (P29). Until that date every pass was priced as the full array on both sides, which overcharged the input side of every conversion pass on $R > C$ arrays and of every GEMM pass with $K < R$ (attention energy fell by 6 % at 128×64 and 41 % at 1024×64; `simulator/platform/prices.py`). The DIMM counts one pairing add per product and one compare per narrowed output; FIFO words count as memory bytes, written once and read once (v2's ledger, 2026-10-15). CLB selects are not priced. Weight programming is excluded (setup). |
+| cycles $T$ | The v3 model: the composition of the module models (`architecture.md` §6). Each module is pinned to its RTL at its gate, and the head's events equal the RTL on 64×64 (gate H, `architecture.md` §7). Compute cycles, cold, weights preloaded (user, 2026-10-15): $T = t_{done} - t_{start}$, the head's `done` in the model and in the RTL. `done` comes two cycles after the last run's last $O_8$ plane leaves the accumulator on E9 ($t_{o8} + 2$). There is no O read-out: the head outputs the final $O_8$ values as they are computed (`o_v`, `o_d`: one plane window of $N_{OC} I$ values per wave) and the O projection reads them (user, 2026-10-15: the old read-out was set by the pre-bit-plane port, not by the crossbars or the mapping; `acc_spec.md` §10 item 7). **Since 2026-10-22** the models follow the bit-plane pass (`ip/xbar/spec.md`), model-only until the RTL pass pins them again; the results of §8 still carry the pre-bit-plane cycles until they are regenerated (`LEDGER.md`). |
+| energy $E$ | Frozen per-operation prices (`cost.py` + `Platform("nl_dpe", rows=R, cols=C)`), counted per module: crossbar passes, CLB adds and compares, memory bytes. **The pass price (user, 2026-10-17):** the whole array fires on every pass, so the $R \times C$ cells, the ACAM on every column, the output buffer and the output drain are charged in full; only the rows in use are read, so the input-buffer bytes and the input port words follow `ROWS_USED` (P29). Until that date every pass was priced as the full array on both sides, which overcharged the input side of every conversion pass on $R > C$ arrays and of every GEMM pass with $K < R$ (attention energy fell by 6 % at 128×64 and 41 % at 1024×64; `simulator/platform/prices.py`). The DIMM counts one pairing add per product and one compare per narrowed output; FIFO words count as memory bytes, written once and read once (v2's ledger, 2026-10-15). CLB selects are not priced. Weight programming is excluded (setup). **The port traffic (user, 2026-10-23):** the crossbar's port is $R$ bits in and $C$ bits out per cycle, so a pass moves $P$ planes of the rows in use in and $P$ planes of every column out, priced per bit (`ip/xbar/spec.md` §6); until then 40-bit port words. |
 | area $A$ | $(clb + \sum_{wc} W H + 2\, mem) \times 66{,}117$ MWTA. The counts come from VPR (the largest over the seeds); each used cell is priced at the routing-aware CLB tile (2239 µm²). $W H$ is the crossbar tile of §5.1. The simulator predicts $mem$ and the crossbar count; every build's VPR counts must equal them (a mismatch stops the build for a look). |
 | Fmax | VTR, the mean over seeds {11, 13, 17}. Route channel width 300. SDC = `clock.sdc` (I/O-excluding). |
 | latency | $D[\mathrm{ns}] = T \cdot 1000 / F_{max}[\mathrm{MHz}]$ |
@@ -267,7 +273,8 @@ At 512×64, the local crossbar adds 4 of the 10 extra cells, and the empty colum
 
 The module work and its gates are in `architecture.md` §7–§8. The experiment's own steps:
 
-1. **FC:** the v3 model reproduces the 48 snapshot rows (cycles and energy). `gemm_top` and the prices are unchanged.
+1. **FC:** the v3 model reproduces the 48 snapshot rows' energy and area; its cycles follow the bit-plane closed form
+   (2026-10-22). The 32 FC builds are synthesized again with the bit-plane `gemm_top` (user, 2026-10-23).
 2. **Attention, model ↔ RTL:**
    - the module gates and the head gate of `architecture.md` §7, on 64×64 with small corpora (a full iverilog launch
      needs your approval);
@@ -324,10 +331,15 @@ The module work and its gates are in `architecture.md` §7–§8. The experiment
 
 ## 8 Results (2026-10-22: the row-parallel tiles, 8 configs)
 
+> **Status (2026-10-23):** §8–§9 describe the previous head's results: the 2026-10-16 VTR run (pre-bit-plane cycles at
+> $N_E = 2d$), re-priced with the row-parallel tiles on 2026-10-22. The bit-plane head with the DIMM revision
+> (`ip/dimm/spec.md` §10 item 11) replaces them after stage 4; `dse/attn_rows.py`, `config_table.py` and `breakdown.py`
+> price this run at its own mapping explicitly until then.
+
 48 attention builds (6 shapes × 8 configs, VTR seeds 11, 13, 17) and 32 FC rows (the v2 snapshot's 4 shapes × 8
 configs), priced with the row-parallel crossbar tile of §5.1.
 
-**The cycles still use the 40-bit ports** (`BUF` = 40). These rows pay for the row-parallel tile's area without its
+**The cycles still use the pre-bit-plane ports** (`BUF` = 40). These rows pay for the row-parallel tile's area without its
 bandwidth, so they are pessimistic for the larger arrays. They stay so until two things are done: the timing pass (the
 10-cycle pass and the bit-plane streams), and a VTR run with the row-parallel XMLs. The CLB, memory and Fmax are those
 of the 2026-10-15/16 VTR runs.
@@ -399,9 +411,9 @@ its shapes; FC: the share of the total summed over its shapes), all in `dse/resu
   512×256). A larger array stores more of $W$ per tile.
 - **Attention** multiplies activations by activations ($QK^T$, then $PV$), so neither operand can stay in a
   crossbar. The tiled DIMM uses the crossbars as element-wise EXP / LOG converters with identity weights, one
-  $I$-wide window per pass. The crossbar count follows the head dimension and the fixed mapping (§4.2: $N_E = N_{EP} =
-  2d$, ...): 78 crossbars for $d = 16$, 146 for $d = 32$, 278–297 for $d = 64$, nearly the same at every array
-  size. Of a conversion crossbar's cells,
+  $I$-wide window per pass. The crossbar count follows the head dimension and the fixed mapping (§4.2: $N_E = d$,
+  $N_{EP} = 2d$, ...): 62 crossbars for $d = 16$, 114 for $d = 32$, 214–233 for $d = 64$ (78, 146 and 278–297 at
+  $N_E = 2d$, the mapping until 2026-10-23), nearly the same at every array size. Of a conversion crossbar's cells,
   $I^2 / (R C)$ are in use: 100 % at 128×128 and 256×256, 50 % at 128×64, 12.5 % at 512×64.
 
 ### 9.2 Area breakdown (VPR counts, the row-parallel tiles)
@@ -432,7 +444,7 @@ its shapes; FC: the share of the total summed over its shapes), all in `dse/resu
 ### 9.3 Latency breakdown ($D = T / F_{max}$)
 
 - **FC:** one pass per tile, 52–147 cycles, growing with $R$ and $C$: each pass streams $\min(R, K)$ input rows in and
-  $\min(C, N)$ outputs out through the 40-bit port. Fmax 379–451 MHz: the designs are tiny (4–20 CLBs). Several
+  $\min(C, N)$ outputs out through the pre-bit-plane port. Fmax 379–451 MHz: the designs are tiny (4–20 CLBs). Several
   builds report the same 450.6 MHz, which suggests the crossbar block's own timing sets it (an inference, not
   checked).
 - **Attention:** 12k–20k cycles, in two parts measured in the simulator:
@@ -442,7 +454,7 @@ its shapes; FC: the share of the total summed over its shapes), all in `dse/resu
      formula was 7 cycles exact before the drain rule). That is a median 56 % of the cycles (36–81 %). It grows with
      $R$ while $d_m > R$: for BERT-base ($d_m = 768$), 4.4k cycles at $R = 128$ and 14.2k at $R = 512$; for
      BERT-Tiny ($d_m = 128$) it stays at 4.4k up to $C = 128$ and reaches 6.8k at $C = 256$, where the drain paces it.
-  2. **The core.** Bound by the score stream into the online softmax (one 40-bit port, about $n^2/5$ cycles), which
+  2. **The core.** Bound by the score stream into the online softmax (one pre-bit-plane port, about $n^2/5$ cycles), which
      does not depend on the array size. A smaller $I$ means smaller query runs ($S = \min(n, I)$) that overlap the
      projection stream better: BERT-Tiny takes 7,752 cycles at 128×64 and 9,405 at 128×128.
 
@@ -465,7 +477,7 @@ its shapes; FC: the share of the total summed over its shapes), all in `dse/resu
      $T$ exactly. A segment is labeled by the module it is in (its role: gemm, qk, sm, pv, acc, ctrl) and by its
      kind: *DPE load* (a pass's input burst, $\lceil 8\,ROWS\_USED / BUF \rceil$ words into a crossbar), *DPE compute*
      (the $P$ bit-slices, the shift-accumulate, the ACAM and the hand-overs), *DPE drain* (the first output word, and
-     the drain words a consumer takes), *stream* (the words of a port, or a FIFO read one word per cycle: the 40-bit
+     the drain words a consumer takes), *stream* (the words of a port, or a FIFO read one word per cycle: the pre-bit-plane
      paths between modules), *logic* (every other named latency: trees, registers, decisions, the writers, and the
      start's cycle). Table 3 gives the shares of $T$ by kind and by module (the mean over the heads of each share),
      the per-head tables the same for one config, and the FC table the one-pass rows. A cycle that two inputs set
@@ -504,7 +516,7 @@ ones (area, latency and Fmax). The cross-family front therefore sits in the midd
    ACAM, is what makes a large array expensive per pass whatever the window.
 3. **One projection copy** ($P_{proj} = 1$). The X stream is serial, 5 bytes per cycle per copy, which makes the
    projections half of the attention cycles.
-4. **The 40-bit ports.** They bound both the score stream (the core's $n^2/5$) and the projection load. Since
+4. **The pre-bit-plane ports.** They bound both the score stream (the core's $n^2/5$) and the projection load. Since
    2026-10-22 the area already pays for the row-parallel ports ($R$ pins in, $C$ out; §5.1) while the cycles do not
    yet use them: the timing pass will give the larger arrays their bandwidth.
 5. **FC is a single GEMV** ($M = 1$, the v2 snapshot, from v2's RTL before the tree fix). Its latency is one pass;

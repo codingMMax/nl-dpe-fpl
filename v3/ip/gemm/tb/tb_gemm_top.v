@@ -1,33 +1,24 @@
 // ============================================================================
-// tb_gemm_top.v — Stage-2 GATE-2 TB for the v2 GEMM array (`gemm_top`).
+// tb_gemm_top.v — GATE-2 testbench of `gemm_top` (v3, ip/gemm/spec.md §7). Case files are written by
+// ip/gemm/cases.py (model run + GATE 1); the runner ip/gemm/tb/run_gemm_gate2.py compares this testbench's event
+// lines with the model's, line for line.
 //
-// Consumes case dirs produced by `v2/sim/gemm_sim.py::dump_case` (expanded by
-// `v2/smoke/run_gemm_rtl.py` into <VDIR>/*.hex):
+// Forked 2026-10-23 from v2's Stage-2 testbench (git show v2-final:v2/sim/tb/tb_gemm_top.v; sha256 in
+// tools/copies.lock and the LEDGER) for the bit-plane interface: the weights are preloaded, the rows are plane words
+// replayed at the model's cycles, the wide S_col probe is gone (model-only, spec §1).
 //
-//   w.hex    one 2-hex byte per line,  V*H*R*C  (§4.1: v-major, h, row-outer)
-//   act.hex  one 10-hex word per line, M*V*LCYC (burst m = V lane blocks)
-//   expS.hex one 8-hex int32 per line, M*H*C (wide partial; padding cols 0)
-//   expo.hex one 2-hex byte per line,  M*H*C (lane h = cols h*C..h*C+C-1)
-//
-// Plusargs:  +M=<passes>  +VDIR=<vectors dir>  [+CASE=<name>]  [+ODIR=<dir>]
-// Geometry:  -DK_TB -DN_TB -DR_TB -DC_TB -DBUF_TB -DP_TB  [-DRU_TB -DCU_TB: P29 extent]
-//
-// What is gated (charter v0.3):
-//   * dual compare: lane bytes (`data_out`) AND the wide reduced partial
-//     `dut.S_col` vs the GATE-1-certified expected bits
-//   * readiness: no act strobe accepted while MSB_SA_Ready low
-//   * drain integrity: exactly OCYC words per pass, M dpe_done pulses
-//   * cycles: measured == T_fill_array + (M-1)*T_steady + delta
-//     (delta is printed; the harness gates constancy + T_steady steps)
-//
-// TB probe contract (internal names frozen so the RTL header can pin them):
-//   S_col[0:H*C-1] : reg signed [31:0] — wide reduced partial per column,
-//                    complete at dpe_done, stable until the next pass
-//   out_valid      : reg — 1-cycle pulse per drained word; lanes valid
-// The primitive has no per-word valid port, so the RTL derives its drain
-// from `reg_full` + OUTPUT_CYC_prim (documented in the RTL header).
+// The testbench is the module's environment of the model's test graph (simulator/models/fc.py):
+//   X source   row u's burst starts at the cycle the model planned: 8 plane words of every lane, one per cycle, under
+//              act_en; before it the testbench checks that the RTL has already given the row's credit (credit u - 1
+//              for u >= 1: MSB_SA_Ready rose u times) and that MSB_SA_Ready is high
+//   Y sink     takes every output plane word (out_valid) and checks every lane's word
+// Logged (EV lines, the model's event format): the rows' lane windows, the MSB_SA_Ready rises (the act port's
+// credit), the output windows (first word).
+// Also checked: 8 output words per row without a gap, dpe_done exactly one cycle after each row's last word, every
+// tile's sticky `err` (a burst while not ready, a gap in a burst, the output register binding), a watchdog.
+// Weights: preloaded at zero time after reset from w.mem (tile v*H + h, row-major; mode_q REGULAR; PLAN R8).
+// Cycle 0 is the first cycle after reset.
 // ============================================================================
-
 `timescale 1ns / 1ps
 
 `ifndef K_TB
@@ -37,22 +28,12 @@
   `define N_TB 128
 `endif
 `ifndef R_TB
-  `define R_TB 256
+  `define R_TB 64
 `endif
 `ifndef C_TB
-  `define C_TB 256
+  `define C_TB 64
 `endif
-`ifndef BUF_TB
-  `define BUF_TB 40
-`endif
-`ifndef P_TB
-  `define P_TB 8
-`endif
-`ifndef MAXM_TB
-  `define MAXM_TB 16
-`endif
-// P29 pass extent (default = the full R x C): every tile loads RU rows and
-// drains CU columns (gemm_top ROWS_USED / COLS_USED)
+// P29 pass extent (default: the whole array)
 `ifndef RU_TB
   `define RU_TB `R_TB
 `endif
@@ -61,304 +42,176 @@
 `endif
 
 module tb_gemm_top;
+    localparam K = `K_TB, N = `N_TB, R = `R_TB, C = `C_TB, P = 8, RU = `RU_TB, CU = `CU_TB;
+    localparam V = (K + R - 1) / R;
+    localparam H = (N + C - 1) / C;
+    localparam MAXM = 64;
 
-    localparam K   = `K_TB;
-    localparam N   = `N_TB;
-    localparam R   = `R_TB;
-    localparam C   = `C_TB;
-    localparam BUF = `BUF_TB;
-    localparam P   = `P_TB;
-    localparam MAXM = `MAXM_TB;
-    localparam RU  = `RU_TB;
-    localparam CU  = `CU_TB;
+    reg clk = 1'b0;
+    always #5 clk = ~clk;
+    reg reset = 1'b1;
 
-    localparam V   = (K + R - 1) / R;
-    localparam H   = (N + C - 1) / C;
-    localparam EPS = BUF / 8;
-    localparam LCYC = (RU * 8 + BUF - 1) / BUF;     // P29: rows in use
-    localparam OCYC = (CU * 8 + BUF - 1) / BUF;     // P29: columns in use
-    localparam CW_CMP = (OCYC * EPS < C) ? OCYC * EPS : C;   // drained columns per lane
-    localparam CCYC = P + 2;
-
-    function integer clog2_fn;
-        input integer val;
-        integer i;
-        begin
-            clog2_fn = 0;
-            for (i = val - 1; i > 0; i = i >> 1) clog2_fn = clog2_fn + 1;
-        end
-    endfunction
-    localparam TREE_PIPE = (V > 1) ? clog2_fn(V) : 0;
-    localparam L_W       = TREE_PIPE + 1;
-    localparam T_FILL    = LCYC + CCYC + OCYC + L_W;
-    localparam TS_A      = (LCYC + P > CCYC) ? (LCYC + P) : CCYC;
-    localparam T_STEADY  = (TS_A > OCYC + 1) ? TS_A : (OCYC + 1);
-
-    reg clk;
-    initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
-    end
-
-    reg reset;
-    reg [V*BUF-1:0] act_in;
-    reg             act_en;
-    reg [7:0]       weight_in;
-    reg             weight_en;
-
-    wire               MSB_SA_Ready;
-    wire [H*BUF-1:0]   data_out;
-    wire               dpe_done;
-    wire               reg_full;
+    reg  [V*RU-1:0] act_in = 0;
+    reg             act_en = 1'b0;
+    wire            MSB_SA_Ready, dpe_done, reg_full, out_valid;
+    wire [H*CU-1:0] data_out;
 
     gemm_top #(
-        .K(K), .N(N), .R(R), .C(C), .BUF(BUF), .P(P), .ROWS_USED(RU), .COLS_USED(CU)
+        .K(K), .N(N), .R(R), .C(C), .P(P), .ROWS_USED(RU), .COLS_USED(CU)
     ) dut (
-        .clk(clk),
-        .reset(reset),
-        .act_in(act_in),
-        .act_en(act_en),
-        .weight_in(weight_in),
-        .weight_en(weight_en),
-        .MSB_SA_Ready(MSB_SA_Ready),
-        .data_out(data_out),
-        .dpe_done(dpe_done),
-        .reg_full(reg_full)
-    );
+        .clk(clk), .reset(reset), .act_in(act_in), .act_en(act_en), .weight_in(8'd0), .weight_en(1'b0),
+        .MSB_SA_Ready(MSB_SA_Ready), .data_out(data_out), .dpe_done(dpe_done), .reg_full(reg_full),
+        .out_valid(out_valid));
 
-    // -- stimulus / expected memories ---------------------------------------
-    reg [7:0]  w_mem   [0:V*H*R*C-1];
-    reg [BUF-1:0] act_mem [0:MAXM*V*LCYC-1];
-    reg signed [31:0] exp_s [0:MAXM*H*C-1];
-    reg [7:0]  exp_o   [0:MAXM*H*C-1];
+    // ---- weights: zero-time preload after reset (PLAN R8) ----------------------------------------------------------
+    reg [7:0] wmem [0:V*H*R*C-1];
+    event preload;
+    wire [V*H-1:0] tile_err;
+    genvar gv, gh;
+    generate
+        for (gv = 0; gv < V; gv = gv + 1) begin : w_v
+            for (gh = 0; gh < H; gh = gh + 1) begin : w_h
+                integer wk;
+                always @(preload) begin
+                    for (wk = 0; wk < R*C; wk = wk + 1)
+                        dut.gen_v[gv].gen_h[gh].u_dpe.weights[wk] = wmem[(gv*H + gh)*R*C + wk];
+                    dut.gen_v[gv].gen_h[gh].u_dpe.mode_q = 2'b00;                  // REGULAR
+                end
+                assign tile_err[gv*H + gh] = dut.gen_v[gv].gen_h[gh].u_dpe.err;
+            end
+        end
+    endgenerate
 
-    // -- capture ------------------------------------------------------------
-    reg [7:0] cap [0:MAXM*OCYC*H*EPS-1];      // lane bytes, per pass/word/lane
-    reg signed [31:0] s_cap [0:MAXM*H*C-1];   // wide partials sampled at done
+    // ---- case files ------------------------------------------------------------------------------------------------
+    reg [8*256-1:0] vdir, fn;
+    integer fd, rc, i, b, v, h;
+    integer M, tmax;
+    integer at_t [0:MAXM-1];                     // row u's burst cycle
+    reg [RU-1:0] ax [0:MAXM*V*P-1];              // row u, lane v, plane b
+    reg [CU-1:0] yx [0:MAXM*H*P-1];              // row u, lane h, plane b
+    reg [RU-1:0] aword;
+    reg [CU-1:0] yword;
 
-    integer cycle_count;
-    always @(posedge clk) cycle_count <= cycle_count + 1;
+    task load;
+        begin
+            $sformat(fn, "%0s/w.mem", vdir);
+            $readmemh(fn, wmem);
+            $sformat(fn, "%0s/act.txt", vdir);
+            fd = $fopen(fn, "r");
+            for (i = 0; i < M; i = i + 1) begin
+                rc = $fscanf(fd, "%d", at_t[i]);
+                for (b = 0; b < V*P; b = b + 1) begin rc = $fscanf(fd, "%h", aword); ax[i*V*P + b] = aword; end
+            end
+            $fclose(fd);
+            $sformat(fn, "%0s/y_exp.txt", vdir);
+            fd = $fopen(fn, "r");
+            for (i = 0; i < M*H*P; i = i + 1) begin rc = $fscanf(fd, "%h", yword); yx[i] = yword; end
+            $fclose(fd);
+        end
+    endtask
 
-    integer done_idx, wpass, word_total;
-    integer t_first_load;
-    integer t_done [0:MAXM-1];
-    integer ready_violations, errors, ready_errs, cycle_errs;
-    integer measured, expected, delta;
-    reg mark_first_load;
-    integer i, m, w, v, hh, bb, kk;
+    // ---- cycle counter, errors -------------------------------------------------------------------------------------
+    integer tc = 0;
+    always @(posedge clk) if (!reset) tc <= tc + 1;
+    integer errors = 0;
 
+    // ---- monitor + driver (cycle tc, just after the edge) ----------------------------------------------------------
+    // Runs at posedge + 2 (reset is released at posedge + 1, so the first visit is cycle 0).
+    integer n_cr = 0, n_done = 0, n_w = 0;
+    integer ap = 0, ab = -1;                     // the row being sent, its plane (-1: none)
+    integer orow = 0, ow = 0;                    // the output row, its plane
+    integer done_due = -1, last_t = -1;
+    reg     rdy_d = 1'b1;
+    reg     running = 1'b0;
     always @(posedge clk) begin
-        // I3: a strobe presented in this cycle requires ready high in-cycle
-        if (act_en && !MSB_SA_Ready)
-            ready_violations = ready_violations + 1;
-
-        if (mark_first_load) begin
-            t_first_load = cycle_count;
-            mark_first_load = 0;
-        end
-
-        if (dut.out_valid) begin
-            for (hh = 0; hh < H; hh = hh + 1)
-                for (bb = 0; bb < EPS; bb = bb + 1)
-                    cap[(done_idx*OCYC + wpass)*H*EPS + hh*EPS + bb] =
-                        data_out[hh*BUF + bb*8 +: 8];
-            wpass = wpass + 1;
-            word_total = word_total + 1;
-        end
-
-        if (dpe_done) begin
-            if (done_idx < MAXM)
-                for (i = 0; i < H*C; i = i + 1)
-                    s_cap[done_idx*H*C + i] = dut.S_col[i];
-            t_done[done_idx] = cycle_count;
-            done_idx = done_idx + 1;
-            wpass = 0;
-        end
-    end
-
-    // -- driver --------------------------------------------------------------
-    integer M, guard;
-    reg [1023:0] vdir, odir, case_name;
-    reg [2047:0] fw, fa, fs, fo, foy, foo, foc;
-    reg odir_set;
-    integer fdy, fdo, fdc;
-
-    initial begin
-        reset = 1;
-        act_in = 0;
-        act_en = 0;
-        weight_in = 0;
-        weight_en = 0;
-        mark_first_load = 0;
-        cycle_count = 0;
-        done_idx = 0; wpass = 0; word_total = 0;
-        t_first_load = -1;
-        ready_violations = 0;
-        errors = 0; ready_errs = 0; cycle_errs = 0;
-        measured = 0; expected = 0; delta = 0;
-        odir_set = 0;
-        for (i = 0; i < MAXM; i = i + 1) t_done[i] = -1;
-        for (i = 0; i < MAXM*H*C; i = i + 1) begin
-            exp_s[i] = 32'sd0; exp_o[i] = 8'h00; s_cap[i] = 32'sd0;
-        end
-        for (i = 0; i < MAXM*OCYC*H*EPS; i = i + 1) cap[i] = 8'h00;
-
-        if (!$value$plusargs("CASE=%s", case_name)) case_name = "case";
-        if (!$value$plusargs("M=%d", M)) M = 1;
-        if (!$value$plusargs("VDIR=%s", vdir)) begin
-            $display("[tb_gemm_top] FAIL %0s: missing +VDIR=<path>", case_name);
-            $finish;
-        end
-        if ($value$plusargs("ODIR=%s", odir)) odir_set = 1;
-
-        $sformat(fw, "%0s/w.hex", vdir);
-        $sformat(fa, "%0s/act.hex", vdir);
-        $sformat(fs, "%0s/expS.hex", vdir);
-        $sformat(fo, "%0s/expo.hex", vdir);
-        $readmemh(fw, w_mem);
-        $readmemh(fa, act_mem);
-        $readmemh(fs, exp_s);
-        $readmemh(fo, exp_o);
-
-        $display("[tb_gemm_top] case=%0s M=%0d K=%0d N=%0d R=%0d C=%0d P=%0d BUF=%0d V=%0d H=%0d LCYC=%0d OCYC=%0d T_FILL=%0d T_STEADY=%0d",
-                 case_name, M, K, N, R, C, P, BUF, V, H, LCYC, OCYC, T_FILL, T_STEADY);
-
-        repeat (3) @(posedge clk);
-        #1 reset = 0;
-        @(posedge clk); #1;
-
-        // -- WEIGHT strobes (one-time; §4.1 order; no mode latch in v0.3) ----
-        for (i = 0; i < V*H*R*C; i = i + 1) begin
-            weight_en = 1;
-            weight_in = w_mem[i];
-            @(posedge clk); #1;
-        end
-        weight_en = 0;
-        weight_in = 0;
-        @(posedge clk); #1;
-
-        // -- M ACT bursts, paced strictly by MSB_SA_Ready (P1/A9) ------------
-        for (m = 0; m < M; m = m + 1) begin
-            if (m > 0) begin
-                guard = 0;
-                while (MSB_SA_Ready && guard < 100000) begin
-                    @(posedge clk); #1; guard = guard + 1;
+        #2;
+        if (running) begin
+            // -- DUT outputs of this cycle --
+            if (MSB_SA_Ready && !rdy_d) begin $display("EV %0d gemm.act cr u%0d", tc, n_cr); n_cr = n_cr + 1; end
+            rdy_d = MSB_SA_Ready;
+            if (out_valid) begin
+                if (orow >= M) begin
+                    if (errors < 10) $display("[tb_gemm] ERROR: an output word after the last row at %0d", tc);
+                    errors = errors + 1;
+                end else begin
+                    if (ow == 0)
+                        for (h = 0; h < H; h = h + 1) $display("EV %0d gemm.out win ch%0d u%0d w%0d", tc, h, orow, h);
+                    for (h = 0; h < H; h = h + 1)
+                        if (data_out[h*CU +: CU] !== yx[(orow*H + h)*P + ow]) begin
+                            if (errors < 10)
+                                $display("[tb_gemm] ERROR value: row %0d lane %0d plane %0d got %h exp %h", orow, h, ow,
+                                         data_out[h*CU +: CU], yx[(orow*H + h)*P + ow]);
+                            errors = errors + 1;
+                        end
+                    n_w = n_w + 1;
+                    ow = ow + 1;
+                    if (ow == P) begin ow = 0; orow = orow + 1; done_due = tc + 1; last_t = tc; end
                 end
-                if (MSB_SA_Ready) begin
-                    $display("[tb_gemm_top]   ERROR: MSB_SA_Ready never fell after pass %0d burst", m-1);
-                    ready_errs = ready_errs + 1;
-                end
+            end else if (ow != 0) begin
+                $display("[tb_gemm] ERROR: a gap inside row %0d's output window at %0d", orow, tc);
+                errors = errors + 1;
             end
-            guard = 0;
-            while (!MSB_SA_Ready && guard < 100000) begin
-                @(posedge clk); #1; guard = guard + 1;
-            end
-            if (!MSB_SA_Ready) begin
-                $display("[tb_gemm_top]   ERROR: MSB_SA_Ready never rose before pass %0d", m);
-                ready_errs = ready_errs + 1;
-            end
-            for (w = 0; w < LCYC; w = w + 1) begin
-                for (v = 0; v < V; v = v + 1)
-                    act_in[v*BUF +: BUF] = act_mem[(m*V + v)*LCYC + w];
-                act_en = 1;
-                if (m == 0 && w == 0) mark_first_load = 1;
-                @(posedge clk); #1;
-            end
-            act_en = 0;
-            act_in = 0;
-        end
-
-        // -- wait for the final drain, then compare --------------------------
-        expected = T_FILL + (M - 1) * T_STEADY;
-        guard = 0;
-        while (done_idx < M && guard < 4*expected + 1000) begin
-            @(posedge clk); #1; guard = guard + 1;
-        end
-        @(posedge clk); #1;
-
-        if (done_idx != M) begin
-            $display("[tb_gemm_top]   ERROR: only %0d/%0d dpe_done pulses seen", done_idx, M);
-            cycle_errs = cycle_errs + 1;
-        end
-        if (word_total != M*OCYC) begin
-            $display("[tb_gemm_top]   ERROR: drained %0d/%0d lane words", word_total, M*OCYC);
-            cycle_errs = cycle_errs + 1;
-        end
-
-        // lane bytes vs expected (lane h = columns h*C .. h*C+C-1; P29: the drained columns)
-        for (m = 0; m < M; m = m + 1) begin
-            for (hh = 0; hh < H; hh = hh + 1) begin
-                for (kk = 0; kk < CW_CMP; kk = kk + 1) begin
-                    if (cap[(m*OCYC + kk/EPS)*H*EPS + hh*EPS + kk%EPS]
-                        !== exp_o[m*H*C + hh*C + kk]) begin
-                        if (errors < 10)
-                            $display("[tb_gemm_top]   out MISMATCH pass=%0d lane=%0d col=%0d got=%02x exp=%02x",
-                                     m, hh, kk,
-                                     cap[(m*OCYC + kk/EPS)*H*EPS + hh*EPS + kk%EPS],
-                                     exp_o[m*H*C + hh*C + kk]);
-                        errors = errors + 1;
-                    end
-                end
-            end
-        end
-
-        // wide partial S vs expected (all H*C columns, padding cols equal 0;
-        // P29: the drained columns of each lane)
-        for (m = 0; m < M; m = m + 1) begin
-            for (i = 0; i < H*C; i = i + 1) begin
-                if ((i % C) < CW_CMP && s_cap[m*H*C + i] !== exp_s[m*H*C + i]) begin
-                    if (errors < 10)
-                        $display("[tb_gemm_top]   S MISMATCH pass=%0d col=%0d got=%0d exp=%0d",
-                                 m, i, s_cap[m*H*C + i], exp_s[m*H*C + i]);
+            if (dpe_done) begin
+                if (tc != done_due) begin
+                    $display("[tb_gemm] ERROR: dpe_done at %0d, the last output word + 1 is %0d", tc, done_due);
                     errors = errors + 1;
                 end
+                n_done = n_done + 1;
+            end else if (tc == done_due) begin
+                $display("[tb_gemm] ERROR: no dpe_done at %0d (one cycle after the row's last word)", tc);
+                errors = errors + 1;
+            end
+            // -- driver: the X source --
+            act_en = 1'b0;
+            act_in = 0;
+            if (ab < 0 && ap < M && at_t[ap] == tc) begin
+                if (!MSB_SA_Ready || (ap >= 1 && n_cr < ap)) begin
+                    $display("[tb_gemm] ERROR: row %0d sent at %0d without its credit (credits %0d, ready %b)", ap,
+                             tc, n_cr, MSB_SA_Ready);
+                    errors = errors + 1;
+                end
+                for (v = 0; v < V; v = v + 1) $display("EV %0d x.act win ch%0d u%0d w%0d", tc, v, ap, v);
+                ab = 0;
+            end
+            if (ab >= 0) begin
+                act_en = 1'b1;
+                for (v = 0; v < V; v = v + 1) act_in[v*RU +: RU] = ax[(ap*V + v)*P + ab];
+                ab = ab + 1;
+                if (ab == P) begin ab = -1; ap = ap + 1; end
             end
         end
-
-        if (done_idx == M) begin
-            measured = t_done[M-1] - t_first_load;
-            delta = measured - expected;   // reported; harness gates constancy
-        end
-
-        // -- observed dumps (optional; +ODIR=<dir> must exist) ---------------
-        if (odir_set) begin
-            $sformat(foy, "%0s/observed_psum.hex", odir);
-            fdy = $fopen(foy, "w");
-            for (m = 0; m < M; m = m + 1)
-                for (i = 0; i < H*C; i = i + 1)
-                    $fwrite(fdy, "%08x\n", s_cap[m*H*C + i]);
-            $fclose(fdy);
-
-            $sformat(foo, "%0s/observed_out.hex", odir);
-            fdo = $fopen(foo, "w");
-            for (m = 0; m < M; m = m + 1)
-                for (hh = 0; hh < H; hh = hh + 1)
-                    for (kk = 0; kk < C; kk = kk + 1)
-                        $fwrite(fdo, "%02x\n",
-                                cap[(m*OCYC + kk/EPS)*H*EPS + hh*EPS + kk%EPS]);
-            $fclose(fdo);
-
-            $sformat(foc, "%0s/observed_cycles.txt", odir);
-            fdc = $fopen(foc, "w");
-            $fwrite(fdc, "first_load=%0d done=%0d measured=%0d expected=%0d delta=%0d errors=%0d ready_err=%0d cycle_err=%0d verdict=%0s\n",
-                    t_first_load, (done_idx == M) ? t_done[M-1] : -1,
-                    measured, expected, delta,
-                    errors, ready_errs, cycle_errs,
-                    (errors == 0 && ready_errs == 0 && cycle_errs == 0) ? "PASS" : "FAIL");
-            for (m = 0; m < M; m = m + 1)
-                $fwrite(fdc, "pass=%0d done=%0d\n", m, t_done[m]);
-            $fclose(fdc);
-        end
-
-        if (errors == 0 && ready_errs == 0 && cycle_errs == 0) begin
-            $display("[tb_gemm_top] PASS case=%0s M=%0d measured=%0d expected=%0d delta=%0d",
-                     case_name, M, measured, expected, delta);
-        end else begin
-            $display("[tb_gemm_top] FAIL case=%0s M=%0d errors=%0d ready_err=%0d cycle_err=%0d measured=%0d expected=%0d delta=%0d",
-                     case_name, M, errors, ready_errs, cycle_errs,
-                     measured, expected, delta);
-        end
-        $finish;
     end
 
+    // ---- main ----------------------------------------------------------------------------------------------------
+    reg [8*128-1:0] case_name;
+    initial begin
+        if (!$value$plusargs("VDIR=%s", vdir)) begin $display("[tb_gemm] ERROR: +VDIR required"); $finish; end
+        if (!$value$plusargs("CASE=%s", case_name)) case_name = "case";
+        if (!$value$plusargs("M=%d", M)) M = 1;
+        if (!$value$plusargs("TMAX=%d", tmax)) tmax = 100000;
+        if (M > MAXM) begin $display("[tb_gemm] ERROR: M %0d > MAXM %0d", M, MAXM); $finish; end
+        $display("[tb_gemm] case=%0s M=%0d K=%0d N=%0d R=%0d C=%0d V=%0d H=%0d ROWS_USED=%0d COLS_USED=%0d",
+                 case_name, M, K, N, R, C, V, H, RU, CU);
+        load;
+        repeat (3) @(posedge clk);
+        #1 reset = 1'b0;
+        -> preload;
+        running = 1'b1;
+        while ((orow < M || tc <= done_due) && tc < tmax) @(posedge clk);
+        repeat (4) @(posedge clk);
+        #4;
+        if (tc >= tmax) begin $display("[tb_gemm] ERROR: watchdog (tc %0d, rows out %0d of %0d)", tc, orow, M);
+                              errors = errors + 1; end
+        if (n_w != M * P) begin $display("[tb_gemm] ERROR: %0d output words, expected %0d", n_w, M * P);
+                                errors = errors + 1; end
+        if (n_done != M) begin $display("[tb_gemm] ERROR: %0d dpe_done pulses, expected %0d", n_done, M);
+                               errors = errors + 1; end
+        if (n_cr != M) begin $display("[tb_gemm] ERROR: %0d MSB_SA_Ready credits, expected %0d", n_cr, M);
+                             errors = errors + 1; end
+        if (|tile_err) begin $display("[tb_gemm] ERROR: a tile's err flag is set (%b)", tile_err);
+                             errors = errors + 1; end
+        $display("[tb_gemm] %0s %0s errors=%0d last_word=%0d words=%0d", (errors == 0) ? "PASS" : "FAIL",
+                 case_name, errors, last_t, n_w);
+        $finish;
+    end
 endmodule

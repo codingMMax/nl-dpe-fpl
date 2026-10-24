@@ -1,7 +1,8 @@
 """platform.py — `Platform`: the crossbar type the models run on (docs/simulator.md §4.7).
 
 A config (<name>.json beside this file, or any path) gives the shared `fabric` (block RAM and CLB prices) and the
-`compute_tile`: the crossbar geometry, the input bit slices, the port width, the buffers, and the components with
+`compute_tile`: the crossbar geometry, the input bit slices, the port (R bits in and C bits out per cycle, P planes per
+pass, priced per bit: `port`; or a fixed width, `port_width_bits`, as azure_lily.json), the buffers, and the components with
 their area and energy per unit:
 
   component      area unit                        energy charged per pass (prices.py)
@@ -59,7 +60,19 @@ class Platform:
         self.cols = tile["cols"] if cols is None else cols
         self.bufferSize = tile["buffer_size"] if bufferSize is None else bufferSize
         self.inputBitSlices = tile["input_bit_slices"]
-        self.portWidthBits = tile["port_width_bits"]
+        port = tile.get("port")                           # the row-parallel interface (2026-10-23, user)
+        if port is not None:
+            self.portFixedWidthBits = None
+            self.portInBits = self.rows if port["in_bits"] == "rows" else int(port["in_bits"])
+            self.portOutBits = self.cols if port["out_bits"] == "cols" else int(port["out_bits"])
+            self.portWordsPerPass = (self.inputBitSlices if port["planes_per_pass"] == "input_bit_slices"
+                                     else int(port["planes_per_pass"]))
+            self.portEnergyPjPerBit = port["energy_pj_per_bit"]
+        else:                                             # a fixed-width port (azure_lily.json, kept as data)
+            self.portFixedWidthBits = tile["port_width_bits"]
+            self.portInBits = self.portOutBits = self.portFixedWidthBits
+            self.portWordsPerPass = None
+            self.portEnergyPjPerBit = self.fabric["block_ram"]["energy_pj_per_access"] / self.portFixedWidthBits
         self.components = {name: tile[name] for name in COMPONENTS if name in tile}
         self.outputStage = "acam" if "acam" in tile else "adc"
         self.modes = tuple(tile[self.outputStage]["modes"])

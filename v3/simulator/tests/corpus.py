@@ -45,7 +45,7 @@ def readWords(path: Path) -> np.ndarray:
 
 
 def wordsToBytes(words: np.ndarray, n: int) -> np.ndarray:
-    """The first n bytes of 40-bit words (byte i of a word = bits 8i+7:8i), as int8."""
+    """The first n bytes of pre-bit-plane words (byte i of a word = bits 8i+7:8i), as int8."""
     shifts = np.arange(5, dtype=np.uint64) * np.uint64(8)
     b = ((words[:, None] >> shifts[None, :]) & np.uint64(0xFF)).astype(np.uint8).reshape(-1)
     if b.size < n:

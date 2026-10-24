@@ -7,7 +7,7 @@ bit-plane pass (2026-10-22).
            credit holds
   closed   the core fed a stream schedule (word 0 at 2, back to back, block b >= 2 at ret(b - 2) + 1) == spec §5's
            recurrence written here by hand: every block's EXP bursts, sp_done, wait, carry passes and retire, and the
-           total (until 2026-10-22 the witness was v2's `softmax_online_cycle_model`, which times the 40-bit pass)
+           total (until 2026-10-22 the witness was v2's `softmax_online_cycle_model`, which times the pre-bit-plane pass)
   rules    every tile decision, plane read, corner-turn word, E5 / E6 / E7 window, carry pass, s_cr, done and start
            credit recomputed from the spec §5 formulas; each gate term (idle, arm, data, slot, lp, la) and the ll
            credit bind somewhere
@@ -211,9 +211,8 @@ def checkRules(c: Case, bind: dict) -> None:
             assert reads[i] == t, (c.name, j, i)
         readerFree = int(reads[-1]) + 1
         assert cr["sm.s"][j] == reads[-1] + softmax.SCR_LAT
-        stream = sm.streamTimes[j]                  # the corner-turn: window w's P words from its last plane + 2
-        assert list(stream) == [int(reads[w * P + P - 1]) + softmax.CT_LAT + cc for w in range(d.NWB)
-                                for cc in range(P)], (c.name, j)
+        stream = sm.streamTimes[j]                  # the core words: each read word + RD_LAT (the registered read)
+        assert list(stream) == [int(r) + softmax.RD_LAT for r in reads], (c.name, j)
         # the core: E5 windows at their pass's load_start, the pass placed by the pass rule
         be = steps[("blk", j)].events
         lastWord = int(stream[-1])
@@ -311,7 +310,7 @@ def testTimingAndOrder(rng) -> None:
             assert r.events == a.events and r.cycles == a.cycles
 
 
-MUTANT_LATS = ("FIFO_LAT", "CR_IN_LAT", "RET_LAT", "ARM_LAT", "OPEN_LAT", "CT_LAT", "SCR_LAT", "MAX_REG", "FEED_REG",
+MUTANT_LATS = ("FIFO_LAT", "CR_IN_LAT", "RET_LAT", "ARM_LAT", "OPEN_LAT", "RD_LAT", "SCR_LAT", "MAX_REG", "FEED_REG",
                "SP_LAT", "WAIT_LAT", "GO_LAT", "E_LAT", "LA_LAT", "E7_LAT", "DONE_LAT", "GO_CR_LAT")
 
 

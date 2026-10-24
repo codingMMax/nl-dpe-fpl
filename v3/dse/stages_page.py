@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """stages_page.py — the stage-analysis page (docs/attention_stages.md §6): for the two case-study heads, the
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 pipelined time diagram, the per-stage tables, the analytic cycle and energy models with their errors against the
 simulator, and the sweep over the array size. Reads dse/results/stages/stages.json and the PNGs of dse/plot_stages.py;
 writes dse/results/stages/stages.html (published with the three PNGs beside it). The look is the results page's

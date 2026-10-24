@@ -14,11 +14,12 @@
 - input wire [7:0] weight_in,
 - input wire weight_en,
 @@
-- wire [BUF-1:0] dpe_in = weight_en ? {{(BUF-8){1'b0}}, weight_in} : in_q;
+- wire [R-1:0] dpe_in = weight_en ? {{(R-8){1'b0}}, weight_in} : in_q;
++ wire [R-1:0] dpe_in = in_q;
+@@
 - dpe #(
-- .KERNEL_WIDTH(R), .NUM_COLS(C), .DPE_BUF_WIDTH(BUF), .PRECISION(P), .ROWS_USED(L), .COLS_USED(L)
+- .KERNEL_WIDTH(R), .NUM_COLS(C), .PRECISION(P), .ROWS_USED(L), .COLS_USED(L)
 - ) u_dpe (
-+ wire [BUF-1:0] dpe_in = in_q;
 + dpe u_dpe (
 @@
 - .load_output_reg(1'b0), .load_input_reg(weight_en),
@@ -27,12 +28,11 @@
 - input wire [7:0] weight_in,
 - input wire weight_en,
 @@
-- wire [BUF-1:0] dpe_in = weight_en ? {{(BUF-8){1'b0}}, weight_in} : feed_bytes;
-+ wire [BUF-1:0] dpe_in = feed_bytes;
+- wire [R-1:0] dpe_in = weight_en ? {{(R-8){1'b0}}, weight_in} : x_in;
++ wire [R-1:0] dpe_in = x_in;
 @@
 - dpe #(
-- .KERNEL_WIDTH(R), .NUM_COLS(C), .DPE_BUF_WIDTH(BUF), .PRECISION(P),
-- .ROWS_USED(I), .COLS_USED(I)
+- .KERNEL_WIDTH(R), .NUM_COLS(C), .PRECISION(P), .ROWS_USED(XADD ? 2*I : I), .COLS_USED(I)
 - ) u_dpe (
 + dpe u_dpe (
 @@

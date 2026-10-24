@@ -4,7 +4,7 @@ Status 2026-10-17: the DSE is done (VTR of the 72 attention builds, the latency 
 ranking, the FC vs attention analysis: `docs/experiment.md` §8–§9). The simulator is the `simulator/` package, proven
 equal to the pre-refactor one. 2026-10-22: the row-parallel crossbar tiles (area side) and the 8 configs, R up to 512
 with C <= R (`docs/experiment.md` §2.1, §5.1, §8); then the bit-plane pass in the docs and the models (`ip/xbar/spec.md`;
-model-only, the RTL follows; the DSE results still carry the 40-bit cycles). `LEDGER.md` has the status, the
+model-only, the RTL follows; the DSE results still carry the pre-bit-plane cycles). `LEDGER.md` has the status, the
 decisions, what waits for you, and the log.
 
 ## Where things are (one question per folder)
@@ -15,7 +15,7 @@ decisions, what waits for you, and the log.
 | `ip/` `top/` | what we build: RTL per module (`xbar gemm dimm softmax lib`) and the head (`top` = `att_ctrl` + `att_head`): `spec.md`, `rtl/{sim,vtr}`, `tb/`, `cases.py`, `gen_cases.py` |
 | `oracle/` | what the simulator is checked against: the numpy oracles and `v2_kernels/` (never imported by the models) |
 | `simulator/` | the behavior models (`core` engine + crossbar, `models` module models + workloads, `platform` prices, area, DSE rows, `tests`); `README.md` = layout, rules, how to call it |
-| `vtr/` | the generic VTR flow: `arch/` (v2's 12 arch XMLs, 40-bit ports; VTR's), `arch_rowpar/` (the row-parallel XMLs of the 8 configs, staged for the RTL pass; `gen_arch.py`, `--check`), `clock.sdc`, `run_vtr.py`, `smoke.py` (one module's or the head's VTR smoke) |
+| `vtr/` | the generic VTR flow: `arch/` (v2's 12 arch XMLs, pre-bit-plane ports; VTR's), `arch_rowpar/` (the row-parallel XMLs of the 8 configs, staged for the RTL pass; `gen_arch.py`, `--check`), `clock.sdc`, `run_vtr.py`, `smoke.py` (one module's or the head's VTR smoke) |
 | `dse/` | `README.md` (the pipeline, step by step, and `run_all.sh`), `space.py` (the 6 shapes x 8 configs, defined once), `fc_rows.py` and `attn_rows.py` (the priced tables), `data.py` (their loader), `vtr_dse.py` (the VTR run of the 72 builds and its CSV; `dse_watch.py` watches a run) and the scripts that turn results into tables and figures, among them `config_table.py` (the attention configs side by side: the chain area × latency = ADP, energy × ADP = EDAP relative to the best, what is inside, and where every build's cycles go on its critical path: DPE load / compute / drain, stream, logic, by module); `results/` (tracked): per family the VTR table and the priced table (`fc_vtr_results.csv`, `fc_priced_results.csv`, `attn_vtr_results.csv`, `attn_priced_results.csv`), `breakdown.json`, `attn_config_table.md`, `critical_path.json`, then one folder per view: `adp/` (the current one: latency vs area, area-delay product) and `edap/` (the earlier energy-delay-area ranking), each with its JSON, figures and page |
 | `tools/` | static checks and gates: copy lock, RTL twins, lint, head params, the F1 / F2 gates, the GATE-2 runner |
 | `work/` | scratch, gitignored: `vtr/{dse,smoke}` (the VTR runs, 276 GB), `corpus`, `equivalence`, `dse` (logs), `tmp`, per-module RTL runs |

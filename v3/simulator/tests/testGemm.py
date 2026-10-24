@@ -8,8 +8,8 @@
             max(offer_m, burst_{m-1} + P + 2); its crossbar events at the charter's offsets; its output window at
             drain_start + L_W, L_W = clog2(V) + 1 (V > 1) or 1; M rows back to back take (P + 2) M + P + L_W cycles
   gated     rows offered late: each burst at max(offer, MSB_SA_Ready), the same closed form
-  structure the model's parameters and port signals are the RTL's (ip/gemm/rtl/sim/gemm_top.v; BUF leaves the RTL in
-            the RTL pass), derive() == the spec's localparams, checkDomain() == the RTL extent guard
+  structure the model's parameters and port signals are the RTL's (ip/gemm/rtl/sim/gemm_top.v), derive() == the
+            spec's localparams, checkDomain() == the RTL extent guard
   timing    values off: identical events, steps and counts (I4); random step order: identical Report
   mutants   a latency + 1, a dropped MSB_SA_Ready credit, a wrong extent: each must fail a check
 Run: python3 v3/simulator/tests/testGemm.py
@@ -33,7 +33,6 @@ from simulator.models.fc import fc, result  # noqa: E402
 from tools.check_twins import header, modules  # noqa: E402
 
 P = 8
-PENDING_RTL_PARAMS = {"BUF"}           # parameters the RTL still has until the RTL pass (ip/gemm/spec.md §2)
 
 
 def rowEvents(burst: int, V: int, P: int = P) -> dict:
@@ -56,7 +55,7 @@ def loadCase(d: Path, cj: dict) -> tuple:
     M, K, N, R, C, V, H, ru = cj["M"], cj["K"], cj["N"], cj["R"], cj["C"], cj["V"], cj["H"], cj["rows_used"]
     w = corpus.readWords(d / "weights.mem").astype(np.uint8).view(np.int8).reshape(V, H, R, C)
     Wp = w.transpose(0, 2, 1, 3).reshape(V * R, H * C)
-    loadCycles = -(-ru * 8 // cj["BUF"])                          # the v2 stimuli are 40-bit words: only data here
+    loadCycles = -(-ru * 8 // cj["BUF"])                          # the v2 stimuli are pre-bit-plane words: only data here
     words = corpus.readWords(d / "act.mem").reshape(M, V, loadCycles)
     Xp = np.zeros((M, V * R), dtype=np.int8)
     for m in range(M):
@@ -143,8 +142,7 @@ def testStructure() -> None:
     text = (V3 / "ip" / "gemm" / "rtl" / "sim" / "gemm_top.v").read_text()
     params, ports = header(modules(text)["gemm_top"])
     rtl = [p for p, _ in params]
-    assert set(rtl) - set(GemmTop.paramNames()) <= PENDING_RTL_PARAMS, (rtl, GemmTop.paramNames())
-    assert [p for p in rtl if p not in PENDING_RTL_PARAMS] == GemmTop.paramNames(), (rtl, GemmTop.paramNames())
+    assert rtl == GemmTop.paramNames(), (rtl, GemmTop.paramNames())
     names = {p[3] for p in ports}
     model = GemmTop("g", GemmParams(K=600, N=300, R=256, C=128), rows=0, withValues=False)
     signals = {s for spec in model.ports().values() for s in spec.signals}

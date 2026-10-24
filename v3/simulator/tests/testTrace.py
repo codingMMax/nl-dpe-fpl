@@ -13,8 +13,8 @@
             traced; a late source is an origin of that many cycles; a module that drops the chain shows as untraced
   head      BERT-Tiny at 128x64 and ViT-B/16 at 128x64 (two runs): the segments add up to T, none untraced or
             negative, the kinds known; the path opens with the first token's load; the same breakdown in 3 random
-            step orders; T pinned at the bit-plane model's values of 2026-10-22 (3818, 12481; the 40-bit pass gave
-            7752, 24395)
+            step orders; T pinned at the model's values of 2026-10-23 with N_E = d (3920, 12554; 3784, 12189 at N_E = 2d after the trims; the bit-plane model of
+            2026-10-22 gave 3818, 12481, the pre-bit-plane pass 7752, 24395)
 Run: python3 v3/simulator/tests/testTrace.py
 """
 from __future__ import annotations
@@ -249,7 +249,7 @@ def headCheck(nseq, dm, d, R, C, orders=3) -> tuple:
 def testHead() -> int:
     n = 0
     T, bd, segs = headCheck(128, 128, 64, 128, 64)
-    assert T == 3818; n += 1
+    assert T == 3920; n += 1
     # the first token's pass: its burst, then the 8 planes fired, the ACAM and the ready (9) before the next burst
     assert segs[0] == (("x0", "origin"), 1) and segs[1] == (("gemm", "dpe_load"), 1) and \
         segs[2] == (("gemm", "dpe_compute"), 9), segs[:3]; n += 1
@@ -259,7 +259,7 @@ def testHead() -> int:
     assert byKind["dpe_load"] >= 128 and byKind["dpe_compute"] >= 128 * 9, byKind   # every token's projection
     n += 1
     T2, bd2, segs2 = headCheck(256, 768, 64, 128, 64, orders=1)              # two runs, V = 6
-    assert T2 == 12481 and sum(bd2.values()) == T2; n += 1
+    assert T2 == 12554 and sum(bd2.values()) == T2; n += 1
     return n
 
 

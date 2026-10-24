@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 EV_RE = re.compile(r"^EV (\d+ .*)$", re.M)
+WIDTH_RE = re.compile(r"\b(Padding|Pruning)\b")      # iverilog's port-width warnings
 
 
 def _key(line: str) -> tuple:
@@ -79,14 +80,19 @@ def self_test(tmp: Path) -> None:
 
 
 def compile_tb(tb: Path, rtl: list, top: str, defines: dict, work: Path) -> Path:
-    """One iverilog build per set of defines (cached in the work folder)."""
+    """One iverilog build per set of defines (cached in the work folder; a build is reused only with its `.ok` stamp).
+    A port connected with the wrong width (iverilog's "Padding" / "Pruning" warnings) fails the build: every `dpe`
+    takes exactly R and C bits."""
     vvp = work / ("tb_" + "_".join(f"{k[:-3]}{v}" for k, v in sorted(defines.items())) + ".vvp")
-    if not vvp.exists():
+    stamp = vvp.with_suffix(".ok")
+    if not (vvp.exists() and stamp.exists()):
         cmd = ["iverilog", "-g2005", "-o", str(vvp), *[f"-D{k}={v}" for k, v in defines.items()], "-s", top,
                str(tb), *map(str, rtl)]
         r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0:
-            raise RuntimeError(f"compile failed:\n{r.stdout}{r.stderr}")
+        out = r.stdout + r.stderr
+        if r.returncode != 0 or WIDTH_RE.search(out):
+            raise RuntimeError(f"compile failed:\n{out}")
+        stamp.write_text(out)
     return vvp
 
 

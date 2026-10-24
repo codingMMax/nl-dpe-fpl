@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""gen_cases.py — the GATE-2 corpus of `dimm_tile_top` on 64x64 crossbars (PLAN R4; ip/dimm/spec.md §8).
+"""gen_cases.py — the GATE-2 corpus of `dimm_tile_top` on 64x64 crossbars (PLAN R4; ip/dimm/spec.md §8), or with
+--rc 128x64 the same cases on 128x64 (the X_ADD branch, the add in the crossbar's rows; the same I).
 
 Every case goes through ip/dimm/cases.py: model run, GATE 1 against the oracle, then the testbench's files and the
 model's events. The corpus covers both instances of the head (spec §9): QK (int8 rows, row frame, TRANS_B = 1,
@@ -7,7 +8,7 @@ NARROW = 5) and PV (log windows, window frame, released slots, TRANS_B = 0, full
 1 / 2 / 4 channels, d 16 / 32 / 64, several runs, blocks and jobs, output credit starvation, late jobs and late
 operands, and the random / zeros / extremes classes.
 
-Usage: python3 v3/ip/dimm/gen_cases.py [--out DIR] [--only SUBSTR]   (default out: v3/work/corpus/dimm_64x64)
+Usage: python3 v3/ip/dimm/gen_cases.py [--rc RxC] [--out DIR] [--only SUBSTR]   (default out: v3/work/corpus/dimm_<RxC>)
 """
 from __future__ import annotations
 
@@ -22,9 +23,6 @@ V3 = HERE.parents[1]
 sys.path.insert(0, str(V3))
 from ip.dimm.cases import convPeriod, pvParams, qkParams, randomCase, writeTbFiles  # noqa: E402
 
-R = C = 64
-
-
 def qkJobs(runs: int, blocks: int) -> list:
     return [(r, b, 0) for r in range(runs) for b in range(blocks)]
 
@@ -33,7 +31,7 @@ def pvJobs(runs: int, blocks: int) -> list:
     return [(j % 2, j % blocks, 1) for j in range(runs * blocks)]
 
 
-def corpus(rng) -> list:
+def corpus(rng, R: int = 64, C: int = 64) -> list:
     cases = []
 
     def qk(name, S, d, nE, pp=1, runs=1, blocks=1, cls="random", cCap=2, **kw):
@@ -71,14 +69,16 @@ def corpus(rng) -> list:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--out", default=str(V3 / "work" / "corpus" / "dimm_64x64"))
+    ap.add_argument("--rc", default="64x64", help="R x C of every case: 64x64 (the adders) or 128x64 (X_ADD)")
+    ap.add_argument("--out", default=None, help="default v3/work/corpus/dimm_<RxC>")
     ap.add_argument("--only", default=None)
     a = ap.parse_args()
-    out = Path(a.out)
+    R, C = (int(x) for x in a.rc.split("x"))
+    out = Path(a.out) if a.out else V3 / "work" / "corpus" / f"dimm_{a.rc}"
     out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(20261014)
     names = []
-    for c in corpus(rng):
+    for c in corpus(rng, R, C):
         if a.only and a.only not in c.name:
             continue
         cj = writeTbFiles(c, out / c.name)

@@ -8,16 +8,19 @@
 Both come back as the CSV's rows, one dict per row with every value a string; both carry config "RxC", R, C,
 T_cycles, passes, the energy terms e_*_pj, clb_count, wc_vtr, mem_blocks, area_total_mwta, area_total_mm2, fmax_mhz,
 latency_ns, edap. The workload of an attention row is its `shape`; of an FC row, fcWorkload(row) = "M x K x N".
+The folder is dse/results unless DSE_RESULTS names another one with the same layout (dse/projection.py's
+dse/results/projection); rank.py, breakdown.py and plot_dse.py read and write there.
 """
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 
 from dse.space import CONFIGS, FC_SHAPES, SHAPES
 
 V3 = Path(__file__).resolve().parents[1]
-RESULTS = V3 / "dse" / "results"
+RESULTS = Path(os.environ.get("DSE_RESULTS") or V3 / "dse" / "results").resolve()
 ATT_CSV = RESULTS / "attn_priced_results.csv"
 FC_CSV = RESULTS / "fc_priced_results.csv"
 MM2_PER_MWTA = 0.033864e-6          # 1 MWTA = 0.033864 um^2

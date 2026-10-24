@@ -1,4 +1,6 @@
 """Build nl_dpe_head.html (the architecture page) from template2.html, params_block.html, page.js, docs/architecture.md
+Frozen 2026-10-23: the page documents the pre-bit-plane RTL of 2026-10-15 (its line references are of that RTL) and the
+N_E = 2d mapping; it is not regenerated for the bit-plane head.
 and builds.json.
 
 Usage, from the repository root:

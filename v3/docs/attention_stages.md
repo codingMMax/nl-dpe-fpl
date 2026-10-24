@@ -1,5 +1,9 @@
 # Where an attention head's time and energy go, stage by stage
 
+> **Status note (2026-10-23):** pre-bit-plane analysis. It models the previous design (the 5-byte port, `BUF` = 40)
+> at the $N_E = 2d$ mapping and describes the 2026-10-16 run; frozen until the port to the bit-plane results after
+> stage 4 (`dse/stage_analysis.py`, `stages_*.py`, `pipelines.py`).
+
 Status: 2026-10-19, an explainer for the sensitivity study (user: the energy and time breakdown by stage for the
 smallest and the largest head, how the mapping sets the crossbars of each stage, and how the array size enters).
 The numbers are the simulator's (`dse/config_table.py`, `dse/critical_path.json`, the priced tables); the equations are

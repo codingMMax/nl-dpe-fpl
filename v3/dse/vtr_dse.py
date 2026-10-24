@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""vtr_dse.py — VTR of the attention DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/attn_vtr_results.csv.
+"""vtr_dse.py — VTR of the DSE builds (docs/experiment.md §6 step 3, its launch plan) -> dse/results/attn_vtr_bitplane.csv
+and dse/results/fc_vtr_bitplane.csv (the bit-plane RTL, 2026-10-23; the previous runs' (2026-10-16) tables attn_vtr_results.csv and
+fc_vtr_results.csv are kept as they are).
 
-A build is one attention head (`att_head`) at the fixed mapping (the `head_params` defaults, experiment.md §4.2) for one
-shape (§3.2) on one crossbar config: 6 shapes x 8 configs = 48 builds (72 on the 12 configs of the 2026-10-15 run). Its circuit is the smoke's (smoke.circuit: the
-VTR twins + the parameter wrapper; top att_head_<shape>_<R>x<C>). The first 12 hex digits of the circuit's sha256 name
-the build's folder work/vtr/dse/<shape>_<R>x<C>_<hash>/, so another RTL gets another folder and nothing is overwritten:
+An attention build is one head (`att_head`) at the fixed mapping (the `head_params` defaults, experiment.md §4.2) for one
+shape (§3.2) on one crossbar config: 6 shapes x 8 configs = 48 builds (72 on the 12 configs of the 2026-10-15 run). An FC
+build is one `gemm_top` for one FC GEMM (dse/space.py FC_SHAPES, the P29 extent fc.extent "used") on one config: 4 x 8
+= 32 builds (re-synthesized with the bit-plane GEMM, user 2026-10-23; until then v2's FC VTR rows were reused). A
+circuit is the smoke's (smoke.circuit: the VTR twins + the parameter wrapper; top att_head_<shape>_<R>x<C> or
+gemm_top_fc_<K>x<N>_<R>x<C>), on the config's row-parallel arch XML (vtr/arch_rowpar/). The first 12 hex digits of the
+sha256 of the circuit and the arch XML name the build's folder work/vtr/dse/<build>_<hash>/, so another RTL or another
+XML gets another folder and nothing is overwritten:
   <top>.v            the circuit
   elab/              the elaboration check (smoke.elab: Parmys's Yosys front end), its verdict in elab/elab.json: the top,
                      crossbars == the simulator's, the memory list (words x bits, with counts) == the simulator's, every
@@ -62,13 +68,15 @@ V3 = HERE.parent
 sys.path.insert(0, str(V3))
 sys.path.insert(0, str(V3 / "vtr"))          # run_vtr.py and smoke.py: the generic VTR flow
 import smoke  # noqa: E402
-from dse.space import CONFIGS, SHAPES  # noqa: E402
+from dse.space import CONFIGS, FC_SHAPES, SHAPES  # noqa: E402
 from run_vtr import build_vtr_command, find_vpr_log, parse_metrics, parse_resources  # noqa: E402
 from simulator.platform import area  # noqa: E402
 from simulator.models.attentionHead import attentionHead, headParams  # noqa: E402
+from simulator.models.fc import extent, fc  # noqa: E402
 
 OUT = V3 / "work" / "vtr" / "dse"
-CSV_PATH = V3 / "dse" / "results" / "attn_vtr_results.csv"     # vtr_att_72.csv until 2026-10-17
+CSV_PATH = V3 / "dse" / "results" / "attn_vtr_bitplane.csv"    # the previous run's (2026-10-16) table: attn_vtr_results.csv
+FC_CSV_PATH = V3 / "dse" / "results" / "fc_vtr_bitplane.csv"     # the pre-bit-plane (v2) FC rows: fc_vtr_results.csv
 RUN_LOG = V3 / "work" / "dse" / "vtr_dse.log"
 SEEDS = (11, 13, 17)
 TOOLS = dict(flow=smoke.VTR_ROOT / "vtr_flow" / "scripts" / "run_vtr_flow.py", python=smoke.VTR_ROOT / ".venv" / "bin" /
@@ -86,12 +94,19 @@ def slug(shape: str) -> str:
     return re.sub(r"[^0-9a-z]+", "_", shape.lower()).strip("_")
 
 
-def build_dir(out: Path, name: str, text: str) -> Path:
-    return out / f"{name}_{hashlib.sha256(text.encode()).hexdigest()[:12]}"
+def build_key(text: str, arch: Path) -> str:
+    """The sha256 of a build's circuit and its arch XML: a resumed run never reuses results of another XML."""
+    return hashlib.sha256(text.encode() + arch.read_bytes()).hexdigest()
+
+
+def build_dir(out: Path, name: str, key: str) -> Path:
+    return out / f"{name}_{key[:12]}"
 
 
 class Build:
-    """One DSE build: its circuit and the simulator's counts (crossbars, memory list, predicted memory blocks)."""
+    """One attention DSE build: its circuit and the simulator's counts (crossbars, memory list, predicted memory
+    blocks)."""
+    family = "attn"
 
     def __init__(self, shape: str, n: int, dm: int, d: int, R: int, C: int, out: Path = OUT):
         self.shape, self.n, self.dm, self.d, self.R, self.C = shape, n, dm, d, R, C
@@ -99,8 +114,9 @@ class Build:
         self.lp = headParams(n, dm, d, R, C)
         self.params = smoke.head_point(self.lp)
         self.top, self.text, self.n_xbar, _ = smoke.circuit("head", self.name, params=self.params)
-        self.digest = hashlib.sha256(self.text.encode()).hexdigest()
-        self.dir = build_dir(out, self.name, self.text)
+        self.arch = smoke.arch_for(self.params)
+        self.digest = build_key(self.text, self.arch)
+        self.dir = build_dir(out, self.name, self.digest)
         g, _ = attentionHead(self.lp, withValues=False)
         res = [m.resources for m in g.modules]
         if sum(r.nCrossbars for r in res) != self.n_xbar:
@@ -110,7 +126,6 @@ class Build:
             self.mems.update(r.memories)
         self.mem_blocks = area.predictedMemBlocks(res, R, C)
         self.mem_bits = sum(w * b * k for (w, b), k in self.mems.items())
-        self.arch = smoke.arch_for(self.params)
 
     @property
     def circuit_path(self) -> Path:
@@ -121,8 +136,40 @@ class Build:
         return self.dir / "synth" / f"{self.top}.abc.blif"
 
 
-def all_builds(out: Path = OUT) -> list:
+class FcBuild(Build):
+    """One FC DSE build: one gemm_top (its VTR twin + the wrapper) for an FC GEMM (M, K, N) on one config, and the GEMM
+    model's counts (V*H crossbars, no memories)."""
+    family = "fc"
+
+    def __init__(self, M: int, K: int, N: int, R: int, C: int, out: Path = OUT):
+        self.M, self.K, self.N, self.R, self.C = M, K, N, R, C
+        self.name, self.label = f"fc_{K}x{N}_{R}x{C}", f"FC-{K}x{N}@{R}x{C}"
+        ru, cu = extent(K, N, R, C, "used")
+        self.params = dict(K=K, N=N, R=R, C=C, P=8, ROWS_USED=ru, COLS_USED=cu)
+        self.top, self.text, self.n_xbar, _ = smoke.circuit("gemm", self.name, params=self.params)
+        self.arch = smoke.arch_for(self.params)
+        self.digest = build_key(self.text, self.arch)
+        self.dir = build_dir(out, self.name, self.digest)
+        gemm = fc(K, N, R, C, M=M, withValues=False).modules[1]
+        res = gemm.resources
+        if res.nCrossbars != self.n_xbar or (gemm.p.ROWS_USED, gemm.p.COLS_USED) != (ru, cu):
+            raise ValueError(f"{self.label}: the GEMM model ({res.nCrossbars} crossbars, extent "
+                             f"{gemm.p.ROWS_USED}x{gemm.p.COLS_USED}) != the circuit ({self.n_xbar}, {ru}x{cu})")
+        self.mems = Counter(res.memories)
+        self.mem_blocks = area.predictedMemBlocks([res], R, C)
+        self.mem_bits = sum(w * b * k for (w, b), k in self.mems.items())
+
+
+def attn_builds(out: Path = OUT) -> list:
     return [Build(s, n, dm, d, R, C, out) for (s, n, dm, d) in SHAPES for (R, C) in CONFIGS]
+
+
+def fc_builds(out: Path = OUT) -> list:
+    return [FcBuild(M, K, N, R, C, out) for (M, K, N) in FC_SHAPES for (R, C) in CONFIGS]
+
+
+def all_builds(out: Path = OUT) -> list:
+    return attn_builds(out) + fc_builds(out)
 
 
 def _read(p: Path) -> str:
@@ -357,18 +404,27 @@ def seed_result(b: Build, seed: int) -> tuple:
     return r, ""                                         # memory vs the prediction: build_row's mem_check
 
 
-FIELDS = (["shape", "n", "d_model", "d", "config", "R", "C", *MAP_KEYS, "build", "hash", "top", "elab", "ok",
-           "fmax_mhz", *[f"fmax_s{s}" for s in SEEDS], "clb", "memory", "wc", "io", "dsp", "expected_wc",
-           "mem_blocks_model", "mem_bits_model", "mem_check", "seeds", "synth_s", "vpr_s", "peak_gib_synth",
-           "peak_gib_vpr", "dir", "note"])
+_RESULT_FIELDS = ["build", "hash", "top", "elab", "ok", "fmax_mhz", *[f"fmax_s{s}" for s in SEEDS], "clb", "memory",
+                  "wc", "io", "dsp", "expected_wc", "mem_blocks_model", "mem_bits_model", "mem_check", "seeds", "synth_s",
+                  "vpr_s", "peak_gib_synth", "peak_gib_vpr"]
+FIELDS = ["shape", "n", "d_model", "d", "config", "R", "C", *MAP_KEYS, *_RESULT_FIELDS, "dir", "note"]
+# the FC table keeps the columns of v2's FC rows that area.vtrTable reads (config, family, M, K, N, ok, fmax_mhz, clb,
+# memory, wc, seeds, top, run_dir)
+FC_FIELDS = ["config", "family", "M", "K", "N", "R", "C", "ROWS_USED", "COLS_USED", *_RESULT_FIELDS, "run_dir", "note"]
 
 
 def build_row(b: Build) -> dict:
     """The build's CSV line from its folder."""
-    row = dict.fromkeys(FIELDS, "")
-    row.update(shape=b.shape, n=b.n, d_model=b.dm, d=b.d, config=f"{b.R}x{b.C}", R=b.R, C=b.C,
-               **{k: b.params[k] for k in MAP_KEYS}, build=b.name, hash=b.digest[:12], top=b.top, ok=0,
-               expected_wc=b.n_xbar, mem_blocks_model=b.mem_blocks, mem_bits_model=b.mem_bits, dir=_rel(b.dir))
+    if b.family == "fc":
+        row = dict.fromkeys(FC_FIELDS, "")
+        row.update(config=f"{b.R}x{b.C}", family="gemm", M=b.M, K=b.K, N=b.N, R=b.R, C=b.C,
+                   ROWS_USED=b.params["ROWS_USED"], COLS_USED=b.params["COLS_USED"], run_dir=_rel(b.dir))
+    else:
+        row = dict.fromkeys(FIELDS, "")
+        row.update(shape=b.shape, n=b.n, d_model=b.dm, d=b.d, config=f"{b.R}x{b.C}", R=b.R, C=b.C,
+                   **{k: b.params[k] for k in MAP_KEYS}, dir=_rel(b.dir))
+    row.update(build=b.name, hash=b.digest[:12], top=b.top, ok=0, expected_wc=b.n_xbar, mem_blocks_model=b.mem_blocks,
+               mem_bits_model=b.mem_bits)
     e, bad = _json(b.dir / "elab" / "elab.json"), elab_verdict(b)
     if e is not None and e.get("rc") != 0:
         bad = [f"Yosys {_rc_text(e['rc'])}"]
@@ -405,7 +461,7 @@ def build_row(b: Build) -> dict:
     return row
 
 
-def write_csv(rows: list, path: Path, order: list) -> None:
+def write_csv(rows: list, path: Path, order: list, fields: list = FIELDS) -> None:
     """Merge build lines into the CSV (one line per build; a build's new line replaces its old one), in build order."""
     old = {}
     if path.is_file():
@@ -416,17 +472,26 @@ def write_csv(rows: list, path: Path, order: list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     with open(tmp, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS, restval="")
+        w = csv.DictWriter(f, fieldnames=fields, restval="")
         w.writeheader()
         w.writerows(sorted(old.values(), key=lambda r: (rank.get(r["build"], len(rank)), r["build"])))
     tmp.replace(path)                                    # readers never see a half-written CSV
 
 
+def save_csvs(builds: list, csv_path: Path, fc_csv_path: Path, order: list) -> None:
+    """The attention builds' lines into csv_path, the FC builds' into fc_csv_path (each only when it has a line)."""
+    for fam, path, fields in (("attn", csv_path, FIELDS), ("fc", fc_csv_path, FC_FIELDS)):
+        rows = [build_row(b) for b in builds if b.family == fam and b.dir.exists()]
+        if rows or path.is_file():
+            write_csv(rows, path, order, fields)
+
+
 class Run:
     """One invocation: the selected builds through the elaboration checks, then synthesis and VPR."""
 
-    def __init__(self, a, builds: list, order: list, csv_path: Path, lg: RunLog, gate: Gate):
+    def __init__(self, a, builds: list, order: list, csv_path: Path, lg: RunLog, gate: Gate, fc_csv_path: Path):
         self.a, self.builds, self.order, self.csv_path, self.lg, self.gate = a, builds, order, csv_path, lg, gate
+        self.fc_csv_path = fc_csv_path
         self.seeds = [int(s) for s in a.seeds.split(",")]
         self.pool = Pool(a.jobs)
         self.errors, self.csv_lock = [], threading.Lock()
@@ -437,7 +502,7 @@ class Run:
 
     def save_csv(self) -> None:
         with self.csv_lock:
-            write_csv([build_row(b) for b in self.builds if b.dir.exists()], self.csv_path, self.order)
+            save_csvs(self.builds, self.csv_path, self.fc_csv_path, self.order)
 
     def tool(self, cmd: list, log: Path, cwd: Path, tag: str) -> int:
         return run_tool(cmd, log, cwd, self.a.mem_gib, on_start=lambda pid: self.lg(f"{tag} start (pid {pid})"))
@@ -542,14 +607,15 @@ class Run:
         for r in rows:
             if self.a.elab_only:
                 continue
-            self.lg(f"{r['shape']}@{r['config']}: ok={r['ok']} Fmax {r['fmax_mhz'] or '-'} MHz (seeds {r['seeds'] or '-'}) "
+            self.lg(f"{r['build']}: ok={r['ok']} Fmax {r['fmax_mhz'] or '-'} MHz (seeds {r['seeds'] or '-'}) "
                     f"clb {r.get('clb', '')} memory {r.get('memory', '')}/{r['mem_blocks_model']} wc {r.get('wc', '')}/"
                     f"{r['expected_wc']}" + (f"; {r['note']}" if r.get("note") else ""))
         want = {f"s{s}" for s in self.seeds}
         complete = all(r["elab"] == "OK" and (self.a.elab_only or not any(n.split(":")[0] in want for n in
                        r.get("note", "").split("; ") if n) and r["ok"] == 1) for r in rows)
         rc = 0 if complete and not self.errors else 1
-        self.lg(f"=== wrote {self.csv_path} ({len(rows)} builds); {len(self.errors)} error(s); exit {rc}")
+        self.lg(f"=== wrote {_rel(self.csv_path)} / {_rel(self.fc_csv_path)} ({len(rows)} builds); {len(self.errors)} "
+                f"error(s); exit {rc}")
         return rc
 
 
@@ -576,6 +642,7 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--aggregate", action="store_true", help="rebuild the CSV from the folders (no tool)")
     ap.add_argument("--out", default=None, help=f"build folders (default {_rel(OUT)})")
     ap.add_argument("--csv", default=None, help=f"default {_rel(CSV_PATH)}")
+    ap.add_argument("--fc-csv", default=None, help=f"default {_rel(FC_CSV_PATH)}")
     ap.add_argument("--log", default=None, help=f"run log, appended (default {_rel(RUN_LOG)})")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
@@ -585,12 +652,13 @@ def main(argv: list | None = None) -> int:
         raise SystemExit(f"--seeds must be among {SEEDS}")
     out = Path(a.out).resolve() if a.out else OUT
     csv_path = Path(a.csv).resolve() if a.csv else CSV_PATH
+    fc_csv_path = Path(a.fc_csv).resolve() if a.fc_csv else FC_CSV_PATH
     every = all_builds(out)
     builds = select(every, a.build)
     order = [b.name for b in every]
     if a.aggregate:
-        write_csv([build_row(b) for b in builds if b.dir.exists()], csv_path, order)
-        print(f"wrote {csv_path}")
+        save_csvs(builds, csv_path, fc_csv_path, order)
+        print(f"wrote {csv_path}, {fc_csv_path}")
         return 0
     lg = RunLog(Path(a.log).resolve() if a.log else RUN_LOG)
     out.mkdir(parents=True, exist_ok=True)
@@ -605,7 +673,7 @@ def main(argv: list | None = None) -> int:
     if disk < need:
         lg(f"=== not started: {disk:.0f} GB free on the disk, {need} GB needed; exit 1")
         return 1
-    return Run(a, builds, order, csv_path, lg, gate).go()
+    return Run(a, builds, order, csv_path, lg, gate, fc_csv_path).go()
 
 
 # ---------------------------------------------------------------------------------------------------------------- tests
@@ -840,7 +908,7 @@ def _flow_tests(td: Path) -> list:
         (tools / name).chmod(0o755)
     every = {b.label: b for b in all_builds(out)}
     A, B, F = every["JetFormer-150P@128x128"], every["JetFormer-150P@128x64"], every["JetFormer-150P@256x64"]
-    K = every["JetFormer-150P@512x64"]
+    K, G = every["JetFormer-150P@512x64"], every["FC-2048x256@256x128"]
     mlist = lambda b: [[w, bits, 1, 1] for (w, bits), k in sorted(b.mems.items()) for _ in range(k)]  # noqa: E731
     res = lambda b, **kw: dict(dict(io=100, clb=500, wc=b.n_xbar, memory=b.mem_blocks, dsp_top=0), **kw)  # noqa: E731
     spec = {A.top: dict(elab=dict(dpe=A.n_xbar, mems=mlist(A)),
@@ -848,16 +916,18 @@ def _flow_tests(td: Path) -> list:
                              "17": dict(fmax=120.0, res=res(A, clb=505))}),
             B.top: dict(elab=dict(dpe=B.n_xbar - 1, mems=mlist(B)), vpr={"all": dict(fmax=1.0, res=res(B))}),
             F.top: dict(elab=dict(dpe=F.n_xbar, mems=mlist(F)), synth_rc=1, vpr={"all": dict(fmax=1.0, res=res(F))}),
-            K.top: dict(elab=dict(kill=True, dpe=0, mems=[]), vpr={"all": dict(fmax=1.0, res=res(K))})}
+            K.top: dict(elab=dict(kill=True, dpe=0, mems=[]), vpr={"all": dict(fmax=1.0, res=res(K))}),
+            G.top: dict(elab=dict(dpe=G.n_xbar, mems=[]), vpr={"all": dict(fmax=300.0, res=res(G, memory=0))})}
     spec_p.write_text(json.dumps(spec))
     os.environ.update(FAKE_SPEC=str(spec_p), FAKE_CALLS=str(calls))
     real = (dict(TOOLS), smoke.YOSYS)
     stamp = lambda p: (p.stat().st_size, p.stat().st_mtime_ns) if p.is_file() else None  # noqa: E731
-    before = (stamp(CSV_PATH), stamp(RUN_LOG))
+    before = (stamp(CSV_PATH), stamp(FC_CSV_PATH), stamp(RUN_LOG))
     TOOLS.update(flow=tools / "run_vtr_flow.py", python=tools / "no_python", vpr=tools / "vpr")
     smoke.YOSYS = tools / "yosys"
-    base = ["--out", str(out), "--csv", str(csvp), "--log", str(logp), "--jobs", "3", "--synth-gap", "0", "--free-gib",
-            "0"]
+    fccsv = td / "fc_vtr.csv"
+    base = ["--out", str(out), "--csv", str(csvp), "--fc-csv", str(fccsv), "--log", str(logp), "--jobs", "3",
+            "--synth-gap", "0", "--free-gib", "0"]
     ncalls = lambda: len(_read(calls).splitlines())  # noqa: E731
 
     def rows():
@@ -889,7 +959,7 @@ def _flow_tests(td: Path) -> list:
                 (str(517), str(A.mem_blocks), str(A.n_xbar), "100", "0") and ra.get("note") == ""
                 and ra.get("elab") == "OK" and ra.get("synth_s") == "1.5" and ra.get("peak_gib_synth") == "3.0"
                 and ra.get("mem_check") == "equal"
-                and ra.get("hash") == A.digest[:12] and ra.get("N_E") == str(2 * A.d)):
+                and ra.get("hash") == A.digest[:12] and ra.get("N_E") == str(A.d)):              # N_E = d (2026-10-23)
             fails.append(f"CSV line of A: {ra}")
         if not (rb.get("ok") == "0" and "crossbars" in rb.get("elab", "") and "elaboration" in rb.get("note", "")):
             fails.append(f"CSV line of B (stopped at its elaboration check): {rb}")
@@ -950,9 +1020,22 @@ def _flow_tests(td: Path) -> list:
         if not (new == ["yosys", "yosys"] and rc == 1 and rk.get("elab") == "Yosys killed (signal 9)"
                 and rk.get("note") == "elaboration did not finish"):
             fails.append(f"killed elaboration: calls {new} (want yosys twice), rc {rc}, {rk}")
-        d2 = build_dir(out, A.name, A.text + "// an RTL edit\n")
-        if d2 == A.dir or d2.parent != A.dir.parent or build_dir(out, A.name, A.text) != A.dir:
+        d2 = build_dir(out, A.name, build_key(A.text + "// an RTL edit\n", A.arch))
+        if d2 == A.dir or d2.parent != A.dir.parent or build_dir(out, A.name, build_key(A.text, A.arch)) != A.dir:
             fails.append("another circuit must get another folder, the same circuit the same")
+        other = smoke.arch_for(dict(R=128, C=64))
+        if build_key(A.text, other) == A.digest:
+            fails.append("another arch XML must give another folder")
+        n3 = ncalls()                                                   # an FC build end to end: its own CSV
+        rc = main(base + ["--build", G.label])
+        with open(fccsv, newline="") as fh:
+            rg = {r["build"]: r for r in csv.DictReader(fh)}.get(G.name, {})
+        new = sorted(x.split(" ")[0] for x in _read(calls).splitlines()[n3:])
+        if not (rc == 0 and new == ["synth", "vpr", "vpr", "vpr", "yosys"] and rg.get("ok") == "1"
+                and (rg.get("family"), rg.get("M"), rg.get("K"), rg.get("N"), rg.get("config")) ==
+                ("gemm", "1", str(G.K), str(G.N), f"{G.R}x{G.C}") and rg.get("wc") == str(G.n_xbar)
+                and rg.get("mem_check") == "equal" and rg.get("run_dir") == _rel(G.dir) and G.name not in rows()):
+            fails.append(f"the FC build: rc {rc}, calls {new}, its line {rg}")
         try:
             main(base + ["--timeout", "5"])
             fails.append("--timeout must be rejected (no timeout)")
@@ -968,7 +1051,7 @@ def _flow_tests(td: Path) -> list:
         TOOLS.clear()
         TOOLS.update(real[0])
         smoke.YOSYS = real[1]
-    if (stamp(CSV_PATH), stamp(RUN_LOG)) != before:
+    if (stamp(CSV_PATH), stamp(FC_CSV_PATH), stamp(RUN_LOG)) != before:
         fails.append("the self-test touched the DSE's CSV or run log")
     return fails
 
@@ -980,13 +1063,20 @@ def self_test() -> int:
     (V3 / "work" / "tmp").mkdir(parents=True, exist_ok=True)
     td = Path(tempfile.mkdtemp(prefix="vtr_dse_test_", dir=V3 / "work" / "tmp"))
     every = all_builds(td / "out")
-    if not (len(every) == len(SHAPES) * len(CONFIGS) == len({b.name for b in every}) == len({b.top for b in every})
+    n_all = (len(SHAPES) + len(FC_SHAPES)) * len(CONFIGS)
+    if not (len(every) == n_all == len({b.name for b in every}) == len({b.top for b in every})
             == len({b.dir for b in every})):
-        fails.append(f"{len(SHAPES) * len(CONFIGS)} builds with unique names, tops and folders")
+        fails.append(f"{n_all} builds with unique names, tops and folders")
+    g = next(b for b in every if b.label == "FC-2048x256@256x128")
+    if (g.n_xbar, g.mem_blocks, g.params["ROWS_USED"], g.params["COLS_USED"], g.family) != (16, 0, 256, 128, "fc"):
+        fails.append(f"FC-2048x256@256x128: {g.n_xbar} crossbars (V 8 x H 2), {g.mem_blocks} blocks, {g.params}")
+    g1 = next(b for b in every if b.label == "FC-512x128@512x256")
+    if (g1.n_xbar, g1.params["ROWS_USED"], g1.params["COLS_USED"]) != (1, 512, 128):
+        fails.append(f"FC-512x128@512x256 (V = H = 1, P29 extent 512 x 128): {g1.n_xbar}, {g1.params}")
     bt = next(b for b in every if b.label == "BERT-Tiny@128x128")
-    # 593 memory blocks: the bit-plane model's prediction (2026-10-22); VPR packed 376 for the 40-bit RTL (2026-10-15),
-    # and the bit-plane head smoke (256x128) re-checks the prediction
-    if (bt.n_xbar, bt.mem_blocks, bt.params["N_OC"], bt.params["N_E"], bt.params["P_PROJ"]) != (278, 593, 6, 128, 1):
+    # 214 crossbars and 554 memory blocks at N_E = d (2026-10-23; 278 and 593 at N_E = 2d, the bit-plane model's
+    # prediction of 2026-10-22; VPR packed 376 for the pre-bit-plane RTL, 2026-10-15); the 128x64 smokes re-check the prediction
+    if (bt.n_xbar, bt.mem_blocks, bt.params["N_OC"], bt.params["N_E"], bt.params["P_PROJ"]) != (214, 554, 6, 64, 1):
         fails.append(f"BERT-Tiny@128x128 (the smoke point): {bt.n_xbar} crossbars, {bt.mem_blocks} blocks, {bt.params}")
     if all_builds(td / "out")[5].digest != every[5].digest:
         fails.append("the circuit hash must be stable")

@@ -1,46 +1,76 @@
 // ============================================================================
-// softmax_online_top.v — NL-DPE online softmax, log-domain carry; VTR twin (v3, F3 / phase B).
-// Synthesis input only — never simulated. Contract: v3/ip/softmax/spec.md; value / cycle contract = the
-// simulation twin v3/ip/softmax/rtl/sim/softmax_online_top.v (GATE 2 against v3/ip/softmax/model.py).
+// softmax_online_top.v — NL-DPE online softmax, log-domain carry; VTR twin (v3, the bit-plane pass): bare `dpe`
+// hard blocks (port contract ip/xbar/rtl/vtr/dpe_blackbox.v; the widths from the arch XML, vtr/arch_rowpar/), never
+// simulated. Simulation twin: ip/softmax/rtl/sim/softmax_online_top.v (gate: tools/check_twins.py).
+// Contract: v3/ip/softmax/spec.md; behavior model v3/simulator/models/softmaxOnline.py (GATE 2: every port event and
+// value equal). Value contract: softmax_online_ref.logcarry_stage_values.
 //
-// Maintained by hand next to its twin; the two share modules, parameters and datapath, and differ only in:
-//   * `dpe` is the arch-XML hard block (<model name="dpe">, the `wc` subckt): no behavior model is compiled and
-//     every instance is bare (the model declares no parameters); load_input_reg is tied 0. Identity weights are
-//     preloaded configuration (there is no weight programmer in either twin).
-//   * no verification-only probe state.
-// Consistency gate: v3/tools/check_twins.py. No runtime products: v3/tools/lint_rtl.py.
+// Rewritten 2026-10-23 for the bit-plane pass (spec §10 item 6) from the pre-bit-plane F3 module (git show
+// 8acf73c:v3/ip/softmax/rtl/sim/softmax_online_top.v). Kept: the run control, the tile gate and the credit counters,
+// the row max with its rotating m ring, the m_new / log a / sp tables by block parity, the carry's sequence. New:
+// plane-word FIFOs and a double corner-turn instead of the packer; store words of Q_W = I/8 bytes; the EXP feeds
+// subtract and clamp at Q_W lanes into a double corner-turn and send one burst per window (the E5 window); the row
+// sums add per-plane counts; the carry's inputs and outputs are planes of the tables; E6 and E7 are plane windows.
 //
-// v3 adds to the verified v2 core: the input stage (FIFO per E4 channel, the tile reader, the packer, s_cr), the
-// tile gate (run armed, store slot, log P credit, alpha credit) with registered credit counters, the output framing
-// (lp = the EXP feeds' pops, la = log a of the blocks b >= 1, ll = the final log l row by row, done after it), and
-// the P29 extents (EXP passes I x I, carry passes S x S).
+// Behavioral simulation: compile with v3/ip/xbar/rtl/sim/dpe_nldpe.v (the `dpe` model; the TB preloads the identity
+// weights through the hierarchical paths below). The VTR twin is v3/ip/softmax/rtl/vtr/softmax_online_top.v: the
+// same modules and datapath with a bare `dpe` hard block (gate: v3/tools/check_twins.py).
+//
+// Per row r, key blocks b = 0..B-1 (B = N/BKV), P24 ACAM forms:
+//   m_blk = max_j s ;  m_new = m_blk (b=0) | max(m, m_blk) ;  log_a = m - m_new
+//   logp_j = max(s_j - m_new, -128)            -> lp_* ports (log|P| to P.V), the EXP crossbars' input bursts
+//   sp     = sum_j ACAM_EXP(logp_j)            (per-plane counts of the EXP drain, weighted by 2^b)
+//   l'     = sp (b=0) | (ACAM_EXP(clamp(log_a + log_l)) << log2 N) + sp
+//   log_l' = ACAM_LOG(min(l' >> log2 N, 127))  -> ll_* ports; carry (m, log_l)
+//
+// Structure (modules in datapath order):
+//   softmax_online_dpe      one crossbar with identity weights and a fixed ACAM mode
+//   softmax_online_ohmux    one-hot read mux helper
+//   softmax_online_popcnt   balanced population count (combinational)
+//   softmax_online_instage  plane FIFOs, the tile reader, the double corner-turn -> the core stream (Q_W bytes/word)
+//   softmax_online_store    2-block ring score store: NB banks of Q_W-byte words, 1W/1R sync-read RAMs
+//   softmax_online_loadmax  per-block row max while the block streams in; running max m, m_new / log_a tables
+//   softmax_online_xfeed    one EXP crossbar: window reads, s - m_new and the clamp, a double corner-turn, the burst;
+//                           the drain's row sums (count register, weighted add)
+//   softmax_online_wfeed    one carry crossbar (S x S) fed with a plane register
+//   softmax_online_carry    per-block carry: [EXP of clamp(log_a + log_l)] -> lq -> LOG -> log_l; retires blocks
+//   softmax_online_top
+//
+// Flow control: block b streams in once block b-2 has retired (its carry is done), so every ping-pong slot (store,
+// m_new, log_a, sp) of b is free. EXP windows of block b start once its row maxima are complete.
+//
+// Shapes: S query rows per run (S <= I), N keys in B = N/BKV blocks. A run re-arms on `start` while idle
+// (back-to-back row blocks; the crossbars keep their power-on state; the input stage and the credit counters keep
+// theirs).
 //
 // Domain (elaboration guards): S, N, BKV, I = min(R, C), N_EXP, S_CH powers of two; 8 <= S <= I;
-// 8 <= BKV <= min(N, I); EPS = BUF/8 = 5; S*BKV >= I; S_CH <= NWB; B*NWB a multiple of N_EXP; capacities >= 1.
+// 8 <= BKV <= min(N, I); P = 8; S*BKV >= I; S_CH <= NWB; B*NWB a multiple of N_EXP; credit capacities >= 1.
+//
+// TB preload paths: gen_exp[g].u_feed.u_x.u_dpe, u_carry.u_cexp.u_x.u_dpe, u_carry.u_clog.u_x.u_dpe.
 // ============================================================================
 
 `timescale 1ns / 1ps
 
 // ----------------------------------------------------------------------------
-// softmax_online_dpe — one NL-DPE crossbar with identity weights and a fixed ACAM mode.
+// softmax_online_dpe — one NL-DPE crossbar with identity weights and a fixed ACAM mode: R-bit input planes, C-bit
+// drain planes (ip/xbar/spec.md).
 // ----------------------------------------------------------------------------
 module softmax_online_dpe #(
     parameter R = 256,
     parameter C = 256,
-    parameter BUF = 40,
     parameter P = 8,
     parameter [1:0] MODE = 2'b10,
     parameter RU = R,                  // P29 pass extent: rows loaded, columns drained
     parameter CU = C
 ) (
-    input  wire           clk,
-    input  wire           reset,
-    input  wire [BUF-1:0] data_in,
-    input  wire           w_buf_en,
-    output wire           ready,
-    output wire [BUF-1:0] data_out,
-    output wire           done,
-    output wire           full
+    input  wire         clk,
+    input  wire         reset,
+    input  wire [R-1:0] data_in,
+    input  wire         w_buf_en,
+    output wire         ready,
+    output wire [C-1:0] data_out,
+    output wire         done,
+    output wire         full
 );
     dpe u_dpe (
         .clk(clk), .reset(reset),
@@ -55,8 +85,8 @@ endmodule
 
 
 // ----------------------------------------------------------------------------
-// softmax_online_ohmux — one-hot select of N W-bit words (flat): per-bit reduction OR of
-// the masked inputs (generate-only, no combinational loops).
+// softmax_online_ohmux — one-hot select of N W-bit words (flat): per-bit reduction OR of the masked inputs
+// (generate-only, no combinational loops).
 // ----------------------------------------------------------------------------
 module softmax_online_ohmux #(
     parameter N = 4,
@@ -80,1085 +110,79 @@ endmodule
 
 
 // ----------------------------------------------------------------------------
-// softmax_online_store — ring of score blocks. Block element e (row-major within the block)
-// is in window w = e >> log2 NWEL (global window g = b*NWB + w) at position
-// pos = e mod NWEL; bank g mod NB, lane pos mod EPS, address
-// ((g / NB) mod DW) * WPW + pos / EPS. A stream word hits each lane RAM of a
-// bank at most once and straddles at most two windows (different banks, NB >= 2).
-// Each block starts on a fresh stream word (per-block padding).
+// softmax_online_popcnt — the number of set bits of a W-bit word (W a power of two), a balanced tree of adds
+// (combinational).
 // ----------------------------------------------------------------------------
-module softmax_online_store #(
-    parameter NWEL   = 256,
-    parameter BLKEL  = 1024,
-    parameter WPW    = 52,
-    parameter NB     = 2,
-    parameter BDEPTH = 104,
-    parameter BAW    = 7,
-    parameter EPS    = 5
+module softmax_online_popcnt #(
+    parameter W = 16
 ) (
-    input  wire                 clk,
-    input  wire                 reset,
-    input  wire                 ld_valid,
-    input  wire [8*EPS-1:0]     ld_data,
-    input  wire [NB*BAW-1:0]    rd_addr,
-    output wire [NB*8*EPS-1:0]  rd_data
+    input  wire [W-1:0]         x,
+    output wire [$clog2(W):0]   n
 );
-    localparam LNB = $clog2(NB);
-    localparam PW  = $clog2(NWEL + EPS + 1);
-    localparam QW  = $clog2(WPW + 1);
-    localparam EW  = $clog2(BLKEL + EPS + 1);
-
-    // next-word tracking (lane 0 of the incoming word)
-    reg [EW-1:0]  t_e;          // element index within the block
-    reg [PW-1:0]  t_pos;
-    reg [2:0]     t_r;
-    reg [QW-1:0]  t_q;
-    reg [LNB-1:0] t_b;
-    reg [BAW-1:0] t_wb;
-    wire [LNB-1:0] t_b1  = t_b + 1'b1;
-    wire [BAW-1:0] t_wbn = (t_wb + WPW == BDEPTH) ? {BAW{1'b0}} : t_wb + WPW;
-    wire [BAW-1:0] t_wb1 = (t_b1 == 0) ? t_wbn : t_wb;
-    wire           last  = (t_e + EPS >= BLKEL);
-    wire           cross = (t_pos + EPS >= NWEL);
-
-    // stage L0
-    reg              l0_v;
-    reg [8*EPS-1:0]  l0_d;
-    reg [EW-1:0]     l0_e;
-    reg [PW-1:0]     l0_pos;
-    reg [2:0]        l0_r;
-    reg [LNB-1:0]    l0_b;
-    reg [BAW-1:0]    l0_a0, l0_a1, l0_wb1;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            t_e <= 0; t_pos <= 0; t_r <= 0; t_q <= 0; t_b <= 0; t_wb <= 0;
-            l0_v <= 1'b0;
-        end
-        else begin
-            l0_v <= ld_valid;
-            if (ld_valid) begin
-                l0_d   <= ld_data;
-                l0_e   <= t_e;
-                l0_pos <= t_pos;
-                l0_r   <= t_r;
-                l0_b   <= t_b;
-                l0_a0  <= t_wb + t_q;
-                l0_a1  <= t_wb + t_q + 1'b1;
-                l0_wb1 <= t_wb1;
-                if (last) begin                    // next block: fresh word, next window
-                    t_e <= 0; t_pos <= 0; t_r <= 0; t_q <= 0;
-                    t_b <= t_b1; t_wb <= t_wb1;
-                end
-                else if (cross) begin
-                    t_e   <= t_e + EPS;
-                    t_pos <= t_pos + EPS - NWEL;
-                    t_r   <= t_pos + EPS - NWEL;
-                    t_q   <= 0;
-                    t_b   <= t_b1; t_wb <= t_wb1;
-                end
-                else begin
-                    t_e   <= t_e + EPS;
-                    t_pos <= t_pos + EPS;
-                    t_q   <= t_q + 1'b1;
-                end
-            end
-        end
-    end
-
-    genvar gb, gl;
-    generate
-        for (gb = 0; gb < NB; gb = gb + 1) begin : g_b
-            for (gl = 0; gl < EPS; gl = gl + 1) begin : g_l
-                wire [3:0]  t_in  = (gl >= l0_r) ? (gl - l0_r) : (gl + EPS - l0_r);
-                wire [PW:0] t_nx  = gl + NWEL - l0_pos;
-                wire in_ok = l0_v && (l0_b == gb) && (l0_pos + t_in < NWEL)
-                             && (l0_e + t_in < BLKEL);
-                wire nx_ok = l0_v && (((l0_b + 1'b1) & (NB - 1)) == gb) && (t_nx < EPS)
-                             && (l0_e + t_nx < BLKEL);
-                wire [2:0]     t_sel = in_ok ? t_in[2:0] : t_nx[2:0];
-                wire           we    = in_ok | nx_ok;
-                wire [BAW-1:0] wa    = in_ok ? ((gl >= l0_r) ? l0_a0 : l0_a1) : l0_wb1;
-                wire [7:0]     wd    = l0_d[t_sel*8 +: 8];
-
-                // write controls registered before the RAM port (ladder 2026-10-06)
-                reg            w2_we;
-                reg [BAW-1:0]  w2_a;
-                reg [7:0]      w2_d;
-                always @(posedge clk) begin
-                    if (reset) w2_we <= 1'b0;
-                    else       w2_we <= we;
-                    w2_a <= wa;
-                    w2_d <= wd;
-                end
-
-                reg [7:0] mem [0:BDEPTH-1];
-                reg [7:0] rq;
-                always @(posedge clk) begin
-                    if (w2_we) mem[w2_a] <= w2_d;
-                    rq <= mem[rd_addr[gb*BAW +: BAW]];
-                end
-                assign rd_data[(gb*EPS + gl)*8 +: 8] = rq;
-            end
-        end
-    endgenerate
-endmodule
-
-
-// ----------------------------------------------------------------------------
-// softmax_online_loadmax — per-block row maxima while the block streams in. Rows are BKV
-// consecutive elements (BKV > EPS: a word ends at most one row). M1 masked
-// lane maxima, M2 running max, M3 per completed row r of block b:
-//   m_new = m_blk (b = 0) | max(m[r], m_blk);  log_a = m[r] - m_new (0 at b = 0)
-// writes mn_<parity>[r], la_<parity>[r] (rows complete in order, one-hot
-// pointer) and emits a la event. max_cnt = blocks whose rows are all done.
-// The running max m is a rotating ring (rows complete in order every block):
-// row r is at the head when it completes, so no S:1 read mux (ladder lc1);
-// after the last block the ring is aligned again (m_q[r*8 +: 8] = m[r]).
-// ----------------------------------------------------------------------------
-module softmax_online_loadmax #(
-    parameter S   = 64,
-    parameter BKV = 16,
-    parameter EPS = 5,
-    parameter MCW = 3,
-    parameter LS  = $clog2(S)
-) (
-    input  wire              clk,
-    input  wire              reset,
-    input  wire              ld_valid,
-    input  wire [8*EPS-1:0]  ld_data,
-    output reg  [8*S-1:0]    m_q,
-    output reg  [8*S-1:0]    mn0,
-    output reg  [8*S-1:0]    mn1,
-    output reg  [9*S-1:0]    la0,
-    output reg  [9*S-1:0]    la1,
-    output reg  [MCW-1:0]    max_cnt,
-    output reg               la_valid,
-    output reg  [MCW-1:0]    la_blk,
-    output reg  [LS-1:0]     la_row,
-    output reg  [8:0]        la_val
-);
-    localparam BLKEL = S * BKV;
-    localparam LB    = $clog2(BKV);
-    localparam EW    = $clog2(BLKEL + EPS + 1);
-
-    // M0
-    reg              m0_v;
-    reg [8*EPS-1:0]  m0_d;
-    reg [EW-1:0]     m0_e;
-    reg [EW-1:0]     t_e;
-    always @(posedge clk) begin
-        if (reset) begin m0_v <= 1'b0; t_e <= 0; end
-        else begin
-            m0_v <= ld_valid;
-            if (ld_valid) begin
-                m0_d <= ld_data; m0_e <= t_e;
-                t_e  <= (t_e + EPS >= BLKEL) ? {EW{1'b0}} : t_e + EPS;
-            end
-        end
-    end
-
-    wire [LB-1:0]  p0 = m0_e[LB-1:0];
-    wire [EPS-1:0] va, vb, lr;
-    genvar j;
-    generate
-        for (j = 0; j < EPS; j = j + 1) begin : g_c
-            wire [LB:0] pj = p0 + j;
-            wire        v  = m0_v && (m0_e + j < BLKEL);
-            assign va[j] = v && (pj < BKV);
-            assign vb[j] = v && (pj >= BKV);
-            assign lr[j] = v && (pj == BKV - 1);
-        end
-    endgenerate
-
-    function signed [7:0] smax;
-        input signed [7:0] a, b;
-        smax = (a > b) ? a : b;
-    endfunction
-    function signed [7:0] lane;
-        input [8*EPS-1:0] d;
-        input integer k;
-        input m;
-        lane = m ? d[k*8 +: 8] : 8'sh80;
-    endfunction
-
-    // M1a / M1b
-    reg              m1_v, m1_done, m1_hasb;
-    reg signed [7:0] a01, a23, a4, b01, b23, b4;
-    always @(posedge clk) begin
-        if (reset) m1_v <= 1'b0;
-        else begin
-            m1_v    <= m0_v;
-            m1_done <= |lr;
-            m1_hasb <= |vb;
-            a01 <= smax(lane(m0_d, 0, va[0]), lane(m0_d, 1, va[1]));
-            a23 <= smax(lane(m0_d, 2, va[2]), lane(m0_d, 3, va[3]));
-            a4  <= lane(m0_d, 4, va[4]);
-            b01 <= smax(lane(m0_d, 0, vb[0]), lane(m0_d, 1, vb[1]));
-            b23 <= smax(lane(m0_d, 2, vb[2]), lane(m0_d, 3, vb[3]));
-            b4  <= lane(m0_d, 4, vb[4]);
-        end
-    end
-    reg              m2_v, m2_done, m2_hasb;
-    reg signed [7:0] ma, mb;
-    always @(posedge clk) begin
-        if (reset) m2_v <= 1'b0;
-        else begin
-            m2_v    <= m1_v;
-            m2_done <= m1_done;
-            m2_hasb <= m1_hasb;
-            ma <= smax(smax(a01, a23), a4);
-            mb <= smax(smax(b01, b23), b4);
-        end
-    end
-
-    // M2: running block-row max
-    reg signed [7:0] run;
-    reg [S-1:0]      rp_oh;
-    reg [LS-1:0]     r2;
-    wire signed [7:0] fold = smax(run, ma);
-    reg              w3_v;
-    reg [S-1:0]      w3_oh;
-    reg [LS-1:0]     w3_row;
-    reg signed [7:0] w3_val;
-    always @(posedge clk) begin
-        if (reset) begin
-            run <= 8'sh80; rp_oh <= 1; r2 <= 0; w3_v <= 1'b0;
-        end
-        else begin
-            w3_v <= 1'b0;
-            if (m2_v) begin
-                if (m2_done) begin
-                    w3_v   <= 1'b1;
-                    w3_oh  <= rp_oh;
-                    w3_row <= r2;
-                    w3_val <= fold;
-                    run    <= m2_hasb ? mb : 8'sh80;
-                    rp_oh  <= rp_oh[S-1] ? {{(S-1){1'b0}}, 1'b1} : rp_oh << 1;
-                    r2     <= r2 + 1'b1;
-                end
-                else run <= fold;
-            end
-        end
-    end
-
-    // M3: running max, m_new, log_a
-    reg [MCW-1:0] cb3;
-    wire          first = (cb3 == 0);
-    wire          par   = cb3[0];
-    wire [7:0]    m_old = m_q[7:0];               // ring head = the completing row
-    genvar gr;
-    wire signed [7:0] mnv = first ? w3_val : smax($signed(m_old), w3_val);
-    wire signed [8:0] lav = first ? 9'sd0 : ($signed({m_old[7], m_old}) - $signed({mnv[7], mnv}));
-
-    generate
-        for (gr = 0; gr < S; gr = gr + 1) begin : g_w
-            always @(posedge clk)
-                if (w3_v && w3_oh[gr]) begin
-                    if (par) begin mn1[gr*8 +: 8] <= mnv; la1[gr*9 +: 9] <= lav; end
-                    else     begin mn0[gr*8 +: 8] <= mnv; la0[gr*9 +: 9] <= lav; end
-                end
-        end
-    endgenerate
-
-    always @(posedge clk) begin
-        if (reset) begin
-            cb3 <= 0; max_cnt <= 0; la_valid <= 1'b0;
-        end
-        else begin
-            la_valid <= w3_v;
-            la_blk   <= cb3;
-            la_row   <= w3_row;
-            la_val   <= lav;
-            if (w3_v) m_q <= {mnv, m_q[8*S-1:8]};     // rotate: next row to the head
-            if (w3_v && w3_oh[S-1]) begin
-                cb3 <= cb3 + 1'b1;
-                max_cnt <= max_cnt + 1'b1;
-            end
-        end
-    end
-
-endmodule
-
-
-// ----------------------------------------------------------------------------
-// softmax_online_xfeed — EXP crossbar CX of N_EXP. Global windows g = CX, CX+N_EXP, ...
-// (PW = B*NWB windows of NWEL elements, block-major). Window g belongs to block
-// g >> log2 NWB and issues once that block's row maxima are done (max_cnt).
-// Producer per word k: bank read (window base + k), subtract m_new of the
-// lane's row (rows of lane 0 and the next; BKV > EPS), clamp -128, mask lanes
-// >= NWEL; FIFO entry two cycles later. The dpe pops whenever ready; popped
-// words are the log|P| output. Drain windows in order.
-// ----------------------------------------------------------------------------
-module softmax_online_xfeed #(
-    parameter CX    = 0,
-    parameter N_EXP = 1,
-    parameter S     = 64,
-    parameter BKV   = 16,
-    parameter R     = 256,
-    parameter C     = 256,
-    parameter BUF   = 40,
-    parameter P     = 8,
-    parameter NWEL  = 256,
-    parameter NWB   = 4,
-    parameter B     = 4,
-    parameter WPW   = 52,
-    parameter NB    = 2,
-    parameter DW    = 4,
-    parameter BAW   = 8,
-    parameter AW    = 13,
-    parameter MCW   = 3
-) (
-    input  wire                      clk,
-    input  wire                      reset,          // run clear (re-arm) + power-on reset
-    input  wire                      dpe_reset,      // power-on reset of the crossbar only
-    input  wire                      go,
-    input  wire [MCW-1:0]            max_cnt,
-    input  wire [8*S-1:0]            mn0,
-    input  wire [8*S-1:0]            mn1,
-    output wire [BAW-1:0]            rd_addr,
-    input  wire [(NB/N_EXP)*BUF-1:0] rd_data,
-    output wire                      lp_valid,
-    output wire [AW-1:0]             lp_base,
-    output wire [BUF/8-1:0]          lp_mask,
-    output wire [BUF-1:0]            lp_data,
-    output wire                      dr_valid,
-    output wire [AW-1:0]             dr_base,
-    output wire [BUF/8-1:0]          dr_mask,
-    output wire [BUF-1:0]            dr_data
-);
-    localparam EPS   = BUF / 8;
-    localparam XI    = (R < C) ? R : C;                // P29: the pass loads and drains I = min(R, C)
-    localparam LCYC  = (XI * 8 + BUF - 1) / BUF;
-    localparam OCYC  = (XI * 8 + BUF - 1) / BUF;
-    localparam NBX   = NB / N_EXP;
-    localparam PW    = B * NWB;
-    localparam NWC   = (PW > CX) ? (PW - CX + N_EXP - 1) / N_EXP : 0;
-    localparam LS    = $clog2(S);
-    localparam LB    = $clog2(BKV);
-    localparam LNWEL = $clog2(NWEL);
-    localparam LNWB  = $clog2(NWB);
-    localparam LNB   = $clog2(NB);
-    localparam LNX   = $clog2(N_EXP);
-    localparam RSH   = LNWEL - LB;                 // rows per window = 2^RSH
-    localparam GW    = $clog2(PW + N_EXP + 1);
-    localparam KW    = $clog2(LCYC + 1);
-    localparam DCW   = $clog2(OCYC + 1);
-    // column of lane 0 runs over every loaded / drained word (LCYC, OCYC words),
-    // not just the window: sized for both (S=8 regression, 2026-10-06)
-    localparam CPW  = $clog2(((LCYC > OCYC) ? LCYC : OCYC) * EPS + EPS + 1);
-    localparam LBW   = (NBX > 1) ? $clog2(NBX) : 1;
-    localparam FD    = 4;
-    localparam EW    = BUF + AW + EPS + 1;          // FIFO entry: last, mask, base, data
-
-    function [31:0] mulk;
-        input [31:0] x;
-        input integer k;
-        integer b;
+    localparam L = $clog2(W);
+    function integer off;                      // the first bit of level l (level l: W >> l counts of l + 1 bits)
+        input integer l;
+        integer i;
         begin
-            mulk = 32'd0;
-            for (b = 0; b < 31; b = b + 1)
-                if ((k >> b) & 1) mulk = mulk + (x << b);
+            off = 0;
+            for (i = 0; i < l; i = i + 1) off = off + (W >> i) * (i + 1);
         end
     endfunction
-
-    // window-derived values (shifts / masks of the window index; no multiply)
-    function [BAW-1:0] w_addr;      // bank address of word 0
-        input [GW-1:0] g;
-        w_addr = mulk((g >> LNB) & (DW - 1), WPW);
-    endfunction
-    function [AW-1:0] w_elem;       // global element index of word 0
-        input [GW-1:0] g;
-        w_elem = g << LNWEL;
-    endfunction
-    function [LS-1:0] w_row;        // block row of word 0
-        input [GW-1:0] g;
-        w_row = (g & (NWB - 1)) << RSH;
-    endfunction
-    function [LBW-1:0] w_lb;        // local bank among this crossbar's banks
-        input [GW-1:0] g;
-        w_lb = (g & (NB - 1)) >> LNX;
-    endfunction
-
-    // ---------------- dpe ---------------------------------------------------
-    wire           dpe_ready, dpe_done_w, dpe_full;
-    wire [BUF-1:0] dpe_out, dpe_in;
-    wire           dpe_wen;
-    softmax_online_dpe #(.R(R), .C(C), .BUF(BUF), .P(P), .MODE(2'b10), .RU(XI), .CU(XI)) u_x (
-        .clk(clk), .reset(dpe_reset), .data_in(dpe_in), .w_buf_en(dpe_wen),
-        .ready(dpe_ready), .data_out(dpe_out), .done(dpe_done_w), .full(dpe_full));
-
-    // ---------------- producer ---------------------------------------------
-    reg            p_act;
-    reg [GW-1:0]   p_g;
-    reg [KW-1:0]   p_k;
-    reg [CPW-1:0]  p_col;
-    reg [BAW-1:0]  p_addr;
-    reg [AW-1:0]   p_e;
-    reg [LS-1:0]   p_ra;
-    reg [LB:0]     p_rp;
-    wire [GW-1:0]  p_blk = p_g >> LNWB;
-    wire           p_par = p_blk[0];
-    wire [GW-1:0]  n_g   = p_g + N_EXP;
-
-    reg [1:0]       f_wp, f_rp;
-    reg [2:0]       f_cnt;
-    reg             i1_v, i2_v;
-    wire            k_last = (p_k == LCYC - 1);
-    // block gate registered (ladder lc4): `max_cnt > p_blk` evaluated one cycle
-    // ahead and cleared on a window change, so it is never stale; keeps the compare
-    // off the issue enable that fans out to every producer register
-    reg             blk_ok;
-    // FIFO credit registered too (ladder lc5): credit_ok == (f_cnt + i1_v + i2_v < FD)
-    // of the current cycle, computed one edge early from the next-state values, so
-    // `issue` is an AND of registers
-    reg             credit_ok;
-    wire            issue  = go && p_act && blk_ok && credit_ok;
-    always @(posedge clk) begin
-        if (reset) begin blk_ok <= 1'b0; credit_ok <= 1'b1; end
-        else begin
-            blk_ok    <= (issue && k_last) ? 1'b0 : (max_cnt > p_blk);
-            credit_ok <= ({1'b0, f_cnt} + i2_v - pop + issue + i1_v) < FD;
-        end
-    end
-    wire            pop    = (f_cnt != 0) && dpe_ready;
-    // the RAM reads the registered address, aligned with the 2-stage m_new select
-    reg  [BAW-1:0]  ra_q;
-    always @(posedge clk) ra_q <= p_addr;
-    assign rd_addr = ra_q;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            p_act <= (NWC > 0); p_g <= CX; p_k <= 0; p_col <= 0;
-            p_addr <= w_addr(CX); p_e <= w_elem(CX); p_ra <= w_row(CX); p_rp <= 0;
-        end
-        else if (issue) begin
-            if (k_last) begin
-                p_g    <= n_g;
-                p_k    <= 0;
-                p_col  <= 0;
-                p_addr <= w_addr(n_g);
-                p_e    <= w_elem(n_g);
-                p_ra   <= w_row(n_g);
-                p_rp   <= 0;
-                if (n_g >= PW) p_act <= 1'b0;
-            end
-            else begin
-                p_k    <= p_k + 1'b1;
-                p_col  <= p_col + EPS;
-                p_addr <= p_addr + 1'b1;
-                p_e    <= p_e + EPS;
-                if (p_rp + EPS >= BKV) begin
-                    p_rp <= p_rp + EPS - BKV;
-                    p_ra <= p_ra + 1'b1;
-                end
-                else p_rp <= p_rp + EPS;
-            end
-        end
-    end
-
-    // ---------------- I1 / I2: meta + 2-stage m_new select (ladder lc2) ----
-    // I1 selects the 2^RL-row group of the lane-0 row and of the next row;
-    // I2 the row inside the group; the RAM word arrives with I2.
-    localparam RL = LS - LS / 2;                    // low row bits
-    localparam GWD = 8 << RL;                       // group width in bits
-    reg [EPS-1:0]  i1_mask, i1_split, i2_mask, i2_split;
-    reg [GWD-1:0]  i1_ga, i1_gb;
-    reg [RL-1:0]   i1_la, i1_lb1;
-    reg [7:0]      i2_rma, i2_rmb;
-    reg [LBW-1:0]  i1_lb, i2_lb;
-    reg            i1_last, i2_last;
-    reg [AW-1:0]   i1_e, i2_e;
-    wire [8*S-1:0] mn  = p_par ? mn1 : mn0;
-    wire [LS-1:0]  ra1 = p_ra + 1'b1;
-    wire [31:0]    ra_w  = p_ra;                   // zero-extended: the group base below is wider than a row index
-    wire [31:0]    ra1_w = ra1;
-    integer jm;
-    always @(posedge clk) begin
-        if (reset) begin i1_v <= 1'b0; i2_v <= 1'b0; end
-        else begin i1_v <= issue; i2_v <= i1_v; end
-        for (jm = 0; jm < EPS; jm = jm + 1) begin
-            i1_mask[jm]  <= (p_col + jm < NWEL);
-            i1_split[jm] <= (p_rp + jm >= BKV);
-        end
-        i1_ga   <= mn[((ra_w >> RL) << (RL + 3)) +: GWD];     // group base = group * GWD, GWD = 2^(RL+3)
-        i1_gb   <= mn[((ra1_w >> RL) << (RL + 3)) +: GWD];
-        i1_la   <= p_ra[RL-1:0];
-        i1_lb1  <= ra1[RL-1:0];
-        i1_lb   <= w_lb(p_g);
-        i1_last <= k_last;
-        i1_e    <= p_e;
-        i2_rma   <= i1_ga[i1_la*8 +: 8];
-        i2_rmb   <= i1_gb[i1_lb1*8 +: 8];
-        i2_mask  <= i1_mask;
-        i2_split <= i1_split;
-        i2_lb    <= i1_lb;
-        i2_last  <= i1_last;
-        i2_e     <= i1_e;
-    end
-
-    // ---------------- I3: subtract + clamp, FIFO --------------------------
-    genvar gq;
-    wire [NBX-1:0] lb_sel;                     // one-hot of the local bank (NBX <= 2)
-    generate
-        for (gq = 0; gq < NBX; gq = gq + 1) begin : g_lb
-            assign lb_sel[gq] = (i2_lb == gq);
-        end
-    endgenerate
-    wire [BUF-1:0] rword;
-    softmax_online_ohmux #(.N(NBX), .W(BUF)) u_rw (.sel(lb_sel), .in(rd_data), .out(rword));
-    reg  [BUF-1:0] sub_w;
-    reg signed [8:0] dd;
-    integer js;
-    always @(*) begin
-        sub_w = 0;
-        for (js = 0; js < EPS; js = js + 1) begin
-            dd = $signed(rword[js*8 +: 8]) - $signed(i2_split[js] ? i2_rmb : i2_rma);
-            if (i2_mask[js])
-                sub_w[js*8 +: 8] = (dd < -9'sd128) ? 8'h80 : dd[7:0];
-        end
-    end
-    always @(posedge clk) begin
-        if (reset) begin f_wp <= 0; f_rp <= 0; f_cnt <= 0; end
-        else begin
-            if (i2_v) f_wp <= f_wp + 1'b1;
-            if (pop) f_rp <= f_rp + 1'b1;
-            f_cnt <= f_cnt + i2_v - pop;
-        end
-    end
-    // FIFO entries (one register each), head by a one-hot read select
-    wire [FD*EW-1:0] f_q;
-    wire [FD-1:0]    f_rsel;
-    generate
-        for (gq = 0; gq < FD; gq = gq + 1) begin : g_fq
-            reg [EW-1:0] q;
-            always @(posedge clk) if (!reset && i2_v && (f_wp == gq)) q <= {i2_last, i2_mask, i2_e, sub_w};
-            assign f_q[gq*EW +: EW] = q;
-            assign f_rsel[gq] = (f_rp == gq);
-        end
-    endgenerate
-    wire [EW-1:0] head;
-    softmax_online_ohmux #(.N(FD), .W(EW)) u_head (.sel(f_rsel), .in(f_q), .out(head));
-    assign dpe_in   = head[BUF-1:0];
-    assign dpe_wen  = pop;
-    assign lp_valid = pop;
-    assign lp_data  = head[BUF-1:0];
-    assign lp_base  = head[BUF +: AW];
-    assign lp_mask  = head[BUF+AW +: EPS];
-    wire   head_last = head[EW-1];
-
-    // ---------------- drain -----------------------------------------------
-    reg [1:0]     fed, drained;
-    reg [DCW-1:0] d_cnt;
-    reg [CPW-1:0] d_col;
-    reg [AW-1:0]  d_base, d_eb;
-    wire          pend = (fed != drained);
-    assign dr_valid = pend && dpe_full;
-    assign dr_base  = d_base;
-    assign dr_data  = dpe_out;
-    genvar gd;
-    generate
-        for (gd = 0; gd < EPS; gd = gd + 1) begin : g_dm
-            assign dr_mask[gd] = dr_valid && (d_col + gd < NWEL);
-        end
-    endgenerate
-    localparam [AW-1:0] WSTEP = N_EXP * NWEL;
-    always @(posedge clk) begin
-        if (reset) begin
-            fed <= 0; drained <= 0; d_cnt <= 0; d_col <= 0;
-            d_base <= w_elem(CX); d_eb <= w_elem(CX);
-        end
-        else begin
-            if (pop && head_last) fed <= fed + 1'b1;
-            if (pend && dpe_done_w) begin
-                drained <= drained + 1'b1;
-                d_cnt  <= 0;
-                d_col  <= 0;
-                d_eb   <= d_eb + WSTEP;
-                d_base <= d_eb + WSTEP;
-            end
-            else if (dr_valid && (d_cnt != OCYC - 1)) begin
-                d_cnt  <= d_cnt + 1'b1;
-                d_col  <= d_col + EPS;
-                d_base <= d_base + EPS;
-            end
-        end
-    end
-endmodule
-
-
-// ----------------------------------------------------------------------------
-// softmax_online_row_acc — streaming row-sum accumulator, 2-stage (Fmax ladder 2026-10-06).
-// Each crossbar drains its windows in order; with RS | I a row never straddles a
-// window, so one open-row accumulator per crossbar suffices. A drain word
-// (EPS <= 8 lanes, RS > EPS) touches at most two rows: lanes of lane 0's row (a)
-// and of the next row (b).
-//   stage A (registered): lane classes, masked lane values, balanced lane-sum
-//                         tree for a and b
-//   stage B (registered): acc <= done_a ? sum_b : acc + sum_a; event (row,
-//                         acc + sum_a) when row a ends in the word
-// Events leave 2 cycles after the completing drain word, one per crossbar.
-// ----------------------------------------------------------------------------
-module softmax_online_row_acc #(
-    parameter RS    = 128,
-    parameter N_EXP = 1,
-    parameter PORTS = 40,
-    parameter AW    = 16
-) (
-    input  wire                       clk,
-    input  wire                       reset,
-    input  wire [N_EXP-1:0]           dr_valid,
-    input  wire [N_EXP*AW-1:0]        dr_base,
-    input  wire [N_EXP*(PORTS/8)-1:0] dr_mask,
-    input  wire [N_EXP*PORTS-1:0]     dr_data,
-    output wire [N_EXP-1:0]           ev_we,
-    output wire [N_EXP*AW-1:0]        ev_row,
-    output wire [N_EXP*32-1:0]        ev_sum
-);
-    localparam EPS = PORTS / 8;
-    localparam LRS = $clog2(RS);
-    localparam SW  = 8 + LRS;
-    localparam LW  = 11;                 // 8 lanes * 255 < 2^11
-
-    genvar c, j;
-    generate
-        for (c = 0; c < N_EXP; c = c + 1) begin : g_x
-            wire [AW-1:0]   base = dr_base[c*AW +: AW];
-            wire [LRS:0]    pos0 = {1'b0, base[LRS-1:0]};
-            wire [8*LW-1:0] ma, mb;          // masked lanes, padded to 8
-            wire [7:0]      lastl;
-            for (j = 0; j < 8; j = j + 1) begin : g_l
-                if (j < EPS) begin : g_in
-                    wire         v    = dr_valid[c] & dr_mask[c*EPS + j];
-                    wire [LRS:0] pj   = pos0 + j;
-                    wire         in_b = (pj >= RS);
-                    wire [7:0]   d    = dr_data[c*PORTS + j*8 +: 8];
-                    assign ma[j*LW +: LW] = (v & ~in_b) ? {{(LW-8){1'b0}}, d} : {LW{1'b0}};
-                    assign mb[j*LW +: LW] = (v &  in_b) ? {{(LW-8){1'b0}}, d} : {LW{1'b0}};
-                    assign lastl[j] = v & (pj == RS - 1);
-                end else begin : g_pad
-                    assign ma[j*LW +: LW] = {LW{1'b0}};
-                    assign mb[j*LW +: LW] = {LW{1'b0}};
-                    assign lastl[j] = 1'b0;
-                end
-            end
-            wire [LW-1:0] sa = ((ma[0*LW +: LW] + ma[1*LW +: LW]) + (ma[2*LW +: LW] + ma[3*LW +: LW]))
-                             + ((ma[4*LW +: LW] + ma[5*LW +: LW]) + (ma[6*LW +: LW] + ma[7*LW +: LW]));
-            wire [LW-1:0] sb = ((mb[0*LW +: LW] + mb[1*LW +: LW]) + (mb[2*LW +: LW] + mb[3*LW +: LW]))
-                             + ((mb[4*LW +: LW] + mb[5*LW +: LW]) + (mb[6*LW +: LW] + mb[7*LW +: LW]));
-
-            // stage A
-            reg          a_v, a_done;
-            reg [LW-1:0] a_sa, a_sb;
-            reg [AW-1:0] a_row;
-            always @(posedge clk) begin
-                if (reset) a_v <= 1'b0;
-                else       a_v <= dr_valid[c];
-                a_done <= |lastl;
-                a_sa   <= sa;
-                a_sb   <= sb;
-                a_row  <= base >> LRS;
-            end
-
-            // stage B
-            reg  [SW-1:0] acc;
-            wire [SW-1:0] tot_a = acc + a_sa;
-            reg           e_we;
-            reg  [AW-1:0] e_row;
-            reg  [SW-1:0] e_sum;
-            always @(posedge clk) begin
-                if (reset) begin acc <= {SW{1'b0}}; e_we <= 1'b0; end
-                else begin
-                    if (a_v) acc <= a_done ? {{(SW-LW){1'b0}}, a_sb} : tot_a;
-                    e_we <= a_v & a_done;
-                end
-                e_row <= a_row;
-                e_sum <= tot_a;
-            end
-            assign ev_we[c]           = e_we;
-            assign ev_row[c*AW +: AW] = e_row;
-            assign ev_sum[c*32 +: 32] = {{(32-SW){1'b0}}, e_sum};
-        end
-    endgenerate
-endmodule
-
-
-// ----------------------------------------------------------------------------
-// softmax_online_wfeed — one window of S row values through a carry crossbar (mode MODE).
-// On `start`, the producer emits LCYC words; word k carries rows EPS*k + l,
-// selected by the parent from the one-hot pointer `k_oh` (zero past the row
-// words). The parent registers its selection, so `word` belongs to the word
-// issued in the previous cycle (ladder lc2). FIFO + pop-when-ready as in softmax_online_xfeed. Drain: rows by the one-hot
-// word pointer `d_oh` (row r = word r/EPS, lane r%EPS); `last_row` marks the
-// drain word that carries row S-1; `d_row0` is the row of lane 0.
-// ----------------------------------------------------------------------------
-module softmax_online_wfeed #(
-    parameter S   = 64,
-    parameter R   = 256,
-    parameter C   = 256,
-    parameter BUF = 40,
-    parameter P   = 8,
-    parameter [1:0] MODE = 2'b10,
-    parameter WL  = (S + BUF / 8 - 1) / (BUF / 8),
-    parameter LS  = $clog2(S)
-) (
-    input  wire            clk,
-    input  wire            reset,          // run clear (re-arm) + power-on reset
-    input  wire            dpe_reset,      // power-on reset of the crossbar only
-    input  wire            start,
-    output reg  [WL-1:0]   k_oh,
-    input  wire [BUF-1:0]  word,
-    output wire            dr_v,
-    output reg  [WL:0]     d_oh,
-    output reg  [LS:0]     d_row0,
-    output wire [BUF-1:0]  dr_data,
-    output wire            last_row
-);
-    localparam EPS  = BUF / 8;
-    localparam LCYC = (S * 8 + BUF - 1) / BUF;         // P29: the pass loads and drains the S rows in use
-    localparam OCYC = (S * 8 + BUF - 1) / BUF;
-    localparam KW   = $clog2(LCYC + 1);
-    localparam DCW  = $clog2(OCYC + 1);
-    localparam FD   = 4;
-
-    wire           ready, ddone, full;
-    wire [BUF-1:0] dout, din;
-    wire           wen;
-    softmax_online_dpe #(.R(R), .C(C), .BUF(BUF), .P(P), .MODE(MODE), .RU(S), .CU(S)) u_x (
-        .clk(clk), .reset(dpe_reset), .data_in(din), .w_buf_en(wen),
-        .ready(ready), .data_out(dout), .done(ddone), .full(full));
-
-    reg                  p_act;
-    reg [KW-1:0]         p_k;
-    reg [1:0]            f_wp, f_rp;
-    reg [2:0]            f_cnt;
-    reg                  i1_v, i1_last;
-    wire issue = p_act && ((f_cnt + i1_v) < FD);
-    wire pop   = (f_cnt != 0) && ready;
-    always @(posedge clk) begin
-        if (reset) begin
-            p_act <= 1'b0; p_k <= 0; k_oh <= 0; f_wp <= 0; f_rp <= 0; f_cnt <= 0;
-            i1_v <= 1'b0; i1_last <= 1'b0;
-        end
-        else begin
-            i1_v    <= issue;
-            i1_last <= (p_k == LCYC - 1);
-            if (start && !p_act) begin
-                p_act <= 1'b1; p_k <= 0; k_oh <= {{(WL-1){1'b0}}, 1'b1};
-            end
-            else if (issue) begin
-                p_k  <= p_k + 1'b1;
-                k_oh <= k_oh << 1;
-                if (p_k == LCYC - 1) p_act <= 1'b0;
-            end
-            if (i1_v) f_wp <= f_wp + 1'b1;
-            if (pop) f_rp <= f_rp + 1'b1;
-            f_cnt <= f_cnt + i1_v - pop;
-        end
-    end
-    // FIFO entries (one register each), head by a one-hot read select
-    genvar gq;
-    wire [FD*(BUF+1)-1:0] f_q;
-    wire [FD-1:0]         f_rsel;
-    generate
-        for (gq = 0; gq < FD; gq = gq + 1) begin : g_fq
-            reg [BUF:0] q;
-            always @(posedge clk) if (!reset && i1_v && (f_wp == gq)) q <= {i1_last, word};
-            assign f_q[gq*(BUF+1) +: BUF+1] = q;
-            assign f_rsel[gq] = (f_rp == gq);
-        end
-    endgenerate
-    wire [BUF:0] head;
-    softmax_online_ohmux #(.N(FD), .W(BUF+1)) u_head (.sel(f_rsel), .in(f_q), .out(head));
-    assign din = head[BUF-1:0];
-    assign wen = pop;
-
-    reg [1:0]     fed, drained;
-    reg [DCW-1:0] d_cnt;
-    wire pend = (fed != drained);
-    assign dr_v     = pend && full;
-    assign dr_data  = dout;
-    assign last_row = dr_v && d_oh[(S - 1) / EPS];
-    always @(posedge clk) begin
-        if (reset) begin
-            fed <= 0; drained <= 0; d_cnt <= 0;
-            d_oh <= {{WL{1'b0}}, 1'b1}; d_row0 <= 0;
-        end
-        else begin
-            if (pop && head[BUF]) fed <= fed + 1'b1;
-            if (pend && ddone) begin
-                drained <= drained + 1'b1; d_cnt <= 0;
-                d_oh <= {{WL{1'b0}}, 1'b1}; d_row0 <= 0;
-            end
-            else if (dr_v && (d_cnt != OCYC - 1)) begin
-                d_cnt  <= d_cnt + 1'b1;
-                d_oh   <= d_oh << 1;
-                d_row0 <= d_row0 + EPS;
-            end
-        end
-    end
-endmodule
-
-
-// ----------------------------------------------------------------------------
-// softmax_online_carry — per-block carry update, blocks in order (cb = 0..B-1):
-//   WAIT : sp of block cb complete and its row maxima done
-//   b = 0: WALK  lq[r] = min(sp >> log2 N, 127), one word (EPS rows) per cycle
-//   b > 0: CEXP  carry-EXP crossbar on t = clamp(log_a + log_l, -128, 127);
-//               each drain word e gives lq[r] = min(e + (sp >> log2 N), 127)
-//                (= min(((e << log2 N) + sp) >> log2 N, 127), exactly)
-//   LOG  : carry-LOG crossbar on lq; drain writes log_l[r] (+ ll events);
-//          the word with row S-1 retires the block.
-// ----------------------------------------------------------------------------
-module softmax_online_carry #(
-    parameter S   = 64,
-    parameter B   = 4,
-    parameter R   = 256,
-    parameter C   = 256,
-    parameter BUF = 40,
-    parameter P   = 8,
-    parameter SPW = 12,
-    parameter MCW = 3,
-    parameter LS  = $clog2(S),
-    parameter LN  = $clog2(S)          // log2 of the key length N (mean shift)
-) (
-    input  wire              clk,
-    input  wire              reset,
-    input  wire              dpe_reset,
-    input  wire [MCW-1:0]    max_cnt,
-    input  wire [1:0]        sp_full,
-    input  wire [SPW*S-1:0]  sp0,
-    input  wire [SPW*S-1:0]  sp1,
-    input  wire [9*S-1:0]    la0,
-    input  wire [9*S-1:0]    la1,
-    output reg  [1:0]        sp_clr,
-    output reg  [MCW-1:0]    ret_cnt,
-    output reg  [8*S-1:0]    ll_q,
-    output wire              ll_valid,
-    output wire [MCW-1:0]    ll_blk,
-    output wire [LS:0]       ll_base,
-    output wire [BUF/8-1:0]  ll_mask,
-    output wire [BUF-1:0]    ll_data,
-    output reg               done
-);
-    localparam EPS = BUF / 8;
-    localparam WL  = (S + EPS - 1) / EPS;
-    localparam [2:0] ST_WAIT = 3'd0, ST_WALK = 3'd1, ST_CEXP = 3'd2, ST_LOG = 3'd3, ST_END = 3'd4;
-
-    reg [2:0]     st;
-    reg [MCW-1:0] cb;
-    wire          par = cb[0];
-    reg [8*S-1:0] lq_q;
-    reg [WL-1:0]  w_oh;              // WALK pointer (b = 0)
-    reg           cexp_go, clog_go;
-
-    // ---- carry-EXP feed: t = clamp(log_a + log_l, -128, 127) per row --------
-    wire [WL-1:0]  cx_k;
-    wire [9*S-1:0] la = par ? la1 : la0;
-    wire [BUF-1:0] cx_word;
-    // per lane l: rows EPS*k + l (k < WL; rows >= S read as zero)
+    wire [off(L + 1)-1:0] t;
+    assign t[0 +: W] = x;
     genvar gl, gk;
     generate
-        for (gl = 0; gl < EPS; gl = gl + 1) begin : g_cx
-            wire [WL*9-1:0] la_c;
-            wire [WL*8-1:0] ll_c;
-            for (gk = 0; gk < WL; gk = gk + 1) begin : g_k
-                if (EPS * gk + gl < S) begin : g_in
-                    assign la_c[gk*9 +: 9] = la[(EPS*gk + gl)*9 +: 9];
-                    assign ll_c[gk*8 +: 8] = ll_q[(EPS*gk + gl)*8 +: 8];
-                end else begin : g_out
-                    assign la_c[gk*9 +: 9] = 9'd0;
-                    assign ll_c[gk*8 +: 8] = 8'd0;
-                end
+        for (gl = 0; gl < L; gl = gl + 1) begin : g_lvl
+            localparam OI = off(gl), OO = off(gl + 1), NO = W >> (gl + 1), WI = gl + 1;
+            for (gk = 0; gk < NO; gk = gk + 1) begin : g_k
+                assign t[OO + gk*(WI+1) +: WI+1] = t[OI + 2*gk*WI +: WI] + t[OI + (2*gk+1)*WI +: WI];
             end
-            wire [8:0] sla;
-            wire [7:0] sll;
-            softmax_online_ohmux #(.N(WL), .W(9)) u_la (.sel(cx_k), .in(la_c), .out(sla));
-            softmax_online_ohmux #(.N(WL), .W(8)) u_ll (.sel(cx_k), .in(ll_c), .out(sll));
-            reg [8:0] sla_q;
-            reg [7:0] sll_q;
-            always @(posedge clk) begin sla_q <= sla; sll_q <= sll; end
-            wire signed [9:0] tsum = $signed(sla_q) + $signed(sll_q);
-            assign cx_word[gl*8 +: 8] = (tsum < -10'sd128) ? 8'h80
-                                      : (tsum > 10'sd127) ? 8'h7f : tsum[7:0];
         end
     endgenerate
-    wire            cx_dv, cx_last;
-    wire [WL:0]     cx_doh;
-    wire [LS:0]     cx_row0;
-    wire [BUF-1:0]  cx_dd;
-    softmax_online_wfeed #(.S(S), .R(R), .C(C), .BUF(BUF), .P(P), .MODE(2'b10)) u_cexp (
-        .clk(clk), .reset(reset), .dpe_reset(dpe_reset), .start(cexp_go), .k_oh(cx_k), .word(cx_word),
-        .dr_v(cx_dv), .d_oh(cx_doh), .d_row0(cx_row0), .dr_data(cx_dd), .last_row(cx_last));
-
-    // ---- lq walker: (pointer, e lanes) from WALK or from the carry-EXP drain --
-    wire           wv0  = (st == ST_WALK) || ((st == ST_CEXP) && cx_dv);
-    wire [WL-1:0]  woh0 = (st == ST_WALK) ? w_oh : cx_doh[WL-1:0];
-    wire [BUF-1:0] e_w0 = (st == ST_WALK) ? {BUF{1'b0}} : cx_dd;
-    // walker stage 2 (ladder lc2): selection registered, add/clamp/write next cycle
-    reg            wv;
-    reg [WL-1:0]   woh;
-    reg [BUF-1:0]  e_w;
-    reg [MCW-1:0]  wcb;
-    always @(posedge clk) begin
-        if (reset) wv <= 1'b0;
-        else       wv <= wv0;
-        woh <= woh0; e_w <= e_w0; wcb <= cb;
-    end
-    wire [SPW*S-1:0] sp = par ? sp1 : sp0;
-    wire [8*EPS-1:0] lq_lane;
-    generate
-        for (gl = 0; gl < EPS; gl = gl + 1) begin : g_wk
-            wire [WL*SPW-1:0] sp_c;
-            for (gk = 0; gk < WL; gk = gk + 1) begin : g_k
-                if (EPS * gk + gl < S) begin : g_in
-                    assign sp_c[gk*SPW +: SPW] = sp[(EPS*gk + gl)*SPW +: SPW];
-                end else begin : g_out
-                    assign sp_c[gk*SPW +: SPW] = {SPW{1'b0}};
-                end
-            end
-            wire [SPW-1:0] ssp0;
-            softmax_online_ohmux #(.N(WL), .W(SPW)) u_sp (.sel(woh0), .in(sp_c), .out(ssp0));
-            reg  [SPW-1:0] ssp;
-            always @(posedge clk) ssp <= ssp0;
-            wire [SPW:0] lsum = e_w[gl*8 +: 8] + (ssp >> LN);
-            assign lq_lane[gl*8 +: 8] = (lsum > 127) ? 8'd127 : lsum[7:0];
-        end
-    endgenerate
-    genvar gr;
-    generate
-        for (gr = 0; gr < S; gr = gr + 1) begin : g_lq
-            always @(posedge clk)
-                if (wv && woh[gr / EPS]) lq_q[gr*8 +: 8] <= lq_lane[(gr % EPS)*8 +: 8];
-        end
-    endgenerate
-
-    // ---- carry-LOG feed on lq; drain -> log_l -------------------------------
-    wire [WL-1:0]  cl_k;
-    wire [BUF-1:0] cl_word;
-    generate
-        for (gl = 0; gl < EPS; gl = gl + 1) begin : g_cl
-            wire [WL*8-1:0] lq_c;
-            for (gk = 0; gk < WL; gk = gk + 1) begin : g_k
-                if (EPS * gk + gl < S) begin : g_in
-                    assign lq_c[gk*8 +: 8] = lq_q[(EPS*gk + gl)*8 +: 8];
-                end else begin : g_out
-                    assign lq_c[gk*8 +: 8] = 8'd0;
-                end
-            end
-            wire [7:0] slq;
-            softmax_online_ohmux #(.N(WL), .W(8)) u_lq (.sel(cl_k), .in(lq_c), .out(slq));
-            reg [7:0] slq_q;
-            always @(posedge clk) slq_q <= slq;
-            assign cl_word[gl*8 +: 8] = slq_q;
-        end
-    endgenerate
-    wire            cl_dv, cl_last;
-    wire [WL:0]     cl_doh;
-    wire [LS:0]     cl_row0;
-    wire [BUF-1:0]  cl_dd;
-    softmax_online_wfeed #(.S(S), .R(R), .C(C), .BUF(BUF), .P(P), .MODE(2'b11)) u_clog (
-        .clk(clk), .reset(reset), .dpe_reset(dpe_reset), .start(clog_go), .k_oh(cl_k), .word(cl_word),
-        .dr_v(cl_dv), .d_oh(cl_doh), .d_row0(cl_row0), .dr_data(cl_dd), .last_row(cl_last));
-    wire lg_rows = (st == ST_LOG) && cl_dv && (|cl_doh[WL-1:0]);
-    generate
-        for (gr = 0; gr < S; gr = gr + 1) begin : g_ll
-            always @(posedge clk)
-                if (lg_rows && cl_doh[gr / EPS]) ll_q[gr*8 +: 8] <= cl_dd[(gr % EPS)*8 +: 8];
-        end
-    endgenerate
-    assign ll_valid = lg_rows;
-    assign ll_blk   = cb;
-    assign ll_base  = cl_row0;
-    assign ll_data  = cl_dd;
-    genvar gm;
-    generate
-        for (gm = 0; gm < EPS; gm = gm + 1) begin : g_llm
-            assign ll_mask[gm] = lg_rows && (cl_row0 + gm < S);
-        end
-    endgenerate
-
-    // ---- sequencer ----------------------------------------------------------
-    always @(posedge clk) begin
-        if (reset) begin
-            st <= ST_WAIT; cb <= 0; ret_cnt <= 0; w_oh <= 0;
-            cexp_go <= 1'b0; clog_go <= 1'b0; sp_clr <= 2'b00; done <= 1'b0;
-        end
-        else begin
-            cexp_go <= 1'b0; clog_go <= 1'b0; sp_clr <= 2'b00; done <= 1'b0;
-            case (st)
-                ST_WAIT:
-                    if (sp_full[par] && (max_cnt > cb)) begin
-                        if (cb == 0) begin
-                            st <= ST_WALK; w_oh <= {{(WL-1){1'b0}}, 1'b1};
-                        end
-                        else begin
-                            st <= ST_CEXP; cexp_go <= 1'b1;
-                        end
-                    end
-                ST_WALK: begin
-                    w_oh <= w_oh << 1;
-                    if (w_oh[WL-1]) begin st <= ST_LOG; clog_go <= 1'b1; end
-                end
-                ST_CEXP:
-                    if (cx_last) begin st <= ST_LOG; clog_go <= 1'b1; end
-                ST_LOG:
-                    if (cl_last) begin
-                        sp_clr[par] <= 1'b1;
-                        ret_cnt <= ret_cnt + 1'b1;
-                        cb <= cb + 1'b1;
-                        if (cb == B - 1) begin st <= ST_END; done <= 1'b1; end
-                        else st <= ST_WAIT;
-                    end
-                default: ;
-            endcase
-        end
-    end
-
+    assign n = t[off(L) +: L+1];
 endmodule
 
 
 // ----------------------------------------------------------------------------
-// softmax_online_instage — the input stage (spec §5: FIFO_LAT, OPEN_LAT, PACK_LAT, SCR_LAT).
-//   FIFOs   one per E4 channel: 2^DFW words of BUF bits, 1W1R, registered read (two tiles)
-//   reader  a tile opens on `open` (idle, open_ok, FIFO 0 non-empty) and is read from the next cycle: window w
-//           from FIFO w mod S_CH, its LW words, one per cycle whenever the FIFO holds the next word; s_cr pulses
-//           one cycle after the tile's last read; the reader is idle for one cycle before the next tile opens
-//   packer  window words (5 bytes; L_LAST in a window's last word) -> 5-byte stream words, each tile's last word
-//           padded; a word completed by the read at r leaves at r + 2, a second word of the same read at r + 3
+// softmax_online_instage — the input stage (spec §5: FIFO_LAT, OPEN_LAT, CT_LAT, SCR_LAT).
+//   FIFOs        one per E4 channel: 2^DFW plane words of I bits, 1W1R, registered read (two tiles)
+//   reader       a tile opens on `open` (idle, open_ok, FIFO 0 non-empty) and is read from the next cycle: window w
+//                from FIFO w mod S_CH, its P planes, one per cycle whenever the FIFO holds the next plane; s_cr one
+//                cycle after the tile's last read; the reader is idle for one cycle before the next tile opens
+//   corner-turn  two buffers of P planes x I bits: a window's planes are written as they arrive from the registered
+//                read; once its last plane is in, its P core words leave one per cycle (word c = bytes c*Q_W .. of the
+//                window: bit b of byte k = plane b's bit c*Q_W + k), while the next window fills the other buffer
 // ----------------------------------------------------------------------------
 module softmax_online_instage #(
-    parameter S_CH   = 1,
-    parameter BUF    = 40,
-    parameter LW     = 13,
-    parameter NWB    = 2,
-    parameter DFW    = 5,
-    parameter L_LAST = 4
+    parameter S_CH = 1,
+    parameter I    = 64,
+    parameter P    = 8,
+    parameter NWB  = 2,
+    parameter DFW  = 5
 ) (
-    input  wire                clk,
-    input  wire                reset,
-    input  wire [S_CH-1:0]     s_v,
-    input  wire [S_CH*BUF-1:0] s_d,
-    input  wire                open_ok,
-    output wire                open,
-    output reg                 s_cr,
-    output reg                 out_v,
-    output reg  [BUF-1:0]      out_d
+    input  wire              clk,
+    input  wire              reset,
+    input  wire [S_CH-1:0]   s_v,
+    input  wire [S_CH*I-1:0] s_d,
+    input  wire              open_ok,
+    output wire              open,
+    output reg               s_cr,
+    output wire              out_v,
+    output wire [I-1:0]      out_d
 );
-    localparam EPS = BUF / 8;
-    localparam LWW = $clog2(LW + 1);
+    localparam Q_W = I / 8;
+    localparam PW  = $clog2(P);
     localparam NWW = $clog2(NWB + 1);
-    localparam [BUF-1:0] LMASK = {BUF{1'b1}} >> (BUF - 8 * L_LAST);   // the bytes of a window's last word
 
     // ---------------- FIFOs ----------------------------------------------
-    wire [S_CH-1:0]     ne, rd_ch;
-    wire [S_CH*BUF-1:0] rq_all;
+    wire [S_CH-1:0]   ne, rd_ch;
+    wire [S_CH*I-1:0] rq_all;
     genvar gc;
     generate
         for (gc = 0; gc < S_CH; gc = gc + 1) begin : g_f
-            reg [DFW:0]   wp, rp;
-            reg [BUF-1:0] mem [0:(1 << DFW) - 1];
-            reg [BUF-1:0] rq;
+            reg [DFW:0] wp, rp;
+            reg [I-1:0] mem [0:(1 << DFW) - 1];
+            reg [I-1:0] rq;
             always @(posedge clk) begin
                 if (reset) begin wp <= 0; rp <= 0; end
                 else begin
@@ -1167,22 +191,22 @@ module softmax_online_instage #(
                 end
             end
             always @(posedge clk) begin
-                if (s_v[gc]) mem[wp[DFW-1:0]] <= s_d[gc*BUF +: BUF];
+                if (s_v[gc]) mem[wp[DFW-1:0]] <= s_d[gc*I +: I];
                 rq <= mem[rp[DFW-1:0]];
             end
             assign ne[gc] = (wp != rp);
-            assign rq_all[gc*BUF +: BUF] = rq;
+            assign rq_all[gc*I +: I] = rq;
         end
     endgenerate
 
     // ---------------- reader ----------------------------------------------
     reg            act;
-    reg [LWW-1:0]  c;
+    reg [PW-1:0]   c;
     reg [NWW-1:0]  w;
     reg [S_CH-1:0] fsel;                       // one-hot: the FIFO of window w
     wire [S_CH-1:0] fnext = (fsel << 1) | (fsel >> (S_CH - 1));
     wire           rd     = act && (|(ne & fsel));
-    wire           c_last = (c == LW - 1);
+    wire           c_last = (c == P - 1);
     wire           w_last = (w == NWB - 1);
     assign open  = !act && open_ok && ne[0];
     assign rd_ch = rd ? fsel : {S_CH{1'b0}};
@@ -1207,54 +231,650 @@ module softmax_online_instage #(
         end
     end
 
-    // ---------------- packer ----------------------------------------------
-    reg            p_v, p_last, p_short;
+    // ---------------- the registered read: the word read at r is the core's word at r + 1 (RD_LAT) -------------
+    // E4 carries value words (the trims of 2026-10-23): word c of a window is bytes c*Q_W .. of the window, as the
+    // core takes them, so no corner-turn
+    reg            p_v;
     reg [S_CH-1:0] p_sel;
     always @(posedge clk) begin
-        if (reset) p_v <= 1'b0;
-        else       p_v <= rd;
-        p_last  <= c_last && w_last;
-        p_short <= c_last;
-        p_sel   <= fsel;
+        p_v   <= !reset && rd;
+        p_sel <= fsel;
     end
-    wire [BUF-1:0] p_raw;
-    softmax_online_ohmux #(.N(S_CH), .W(BUF)) u_sel (.sel(p_sel), .in(rq_all), .out(p_raw));
-    wire [BUF-1:0] p_d = p_short ? (p_raw & LMASK) : p_raw;
-    wire [3:0]     p_n = p_short ? L_LAST : EPS;
-    reg  [8*(EPS-1)-1:0]   rs_d;               // residual bytes (at most EPS - 1)
-    reg  [2:0]             rs_n;
-    reg                    fl_v;               // the tile's last (partial) word is pending
-    wire [8*(2*EPS-1)-1:0] cat = {{(8*EPS){1'b0}}, rs_d} | ({{(8*(EPS-1)){1'b0}}, p_d} << {rs_n, 3'b000});
-    wire [3:0]             tot = rs_n + p_n;
+    softmax_online_ohmux #(.N(S_CH), .W(I)) u_sel (.sel(p_sel), .in(rq_all), .out(out_d));
+    assign out_v = p_v;
+endmodule
+
+
+// ----------------------------------------------------------------------------
+// softmax_online_store — ring of score blocks (spec §6): NB banks of BDEPTH = DW*P words of Q_W bytes (I bits),
+// 1W/1R sync-read RAMs. Core stream word c of the run's window g goes to bank g mod NB, address {(g / NB) mod DW, c};
+// the write controls are registered before the RAM port.
+// ----------------------------------------------------------------------------
+module softmax_online_store #(
+    parameter I   = 64,
+    parameter P   = 8,
+    parameter NB  = 2,
+    parameter DW  = 4,
+    parameter BAW = 5
+) (
+    input  wire              clk,
+    input  wire              reset,
+    input  wire              ld_valid,
+    input  wire [I-1:0]      ld_data,
+    input  wire [NB*BAW-1:0] rd_addr,
+    output wire [NB*I-1:0]   rd_data
+);
+    localparam LNB = $clog2(NB);
+    localparam LDW = $clog2(DW);
+    localparam PW  = $clog2(P);
+    localparam GW  = LNB + LDW + 1;
+    reg [GW-1:0] t_g;                          // the incoming word's window (low bits)
+    reg [PW-1:0] t_c;                          // its word in the window
     always @(posedge clk) begin
-        if (reset) begin out_v <= 1'b0; rs_d <= 0; rs_n <= 0; fl_v <= 1'b0; end
+        if (reset) begin t_g <= 0; t_c <= 0; end
+        else if (ld_valid) begin
+            t_c <= t_c + 1'b1;
+            if (t_c == P - 1) t_g <= t_g + 1'b1;
+        end
+    end
+    wire [BAW-1:0] addr = (((t_g >> LNB) & (DW - 1)) << PW) | t_c;
+    reg            w_we;
+    reg [LNB-1:0]  w_b;
+    reg [BAW-1:0]  w_a;
+    reg [I-1:0]    w_d;
+    always @(posedge clk) begin
+        w_we <= !reset && ld_valid;
+        w_b  <= t_g[LNB-1:0];
+        w_a  <= addr;
+        w_d  <= ld_data;
+    end
+    genvar gb;
+    generate
+        for (gb = 0; gb < NB; gb = gb + 1) begin : g_b
+            reg [I-1:0] mem [0:DW*P-1];
+            reg [I-1:0] rq;
+            always @(posedge clk) begin
+                if (w_we && w_b == gb) mem[w_a] <= w_d;
+                rq <= mem[rd_addr[gb*BAW +: BAW]];
+            end
+            assign rd_data[gb*I +: I] = rq;
+        end
+    endgenerate
+endmodule
+
+
+// ----------------------------------------------------------------------------
+// softmax_online_loadmax — per-block row maxima while the block streams in (spec §5 MAX_LAT = log2 G + MAX_REG):
+// the input register, log2 G registered levels of a signed max over each group of G = min(Q_W, BKV) elements of a
+// word, then the running max with m. A row spans WPR = BKV/G words; a word holds NGR = Q_W/G rows. At a row's last
+// word: m_new = m_blk (b = 0) | max(m, m_blk) and log_a = m - m_new (0 at b = 0) are written into the block parity's
+// tables. The running max m is a rotating ring (rows complete in order every block, so the completing rows are at
+// its head: no S:1 read mux). max_cnt = blocks whose rows are all done; blk_done is high in the cycle the block's last
+// m_new is readable (a_last + MAX_LAT), with the block's parity and first-block flag.
+// ----------------------------------------------------------------------------
+module softmax_online_loadmax #(
+    parameter S   = 64,
+    parameter BKV = 16,
+    parameter Q_W = 8,
+    parameter MCW = 3
+) (
+    input  wire             clk,
+    input  wire             reset,
+    input  wire             ld_valid,
+    input  wire [8*Q_W-1:0] ld_data,
+    output reg  [8*S-1:0]   mn0,
+    output reg  [8*S-1:0]   mn1,
+    output reg  [9*S-1:0]   la0,
+    output reg  [9*S-1:0]   la1,
+    output reg  [MCW-1:0]   max_cnt,
+    output reg              blk_done,
+    output reg              blk_par,
+    output reg              blk_first
+);
+    localparam G      = (Q_W < BKV) ? Q_W : BKV;
+    localparam L      = $clog2(G);
+    localparam NGR    = Q_W / G;                // rows completed by a row's last word
+    localparam WPR    = BKV / G;                // words per row
+    localparam STREAM = (S * BKV) / Q_W;        // words per block
+    localparam SW     = $clog2(STREAM + 1);
+    localparam NRG    = S / NGR;                // row groups (written together)
+
+    function signed [7:0] smax;
+        input signed [7:0] a, b;
+        smax = (a > b) ? a : b;
+    endfunction
+    function integer lo;                        // the first bit of tree level l
+        input integer l;
+        integer i;
+        begin
+            lo = 0;
+            for (i = 0; i < l; i = i + 1) lo = lo + 8 * (Q_W >> i);
+        end
+    endfunction
+
+    // the input register
+    reg             m0_v, m0_first, m0_last, m0_blast;
+    reg [8*Q_W-1:0] m0_d;
+    reg [SW-1:0]    t_i;                         // the incoming word's index in the block
+    always @(posedge clk) begin
+        if (reset) begin m0_v <= 1'b0; t_i <= 0; end
         else begin
-            out_v <= 1'b0;
-            if (p_v) begin
-                if (tot >= EPS) begin                       // a whole word
-                    out_v <= 1'b1;
-                    out_d <= cat[BUF-1:0];
-                    rs_d  <= cat[BUF +: 8*(EPS-1)];
-                    rs_n  <= tot - EPS;
-                    fl_v  <= p_last && (tot != EPS);
+            m0_v <= ld_valid;
+            if (ld_valid) t_i <= (t_i == STREAM - 1) ? {SW{1'b0}} : t_i + 1'b1;
+        end
+        m0_d     <= ld_data;
+        m0_first <= ((t_i & (WPR - 1)) == 0);
+        m0_last  <= ((t_i & (WPR - 1)) == WPR - 1);
+        m0_blast <= (t_i == STREAM - 1);
+    end
+
+    // the max tree: level l holds Q_W >> l maxima; the control travels with it
+    wire [lo(L + 1)-1:0] tv;
+    wire [L:0]           cv, cf, cl, cb;
+    assign tv[0 +: 8*Q_W] = m0_d;
+    assign cv[0] = m0_v;
+    assign cf[0] = m0_first;
+    assign cl[0] = m0_last;
+    assign cb[0] = m0_blast;
+    genvar gl;
+    generate
+        for (gl = 0; gl < L; gl = gl + 1) begin : g_lvl
+            localparam OI = lo(gl), OO = lo(gl + 1), NO = Q_W >> (gl + 1);
+            reg [8*NO-1:0] r;
+            reg            v_q, f_q, l_q, b_q;
+            integer k;
+            always @(posedge clk) begin
+                for (k = 0; k < NO; k = k + 1)
+                    r[k*8 +: 8] <= smax(tv[OI + 2*k*8 +: 8], tv[OI + (2*k+1)*8 +: 8]);
+                v_q <= !reset && cv[gl];
+                f_q <= cf[gl];
+                l_q <= cl[gl];
+                b_q <= cb[gl];
+            end
+            assign tv[OO +: 8*NO] = r;
+            assign cv[gl+1] = v_q;
+            assign cf[gl+1] = f_q;
+            assign cl[gl+1] = l_q;
+            assign cb[gl+1] = b_q;
+        end
+    endgenerate
+
+    // the running max with m
+    wire           f_v = cv[L], f_first = cf[L], f_last = cl[L], f_blast = cb[L];
+    reg [MCW-1:0]  cb3;                          // the block in the run
+    wire           bfirst = (cb3 == 0);
+    wire           par    = cb3[0];
+    reg  [8*S-1:0] m_q;                          // the ring: the completing rows at the head
+    reg  signed [7:0] run;                       // the running max of the row in progress (WPR > 1)
+    reg  [NRG-1:0] rp_oh;                        // the completing row group (one-hot)
+    wire [8*NGR-1:0] mnv;
+    wire [9*NGR-1:0] lav;
+    genvar gj, gr;
+    generate
+        for (gj = 0; gj < NGR; gj = gj + 1) begin : g_r
+            wire signed [7:0] gm   = tv[lo(L) + gj*8 +: 8];
+            wire signed [7:0] mo   = m_q[gj*8 +: 8];
+            wire signed [7:0] prev = f_first ? (bfirst ? 8'sh80 : mo) : run;
+            wire signed [7:0] nv   = smax(prev, gm);
+            assign mnv[gj*8 +: 8] = nv;
+            assign lav[gj*9 +: 9] = bfirst ? 9'sd0 : ($signed({mo[7], mo}) - $signed({nv[7], nv}));
+        end
+        for (gr = 0; gr < S; gr = gr + 1) begin : g_w
+            always @(posedge clk)
+                if (f_v && f_last && rp_oh[gr / NGR]) begin
+                    if (par) begin
+                        mn1[gr*8 +: 8] <= mnv[(gr % NGR)*8 +: 8];
+                        la1[gr*9 +: 9] <= lav[(gr % NGR)*9 +: 9];
+                    end
+                    else begin
+                        mn0[gr*8 +: 8] <= mnv[(gr % NGR)*8 +: 8];
+                        la0[gr*9 +: 9] <= lav[(gr % NGR)*9 +: 9];
+                    end
                 end
-                else if (p_last) begin                      // the tile ends inside this word
-                    out_v <= 1'b1;
-                    out_d <= cat[BUF-1:0];
-                    rs_d  <= 0;
-                    rs_n  <= 0;
-                end
-                else begin
-                    rs_d <= cat[8*(EPS-1)-1:0];
-                    rs_n <= tot;
+        end
+    endgenerate
+    always @(posedge clk) begin
+        if (reset) begin
+            cb3 <= 0; max_cnt <= 0; rp_oh <= 1; blk_done <= 1'b0;
+        end
+        else begin
+            blk_done <= 1'b0;
+            if (f_v) begin
+                run <= mnv[7:0];
+                if (f_last) begin
+                    m_q   <= {mnv, m_q[8*S-1:8*NGR]};                  // rotate: the next rows to the head
+                    rp_oh <= rp_oh[NRG-1] ? {{(NRG-1){1'b0}}, 1'b1} : rp_oh << 1;
+                    if (f_blast) begin
+                        cb3       <= cb3 + 1'b1;
+                        max_cnt   <= max_cnt + 1'b1;
+                        blk_done  <= 1'b1;
+                        blk_par   <= par;
+                        blk_first <= bfirst;
+                    end
                 end
             end
-            else if (fl_v) begin                            // the reader's idle cycle: the last partial word
-                out_v <= 1'b1;
-                out_d <= {{8{1'b0}}, rs_d};
-                rs_d  <= 0;
-                rs_n  <= 0;
-                fl_v  <= 1'b0;
+        end
+    end
+endmodule
+
+
+// ----------------------------------------------------------------------------
+// softmax_online_xfeed — EXP crossbar CX of N_EXP (spec §5 FEED_LAT, SP_LAT). Its windows are the run's windows
+// g = CX, CX + N_EXP, ... (block g / NWB, window g mod NWB), in order. Window g starts at the first cycle s at which
+// its block's row maxima are done and the previous window started P + 2 cycles before (the crossbar's pass period):
+//   s .. s+7    its P store words are read (bank g mod NB); at s the window's rows' m_new are registered
+//   s+1+c       the registered read of word c: s - m_new and the clamp at -128 on its Q_W bytes, registered
+//   s+2+c       the bytes written into the window's corner-turn buffer (two buffers, alternating)
+//   s+10 ..     the burst: plane b = bit b of every byte, into the crossbar (the E5 window, lp_*), LSB first
+// Drain (the crossbar's P planes): per plane, the count of each row's BKV set bits (the count register), then the
+// row sum += count << b (the weighted add); after plane 7 the window's row sums are offered (sp_we, the window add).
+// ----------------------------------------------------------------------------
+module softmax_online_xfeed #(
+    parameter CX    = 0,
+    parameter N_EXP = 1,
+    parameter S     = 64,
+    parameter BKV   = 16,
+    parameter R     = 256,
+    parameter C     = 256,
+    parameter P     = 8,
+    parameter NWB   = 4,
+    parameter B     = 4,
+    parameter NB    = 2,
+    parameter DW    = 4,
+    parameter BAW   = 5,
+    parameter MCW   = 3,
+    parameter SPW   = 12
+) (
+    input  wire                         clk,
+    input  wire                         reset,          // run clear (re-arm) + power-on reset
+    input  wire                         dpe_reset,      // power-on reset of the crossbar and of the pass spacing
+    input  wire [MCW-1:0]               max_cnt,
+    input  wire [8*S-1:0]               mn0,
+    input  wire [8*S-1:0]               mn1,
+    output wire [BAW-1:0]               rd_addr,
+    input  wire [(NB/N_EXP)*((R < C) ? R : C)-1:0] rd_data,
+    output wire                         lp_valid,
+    output wire [((R < C) ? R : C)-1:0] lp_data,
+    output wire                         sp_we,
+    output wire                         sp_par,
+    output wire [$clog2(NWB+1)-1:0]     sp_w,
+    output wire [(((R < C) ? R : C) / BKV)*SPW-1:0] sp_sum
+);
+    localparam I     = (R < C) ? R : C;
+    localparam Q_W   = I / 8;
+    localparam LQ    = $clog2(Q_W);
+    localparam PWR   = B * NWB;                    // windows per run
+    localparam NWC   = PWR / N_EXP;                // this crossbar's windows per run
+    localparam LNB   = $clog2(NB);
+    localparam LNWB  = $clog2(NWB);
+    localparam LB    = $clog2(BKV);
+    localparam RWIN  = I / BKV;                    // rows per window
+    localparam GW    = $clog2(PWR + N_EXP + 1);
+    localparam NBX   = NB / N_EXP;                 // banks this crossbar reads (2 when N_EXP = 1)
+    localparam PWB   = $clog2(P);
+    localparam NWW   = $clog2(NWB + 1);
+
+    // ---------------- the crossbar --------------------------------------------
+    wire           x_ready, x_done, x_full;
+    wire [C-1:0]   x_out;
+    wire           bv;
+    wire [I-1:0]   bplane;
+    wire [R-1:0]   x_in = bplane;                   // rows >= I read 0
+    softmax_online_dpe #(.R(R), .C(C), .P(P), .MODE(2'b10), .RU(I), .CU(I)) u_x (
+        .clk(clk), .reset(dpe_reset), .data_in(x_in), .w_buf_en(bv),
+        .ready(x_ready), .data_out(x_out), .done(x_done), .full(x_full));
+    assign lp_valid = bv;
+    assign lp_data  = bplane;
+
+    // ---------------- the window reader ----------------------------------------
+    reg            p_act;                           // windows remain in this run
+    reg [GW-1:0]   p_g;                             // the next window
+    reg            rd_on;
+    reg [PWB-1:0]  rd_c;                            // the next word
+    reg [3:0]      cool;                            // cycles until the next window may start
+    wire [GW-1:0]  p_blk = p_g >> LNWB;
+    wire           go_rd = p_act && !rd_on && (cool == 0) && (max_cnt > p_blk);
+    wire           r_v   = go_rd || rd_on;
+    wire [PWB-1:0] c_now = rd_on ? rd_c : {PWB{1'b0}};
+    wire [BAW-1:0] base  = ((p_g >> LNB) & (DW - 1)) << PWB;
+    assign rd_addr = base | c_now;
+    always @(posedge clk) begin
+        if (reset) begin
+            p_act <= (NWC > 0); p_g <= CX; rd_on <= 1'b0; rd_c <= 0;
+        end
+        else if (r_v) begin
+            if (c_now == P - 1) begin
+                rd_on <= 1'b0;
+                rd_c  <= 0;
+                p_g   <= p_g + N_EXP;
+                if (p_g + N_EXP >= PWR) p_act <= 1'b0;
+            end
+            else begin
+                rd_on <= 1'b1;
+                rd_c  <= c_now + 1'b1;
+            end
+        end
+    end
+    always @(posedge clk) begin
+        if (dpe_reset)       cool <= 0;
+        else if (go_rd)      cool <= P + 1;         // the next window at s + P + 2 at the earliest
+        else if (cool != 0)  cool <= cool - 1'b1;
+    end
+    // the window's rows' m_new, registered at s
+    reg  [8*RWIN-1:0] slice, slice_n;
+    integer jw;
+    always @(*) begin
+        slice_n = 0;
+        for (jw = 0; jw < NWB; jw = jw + 1)
+            if ((p_g & (NWB - 1)) == jw)
+                slice_n = p_blk[0] ? mn1[jw*RWIN*8 +: RWIN*8] : mn0[jw*RWIN*8 +: RWIN*8];
+    end
+    always @(posedge clk) if (go_rd) slice <= slice_n;
+
+    // ---------------- s - m_new, the clamp (FEED_REG: the registered read, the registered result) -------------
+    reg            a_v;
+    reg [PWB-1:0]  a_c;
+    reg            a_bk;                            // the bank (NBX = 2)
+    always @(posedge clk) begin
+        a_v  <= !reset && r_v;
+        a_c  <= c_now;
+        a_bk <= p_g[0];
+    end
+    wire [I-1:0] rword = (NBX > 1 && a_bk) ? rd_data[(NBX-1)*I +: I] : rd_data[0 +: I];
+    reg  [8*Q_W-1:0] sub_w;
+    reg  signed [8:0] dd;
+    reg  signed [7:0] mrow;
+    integer js, jr;
+    always @(*) begin
+        sub_w = 0;
+        for (js = 0; js < Q_W; js = js + 1) begin
+            mrow = 0;
+            for (jr = 0; jr < RWIN; jr = jr + 1)
+                if (((({{(LB+LQ){1'b0}}, a_c} << LQ) | js) >> LB) == jr) mrow = slice[jr*8 +: 8];
+            dd = $signed(rword[js*8 +: 8]) - mrow;
+            sub_w[js*8 +: 8] = (dd < -9'sd128) ? 8'h80 : dd[7:0];
+        end
+    end
+    reg            b_v;
+    reg [PWB-1:0]  b_c;
+    reg [8*Q_W-1:0] sq;
+    always @(posedge clk) begin
+        b_v <= !reset && a_v;
+        b_c <= a_c;
+        sq  <= sub_w;
+    end
+
+    // ---------------- the corner-turn: two buffers of I bytes; the burst shifts its buffer one bit per plane --------
+    reg            fb;                              // the buffer being filled
+    wire [1:0]     on_w;
+    wire [2*I-1:0] pl_w;
+    always @(posedge clk) begin
+        if (reset) fb <= 1'b0;
+        else if (b_v && b_c == P - 1) fb <= !fb;
+    end
+    genvar gb, ge;
+    generate
+        for (gb = 0; gb < 2; gb = gb + 1) begin : g_ct
+            reg [8*I-1:0] by;                       // byte e of the window at bits e*8 +: 8
+            reg           on;                       // bursting
+            reg [PWB-1:0] k;                        // the burst's plane
+            wire          wr = b_v && (fb == gb);
+            integer q;
+            always @(posedge clk) begin
+                if (dpe_reset) begin on <= 1'b0; k <= 0; end
+                else if (wr && b_c == P - 1) begin on <= 1'b1; k <= 0; end
+                else if (on) begin
+                    if (k == P - 1) on <= 1'b0;
+                    k <= k + 1'b1;
+                end
+                for (q = 0; q < P; q = q + 1)
+                    if (wr && b_c == q) by[q*Q_W*8 +: Q_W*8] <= sq;
+                if (on) by <= by >> 1;              // plane b: bit b of every byte at the byte's bit 0
+            end
+            for (ge = 0; ge < I; ge = ge + 1) begin : g_e
+                assign pl_w[gb*I + ge] = by[ge*8];
+            end
+            assign on_w[gb] = on;
+        end
+    endgenerate
+    assign bv     = |on_w;
+    assign bplane = on_w[1] ? pl_w[I +: I] : pl_w[0 +: I];
+
+    // ---------------- the drain's row sums ----------------------------------------------------------------------
+    reg [PWB-1:0]  db;                              // the drain plane
+    reg [GW-1:0]   dg;                              // the window being drained
+    always @(posedge clk) begin
+        if (reset) begin db <= 0; dg <= CX; end
+        else if (x_full) begin
+            db <= db + 1'b1;
+            if (db == P - 1) dg <= dg + N_EXP;
+        end
+    end
+    wire [GW-1:0] dg_blk = dg >> LNWB;
+    // the count register: per row of the window, its set bits in the plane
+    wire [RWIN*(LB+1)-1:0] cnt_w;
+    genvar gc;
+    generate
+        for (gc = 0; gc < RWIN; gc = gc + 1) begin : g_cnt
+            softmax_online_popcnt #(.W(BKV)) u_pc (.x(x_out[gc*BKV +: BKV]), .n(cnt_w[gc*(LB+1) +: LB+1]));
+        end
+    endgenerate
+    reg                   c_v, c_last, c_par;
+    reg [PWB-1:0]         c_b;
+    reg [NWW-1:0]         c_w;
+    reg [RWIN*(LB+1)-1:0] cnt;
+    always @(posedge clk) begin
+        c_v    <= !reset && x_full;
+        c_b    <= db;
+        c_last <= (db == P - 1);
+        c_par  <= dg_blk[0];
+        c_w    <= dg & (NWB - 1);
+        cnt    <= cnt_w;
+    end
+    // the weighted add: sum += count << b (the sum restarts at plane 0)
+    reg                 s_v, s_last, s_par;
+    reg [NWW-1:0]       s_w;
+    reg [RWIN*SPW-1:0]  acc;
+    reg [SPW-1:0]       cx, cs;
+    integer ja;
+    always @(posedge clk) begin
+        s_v    <= !reset && c_v;
+        s_last <= c_last;
+        s_par  <= c_par;
+        s_w    <= c_w;
+        if (c_v)
+            for (ja = 0; ja < RWIN; ja = ja + 1) begin
+                cx = cnt[ja*(LB+1) +: LB+1];
+                case (c_b)
+                    3'd0:    cs = cx;
+                    3'd1:    cs = cx << 1;
+                    3'd2:    cs = cx << 2;
+                    3'd3:    cs = cx << 3;
+                    3'd4:    cs = cx << 4;
+                    3'd5:    cs = cx << 5;
+                    3'd6:    cs = cx << 6;
+                    default: cs = cx << 7;
+                endcase
+                acc[ja*SPW +: SPW] <= ((c_b == 0) ? {SPW{1'b0}} : acc[ja*SPW +: SPW]) + cs;
+            end
+    end
+    // the window add: the window's row sums, written into the block's sp table by the top
+    assign sp_we  = s_v && s_last;
+    assign sp_par = s_par;
+    assign sp_w   = s_w;
+    assign sp_sum = acc;
+endmodule
+
+
+// ----------------------------------------------------------------------------
+// softmax_online_wfeed — one carry crossbar (mode MODE, extent S x S): its input planes come from the carry's plane
+// register (d, v); its drain planes (q, full) go to the carry's tables.
+// ----------------------------------------------------------------------------
+module softmax_online_wfeed #(
+    parameter S   = 64,
+    parameter R   = 256,
+    parameter C   = 256,
+    parameter P   = 8,
+    parameter [1:0] MODE = 2'b10
+) (
+    input  wire         clk,
+    input  wire         dpe_reset,
+    input  wire [S-1:0] d,
+    input  wire         v,
+    output wire         full,
+    output wire [S-1:0] q
+);
+    wire         ready, ddone;
+    wire [C-1:0] dout;
+    wire [R-1:0] din = d;                           // rows >= S read 0
+    softmax_online_dpe #(.R(R), .C(C), .P(P), .MODE(MODE), .RU(S), .CU(S)) u_x (
+        .clk(clk), .reset(dpe_reset), .data_in(din), .w_buf_en(v),
+        .ready(ready), .data_out(dout), .done(ddone), .full(full));
+    assign q = dout[S-1:0];
+endmodule
+
+
+// ----------------------------------------------------------------------------
+// softmax_online_carry — per-block carry update, blocks in order (cb = 0..B-1), spec §5 Core:
+//   decision   block cb's row sums complete, its row maxima done and block cb - 1 retired: in WAIT, or in the cycle
+//              of block cb - 1's last carry-LOG drain plane (WAIT_LAT: registered)
+//   b = 0      the carry-LOG input lq = min(sp >> log2 N, 127)
+//   b > 0      the carry-EXP input t = clamp(log_a + log_l, -128, 127); its drain writes e plane by plane; then the
+//              carry-LOG input lq = min(e + (sp >> log2 N), 127) (= min(((e << log2 N) + sp) >> log2 N, 127))
+//   inputs     computed from the tables into a byte register, then the plane register (GO_LAT 2), one burst
+//   LOG drain  writes log_l plane by plane; its last plane retires the block (ret_cnt, the sp slot cleared)
+//   done       one cycle after the last block's retire (the core's done)
+// ----------------------------------------------------------------------------
+module softmax_online_carry #(
+    parameter S   = 64,
+    parameter B   = 4,
+    parameter R   = 256,
+    parameter C   = 256,
+    parameter P   = 8,
+    parameter SPW = 12,
+    parameter MCW = 3,
+    parameter LN  = 6                  // log2 of the key length N (mean shift)
+) (
+    input  wire             clk,
+    input  wire             reset,
+    input  wire             dpe_reset,
+    input  wire [MCW-1:0]   max_cnt,
+    input  wire [1:0]       sp_full,
+    input  wire [SPW*S-1:0] sp0,
+    input  wire [SPW*S-1:0] sp1,
+    input  wire [9*S-1:0]   la0,
+    input  wire [9*S-1:0]   la1,
+    output reg  [1:0]       sp_clr,
+    output reg  [MCW-1:0]   ret_cnt,
+    output wire [8*S-1:0]   ll_q,
+    output reg              done
+);
+    localparam [1:0] ST_WAIT = 2'd0, ST_CEXP = 2'd1, ST_LOG = 2'd2, ST_END = 2'd3;
+    localparam PWB = $clog2(P);
+
+    reg [1:0]     st;
+    reg [MCW-1:0] cb;
+    wire          par = cb[0];
+    wire [MCW-1:0] cb1 = cb + 1'b1;
+
+    // ---- the carry crossbars, fed by one plane register --------------------
+    reg  [S-1:0]  pl;                  // the input plane
+    reg           pv, pe;              // a plane this cycle; it goes to the carry-EXP (else the carry-LOG)
+    wire          ce_full, cl_full;
+    wire [S-1:0]  ce_out, cl_out;
+    softmax_online_wfeed #(.S(S), .R(R), .C(C), .P(P), .MODE(2'b10)) u_cexp (
+        .clk(clk), .dpe_reset(dpe_reset), .d(pl), .v(pv && pe), .full(ce_full), .q(ce_out));
+    softmax_online_wfeed #(.S(S), .R(R), .C(C), .P(P), .MODE(2'b11)) u_clog (
+        .clk(clk), .dpe_reset(dpe_reset), .d(pl), .v(pv && !pe), .full(cl_full), .q(cl_out));
+
+    // ---- the drains: e and log_l, written plane by plane (LSB first) -------
+    reg [PWB-1:0] ce_b, cl_b;
+    reg [8*S-1:0] e_q, l_q;
+    reg           e_done;              // e is whole (the cycle after the carry-EXP's last drain plane)
+    wire          ret_now = cl_full && (cl_b == P - 1);
+    integer jd;
+    always @(posedge clk) begin
+        if (dpe_reset) begin ce_b <= 0; cl_b <= 0; end
+        else begin
+            if (ce_full) ce_b <= ce_b + 1'b1;
+            if (cl_full) cl_b <= cl_b + 1'b1;
+        end
+        e_done <= !reset && ce_full && (ce_b == P - 1);
+        for (jd = 0; jd < S; jd = jd + 1) begin
+            if (ce_full) e_q[jd*8 +: 8] <= {ce_out[jd], e_q[jd*8 + 1 +: 7]};
+            if (cl_full) l_q[jd*8 +: 8] <= {cl_out[jd], l_q[jd*8 + 1 +: 7]};
+        end
+    end
+    assign ll_q = l_q;
+
+    // ---- the sequencer -------------------------------------------------------
+    wire ok_cb  = sp_full[cb[0]] && (max_cnt > cb);
+    wire ok_cb1 = sp_full[cb1[0]] && (max_cnt > cb1);
+    wire dec_w  = (st == ST_WAIT) && ok_cb;                                  // block cb decided now
+    wire dec_r  = (st == ST_LOG) && ret_now && (cb != B - 1) && ok_cb1;     // block cb + 1, at cb's retire
+    reg  go_q;                         // the decision registered: the `wait` cycle of block cb
+    always @(posedge clk) begin
+        if (reset) begin
+            st <= ST_WAIT; cb <= 0; ret_cnt <= 0; sp_clr <= 2'b00; done <= 1'b0; go_q <= 1'b0;
+        end
+        else begin
+            sp_clr <= 2'b00;
+            done   <= 1'b0;
+            go_q   <= dec_w || dec_r;
+            case (st)
+                ST_WAIT:
+                    if (ok_cb) st <= (cb == 0) ? ST_LOG : ST_CEXP;
+                ST_CEXP:
+                    if (e_done) st <= ST_LOG;
+                ST_LOG:
+                    if (ret_now) begin
+                        sp_clr[par] <= 1'b1;
+                        ret_cnt <= ret_cnt + 1'b1;
+                        cb <= cb1;
+                        if (cb == B - 1) begin st <= ST_END; done <= 1'b1; end
+                        else if (ok_cb1) st <= ST_CEXP;
+                        else st <= ST_WAIT;
+                    end
+                default: ;
+            endcase
+        end
+    end
+
+    // ---- the carry inputs: computed from the tables, registered, then planes -------------------------------------
+    wire          ld_t  = go_q && (cb != 0);                  // the carry-EXP input (b > 0) at `wait`
+    wire          ld_lq = (go_q && (cb == 0)) || e_done;     // the carry-LOG input at `wait` (b = 0) or e whole
+    wire [9*S-1:0]   la = par ? la1 : la0;
+    wire [SPW*S-1:0] sp = par ? sp1 : sp0;
+    reg  [8*S-1:0]   t_vec, lq_vec;
+    reg  signed [9:0] ts;
+    reg  [SPW:0]     ls;
+    integer jv;
+    always @(*) begin
+        for (jv = 0; jv < S; jv = jv + 1) begin
+            ts = $signed(la[jv*9 +: 9]) + $signed(l_q[jv*8 +: 8]);
+            t_vec[jv*8 +: 8] = (ts < -10'sd128) ? 8'h80 : ((ts > 10'sd127) ? 8'h7f : ts[7:0]);
+            ls = ((cb == 0) ? {(SPW+1){1'b0}} : {{(SPW-7){1'b0}}, e_q[jv*8 +: 8]}) + (sp[jv*SPW +: SPW] >> LN);
+            lq_vec[jv*8 +: 8] = (ls > 127) ? 8'd127 : ls[7:0];
+        end
+    end
+    reg [8*S-1:0] cin_q;               // the input bytes; the plane register takes their bit 0, then they shift
+    reg           lg, lg_e;            // cin_q was loaded in the previous cycle (for the carry-EXP)
+    reg [PWB-1:0] pk;
+    integer jp;
+    always @(posedge clk) begin
+        if (ld_t)       cin_q <= t_vec;
+        else if (ld_lq) cin_q <= lq_vec;
+        else if (lg || pv) cin_q <= cin_q >> 1;
+        if (lg || pv)
+            for (jp = 0; jp < S; jp = jp + 1) pl[jp] <= cin_q[jp*8];
+        if (reset) begin lg <= 1'b0; lg_e <= 1'b0; pv <= 1'b0; pk <= 0; end
+        else begin
+            lg   <= ld_t || ld_lq;
+            lg_e <= ld_t;
+            if (lg) begin pv <= 1'b1; pk <= 0; pe <= lg_e; end
+            else if (pv) begin
+                if (pk == P - 1) pv <= 1'b0;
+                pk <= pk + 1'b1;
             end
         end
     end
@@ -1263,11 +883,11 @@ endmodule
 
 // ----------------------------------------------------------------------------
 // softmax_online_top — the online softmax (v3/ip/softmax/spec.md).
-//   E4 s_v / s_d (S_CH channels) -> input stage -> the core's block stream; s_cr per tile
-//   E5 lp_v / lp_d: the EXP feeds' pops (window g of the run on lane g mod N_EXP); lp_cr per block
-//   E6 la_v / la_d: log a of every row of the blocks b >= 1, as the row's maximum completes; la_cr per block
-//   E7 ll_v / ll_d: the run's final log l, rows 0 .. S-1 on consecutive cycles; ll_cr per run
-//   start / busy: the start port (busy falling is its credit); done one cycle after the last E7 word
+//   E4 s_v / s_d (S_CH channels of I-bit planes) -> input stage -> the core's block stream; s_cr per tile
+//   E5 lp_v / lp_d: the EXP crossbars' input bursts (window g of the run on lane g mod N_EXP); lp_cr per block
+//   E6 la_v / la_d: log a of the S rows of a block b >= 1, one window (2 lanes: lane 1 carries bit 8); la_cr per block
+//   E7 ll_v / ll_d: the run's final log l, one window of S rows; ll_cr per run
+//   start / busy: the start port (busy falling is its credit); done one cycle after the last E7 plane
 // ----------------------------------------------------------------------------
 module softmax_online_top #(
     parameter S      = 64,
@@ -1275,64 +895,63 @@ module softmax_online_top #(
     parameter N      = S,
     parameter R      = 256,
     parameter C      = 256,
-    parameter BUF    = 40,
     parameter P      = 8,
     parameter N_EXP  = 2,
     parameter S_CH   = 1,
     parameter LP_CAP = 2,
     parameter LA_CAP = 2,
-    parameter LL_CAP = 1
+    parameter LL_CAP = 1,
+    // derived (port widths; do not override)
+    parameter I      = (R < C) ? R : C
 ) (
-    input  wire                 clk,
-    input  wire                 reset,
-    input  wire                 start,
-    output wire                 busy,
-    output reg                  done,
-    input  wire [S_CH-1:0]      s_v,
-    input  wire [S_CH*BUF-1:0]  s_d,
-    output wire                 s_cr,
-    output wire [N_EXP-1:0]     lp_v,
-    output wire [N_EXP*BUF-1:0] lp_d,
-    input  wire                 lp_cr,
-    output wire                 la_v,
-    output wire [8:0]           la_d,
-    input  wire                 la_cr,
-    output wire                 ll_v,
-    output wire [7:0]           ll_d,
-    input  wire                 ll_cr
+    input  wire               clk,
+    input  wire               reset,
+    input  wire               start,
+    output wire               busy,
+    output reg                done,
+    input  wire [S_CH-1:0]    s_v,
+    input  wire [S_CH*I-1:0]  s_d,
+    output wire               s_cr,
+    output wire [N_EXP-1:0]   lp_v,
+    output wire [N_EXP*I-1:0] lp_d,
+    input  wire               lp_cr,
+    output wire               la_v,
+    output wire [2*S-1:0]     la_d,
+    input  wire               la_cr,
+    output wire               ll_v,
+    output wire [S-1:0]       ll_d,
+    input  wire               ll_cr
 );
-    localparam EPS    = BUF / 8;
     localparam LS     = $clog2(S);
-    localparam AW     = $clog2(S * N) + 1;
     localparam MCW    = $clog2(N / BKV + 2);
-    localparam I      = (R < C) ? R : C;
     localparam B      = N / BKV;
     localparam LN     = $clog2(N);
     localparam LB     = $clog2(BKV);
     localparam BLKEL  = S * BKV;
-    localparam NWEL   = (BLKEL < I) ? BLKEL : I;
-    localparam NWB    = BLKEL / NWEL;
+    localparam NWB    = BLKEL / I;
     localparam PW     = B * NWB;
-    localparam WPW    = (NWEL + EPS - 1) / EPS;
+    localparam Q_W    = I / 8;
     localparam NB     = (N_EXP < 2) ? 2 : N_EXP;
     localparam NBX    = NB / N_EXP;
     localparam DW     = (2 * NWB >= NB) ? (2 * NWB) / NB : 1;
-    localparam BDEPTH = DW * WPW;
-    localparam BAW    = (BDEPTH > 1) ? $clog2(BDEPTH) : 1;
+    localparam BDEPTH = DW * P;
+    localparam BAW    = $clog2(BDEPTH);
     localparam SPW    = 8 + LB;
-    localparam LW     = (I * 8 + BUF - 1) / BUF;
-    localparam L_LAST = I - EPS * (LW - 1);
     localparam T_W    = NWB / S_CH;
-    localparam DFW    = $clog2(2 * T_W * LW);
+    localparam DFW    = $clog2(2 * T_W * P);
     localparam LPW    = $clog2(LP_CAP + 1);
     localparam LAW    = $clog2(LA_CAP + 1);
     localparam LLW    = $clog2(LL_CAP + 1);
+    localparam RWIN   = I / BKV;                     // rows per window
+    localparam LRW    = $clog2(RWIN);
+    localparam NWW    = $clog2(NWB + 1);
+    localparam PWB    = $clog2(P);
 
     // ---------------- domain guards ------------------------------------------
     generate
         if ((S & (S - 1)) != 0 || (BKV & (BKV - 1)) != 0 || (I & (I - 1)) != 0
             || (N & (N - 1)) != 0 || (N_EXP & (N_EXP - 1)) != 0 || (S_CH & (S_CH - 1)) != 0
-            || BKV < 8 || BKV > N || BKV > I || S < 8 || S > I || EPS != 5
+            || BKV < 8 || BKV > N || BKV > I || S < 8 || S > I || P != 8
             || BLKEL < I || S_CH > NWB || (PW % N_EXP) != 0
             || LP_CAP < 1 || LA_CAP < 1 || LL_CAP < 1)
         begin : g_bad_param
@@ -1383,59 +1002,75 @@ module softmax_online_top #(
     end
 
     // ---------------- input stage ------------------------------------------------
-    wire           ld_valid;
-    wire [BUF-1:0] ld_data;
-    softmax_online_instage #(.S_CH(S_CH), .BUF(BUF), .LW(LW), .NWB(NWB), .DFW(DFW), .L_LAST(L_LAST)) u_in (
+    wire         ld_valid;
+    wire [I-1:0] ld_data;
+    softmax_online_instage #(.S_CH(S_CH), .I(I), .P(P), .NWB(NWB), .DFW(DFW)) u_in (
         .clk(clk), .reset(reset), .s_v(s_v), .s_d(s_d), .open_ok(open_ok), .open(open), .s_cr(s_cr),
         .out_v(ld_valid), .out_d(ld_data));
 
     // ---------------- store + block max --------------------------------------
     wire [NB*BAW-1:0] st_raddr;
-    wire [NB*BUF-1:0] st_rdata;
-    softmax_online_store #(.NWEL(NWEL), .BLKEL(BLKEL), .WPW(WPW), .NB(NB), .BDEPTH(BDEPTH),
-               .BAW(BAW), .EPS(EPS)) u_store (
+    wire [NB*I-1:0]   st_rdata;
+    softmax_online_store #(.I(I), .P(P), .NB(NB), .DW(DW), .BAW(BAW)) u_store (
         .clk(clk), .reset(clr), .ld_valid(ld_valid), .ld_data(ld_data),
         .rd_addr(st_raddr), .rd_data(st_rdata));
 
-    wire [8*S-1:0] m_q, mn0, mn1;
+    wire [8*S-1:0] mn0, mn1;
     wire [9*S-1:0] la0, la1;
     wire [MCW-1:0] max_cnt;
-    wire           la_valid;
-    wire [MCW-1:0] la_blk;
-    wire [LS-1:0]  la_row;
-    wire [8:0]     la_val;
-    softmax_online_loadmax #(.S(S), .BKV(BKV), .EPS(EPS), .MCW(MCW)) u_lmax (
+    wire           blk_done, blk_par, blk_first;
+    softmax_online_loadmax #(.S(S), .BKV(BKV), .Q_W(Q_W), .MCW(MCW)) u_lmax (
         .clk(clk), .reset(clr), .ld_valid(ld_valid), .ld_data(ld_data),
-        .m_q(m_q), .mn0(mn0), .mn1(mn1), .la0(la0), .la1(la1), .max_cnt(max_cnt),
-        .la_valid(la_valid), .la_blk(la_blk), .la_row(la_row), .la_val(la_val));
-    assign la_v = la_valid && (la_blk != 0);
-    assign la_d = la_val;
+        .mn0(mn0), .mn1(mn1), .la0(la0), .la1(la1), .max_cnt(max_cnt),
+        .blk_done(blk_done), .blk_par(blk_par), .blk_first(blk_first));
+
+    // ---------------- E6: a block b >= 1's log a, one window of S rows, from the cycle after its last m_new ---------
+    reg            e6_v, e6_p;
+    reg  [PWB:0]   e6_k;                       // the next plane
+    reg  [2*S-1:0] e6_q;
+    wire           e6_go = blk_done && !blk_first;
+    wire [9*S-1:0] e6_t  = (e6_go ? blk_par : e6_p) ? la1 : la0;
+    wire [PWB:0]   e6_b  = e6_go ? {(PWB+1){1'b0}} : e6_k;
+    wire [2*S-1:0] e6_pl;                      // plane e6_b: lane 0 = bit b of every row, lane 1 = bit 8 + b
+    genvar g6;
+    generate
+        for (g6 = 0; g6 < S; g6 = g6 + 1) begin : g_e6
+            wire [8:0] v9 = e6_t[g6*9 +: 9];
+            assign e6_pl[g6]     = v9[e6_b[PWB-1:0]];
+            assign e6_pl[S + g6] = (e6_b == 0) ? v9[8] : 1'b0;
+        end
+    endgenerate
+    always @(posedge clk) begin
+        if (clr) begin e6_v <= 1'b0; e6_k <= 0; end
+        else if (e6_go) begin e6_v <= 1'b1; e6_k <= 1; e6_p <= blk_par; e6_q <= e6_pl; end
+        else if (e6_v) begin
+            if (e6_k == P) e6_v <= 1'b0;
+            else begin e6_q <= e6_pl; e6_k <= e6_k + 1'b1; end
+        end
+    end
+    assign la_v = e6_v;
+    assign la_d = e6_q;
 
     // ---------------- EXP crossbars ------------------------------------------
-    wire [N_EXP*BAW-1:0] fx_raddr;
-    wire [N_EXP*AW-1:0]  lp_base;
-    wire [N_EXP*EPS-1:0] lp_mask;
-    wire [N_EXP-1:0]     dr_valid;
-    wire [N_EXP*AW-1:0]  dr_base;
-    wire [N_EXP*EPS-1:0] dr_mask;
-    wire [N_EXP*BUF-1:0] dr_data;
+    wire [N_EXP*BAW-1:0]       fx_raddr;
+    wire [N_EXP-1:0]           sp_we;
+    wire [N_EXP-1:0]           sp_par;
+    wire [N_EXP*NWW-1:0]       sp_w;
+    wire [N_EXP*RWIN*SPW-1:0]  sp_sum;
     genvar gc, gb;
     generate
         for (gc = 0; gc < N_EXP; gc = gc + 1) begin : gen_exp
-            wire [NBX*BUF-1:0] own;
+            wire [NBX*I-1:0] own;
             for (gb = 0; gb < NBX; gb = gb + 1) begin : g_own
-                assign own[gb*BUF +: BUF] = st_rdata[(gb*N_EXP + gc)*BUF +: BUF];
+                assign own[gb*I +: I] = st_rdata[(gb*N_EXP + gc)*I +: I];
             end
-            softmax_online_xfeed #(.CX(gc), .N_EXP(N_EXP), .S(S), .BKV(BKV), .R(R), .C(C), .BUF(BUF),
-                       .P(P), .NWEL(NWEL), .NWB(NWB), .B(B), .WPW(WPW), .NB(NB), .DW(DW),
-                       .BAW(BAW), .AW(AW), .MCW(MCW)) u_feed (
-                .clk(clk), .reset(clr), .dpe_reset(reset), .go(started), .max_cnt(max_cnt),
-                .mn0(mn0), .mn1(mn1),
+            softmax_online_xfeed #(.CX(gc), .N_EXP(N_EXP), .S(S), .BKV(BKV), .R(R), .C(C), .P(P), .NWB(NWB), .B(B),
+                                   .NB(NB), .DW(DW), .BAW(BAW), .MCW(MCW), .SPW(SPW)) u_feed (
+                .clk(clk), .reset(clr), .dpe_reset(reset), .max_cnt(max_cnt), .mn0(mn0), .mn1(mn1),
                 .rd_addr(fx_raddr[gc*BAW +: BAW]), .rd_data(own),
-                .lp_valid(lp_v[gc]), .lp_base(lp_base[gc*AW +: AW]),
-                .lp_mask(lp_mask[gc*EPS +: EPS]), .lp_data(lp_d[gc*BUF +: BUF]),
-                .dr_valid(dr_valid[gc]), .dr_base(dr_base[gc*AW +: AW]),
-                .dr_mask(dr_mask[gc*EPS +: EPS]), .dr_data(dr_data[gc*BUF +: BUF]));
+                .lp_valid(lp_v[gc]), .lp_data(lp_d[gc*I +: I]),
+                .sp_we(sp_we[gc]), .sp_par(sp_par[gc]), .sp_w(sp_w[gc*NWW +: NWW]),
+                .sp_sum(sp_sum[gc*RWIN*SPW +: RWIN*SPW]));
         end
         for (gb = 0; gb < NB; gb = gb + 1) begin : g_bank
             assign st_raddr[gb*BAW +: BAW] = fx_raddr[(gb % N_EXP)*BAW +: BAW];
@@ -1443,14 +1078,6 @@ module softmax_online_top #(
     endgenerate
 
     // ---------------- row sums (sp) per block, ping-pong by parity -----------
-    wire [N_EXP-1:0]    acc_we;
-    wire [N_EXP*AW-1:0] acc_row;           // global row = b*S + r
-    wire [N_EXP*32-1:0] acc_sum;
-    softmax_online_row_acc #(.RS(BKV), .N_EXP(N_EXP), .PORTS(BUF), .AW(AW)) u_acc (
-        .clk(clk), .reset(clr),
-        .dr_valid(dr_valid), .dr_base(dr_base), .dr_mask(dr_mask), .dr_data(dr_data),
-        .ev_we(acc_we), .ev_row(acc_row), .ev_sum(acc_sum));
-
     wire [2*SPW*S-1:0] sp_both;
     wire [1:0]         sp_full;
     wire [1:0]         sp_clr;
@@ -1462,19 +1089,18 @@ module softmax_online_top #(
                 integer q;
                 always @(posedge clk)
                     for (q = 0; q < N_EXP; q = q + 1)
-                        if (acc_we[q] && (acc_row[q*AW + LS] == gp)
-                            && (acc_row[q*AW +: LS] == gr))
-                            v <= acc_sum[q*32 +: SPW];
+                        if (sp_we[q] && (sp_par[q] == gp) && (sp_w[q*NWW +: NWW] == (gr >> LRW)))
+                            v <= sp_sum[(q*RWIN + (gr & (RWIN - 1)))*SPW +: SPW];
                 assign sp_both[(gp*S + gr)*SPW +: SPW] = v;
             end
             // completed rows of the slot
             reg [LS:0] cnt;
-            reg [$clog2(N_EXP + 1):0] n;   // holds N_EXP simultaneous completions (was [3:0]: wrapped at 16, PRE-1)
+            reg [LS:0] n;
             integer q2;
             always @(*) begin
                 n = 0;
                 for (q2 = 0; q2 < N_EXP; q2 = q2 + 1)
-                    n = n + (acc_we[q2] && (acc_row[q2*AW + LS] == gp));
+                    if (sp_we[q2] && (sp_par[q2] == gp)) n = n + RWIN;
             end
             always @(posedge clk) begin
                 if (clr || sp_clr[gp]) cnt <= 0;
@@ -1488,50 +1114,47 @@ module softmax_online_top #(
 
     // ---------------- carry ---------------------------------------------------
     wire [8*S-1:0] ll_q;
-    wire           c_ll_valid, core_done;
-    wire [MCW-1:0] c_ll_blk;
-    wire [LS:0]    c_ll_base;
-    wire [EPS-1:0] c_ll_mask;
-    wire [BUF-1:0] c_ll_data;
-    softmax_online_carry #(.S(S), .B(B), .R(R), .C(C), .BUF(BUF), .P(P), .SPW(SPW), .MCW(MCW), .LN(LN)) u_carry (
+    wire           core_done;
+    softmax_online_carry #(.S(S), .B(B), .R(R), .C(C), .P(P), .SPW(SPW), .MCW(MCW), .LN(LN)) u_carry (
         .clk(clk), .reset(clr), .dpe_reset(reset), .max_cnt(max_cnt), .sp_full(sp_full),
         .sp0(sp0), .sp1(sp1), .la0(la0), .la1(la1),
-        .sp_clr(sp_clr), .ret_cnt(ret_cnt), .ll_q(ll_q),
-        .ll_valid(c_ll_valid), .ll_blk(c_ll_blk), .ll_base(c_ll_base), .ll_mask(c_ll_mask),
-        .ll_data(c_ll_data), .done(core_done));
+        .sp_clr(sp_clr), .ret_cnt(ret_cnt), .ll_q(ll_q), .done(core_done));
 
-    // ---------------- E7: the final log l, row by row; done -----------------------
-    // Decided when the core is done (or later, when an ll credit arrives): e7_row walks 0 .. S-1, the 2-cycle
-    // registered read gives row e7_row two cycles later on ll_d; done one cycle after the last row.
-    reg           ll_pend, e7_act, e7_v1, e7_v2;
-    reg [LS:0]    e7_row;
+    // ---------------- E7: the final log l, one window of S rows; done -------------------------------------------
+    // Decided when the core is done (or later, when an ll credit arrives); the decision register, then the plane
+    // register: plane b of every row's log l two cycles after the decision, one plane per cycle; done one cycle after
+    // the last plane.
+    reg           ll_pend, e7_act, e7_v;
+    reg [PWB:0]   e7_k;
+    reg [S-1:0]   e7_q;
     assign e7_go = (core_done || ll_pend) && !e7_act && (ll_cnt != 0);
+    wire [S-1:0]  e7_pl;
+    genvar g7;
+    generate
+        for (g7 = 0; g7 < S; g7 = g7 + 1) begin : g_e7
+            wire [7:0] v8 = ll_q[g7*8 +: 8];
+            assign e7_pl[g7] = v8[e7_k[PWB-1:0]];
+        end
+    endgenerate
     always @(posedge clk) begin
         if (clr) begin
-            ll_pend <= 1'b0; e7_act <= 1'b0; e7_row <= 0; e7_v1 <= 1'b0; e7_v2 <= 1'b0; done <= 1'b0;
+            ll_pend <= 1'b0; e7_act <= 1'b0; e7_k <= 0; e7_v <= 1'b0; done <= 1'b0;
         end
         else begin
-            e7_v1 <= e7_act;
-            e7_v2 <= e7_v1;
-            done  <= e7_v2 && !e7_v1;
+            done <= e7_v && !e7_act;
             if (e7_go) begin
-                ll_pend <= 1'b0; e7_act <= 1'b1; e7_row <= 0;
+                ll_pend <= 1'b0; e7_act <= 1'b1; e7_k <= 0;
             end
-            else begin
-                if (core_done) ll_pend <= 1'b1;
-                if (e7_act) begin
-                    if (e7_row == S - 1) e7_act <= 1'b0;
-                    else e7_row <= e7_row + 1'b1;
-                end
+            else if (core_done) ll_pend <= 1'b1;
+            if (e7_act) begin
+                e7_q <= e7_pl;
+                e7_v <= 1'b1;
+                if (e7_k == P - 1) e7_act <= 1'b0;
+                e7_k <= e7_k + 1'b1;
             end
+            else e7_v <= 1'b0;
         end
     end
-    reg [LS-1:0] rd_row_q;
-    reg [7:0]    rd_ll;
-    always @(posedge clk) begin
-        rd_row_q <= e7_row[LS-1:0];
-        rd_ll    <= ll_q[rd_row_q*8 +: 8];
-    end
-    assign ll_v = e7_v2;
-    assign ll_d = rd_ll;
+    assign ll_v = e7_v;
+    assign ll_d = e7_q;
 endmodule

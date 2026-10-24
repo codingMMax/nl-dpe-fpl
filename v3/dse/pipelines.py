@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """pipelines.py — the page "Crossbar pipelines" (for sharing): every operation of one attention head as crossbar
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 passes, each pass in its three stages, drawn and animated from the simulator's own pass events.
 
 A crossbar pass (simulator/core/crossbar.py, the pass grammar) has three stages: the load (the input rows through the
-40-bit port, ceil(8 rows / 40) cycles), the compute (the 8 bit-slices, then the shift-accumulate and the output stage:
+pre-bit-plane port, ceil(8 rows / 40) cycles), the compute (the 8 bit-slices, then the shift-accumulate and the output stage:
 10 cycles) and the read-out (every column through the port, ceil(8 C / 40) cycles). The next pass loads from the cycle
 after the last bit-slice, so a pass's read-out runs under the next pass's load and compute, and the slower side sets
 the pace: max(load + 8, read-out + 1) cycles per pass when the passes run back to back.
@@ -264,7 +266,7 @@ def describe(op: str, a: dict) -> str:
 
 
 CAPTION = {
-    "proj": "One pass per token. A bigger crossbar has the same 40-bit port, so a token that needs fewer crossbars "
+    "proj": "One pass per token. A bigger crossbar has the same pre-bit-plane port, so a token that needs fewer crossbars "
             "loads through fewer ports at once, and a wider crossbar reads out more columns.",
     "log": "The LOG converters put q, k and v into the log domain. Each converts one token's row per pass.",
     "dimm": "QKᵀ in the log domain: an add of two logs, then EXP on identity crossbars, then an adder tree. PV runs "
@@ -1009,9 +1011,9 @@ h3 {{ font-family: var(--display); font-weight: 600; font-size: 18px; margin: 0;
   <h1>Inside each operation: load, compute, read out</h1>
   <p class="lede">Every operation of the attention head runs as crossbar passes, and every pass has the same three stages. The boards and diagrams are the simulator's own passes for {esc(heads[0]["name"])} and {esc(heads[1]["name"])} on {cfgs}.</p>
   <div class="rules">
-    <div class="rule"><b>Load</b><span>The input enters through the crossbar's 40-bit port, 5 numbers per cycle.</span><span class="n">numbers in ÷ 5 cycles</span></div>
+    <div class="rule"><b>Load</b><span>The input enters through the crossbar's pre-bit-plane port, 5 numbers per cycle.</span><span class="n">numbers in ÷ 5 cycles</span></div>
     <div class="rule"><b>Compute</b><span>One cycle per bit of the 8-bit input, plus 2 to finish. The same on every array.</span><span class="n">10 cycles</span></div>
-    <div class="rule"><b>Read out</b><span>The output leaves through a 40-bit port, 5 numbers per cycle, over all C columns.</span><span class="n">C ÷ 5 cycles</span></div>
+    <div class="rule"><b>Read out</b><span>The output leaves through a pre-bit-plane port, 5 numbers per cycle, over all C columns.</span><span class="n">C ÷ 5 cycles</span></div>
   </div>
   <ul class="notes">
     <li><b>How the stages overlap.</b> The next pass starts loading as soon as the current pass has done its 8 bit cycles, so the read-out of one pass runs while the next pass loads and computes.</li>

@@ -1,0 +1,422 @@
+{
+ "family": "attention",
+ "workloads": [
+  "ViT-B/16",
+  "DeiT-T",
+  "BERT-base",
+  "BERT-Tiny",
+  "JetFormer-150P",
+  "JetFormer-JetClass"
+ ],
+ "metric": "EDAP = pJ * ns * mm^2; per workload, score = EDAP / the largest EDAP (1 = the worst config); G_EDAP = the geometric mean over the workloads, lower is better; G_E, G_D, G_A the same for energy, latency and area; Fmax = the mean of the 3 VTR seeds",
+ "best_per_workload": {
+  "ViT-B/16": "128x128",
+  "DeiT-T": "128x128",
+  "BERT-base": "128x64",
+  "BERT-Tiny": "128x64",
+  "JetFormer-150P": "128x64",
+  "JetFormer-JetClass": "128x64"
+ },
+ "configs": [
+  {
+   "config": "128x64",
+   "R": 128,
+   "C": 64,
+   "rank": 1,
+   "G_EDAP": 0.5337405560990856,
+   "scores": {
+    "ViT-B/16": 0.7135416610945032,
+    "DeiT-T": 0.6651292812755077,
+    "BERT-base": 0.5772813565163892,
+    "BERT-Tiny": 0.5082108841767401,
+    "JetFormer-150P": 0.3615331917197934,
+    "JetFormer-JetClass": 0.4592785375470622
+   },
+   "G_E": 0.801957220018185,
+   "G_D": 0.9605598230005353,
+   "G_A": 0.4612152246637507,
+   "edap": {
+    "ViT-B/16": 13226482192184.379,
+    "DeiT-T": 12347171464682.656,
+    "BERT-base": 1029112419824.9331,
+    "BERT-Tiny": 917558500827.3322,
+    "JetFormer-150P": 3066942062.000133,
+    "JetFormer-JetClass": 75521231549.93687
+   },
+   "energy_pj": {
+    "ViT-B/16": 3751711.11,
+    "DeiT-T": 3683659.03,
+    "BERT-base": 965453.19,
+    "BERT-Tiny": 922920.64,
+    "JetFormer-150P": 31837.11,
+    "JetFormer-JetClass": 251301.99
+   },
+   "latency_ns": {
+    "ViT-B/16": 101044.516,
+    "DeiT-T": 96652.418,
+    "BERT-base": 30393.258,
+    "BERT-Tiny": 28641.93,
+    "JetFormer-150P": 5386.869,
+    "JetFormer-JetClass": 26903.47
+   },
+   "area_mm2": {
+    "ViT-B/16": 34.8901,
+    "DeiT-T": 34.6797,
+    "BERT-base": 35.0715,
+    "BERT-Tiny": 34.711,
+    "JetFormer-150P": 17.8828,
+    "JetFormer-JetClass": 11.1703
+   }
+  },
+  {
+   "config": "128x128",
+   "R": 128,
+   "C": 128,
+   "rank": 2,
+   "G_EDAP": 0.5864626150028813,
+   "scores": {
+    "ViT-B/16": 0.5893367387885675,
+    "DeiT-T": 0.5759313576236182,
+    "BERT-base": 0.693528463003349,
+    "BERT-Tiny": 0.6301506043177426,
+    "JetFormer-150P": 0.4806888528251529,
+    "JetFormer-JetClass": 0.5706043221193488
+   },
+   "G_E": 0.8284546667226825,
+   "G_D": 0.7665520507823116,
+   "G_A": 0.6147223230230877,
+   "edap": {
+    "ViT-B/16": 10924172064221.82,
+    "DeiT-T": 10691339901363.828,
+    "BERT-base": 1236344716007.7832,
+    "BERT-Tiny": 1137716766396.8118,
+    "JetFormer-150P": 4077757990.7702293,
+    "JetFormer-JetClass": 93827030029.14522
+   },
+   "energy_pj": {
+    "ViT-B/16": 3823777.24,
+    "DeiT-T": 3714173.74,
+    "BERT-base": 1001648.47,
+    "BERT-Tiny": 933146.29,
+    "JetFormer-150P": 34474.65,
+    "JetFormer-JetClass": 261649.26
+   },
+   "latency_ns": {
+    "ViT-B/16": 62016.189,
+    "DeiT-T": 63222.866,
+    "BERT-base": 26817.202,
+    "BERT-Tiny": 26814.281,
+    "JetFormer-150P": 5100.287,
+    "JetFormer-JetClass": 22130.928
+   },
+   "area_mm2": {
+    "ViT-B/16": 46.0671,
+    "DeiT-T": 45.5298,
+    "BERT-base": 46.0268,
+    "BERT-Tiny": 45.4693,
+    "JetFormer-150P": 23.1914,
+    "JetFormer-JetClass": 16.2035
+   }
+  },
+  {
+   "config": "256x64",
+   "R": 256,
+   "C": 64,
+   "rank": 3,
+   "G_EDAP": 0.595787096080464,
+   "scores": {
+    "ViT-B/16": 0.8062374676715034,
+    "DeiT-T": 0.6867458532650063,
+    "BERT-base": 0.6551934019566161,
+    "BERT-Tiny": 0.5912713391949779,
+    "JetFormer-150P": 0.39044317601453155,
+    "JetFormer-JetClass": 0.5340394672329491
+   },
+   "G_E": 0.8376070052189637,
+   "G_D": 0.9598520895020939,
+   "G_A": 0.4932822946740798,
+   "edap": {
+    "ViT-B/16": 14944727253166.854,
+    "DeiT-T": 12748452130482.18,
+    "BERT-base": 1168005271138.1138,
+    "BERT-Tiny": 1067521496421.2358,
+    "JetFormer-150P": 3312189936.541112,
+    "JetFormer-JetClass": 87814506806.93245
+   },
+   "energy_pj": {
+    "ViT-B/16": 3895980.78,
+    "DeiT-T": 3853822.01,
+    "BERT-base": 991601.79,
+    "BERT-Tiny": 969910.34,
+    "JetFormer-150P": 33538.8,
+    "JetFormer-JetClass": 264084.97
+   },
+   "latency_ns": {
+    "ViT-B/16": 102879.234,
+    "DeiT-T": 88987.228,
+    "BERT-base": 31526.618,
+    "BERT-Tiny": 29597.184,
+    "JetFormer-150P": 5138.988,
+    "JetFormer-JetClass": 27942.697
+   },
+   "area_mm2": {
+    "ViT-B/16": 37.2858,
+    "DeiT-T": 37.1739,
+    "BERT-base": 37.362,
+    "BERT-Tiny": 37.1873,
+    "JetFormer-150P": 19.2172,
+    "JetFormer-JetClass": 11.9002
+   }
+  },
+  {
+   "config": "256x128",
+   "R": 256,
+   "C": 128,
+   "rank": 4,
+   "G_EDAP": 0.6250089573215863,
+   "scores": {
+    "ViT-B/16": 0.658439266589805,
+    "DeiT-T": 0.635448107971059,
+    "BERT-base": 0.7004653821219199,
+    "BERT-Tiny": 0.714771030540519,
+    "JetFormer-150P": 0.4955993401545441,
+    "JetFormer-JetClass": 0.574165768969291
+   },
+   "G_E": 0.8625550846789429,
+   "G_D": 0.7557717306332142,
+   "G_A": 0.638201482907617,
+   "edap": {
+    "ViT-B/16": 12205083051249.588,
+    "DeiT-T": 11796183038251.934,
+    "BERT-base": 1248711076950.603,
+    "BERT-Tiny": 1290496240118.8628,
+    "JetFormer-150P": 4204245964.2199054,
+    "JetFormer-JetClass": 94412654721.39359
+   },
+   "energy_pj": {
+    "ViT-B/16": 3940907.67,
+    "DeiT-T": 3875961.03,
+    "BERT-base": 1014227.44,
+    "BERT-Tiny": 981142.07,
+    "JetFormer-150P": 36431.79,
+    "JetFormer-JetClass": 275438.32
+   },
+   "latency_ns": {
+    "ViT-B/16": 65053.129,
+    "DeiT-T": 64372.345,
+    "BERT-base": 25835.792,
+    "BERT-Tiny": 27635.78,
+    "JetFormer-150P": 4771.02,
+    "JetFormer-JetClass": 20491.55
+   },
+   "area_mm2": {
+    "ViT-B/16": 47.6076,
+    "DeiT-T": 47.2784,
+    "BERT-base": 47.6546,
+    "BERT-Tiny": 47.5941,
+    "JetFormer-150P": 24.1878,
+    "JetFormer-JetClass": 16.7275
+   }
+  },
+  {
+   "config": "512x64",
+   "R": 512,
+   "C": 64,
+   "rank": 5,
+   "G_EDAP": 0.742931440718851,
+   "scores": {
+    "ViT-B/16": 1.0,
+    "DeiT-T": 0.8862179860017656,
+    "BERT-base": 0.7102297870620609,
+    "BERT-Tiny": 0.7938212017259201,
+    "JetFormer-150P": 0.49458127064603835,
+    "JetFormer-JetClass": 0.6804443704811513
+   },
+   "G_E": 0.9179105117507257,
+   "G_D": 0.9648591847347868,
+   "G_A": 0.5583846997006846,
+   "edap": {
+    "ViT-B/16": 18536383946939.06,
+    "DeiT-T": 16451366277644.084,
+    "BERT-base": 1266117962315.3718,
+    "BERT-Tiny": 1433218796485.4355,
+    "JetFormer-150P": 4195609522.893943,
+    "JetFormer-JetClass": 111888522234.05351
+   },
+   "energy_pj": {
+    "ViT-B/16": 4259146.26,
+    "DeiT-T": 4225725.77,
+    "BERT-base": 1081212.05,
+    "BERT-Tiny": 1063889.74,
+    "JetFormer-150P": 36942.18,
+    "JetFormer-JetClass": 289650.93
+   },
+   "latency_ns": {
+    "ViT-B/16": 102726.851,
+    "DeiT-T": 92327.275,
+    "BERT-base": 27609.801,
+    "BERT-Tiny": 31866.873,
+    "JetFormer-150P": 5203.081,
+    "JetFormer-JetClass": 29148.051
+   },
+   "area_mm2": {
+    "ViT-B/16": 42.3661,
+    "DeiT-T": 42.1668,
+    "BERT-base": 42.4131,
+    "BERT-Tiny": 42.2743,
+    "JetFormer-150P": 21.8279,
+    "JetFormer-JetClass": 13.2526
+   }
+  },
+  {
+   "config": "256x256",
+   "R": 256,
+   "C": 256,
+   "rank": 6,
+   "G_EDAP": 0.8152598488958593,
+   "scores": {
+    "ViT-B/16": 0.7850978917919681,
+    "DeiT-T": 0.8181995680647953,
+    "BERT-base": 0.7789041671759172,
+    "BERT-Tiny": 0.7969543424699375,
+    "JetFormer-150P": 0.8750823132045131,
+    "JetFormer-JetClass": 0.8414472445185404
+   },
+   "G_E": 0.9114082579026427,
+   "G_D": 0.6538571722856625,
+   "G_A": 0.9106453059009618,
+   "edap": {
+    "ViT-B/16": 14552875958188.336,
+    "DeiT-T": 15188701871389.588,
+    "BERT-base": 1388542940536.4404,
+    "BERT-Tiny": 1438875581913.4348,
+    "JetFormer-150P": 7423458801.424235,
+    "JetFormer-JetClass": 138362947525.77975
+   },
+   "energy_pj": {
+    "ViT-B/16": 4031734.76,
+    "DeiT-T": 3921212.38,
+    "BERT-base": 1060248.25,
+    "BERT-Tiny": 1004375.01,
+    "JetFormer-150P": 42217.77,
+    "JetFormer-JetClass": 298671.26
+   },
+   "latency_ns": {
+    "ViT-B/16": 51707.945,
+    "DeiT-T": 55783.398,
+    "BERT-base": 19515.08,
+    "BERT-Tiny": 21450.497,
+    "JetFormer-150P": 5120.242,
+    "JetFormer-JetClass": 19826.23
+   },
+   "area_mm2": {
+    "ViT-B/16": 69.8071,
+    "DeiT-T": 69.4377,
+    "BERT-base": 67.1091,
+    "BERT-Tiny": 66.7867,
+    "JetFormer-150P": 34.3416,
+    "JetFormer-JetClass": 23.3661
+   }
+  },
+  {
+   "config": "512x128",
+   "R": 512,
+   "C": 128,
+   "rank": 7,
+   "G_EDAP": 0.8271265096831697,
+   "scores": {
+    "ViT-B/16": 0.7921523599948838,
+    "DeiT-T": 0.8343820427952094,
+    "BERT-base": 0.9854337253072071,
+    "BERT-Tiny": 0.886563687066398,
+    "JetFormer-150P": 0.7031513842233397,
+    "JetFormer-JetClass": 0.7886272442787046
+   },
+   "G_E": 0.94575829070994,
+   "G_D": 0.7922897784048729,
+   "G_A": 0.7347790760905508,
+   "edap": {
+    "ViT-B/16": 14683640289339.053,
+    "DeiT-T": 15489106312818.102,
+    "BERT-base": 1756720660004.9053,
+    "BERT-Tiny": 1600662388233.4937,
+    "JetFormer-150P": 5964942101.08264,
+    "JetFormer-JetClass": 129677517786.59538
+   },
+   "energy_pj": {
+    "ViT-B/16": 4298715.69,
+    "DeiT-T": 4251889.11,
+    "BERT-base": 1101158.98,
+    "BERT-Tiny": 1077133.63,
+    "JetFormer-150P": 40346.07,
+    "JetFormer-JetClass": 303016.44
+   },
+   "latency_ns": {
+    "ViT-B/16": 62236.747,
+    "DeiT-T": 66536.676,
+    "BERT-base": 28901.049,
+    "BERT-Tiny": 27088.036,
+    "JetFormer-150P": 5268.211,
+    "JetFormer-JetClass": 22716.701
+   },
+   "area_mm2": {
+    "ViT-B/16": 54.8843,
+    "DeiT-T": 54.7499,
+    "BERT-base": 55.2,
+    "BERT-Tiny": 54.8596,
+    "JetFormer-150P": 28.0635,
+    "JetFormer-JetClass": 18.8388
+   }
+  },
+  {
+   "config": "512x256",
+   "R": 512,
+   "C": 256,
+   "rank": 8,
+   "G_EDAP": 0.9910663114643832,
+   "scores": {
+    "ViT-B/16": 0.9475808657596356,
+    "DeiT-T": 1.0,
+    "BERT-base": 1.0,
+    "BERT-Tiny": 1.0,
+    "JetFormer-150P": 1.0,
+    "JetFormer-JetClass": 1.0
+   },
+   "G_E": 1.0,
+   "G_D": 0.6597080205470128,
+   "G_A": 1.0,
+   "edap": {
+    "ViT-B/16": 17564722748493.525,
+    "DeiT-T": 18563566230319.44,
+    "BERT-base": 1782687779898.3904,
+    "BERT-Tiny": 1805468023995.003,
+    "JetFormer-150P": 8483154886.584159,
+    "JetFormer-JetClass": 164434488825.2006
+   },
+   "energy_pj": {
+    "ViT-B/16": 4378827.88,
+    "DeiT-T": 4305189.1,
+    "BERT-base": 1141900.93,
+    "BERT-Tiny": 1104469.49,
+    "JetFormer-150P": 47153.85,
+    "JetFormer-JetClass": 330352.3
+   },
+   "latency_ns": {
+    "ViT-B/16": 52418.573,
+    "DeiT-T": 56386.662,
+    "BERT-base": 21125.935,
+    "BERT-Tiny": 22189.573,
+    "JetFormer-150P": 4734.297,
+    "JetFormer-JetClass": 19712.052
+   },
+   "area_mm2": {
+    "ViT-B/16": 76.5241,
+    "DeiT-T": 76.4703,
+    "BERT-base": 73.8977,
+    "BERT-Tiny": 73.6694,
+    "JetFormer-150P": 38.0001,
+    "JetFormer-JetClass": 25.2513
+   }
+  }
+ ]
+}

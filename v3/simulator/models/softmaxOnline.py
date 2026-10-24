@@ -1,17 +1,17 @@
 """softmaxOnline.py — behavior model of `softmax_online_top` (the online softmax), contract `ip/softmax/spec.md` (the
-bit-plane pass, 2026-10-22: plane words on every port, a double corner-turn instead of the packer, one EXP burst per
-E5 window, E6 and E7 as plane windows).
+bit-plane pass, 2026-10-22: plane words on the crossbar ports, one EXP burst per E5 window, E6 and E7 as plane
+windows; the trims of 2026-10-23: E4 carries value words, read straight into the core).
 
 One execution gives the values, the cycle of every port event and the counts (docs/simulator.md §1). The model is the
 blocks of spec §4, each a stage (simulator/core/stages.py) or a crossbar (simulator/core/crossbar.py):
-  reader              the tile reader (Serial): one FIFO plane per cycle, a plane readable FIFO_LAT after it arrived;
-                      a window's P core words (Q_W bytes each) leave the corner-turn from CT_LAT after its last plane
+  reader              the tile reader (Serial): one FIFO word per cycle, a word readable FIFO_LAT after it arrived;
+                      a word (Q_W bytes) read at r is the core's word at r + RD_LAT
   exp                 the N_EXP EXP crossbars (I x I); carryExp, carryLog: the carry crossbars (S x S)
 The core's timing is v2's recurrence on the bit-plane pass (spec §5), driven by the stream word times; its values go
 through the crossbars (`SoftmaxMath`).
 Processes (one step per unit):
   arm    a run's start pulse -> the arm time
-  tile   an input tile: the gate, the reads, the corner-turn, s_cr
+  tile   an input tile: the gate, the reads, s_cr
   blk    a block: the EXP passes (the lp windows), the row sums, the carry passes, the la window, the retire
   run    a run's end: the log l read-out (the ll window), done, the start port's credit (busy falling)
 """
@@ -24,7 +24,7 @@ import numpy as np
 from simulator.core.cycleMath import clog2, isPowerOfTwo, readyAt
 from simulator.core.errors import ContractError
 from simulator.core.module import Module, Need, checkRules
-from simulator.core.records import PortSpec, Step, planePort
+from simulator.core.records import PortSpec, Step, planePort, valuePort
 from simulator.core.stages import Serial
 from simulator.core.trace import label
 from simulator.core.crossbar import NL_DPE_MODES, Crossbar
@@ -35,7 +35,7 @@ CR_IN_LAT = 1       # a credit pulse at t counts for the gates from t + 1
 RET_LAT = 1         # a block retired at t counts for the store-slot gate from t + 1
 ARM_LAT = 2         # start taken at t: the run is armed from t + 2
 OPEN_LAT = 1        # the reader opens a tile one cycle after its decision
-CT_LAT = 2          # a window's last plane read at r -> its first core word at r + 2 (registered read, corner-turn)
+RD_LAT = 1          # a word read at r -> the core's word at r + 1 (the registered read)
 SCR_LAT = 1         # s_cr one cycle after a tile's last read
 MAX_REG = 2         # MAX_LAT = log2 min(Q_W, BKV) + MAX_REG: the input register, the running max with m
 FEED_REG = 2        # FEED_LAT = MAX_LAT + P + FEED_REG: the registered read, the registered s - m_new and clamp
@@ -181,7 +181,7 @@ class SoftmaxMath:
 class SoftmaxOnline(Module):
     NAME = "softmax_online_top"
     PARAMS_CLASS = SoftmaxOnlineParams
-    BASIS = "model-only"           # the bit-plane pass (2026-10-22); the 40-bit version was GATE 2-pinned 2026-10-14
+    BASIS = "rtl-pinned"           # the bit-plane RTL: GATE 2 at 64x64, 18/18 + 1/1 + 5/5 (2026-10-23)
     STEP_METHODS = {"arm": "stepArm", "tile": "stepTile", "blk": "stepBlock", "run": "stepRunEnd"}
 
     @staticmethod
@@ -253,7 +253,7 @@ class SoftmaxOnline(Module):
     def ports(self) -> dict:
         p, d = self.p, self.d
         return {
-            "s": planePort("s", "in", "push+credit", 8, d.I, p.S_CH, "tile", p.P, CAP=2,
+            "s": valuePort("s", "in", "push+credit", 8, d.I, p.S_CH, "tile", p.P, CAP=2,
                            signals=("s_d", "s_v", "s_cr")),
             "go": PortSpec("go", "in", "burst", 1, 1, 1, 1, "run", CAP=1, signals=("start", "busy")),
             "lp": planePort("lp", "out", "push+credit", 8, d.I, p.N_EXP, "block", p.P, CAP=p.LP_CAP,
@@ -308,26 +308,23 @@ class SoftmaxOnline(Module):
         tDecide = readyAt(self.reader.freeAt, self.armedAt[run], arrivals[0] + FIFO_LAT,
                           self.retireAt[tile - 2] + RET_LAT if b >= 2 else None,
                           None if lp is None else lp + CR_IN_LAT, None if la is None else la + CR_IN_LAT)
-        # the reads: from the cycle after the decision, one plane per cycle once the plane is in its FIFO
+        # the reads: from the cycle after the decision, one word per cycle once the word is in its FIFO
         reads = []
         tOpen = tDecide + OPEN_LAT
-        with label("stream"):                   # the score planes: plane c of window w in its FIFO, read one per cycle
+        with label("stream"):                   # the score words: word c of window w in its FIFO, read one per cycle
             for i in range(d.NWORDS):
                 w, c = divmod(i, p.P)
                 reads.append(self.reader.take(readyAt(arrivals[w] + c + FIFO_LAT, tOpen if i == 0 else None)))
-        # the corner-turn: window w's P core words from CT_LAT after its last plane's read, one per cycle
-        stream = []
-        for w in range(d.NWB):
-            tWord = reads[w * p.P + p.P - 1] + CT_LAT
-            with label("stream"):
-                stream += [tWord + c for c in range(p.P)]
+        # the core words: each read word RD_LAT later (the registered read)
+        with label("stream"):
+            stream = [r + RD_LAT for r in reads]
         self.readTimes[tile] = reads
         io.giveCredit("s", tile, reads[-1] + SCR_LAT)
         self.streamTimes[tile], self.lastStreamWord[tile] = stream, stream[-1]
         if self.math:
             self.math.storeTile(tile, windows)
         self.counts.fifoWords += d.NWORDS
-        fifoBytes = d.NWORDS * d.Q_W                                   # FIFO traffic: each plane written once, read once
+        fifoBytes = d.NWORDS * d.Q_W                                   # FIFO traffic: each word written once, read once
         self.counts.memWriteBytes += fifoBytes
         self.counts.memReadBytes += fifoBytes
         return Step("tile", tile, tDecide, int(reads[0]), int(reads[-1]) + 1,

@@ -1,7 +1,9 @@
 // ============================================================================
 // tb_softmax_online_top.v — GATE-2 testbench of `softmax_online_top` (v3, ip/softmax/spec.md §8). Case files are
 // written by ip/softmax/cases.py (model run + GATE 1); the runner ip/softmax/tb/run_softmax_rtl.py compares this
-// testbench's event lines with the model's, line for line.
+// testbench's event lines with the model's, line for line. The bit-plane pass (2026-10-23): every window is 8 words
+// on consecutive cycles (E4 and E5 I bits per channel, E6 2S bits in 2 lanes, E7 S bits): E4 value words (the trims of
+// 2026-10-23), the others planes.
 //
 // The testbench is the module's environment of the model's test graph (ip/softmax/cases.py, sim/core/env.py):
 //   score source   every E4 window is driven at the cycle the model planned; before a tile's first word the
@@ -49,12 +51,12 @@
 `endif
 
 module tb_softmax_online_top;
-    localparam S = `S_TB, BKV = `BKV_TB, N = `N_TB, R = `R_TB, C = `C_TB, BUF = 40, P = 8, N_EXP = `NE_TB;
+    localparam S = `S_TB, BKV = `BKV_TB, N = `N_TB, R = `R_TB, C = `C_TB, P = 8, N_EXP = `NE_TB;
     localparam S_CH = `SCH_TB, LP_CAP = `LPC_TB, LA_CAP = `LAC_TB, LL_CAP = `LLC_TB;
     localparam I     = (R < C) ? R : C;
     localparam B     = N / BKV;
     localparam NWB   = (S * BKV) / I;
-    localparam LW    = (I * 8 + BUF - 1) / BUF;
+    localparam LW    = P;                              // plane words per window
     localparam MAXW = 4096, MAXU = 1024, MAXR = 64, MAXLA = 65536, MAXLP = 131072;
 
     reg clk = 1'b0;
@@ -63,15 +65,15 @@ module tb_softmax_online_top;
 
     reg                  start = 1'b0;
     reg  [S_CH-1:0]      s_v = 0;
-    reg  [S_CH*BUF-1:0]  s_d = 0;
+    reg  [S_CH*I-1:0]    s_d = 0;
     reg                  lp_cr = 1'b0, la_cr = 1'b0, ll_cr = 1'b0;
     wire                 busy, done, s_cr, la_v, ll_v;
     wire [N_EXP-1:0]     lp_v;
-    wire [N_EXP*BUF-1:0] lp_d;
-    wire [8:0]           la_d;
-    wire [7:0]           ll_d;
+    wire [N_EXP*I-1:0]   lp_d;
+    wire [2*S-1:0]       la_d;
+    wire [S-1:0]         ll_d;
 
-    softmax_online_top #(.S(S), .BKV(BKV), .N(N), .R(R), .C(C), .BUF(BUF), .P(P), .N_EXP(N_EXP), .S_CH(S_CH),
+    softmax_online_top #(.S(S), .BKV(BKV), .N(N), .R(R), .C(C), .P(P), .N_EXP(N_EXP), .S_CH(S_CH),
                          .LP_CAP(LP_CAP), .LA_CAP(LA_CAP), .LL_CAP(LL_CAP)) dut (
         .clk(clk), .reset(reset), .start(start), .busy(busy), .done(done),
         .s_v(s_v), .s_d(s_d), .s_cr(s_cr), .lp_v(lp_v), .lp_d(lp_d), .lp_cr(lp_cr),
@@ -105,14 +107,14 @@ module tb_softmax_online_top;
     integer fd, rc, i, k;
     integer ns, nrun, nblk, nla, lpcr, lacr, llcr, tmax;
     integer sw_t [0:MAXW-1], sw_ch [0:MAXW-1], sw_u [0:MAXW-1], sw_w [0:MAXW-1];
-    reg [BUF-1:0] sw_d [0:MAXW*LW-1];
+    reg [I-1:0]   sw_d [0:MAXW*LW-1];
     integer go_t [0:MAXR-1];
-    reg [BUF-1:0] lpx [0:MAXLP-1];                      // expected lp words, window-major in (unit, window) order
-    reg [8:0]     lax [0:MAXLA-1];
-    reg [7:0]     llx [0:MAXR*S-1];
-    reg [BUF-1:0] word;
-    reg [8:0]     w9;
-    reg [7:0]     w8;
+    reg [I-1:0]   lpx [0:MAXLP-1];                      // expected lp planes, window-major in (unit, window) order
+    reg [2*S-1:0] lax [0:MAXLA-1];                      // expected la planes, per unit
+    reg [S-1:0]   llx [0:MAXR*LW-1];                    // expected ll planes, per run
+    reg [I-1:0]   word;
+    reg [2*S-1:0] w9;
+    reg [S-1:0]   w8;
 
     task load;
         begin
@@ -133,11 +135,11 @@ module tb_softmax_online_top;
             $fclose(fd);
             $sformat(fn, "%0s/la_exp.txt", vdir);
             fd = $fopen(fn, "r");
-            for (i = 0; i < nla; i = i + 1) begin rc = $fscanf(fd, "%h", w9); lax[i] = w9; end
+            for (i = 0; i < nla * LW; i = i + 1) begin rc = $fscanf(fd, "%h", w9); lax[i] = w9; end
             $fclose(fd);
             $sformat(fn, "%0s/ll_exp.txt", vdir);
             fd = $fopen(fn, "r");
-            for (i = 0; i < nrun * S; i = i + 1) begin rc = $fscanf(fd, "%h", w8); llx[i] = w8; end
+            for (i = 0; i < nrun * LW; i = i + 1) begin rc = $fscanf(fd, "%h", w8); llx[i] = w8; end
             $fclose(fd);
         end
     endtask
@@ -181,10 +183,10 @@ module tb_softmax_online_top;
                     wl = gi % NWB;
                     if (lwd[g] == 0) $display("EV %0d sm.lp win ch%0d u%0d w%0d", tc, g, u, wl);
                     idx = gi * LW + lwd[g];
-                    if (lp_d[g*BUF +: BUF] !== lpx[idx]) begin
+                    if (lp_d[g*I +: I] !== lpx[idx]) begin
                         if (errors < 10)
-                            $display("[tb_smol] ERROR lp: unit %0d window %0d word %0d got %h exp %h",
-                                     u, wl, lwd[g], lp_d[g*BUF +: BUF], lpx[idx]);
+                            $display("[tb_smol] ERROR lp: unit %0d window %0d plane %0d got %h exp %h",
+                                     u, wl, lwd[g], lp_d[g*I +: I], lpx[idx]);
                         errors = errors + 1;
                     end
                     n_lpw = n_lpw + 1;
@@ -200,25 +202,28 @@ module tb_softmax_online_top;
                     $display("[tb_smol] ERROR: gap inside an lp window (lane %0d)", g); errors = errors + 1;
                 end
             if (la_v) begin
-                $display("EV %0d sm.la win ch0 u%0d w%0d", tc, n_la / S, n_la % S);
+                if (n_la % LW == 0) $display("EV %0d sm.la win ch0 u%0d w0", tc, n_la / LW);
                 if (la_d !== lax[n_la]) begin
-                    if (errors < 10) $display("[tb_smol] ERROR la: unit %0d row %0d got %h exp %h",
-                                              n_la / S, n_la % S, la_d, lax[n_la]);
+                    if (errors < 10) $display("[tb_smol] ERROR la: unit %0d plane %0d got %h exp %h",
+                                              n_la / LW, n_la % LW, la_d, lax[n_la]);
                     errors = errors + 1;
                 end
-                if (n_la % S == S - 1) la_due[n_la / S] = tc + lacr;
+                if (n_la % LW == LW - 1) la_due[n_la / LW] = tc + lacr;
                 n_la = n_la + 1;
+            end
+            else if (n_la % LW != 0) begin
+                $display("[tb_smol] ERROR: gap inside an la window"); errors = errors + 1;
             end
             if (ll_v) begin
                 if (llw == 0) $display("EV %0d sm.ll win ch0 u%0d w0", tc, llrun);
-                if (ll_d !== llx[llrun * S + llw]) begin
-                    if (errors < 10) $display("[tb_smol] ERROR ll: run %0d row %0d got %h exp %h",
-                                              llrun, llw, ll_d, llx[llrun * S + llw]);
+                if (ll_d !== llx[llrun * LW + llw]) begin
+                    if (errors < 10) $display("[tb_smol] ERROR ll: run %0d plane %0d got %h exp %h",
+                                              llrun, llw, ll_d, llx[llrun * LW + llw]);
                     errors = errors + 1;
                 end
                 n_llw = n_llw + 1;
                 llw = llw + 1;
-                if (llw == S) begin ll_due[llrun] = tc + llcr; llw = 0; llrun = llrun + 1; end
+                if (llw == LW) begin ll_due[llrun] = tc + llcr; llw = 0; llrun = llrun + 1; end
             end
             else if (llw != 0) begin
                 $display("[tb_smol] ERROR: gap inside an ll window"); errors = errors + 1;
@@ -229,7 +234,7 @@ module tb_softmax_online_top;
                 lp_cr = 1'b1; $display("EV %0d lp_snk.lp cr u%0d", tc, n_lpcr); n_lpcr = n_lpcr + 1;
             end
             la_cr = 1'b0;
-            if (n_lacr < nla / S && la_due[n_lacr] == tc) begin
+            if (n_lacr < nla && la_due[n_lacr] == tc) begin
                 la_cr = 1'b1; $display("EV %0d la_snk.la cr u%0d", tc, n_lacr); n_lacr = n_lacr + 1;
             end
             ll_cr = 1'b0;
@@ -250,7 +255,7 @@ module tb_softmax_online_top;
                 end
                 if (sc[ch] >= 0) begin
                     s_v[ch] = 1'b1;
-                    s_d[ch*BUF +: BUF] = sw_d[sp[ch]*LW + sc[ch]];
+                    s_d[ch*I +: I] = sw_d[sp[ch]*LW + sc[ch]];
                     sc[ch] = sc[ch] + 1;
                     if (sc[ch] == LW) begin sc[ch] = -1; sp[ch] = sp[ch] + S_CH; end
                 end
@@ -286,7 +291,7 @@ module tb_softmax_online_top;
         #1 reset = 1'b0;
         -> preload;
         running = 1'b1;
-        while ((llrun < nrun || n_llcr < nrun || n_lpcr < nblk || n_lacr < nla / S || n_gocr < nrun) && tc < tmax)
+        while ((llrun < nrun || n_llcr < nrun || n_lpcr < nblk || n_lacr < nla || n_gocr < nrun) && tc < tmax)
             @(posedge clk);
         repeat (4) @(posedge clk);
         #4;
@@ -294,10 +299,10 @@ module tb_softmax_online_top;
                               errors = errors + 1; end
         if (n_lpw != nblk * NWB * LW) begin $display("[tb_smol] ERROR: %0d lp words, expected %0d", n_lpw,
                                                      nblk * NWB * LW); errors = errors + 1; end
-        if (n_la != nla) begin $display("[tb_smol] ERROR: %0d la words, expected %0d", n_la, nla);
-                               errors = errors + 1; end
-        if (n_llw != nrun * S) begin $display("[tb_smol] ERROR: %0d ll words, expected %0d", n_llw, nrun * S);
-                                     errors = errors + 1; end
+        if (n_la != nla * LW) begin $display("[tb_smol] ERROR: %0d la planes, expected %0d", n_la, nla * LW);
+                                    errors = errors + 1; end
+        if (n_llw != nrun * LW) begin $display("[tb_smol] ERROR: %0d ll planes, expected %0d", n_llw, nrun * LW);
+                                      errors = errors + 1; end
         if (n_done != nrun) begin $display("[tb_smol] ERROR: %0d done pulses, expected %0d", n_done, nrun);
                                   errors = errors + 1; end
         $display("[tb_smol] %0s %0s errors=%0d lp_words=%0d la=%0d ll=%0d end=%0d", (errors == 0) ? "PASS" : "FAIL",

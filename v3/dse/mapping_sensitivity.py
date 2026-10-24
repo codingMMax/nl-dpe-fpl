@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """mapping_sensitivity.py — how the evaluated metrics respond to each mapping parameter, one at a time
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 (docs/mapping_sensitivity.md).
 
 The attention mapping is fixed (experiment.md §4.2): P_PROJ = 1, N_E = N_EP = 2d, N_EXP = 2, N_OC by the floor rule,

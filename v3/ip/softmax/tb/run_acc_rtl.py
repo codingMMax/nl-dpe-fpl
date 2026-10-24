@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """run_acc_rtl.py — GATE 2 of `softmax_online_acc` (ip/softmax/acc_spec.md §8) through the shared runner
-tools/rtl_gate2.py. The testbench also reports the O8 values, gaps inside rows, run_done against the model's cycle,
-the word and credit counts, and the FIFO / e_mem / O reader probes.
+tools/rtl_gate2.py. The testbench also reports the E9 planes, gaps inside windows, run_done against the model's cycle,
+the plane and credit counts, the FIFO probe and every crossbar's err flag.
 
 Usage: python3 v3/ip/softmax/tb/run_acc_rtl.py --stimuli DIR [--only SUBSTR] [--jobs N] [--work DIR] [--recheck]
 """

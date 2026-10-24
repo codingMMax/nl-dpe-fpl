@@ -1,0 +1,254 @@
+<title>NL-DPE DSE Projection</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column for text; figures run full width on white plot-paper mats; the two family summaries sit side by side and stack on phones */
+:root {
+  --bg: #f3f6f6; --surface: #ffffff; --fg: #1b2525; --muted: #586a69; --rule: #d3dcdb;
+  --accent: #0a6a65; --accent-soft: #dfefed; --paper: #ffffff;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1717; --surface: #162121; --fg: #e2eaea; --muted: #9db0ae; --rule: #2a3a39;
+  --accent: #5ec7be; --accent-soft: #1b3533; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0f1717; --surface: #162121; --fg: #e2eaea; --muted: #9db0ae; --rule: #2a3a39;
+  --accent: #5ec7be; --accent-soft: #1b3533; color-scheme: dark; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: none; margin: 0; display: grid; gap: 40px; padding-block: 28px 56px;
+  padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font-family: var(--display); font-weight: 600; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.lede { max-width: none; }
+.muted { color: var(--muted); }
+.families { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.family { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px 18px 14px; display: grid; gap: 12px; min-width: 0; }
+.winner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.winner .cfg { font-family: var(--mono); font-weight: 500; font-size: 30px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.winner .g { font-family: var(--mono); font-size: 15px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+th { font-weight: 500; color: var(--muted); text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:nth-child(-n+2), td:nth-child(-n+2) { text-align: left; }
+table.ranks th:nth-child(n+2), table.ranks td:nth-child(n+2) { text-align: right; }
+tr.top td { background: var(--accent-soft); color: var(--fg); font-weight: 500; }
+.legend { font-size: 13px; }
+section { display: grid; gap: 14px; min-width: 0; }
+.fighead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 16px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.mat { background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px; overflow-x: auto; }
+.mat img { display: block; width: auto; max-width: 100%; height: auto; margin-inline: auto; }
+.mat.full img { max-width: none; }
+figcaption { font-size: 14px; }
+button.zoom { font: 500 13px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 5px 12px; cursor: pointer; }
+button.zoom:hover { border-color: var(--accent); }
+button.zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.notes { display: grid; gap: 6px; font-size: 14px; }
+code { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+
+/* The comparison: Old and Projected side by side where a figure is near square, one above the other where it is wide */
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)); gap: 20px; align-items: start; }
+.stack { display: grid; gap: 18px; }
+.side { display: grid; gap: 8px; min-width: 0; }
+.tag { font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.tag.proj { color: var(--accent); }
+.cap { font-size: 14px; }
+.assume { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 14px; }
+.assume dt { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.assume dd { margin: 0; min-width: 0; }
+table.moves td { white-space: normal; text-align: left; vertical-align: top; }
+.families .family { align-content: start; }
+table.moves th { text-align: left; }
+@media (max-width: 520px) { .assume { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<div class="wrap">
+<header>
+  <p class="eyebrow">v3 DSE · old vs projected · 2026-10-23 · before the bit-plane VTR run</p>
+  <h1>NL-DPE DSE Projection</h1>
+  <p class="lede">The crossbar DSE as measured, beside a projection of the same 48 attention builds and 32 FC rows to the bit-plane design. Old is the pre-bit-plane RTL: its simulator cycles, the VTR run of 2026-10-16 and the crossbar tiles of 2026-10-22. Projected keeps each build's Fmax and CLB count from that VTR run, takes its crossbars and memory blocks from the simulator, and its cycles and energy from the bit-plane simulator. Every projected number is an estimate: no bit-plane netlist has been placed and routed yet. The notation is the DSE page's: on each workload a config's value is divided by the worst config's value on the same side, G is the geometric mean of those scores over a family's workloads, and lower is better. G values are relative to their own side, so across the two sides compare ranks and fronts.</p>
+</header>
+
+<div class="families">
+  <div class="family">
+    <h2>Assumptions</h2>
+    <dl class="assume">
+      <dt>held</dt><dd>Fmax (the mean of VTR seeds 11, 13, 17) and the CLB count of each build, from its previous (2026-10-16) VTR run. FC: v2's VTR run of its old GEMM.</dd>
+      <dt>predicted</dt><dd>Crossbars: the simulator's count, which Yosys matched on all 80 bit-plane builds (elaboration, 2026-10-23). Memory blocks: the simulator's memories packed into blocks (area.predictedMemBlocks); Yosys's memory lists matched too, and VPR checks the block count at the smoke. FC: no memory block, the bit-plane GEMM has none.</dd>
+      <dt>simulated</dt><dd>Cycles (weights preloaded, done − start) and energy (the frozen per-operation prices), from the bit-plane simulator.</dd>
+      <dt>area</dt><dd>One rule on both sides: CLBs, crossbar tiles (row-parallel, 2026-10-22) and 2 cells per memory block.</dd>
+      <dt>left out</dt><dd>The critical path and why attention and FC differ: both analyze the pre-bit-plane cycles.</dd>
+    </dl>
+  </div>
+  <div class="family">
+    <h2>Calibration at the smoke point</h2>
+    <p class="muted">BERT-Tiny at 256 × 128: the build the bit-plane VTR smoke places and routes. Old Fmax is the mean of seeds 11, 13, 17 (seed 11 alone: 116.3 MHz).</p>
+    <div class="tablewrap"><table class="ranks" id="t_cal"><thead><tr><th>quantity</th><th>old (VPR)</th><th>projected</th><th>smoke (VPR)</th></tr></thead><tbody><tr><td>crossbars</td><td>278</td><td>278 (simulator)</td><td>running</td></tr><tr><td>memory blocks</td><td>376</td><td>593 (predicted)</td><td>running</td></tr><tr><td>CLBs</td><td>15,901</td><td>15,901 (held)</td><td>running</td></tr><tr><td>Fmax (MHz)</td><td>114.6</td><td>114.6 (held)</td><td>running</td></tr></tbody></table></div>
+    <p class="legend muted">The smoke runs VTR with seed 11 on the bit-plane head (started 2026-10-23, 10–20 h [estimate]); its column fills in when it ends.</p>
+  </div>
+</div>
+
+<section aria-labelledby="h_chg">
+  <h2 id="h_chg">What the projection changes</h2>
+  <p class="lede">Latency changes by the cycles alone, since Fmax is held. The attention head's cycles fall to 0.18–0.51 × of the old, the more the wider the array; FC rows take 19–23 cycles instead of 51–168. The attention head's predicted memory blocks rise on every build, so its area grows a little. Energy moves by at most 0.02 % on any build.</p>
+  <div class="tablewrap"><table class="ranks" id="t_chg"><thead><tr><th>R × C</th><th>attention cycles ×</th><th>attention memory blocks</th><th>attention area ×</th><th>FC cycles</th><th>FC memory blocks</th><th>FC area ×</th></tr></thead><tbody><tr><td>128 × 64</td><td>0.51</td><td>304 → 355</td><td>1.008</td><td>52 → 21</td><td>4 → 0</td><td>0.982</td></tr><tr><td>256 × 64</td><td>0.45</td><td>303 → 355</td><td>1.008</td><td>77 → 20</td><td>3 → 0</td><td>0.984</td></tr><tr><td>512 × 64</td><td>0.39</td><td>303 → 355</td><td>1.007</td><td>115 → 20</td><td>1 → 0</td><td>0.998</td></tr><tr><td>128 × 128</td><td>0.35</td><td>288 → 468</td><td>1.023</td><td>65 → 21</td><td>4 → 0</td><td>0.982</td></tr><tr><td>256 × 128</td><td>0.32</td><td>288 → 468</td><td>1.022</td><td>90 → 20</td><td>3 → 0</td><td>0.979</td></tr><tr><td>512 × 128</td><td>0.28</td><td>288 → 468</td><td>1.019</td><td>128 → 20</td><td>1 → 0</td><td>0.998</td></tr><tr><td>256 × 256</td><td>0.20</td><td>316 → 737</td><td>1.036</td><td>110 → 20</td><td>3 → 0</td><td>0.984</td></tr><tr><td>512 × 256</td><td>0.18</td><td>316 → 737</td><td>1.033</td><td>147 → 20</td><td>1 → 0</td><td>0.997</td></tr></tbody></table></div>
+  <p class="legend muted">Projected ÷ old. Attention: cycles × and area × are geometric means of the per-build ratios over the 6 shapes, memory blocks the mean per build. FC: cycles the mean over the 4 shapes, memory blocks summed over them (v2's old GEMM placed 0 or 1 block per row), area × the geometric mean of the ratios.</p>
+</section>
+
+<section aria-labelledby="h_mv">
+  <h2 id="h_mv">What moved</h2>
+  <div class="families">
+  <div class="family">
+    <h2>FC</h2>
+    <div class="tablewrap"><table class="moves"><thead><tr><th>view</th><th>old</th><th>projected</th></tr></thead><tbody><tr><td>front, latency vs area</td><td>512&nbsp;×&nbsp;256, 256&nbsp;×&nbsp;256, 256&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;64, 128&nbsp;×&nbsp;128, 128&nbsp;×&nbsp;64</td><td>512&nbsp;×&nbsp;256</td></tr><tr><td>#1 by ADP</td><td>256&nbsp;×&nbsp;128</td><td>512&nbsp;×&nbsp;256</td></tr><tr><td>#1 by EDAP</td><td>512&nbsp;×&nbsp;256</td><td>512&nbsp;×&nbsp;256</td></tr></tbody></table></div>
+  </div>
+  <div class="family">
+    <h2>Attention head</h2>
+    <div class="tablewrap"><table class="moves"><thead><tr><th>view</th><th>old</th><th>projected</th></tr></thead><tbody><tr><td>front, latency vs area</td><td>128&nbsp;×&nbsp;64</td><td>128&nbsp;×&nbsp;64, 256&nbsp;×&nbsp;64, 128&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;256</td></tr><tr><td>#1 by ADP</td><td>128&nbsp;×&nbsp;64</td><td>128&nbsp;×&nbsp;64</td></tr><tr><td>#1 by EDAP</td><td>128&nbsp;×&nbsp;64</td><td>128&nbsp;×&nbsp;64</td></tr></tbody></table></div>
+  </div>
+  <div class="family">
+    <h2>Across the families</h2>
+    <div class="tablewrap"><table class="moves"><thead><tr><th>view</th><th>old</th><th>projected</th></tr></thead><tbody><tr><td>front, ADP plane</td><td>256&nbsp;×&nbsp;128, 128&nbsp;×&nbsp;64</td><td>512&nbsp;×&nbsp;256, 256&nbsp;×&nbsp;256, 256&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;64, 128&nbsp;×&nbsp;128, 128&nbsp;×&nbsp;64</td></tr><tr><td>closest, ADP plane</td><td>128&nbsp;×&nbsp;64 (d&nbsp;0.539)</td><td>256&nbsp;×&nbsp;128 (d&nbsp;0.834)</td></tr><tr><td>front, EDAP plane</td><td>512&nbsp;×&nbsp;256, 256&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;64, 128&nbsp;×&nbsp;64</td><td>512&nbsp;×&nbsp;256, 512&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;128, 256&nbsp;×&nbsp;64, 128&nbsp;×&nbsp;128, 128&nbsp;×&nbsp;64</td></tr><tr><td>closest, EDAP plane</td><td>256&nbsp;×&nbsp;128 (d&nbsp;0.485)</td><td>256&nbsp;×&nbsp;128 (d&nbsp;0.669)</td></tr></tbody></table></div>
+  </div>
+  </div>
+  <p class="legend muted">Fronts in order from the smallest area (per family) or the best FC score (across the families); d = the distance from the origin.</p>
+</section>
+
+<section aria-labelledby="h_cmp">
+  <h2 id="h_cmp">EDAP against ADP, per family</h2>
+  <p class="lede">Each config's rank by ADP and by EDAP (1 = best), old and projected, rows in the projected ADP order. A shift of ↑2 means two places better than before.</p>
+  <div class="families">
+  <div class="family">
+    <h2>FC</h2>
+    <div class="tablewrap"><table class="ranks" id="t_cmp_fc"><thead><tr><th>R × C</th><th>ADP old</th><th>ADP proj.</th><th>shift</th><th>EDAP old</th><th>EDAP proj.</th><th>shift</th></tr></thead><tbody><tr><td>512 × 256</td><td>5</td><td>1</td><td>↑4</td><td>1</td><td>1</td><td>–</td></tr><tr><td>256 × 256</td><td>3</td><td>2</td><td>↑1</td><td>4</td><td>4</td><td>–</td></tr><tr><td>256 × 128</td><td>1</td><td>3</td><td>↓2</td><td>2</td><td>3</td><td>↓1</td></tr><tr><td>512 × 128</td><td>7</td><td>4</td><td>↑3</td><td>3</td><td>2</td><td>↑1</td></tr><tr><td>256 × 64</td><td>6</td><td>5</td><td>↑1</td><td>5</td><td>6</td><td>↓1</td></tr><tr><td>512 × 64</td><td>8</td><td>6</td><td>↑2</td><td>6</td><td>5</td><td>↑1</td></tr><tr><td>128 × 128</td><td>4</td><td>7</td><td>↓3</td><td>8</td><td>7</td><td>↑1</td></tr><tr><td>128 × 64</td><td>2</td><td>8</td><td>↓6</td><td>7</td><td>8</td><td>↓1</td></tr></tbody></table></div>
+  </div>
+  <div class="family">
+    <h2>Attention head</h2>
+    <div class="tablewrap"><table class="ranks" id="t_cmp_att"><thead><tr><th>R × C</th><th>ADP old</th><th>ADP proj.</th><th>shift</th><th>EDAP old</th><th>EDAP proj.</th><th>shift</th></tr></thead><tbody><tr><td>128 × 64</td><td>1</td><td>1</td><td>–</td><td>1</td><td>1</td><td>–</td></tr><tr><td>128 × 128</td><td>3</td><td>2</td><td>↑1</td><td>3</td><td>2</td><td>↑1</td></tr><tr><td>256 × 64</td><td>2</td><td>3</td><td>↓1</td><td>2</td><td>3</td><td>↓1</td></tr><tr><td>256 × 128</td><td>5</td><td>4</td><td>↑1</td><td>5</td><td>4</td><td>↑1</td></tr><tr><td>512 × 64</td><td>4</td><td>5</td><td>↓1</td><td>4</td><td>5</td><td>↓1</td></tr><tr><td>512 × 128</td><td>6</td><td>6</td><td>–</td><td>6</td><td>7</td><td>↓1</td></tr><tr><td>256 × 256</td><td>7</td><td>7</td><td>–</td><td>7</td><td>6</td><td>↑1</td></tr><tr><td>512 × 256</td><td>8</td><td>8</td><td>–</td><td>8</td><td>8</td><td>–</td></tr></tbody></table></div>
+  </div>
+  </div>
+</section>
+
+<section aria-labelledby="h_fc">
+  <h2 id="h_fc">FC: latency vs area</h2>
+  <div class="stack">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_fc_old" type="button" aria-controls="m_fc_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_fc_old"><img src="old_dse_la_fc.png" alt="FC: G_D against G_A for 8 crossbar configs with the Pareto front, then each config's area split and energy split as stacked bars (Old · pre-bit-plane cycles)" width="3264" height="1120"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_fc_proj" type="button" aria-controls="m_fc_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_fc_proj"><img src="proj_dse_la_fc.png" alt="FC: G_D against G_A for 8 crossbar configs with the Pareto front, then each config's area split and energy split as stacked bars (Projected · bit-plane)" width="3264" height="1120"></div></figure>
+  </div>
+  <p class="muted cap">4 workloads, M × K × N: 1 × 512 × 128, 1 × 2048 × 256, 1 × 256 × 512, 1 × 512 × 512. (a) G<sub>D</sub> against G<sub>A</sub> and the Pareto front. (b) Each config's area split into DPE tiles, CLBs and memory blocks. (c) Its energy split into the DPE passes, the CLB adds, the passes' block-RAM port traffic and the memory bytes. Both as the share of the total summed over the 4 shapes. Front, from the smallest area to the lowest latency: old 512 × 256, 256 × 256, 256 × 128, 256 × 64, 128 × 128, 128 × 64; projected 512 × 256. Front configs in bold.</p>
+  <div class="pair">
+    <div class="side"><p class="tag old">Old · pre-bit-plane cycles</p><div class="tablewrap"><table id="t_la_fc_old"><thead><tr><th>R × C</th><th>G<sub>A</sub> area</th><th>G<sub>D</sub> latency</th><th>G<sub>E</sub> energy</th><th>front</th></tr></thead><tbody><tr class="top"><td>512 × 256</td><td>0.464</td><td>0.992</td><td>0.366</td><td>yes</td></tr><tr class="top"><td>256 × 256</td><td>0.542</td><td>0.743</td><td>0.538</td><td>yes</td></tr><tr class="top"><td>256 × 128</td><td>0.560</td><td>0.630</td><td>0.500</td><td>yes</td></tr><tr><td>512 × 128</td><td>0.589</td><td>0.866</td><td>0.348</td><td></td></tr><tr class="top"><td>256 × 64</td><td>0.777</td><td>0.597</td><td>0.576</td><td>yes</td></tr><tr><td>512 × 64</td><td>0.845</td><td>0.888</td><td>0.426</td><td></td></tr><tr class="top"><td>128 × 128</td><td>0.858</td><td>0.507</td><td>0.924</td><td>yes</td></tr><tr class="top"><td>128 × 64</td><td>0.862</td><td>0.431</td><td>1.000</td><td>yes</td></tr></tbody></table></div></div>
+    <div class="side"><p class="tag proj">Projected · bit-plane</p><div class="tablewrap"><table id="t_la_fc_proj"><thead><tr><th>R × C</th><th>G<sub>A</sub> area</th><th>G<sub>D</sub> latency</th><th>G<sub>E</sub> energy</th><th>front</th></tr></thead><tbody><tr class="top"><td>512 × 256</td><td>0.468</td><td>0.709</td><td>0.366</td><td>yes</td></tr><tr><td>256 × 256</td><td>0.541</td><td>0.736</td><td>0.538</td><td></td></tr><tr><td>256 × 128</td><td>0.556</td><td>0.754</td><td>0.500</td><td></td></tr><tr><td>512 × 128</td><td>0.596</td><td>0.719</td><td>0.348</td><td></td></tr><tr><td>256 × 64</td><td>0.774</td><td>0.835</td><td>0.576</td><td></td></tr><tr><td>128 × 128</td><td>0.853</td><td>0.881</td><td>0.924</td><td></td></tr><tr><td>512 × 64</td><td>0.855</td><td>0.825</td><td>0.426</td><td></td></tr><tr><td>128 × 64</td><td>0.857</td><td>0.937</td><td>1.000</td><td></td></tr></tbody></table></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h_att">
+  <h2 id="h_att">Attention head: latency vs area</h2>
+  <div class="stack">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_att_old" type="button" aria-controls="m_att_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_att_old"><img src="old_dse_la_attention.png" alt="Attention: G_D against G_A for 8 crossbar configs with the Pareto front, then each config's area split and energy split as stacked bars (Old · pre-bit-plane cycles)" width="3264" height="1120"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_att_proj" type="button" aria-controls="m_att_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_att_proj"><img src="proj_dse_la_attention.png" alt="Attention: G_D against G_A for 8 crossbar configs with the Pareto front, then each config's area split and energy split as stacked bars (Projected · bit-plane)" width="3264" height="1120"></div></figure>
+  </div>
+  <p class="muted cap">6 workloads (n, d<sub>model</sub>, d): ViT-B/16 (256, 768, 64), DeiT-T (256, 192, 64), BERT-base (128, 768, 64), BERT-Tiny (128, 128, 64), JetFormer-150P (32, 64, 32), JetFormer-JetClass (128, 128, 16). (a) G<sub>D</sub> against G<sub>A</sub> and the Pareto front. (b) Each config's area split into DPE tiles, CLBs and memory blocks. (c) Its energy split into the DPE passes, the CLB adds and compares, the passes' block-RAM port traffic and the memory bytes. Both as the geometric mean of each share over the 6 shapes. Front: old 128 × 64; projected 128 × 64, 256 × 64, 128 × 128, 256 × 128, 256 × 256. Front configs in bold.</p>
+  <div class="pair">
+    <div class="side"><p class="tag old">Old · pre-bit-plane cycles</p><div class="tablewrap"><table id="t_la_att_old"><thead><tr><th>R × C</th><th>G<sub>A</sub> area</th><th>G<sub>D</sub> latency</th><th>G<sub>E</sub> energy</th><th>front</th></tr></thead><tbody><tr class="top"><td>128 × 64</td><td>0.472</td><td>0.497</td><td>0.802</td><td>yes</td></tr><tr><td>256 × 64</td><td>0.505</td><td>0.561</td><td>0.838</td><td></td></tr><tr><td>512 × 64</td><td>0.573</td><td>0.646</td><td>0.918</td><td></td></tr><tr><td>128 × 128</td><td>0.621</td><td>0.573</td><td>0.828</td><td></td></tr><tr><td>256 × 128</td><td>0.645</td><td>0.615</td><td>0.863</td><td></td></tr><tr><td>512 × 128</td><td>0.745</td><td>0.740</td><td>0.946</td><td></td></tr><tr><td>256 × 256</td><td>0.908</td><td>0.858</td><td>0.911</td><td></td></tr><tr><td>512 × 256</td><td>1.000</td><td>0.983</td><td>1.000</td><td></td></tr></tbody></table></div></div>
+    <div class="side"><p class="tag proj">Projected · bit-plane</p><div class="tablewrap"><table id="t_la_att_proj"><thead><tr><th>R × C</th><th>G<sub>A</sub> area</th><th>G<sub>D</sub> latency</th><th>G<sub>E</sub> energy</th><th>front</th></tr></thead><tbody><tr class="top"><td>128 × 64</td><td>0.461</td><td>0.961</td><td>0.802</td><td>yes</td></tr><tr class="top"><td>256 × 64</td><td>0.493</td><td>0.960</td><td>0.838</td><td>yes</td></tr><tr><td>512 × 64</td><td>0.558</td><td>0.965</td><td>0.918</td><td></td></tr><tr class="top"><td>128 × 128</td><td>0.615</td><td>0.767</td><td>0.828</td><td>yes</td></tr><tr class="top"><td>256 × 128</td><td>0.638</td><td>0.756</td><td>0.863</td><td>yes</td></tr><tr><td>512 × 128</td><td>0.735</td><td>0.792</td><td>0.946</td><td></td></tr><tr class="top"><td>256 × 256</td><td>0.911</td><td>0.654</td><td>0.911</td><td>yes</td></tr><tr><td>512 × 256</td><td>1.000</td><td>0.660</td><td>1.000</td><td></td></tr></tbody></table></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h_cross">
+  <h2 id="h_cross">Across the families: area-delay product</h2>
+  <div class="pair">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_cross_old" type="button" aria-controls="m_cross_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_cross_old"><img src="old_dse_adp_cross.png" alt="Attention G_ADP against the FC G_ADP for 8 crossbar configs, with the Pareto front (Old · pre-bit-plane cycles)" width="1088" height="1120"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_cross_proj" type="button" aria-controls="m_cross_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_cross_proj"><img src="proj_dse_adp_cross.png" alt="Attention G_ADP against the FC G_ADP for 8 crossbar configs, with the Pareto front (Projected · bit-plane)" width="1088" height="1120"></div></figure>
+  </div>
+  <p class="muted cap">x = G<sub>ADP</sub> in FC, y = G<sub>ADP</sub> in attention; each is area × latency ÷ the largest on each workload, geometric mean over the family's workloads. The circles mark equal distance d from the origin; the tables are sorted by d. Front, from the best in FC to the best in attention: old 256 × 128, 128 × 64; projected 512 × 256, 256 × 256, 256 × 128, 256 × 64, 128 × 128, 128 × 64.</p>
+  <div class="pair">
+    <div class="side"><p class="tag old">Old · pre-bit-plane cycles</p><div class="tablewrap"><table id="t_cross_old"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>ADP</sub></th><th>attention G<sub>ADP</sub></th><th>d</th><th>FC G<sub>E</sub></th><th>attention G<sub>E</sub></th><th>front</th></tr></thead><tbody><tr class="top"><td>1</td><td>128 × 64</td><td>0.483</td><td>0.239</td><td>0.539</td><td>1.000</td><td>0.802</td><td>yes</td></tr><tr class="top"><td>2</td><td>256 × 128</td><td>0.458</td><td>0.404</td><td>0.611</td><td>0.500</td><td>0.863</td><td>yes</td></tr><tr><td>3</td><td>256 × 64</td><td>0.602</td><td>0.288</td><td>0.667</td><td>0.576</td><td>0.838</td><td></td></tr><tr><td>4</td><td>128 × 128</td><td>0.564</td><td>0.362</td><td>0.670</td><td>0.924</td><td>0.828</td><td></td></tr><tr><td>5</td><td>512 × 128</td><td>0.663</td><td>0.561</td><td>0.869</td><td>0.348</td><td>0.946</td><td></td></tr><tr><td>6</td><td>256 × 256</td><td>0.524</td><td>0.793</td><td>0.950</td><td>0.538</td><td>0.911</td><td></td></tr><tr><td>7</td><td>512 × 64</td><td>0.975</td><td>0.376</td><td>1.045</td><td>0.426</td><td>0.918</td><td></td></tr><tr><td>8</td><td>512 × 256</td><td>0.597</td><td>1.000</td><td>1.165</td><td>0.366</td><td>1.000</td><td></td></tr></tbody></table></div></div>
+    <div class="side"><p class="tag proj">Projected · bit-plane</p><div class="tablewrap"><table id="t_cross_proj"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>ADP</sub></th><th>attention G<sub>ADP</sub></th><th>d</th><th>FC G<sub>E</sub></th><th>attention G<sub>E</sub></th><th>front</th></tr></thead><tbody><tr class="top"><td>1</td><td>256 × 128</td><td>0.424</td><td>0.719</td><td>0.834</td><td>0.500</td><td>0.863</td><td>yes</td></tr><tr class="top"><td>2</td><td>256 × 64</td><td>0.654</td><td>0.705</td><td>0.962</td><td>0.576</td><td>0.838</td><td>yes</td></tr><tr><td>3</td><td>512 × 128</td><td>0.433</td><td>0.867</td><td>0.970</td><td>0.348</td><td>0.946</td><td></td></tr><tr class="top"><td>4</td><td>256 × 256</td><td>0.402</td><td>0.887</td><td>0.974</td><td>0.538</td><td>0.911</td><td>yes</td></tr><tr class="top"><td>5</td><td>128 × 128</td><td>0.760</td><td>0.702</td><td>1.034</td><td>0.924</td><td>0.828</td><td>yes</td></tr><tr class="top"><td>6</td><td>512 × 256</td><td>0.336</td><td>0.983</td><td>1.039</td><td>0.366</td><td>1.000</td><td>yes</td></tr><tr class="top"><td>7</td><td>128 × 64</td><td>0.812</td><td>0.660</td><td>1.047</td><td>1.000</td><td>0.802</td><td>yes</td></tr><tr><td>8</td><td>512 × 64</td><td>0.713</td><td>0.803</td><td>1.074</td><td>0.426</td><td>0.918</td><td></td></tr></tbody></table></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h_efc">
+  <h2 id="h_efc">FC: ranking by EDAP</h2>
+  <div class="pair">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_efc_old" type="button" aria-controls="m_efc_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_efc_old"><img src="old_dse_fc.png" alt="FC ranking: G_EDAP map over R and C, per-workload scores, G_EDAP per config, and G_E, G_D, G_A for 8 crossbar configs (Old · pre-bit-plane cycles)" width="2392" height="2023"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_efc_proj" type="button" aria-controls="m_efc_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_efc_proj"><img src="proj_dse_fc.png" alt="FC ranking: G_EDAP map over R and C, per-workload scores, G_EDAP per config, and G_E, G_D, G_A for 8 crossbar configs (Projected · bit-plane)" width="2392" height="2023"></div></figure>
+  </div>
+  <p class="muted cap">(a) G<sub>EDAP</sub> on the R × C grid. (b) Each workload's EDAP score, configs in rank order. (c) G<sub>EDAP</sub> per config. (d) G<sub>E</sub>, G<sub>D</sub> and G<sub>A</sub>.</p>
+  <div class="pair">
+    <div class="side"><p class="tag old">Old · pre-bit-plane cycles</p><div class="tablewrap"><table id="t_efc_old"><thead><tr><th>#</th><th>R × C</th><th>G<sub>EDAP</sub></th><th title="energy ÷ the worst">G<sub>E</sub></th><th title="latency ÷ the worst">G<sub>D</sub></th><th title="area ÷ the worst">G<sub>A</sub></th></tr></thead><tbody><tr class="top"><td>1</td><td>512 × 256</td><td>0.323</td><td>0.37</td><td>0.99</td><td>0.46</td></tr><tr><td>2</td><td>256 × 128</td><td>0.338</td><td>0.50</td><td>0.63</td><td>0.56</td></tr><tr><td>3</td><td>512 × 128</td><td>0.341</td><td>0.35</td><td>0.87</td><td>0.59</td></tr><tr><td>4</td><td>256 × 256</td><td>0.416</td><td>0.54</td><td>0.74</td><td>0.54</td></tr><tr><td>5</td><td>256 × 64</td><td>0.512</td><td>0.58</td><td>0.60</td><td>0.78</td></tr><tr><td>6</td><td>512 × 64</td><td>0.613</td><td>0.43</td><td>0.89</td><td>0.85</td></tr><tr><td>7</td><td>128 × 64</td><td>0.713</td><td>1.00</td><td>0.43</td><td>0.86</td></tr><tr><td>8</td><td>128 × 128</td><td>0.769</td><td>0.92</td><td>0.51</td><td>0.86</td></tr></tbody></table></div></div>
+    <div class="side"><p class="tag proj">Projected · bit-plane</p><div class="tablewrap"><table id="t_efc_proj"><thead><tr><th>#</th><th>R × C</th><th>G<sub>EDAP</sub></th><th title="energy ÷ the worst">G<sub>E</sub></th><th title="latency ÷ the worst">G<sub>D</sub></th><th title="area ÷ the worst">G<sub>A</sub></th></tr></thead><tbody><tr class="top"><td>1</td><td>512 × 256</td><td>0.139</td><td>0.37</td><td>0.71</td><td>0.47</td></tr><tr><td>2</td><td>512 × 128</td><td>0.170</td><td>0.35</td><td>0.72</td><td>0.60</td></tr><tr><td>3</td><td>256 × 128</td><td>0.239</td><td>0.50</td><td>0.75</td><td>0.56</td></tr><tr><td>4</td><td>256 × 256</td><td>0.244</td><td>0.54</td><td>0.74</td><td>0.54</td></tr><tr><td>5</td><td>512 × 64</td><td>0.343</td><td>0.43</td><td>0.82</td><td>0.86</td></tr><tr><td>6</td><td>256 × 64</td><td>0.425</td><td>0.58</td><td>0.83</td><td>0.77</td></tr><tr><td>7</td><td>128 × 128</td><td>0.792</td><td>0.92</td><td>0.88</td><td>0.85</td></tr><tr><td>8</td><td>128 × 64</td><td>0.917</td><td>1.00</td><td>0.94</td><td>0.86</td></tr></tbody></table></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h_eatt">
+  <h2 id="h_eatt">Attention head: ranking by EDAP</h2>
+  <div class="pair">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_eatt_old" type="button" aria-controls="m_eatt_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_eatt_old"><img src="old_dse_attention.png" alt="Attention head ranking: G_EDAP map over R and C, per-workload scores, G_EDAP per config, and G_E, G_D, G_A for 8 crossbar configs (Old · pre-bit-plane cycles)" width="2713" height="2023"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_eatt_proj" type="button" aria-controls="m_eatt_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_eatt_proj"><img src="proj_dse_attention.png" alt="Attention head ranking: G_EDAP map over R and C, per-workload scores, G_EDAP per config, and G_E, G_D, G_A for 8 crossbar configs (Projected · bit-plane)" width="2392" height="2023"></div></figure>
+  </div>
+  <p class="muted cap">The same four panels for the attention head.</p>
+  <div class="pair">
+    <div class="side"><p class="tag old">Old · pre-bit-plane cycles</p><div class="tablewrap"><table id="t_eatt_old"><thead><tr><th>#</th><th>R × C</th><th>G<sub>EDAP</sub></th><th title="energy ÷ the worst">G<sub>E</sub></th><th title="latency ÷ the worst">G<sub>D</sub></th><th title="area ÷ the worst">G<sub>A</sub></th></tr></thead><tbody><tr class="top"><td>1</td><td>128 × 64</td><td>0.192</td><td>0.80</td><td>0.50</td><td>0.47</td></tr><tr><td>2</td><td>256 × 64</td><td>0.242</td><td>0.84</td><td>0.56</td><td>0.51</td></tr><tr><td>3</td><td>128 × 128</td><td>0.300</td><td>0.83</td><td>0.57</td><td>0.62</td></tr><tr><td>4</td><td>512 × 64</td><td>0.345</td><td>0.92</td><td>0.65</td><td>0.57</td></tr><tr><td>5</td><td>256 × 128</td><td>0.348</td><td>0.86</td><td>0.62</td><td>0.64</td></tr><tr><td>6</td><td>512 × 128</td><td>0.530</td><td>0.95</td><td>0.74</td><td>0.74</td></tr><tr><td>7</td><td>256 × 256</td><td>0.723</td><td>0.91</td><td>0.86</td><td>0.91</td></tr><tr><td>8</td><td>512 × 256</td><td>1.000</td><td>1.00</td><td>0.98</td><td>1.00</td></tr></tbody></table></div></div>
+    <div class="side"><p class="tag proj">Projected · bit-plane</p><div class="tablewrap"><table id="t_eatt_proj"><thead><tr><th>#</th><th>R × C</th><th>G<sub>EDAP</sub></th><th title="energy ÷ the worst">G<sub>E</sub></th><th title="latency ÷ the worst">G<sub>D</sub></th><th title="area ÷ the worst">G<sub>A</sub></th></tr></thead><tbody><tr class="top"><td>1</td><td>128 × 64</td><td>0.534</td><td>0.80</td><td>0.96</td><td>0.46</td></tr><tr><td>2</td><td>128 × 128</td><td>0.586</td><td>0.83</td><td>0.77</td><td>0.61</td></tr><tr><td>3</td><td>256 × 64</td><td>0.596</td><td>0.84</td><td>0.96</td><td>0.49</td></tr><tr><td>4</td><td>256 × 128</td><td>0.625</td><td>0.86</td><td>0.76</td><td>0.64</td></tr><tr><td>5</td><td>512 × 64</td><td>0.743</td><td>0.92</td><td>0.96</td><td>0.56</td></tr><tr><td>6</td><td>256 × 256</td><td>0.815</td><td>0.91</td><td>0.65</td><td>0.91</td></tr><tr><td>7</td><td>512 × 128</td><td>0.827</td><td>0.95</td><td>0.79</td><td>0.73</td></tr><tr><td>8</td><td>512 × 256</td><td>0.991</td><td>1.00</td><td>0.66</td><td>1.00</td></tr></tbody></table></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="h_par">
+  <h2 id="h_par">Pareto fronts per family</h2>
+  <div class="stack">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_par_old" type="button" aria-controls="m_par_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_par_old"><img src="old_dse_pareto.png" alt="Pareto fronts: G_D against G_E times G_A, for FC and the attention head (Old · pre-bit-plane cycles)" width="2100" height="960"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_par_proj" type="button" aria-controls="m_par_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_par_proj"><img src="proj_dse_pareto.png" alt="Pareto fronts: G_D against G_E times G_A, for FC and the attention head (Projected · bit-plane)" width="2100" height="960"></div></figure>
+  </div>
+  <p class="muted cap">x = G<sub>D</sub>, y = G<sub>E</sub> × G<sub>A</sub> (each value ÷ the worst on the workload, geometric means over the workloads). The diagonal lines are equal-EDAP lines, so their order is the ranking.</p>
+</section>
+
+<section aria-labelledby="h_ecross">
+  <h2 id="h_ecross">EDAP across the families</h2>
+  <div class="pair">
+    <figure><div class="fighead"><p class="tag old">Old · pre-bit-plane cycles</p><button class="zoom" id="z_ecross_old" type="button" aria-controls="m_ecross_old" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_ecross_old"><img src="old_dse_cross.png" alt="G_EDAP in FC on x, G_EDAP in attention on y, one dot per crossbar config (Old · pre-bit-plane cycles)" width="1184" height="1152"></div></figure>
+    <figure><div class="fighead"><p class="tag proj">Projected · bit-plane</p><button class="zoom" id="z_ecross_proj" type="button" aria-controls="m_ecross_proj" aria-pressed="false">Zoom in</button></div>
+      <div class="mat" id="m_ecross_proj"><img src="proj_dse_cross.png" alt="G_EDAP in FC on x, G_EDAP in attention on y, one dot per crossbar config (Projected · bit-plane)" width="1184" height="1152"></div></figure>
+  </div>
+  <p class="muted cap">x = G<sub>EDAP</sub> in FC, y = G<sub>EDAP</sub> in attention, one dot per crossbar config; the closer to the origin, the better. Closest: old 256 × 128 (d 0.485), projected 256 × 128 (d 0.669).</p>
+  <div class="pair">
+    <div class="side"><p class="tag old">Old · pre-bit-plane cycles</p><div class="tablewrap"><table id="t_ecross_old"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>EDAP</sub></th><th>attention G<sub>EDAP</sub></th><th>d</th><th>front</th></tr></thead><tbody><tr class="top"><td>1</td><td>256 × 128</td><td>0.338</td><td>0.348</td><td>0.485</td><td>yes</td></tr><tr><td>2</td><td>256 × 64</td><td>0.512</td><td>0.242</td><td>0.566</td><td>yes</td></tr><tr><td>3</td><td>512 × 128</td><td>0.341</td><td>0.530</td><td>0.630</td><td></td></tr><tr><td>4</td><td>512 × 64</td><td>0.613</td><td>0.345</td><td>0.704</td><td></td></tr><tr><td>5</td><td>128 × 64</td><td>0.713</td><td>0.192</td><td>0.738</td><td>yes</td></tr><tr><td>6</td><td>128 × 128</td><td>0.769</td><td>0.300</td><td>0.825</td><td></td></tr><tr><td>7</td><td>256 × 256</td><td>0.416</td><td>0.723</td><td>0.834</td><td></td></tr><tr><td>8</td><td>512 × 256</td><td>0.323</td><td>1.000</td><td>1.051</td><td>yes</td></tr></tbody></table></div></div>
+    <div class="side"><p class="tag proj">Projected · bit-plane</p><div class="tablewrap"><table id="t_ecross_proj"><thead><tr><th>#</th><th>R × C</th><th>FC G<sub>EDAP</sub></th><th>attention G<sub>EDAP</sub></th><th>d</th><th>front</th></tr></thead><tbody><tr class="top"><td>1</td><td>256 × 128</td><td>0.239</td><td>0.625</td><td>0.669</td><td>yes</td></tr><tr><td>2</td><td>256 × 64</td><td>0.425</td><td>0.596</td><td>0.732</td><td>yes</td></tr><tr><td>3</td><td>512 × 64</td><td>0.343</td><td>0.743</td><td>0.818</td><td></td></tr><tr><td>4</td><td>512 × 128</td><td>0.170</td><td>0.827</td><td>0.844</td><td>yes</td></tr><tr><td>5</td><td>256 × 256</td><td>0.244</td><td>0.815</td><td>0.851</td><td></td></tr><tr><td>6</td><td>128 × 128</td><td>0.792</td><td>0.586</td><td>0.986</td><td>yes</td></tr><tr><td>7</td><td>512 × 256</td><td>0.139</td><td>0.991</td><td>1.001</td><td>yes</td></tr><tr><td>8</td><td>128 × 64</td><td>0.917</td><td>0.534</td><td>1.061</td><td>yes</td></tr></tbody></table></div></div>
+  </div>
+</section>
+
+<div class="notes muted">
+  <p>FC holds the Fmax and CLB counts of v2's old GEMM, which had an adder-tree array and an output serializer; the DSE run re-synthesizes the bit-plane GEMM. Old memory: the 12 attention builds of the d = 64 shapes at C = 64 use VPR's count, 5–8 blocks above the simulator's prediction; every other old build matches it.</p>
+  <p>Projected rows: <code>v3/dse/results/projection/attn_priced_results.csv</code>, <code>v3/dse/results/projection/fc_priced_results.csv</code> (<code>v3/dse/projection.py</code>; its self-test reproduces today's priced rows from their inputs). Rankings and figures: <code>v3/dse/results/projection/edap/</code> and <code>adp/</code>, the old ones in <code>v3/dse/results/</code>.</p>
+</div>
+</div>
+<script>
+document.querySelectorAll("button.zoom").forEach(function (b) {
+  b.addEventListener("click", function () {
+    var mat = document.getElementById(b.getAttribute("aria-controls"));
+    var on = mat.classList.toggle("full");
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    b.textContent = on ? "Fit to width" : "Zoom in";
+  });
+});
+</script>

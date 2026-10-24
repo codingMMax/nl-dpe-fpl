@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 V3 = Path(__file__).resolve().parents[1]
-CERTIFIED = ("gemm_top.v",)     # unchanged v2 files: products reported, not failed
+CERTIFIED = ()     # unchanged v2 files: products reported, not failed (none since the bit-plane GEMM, 2026-10-23)
 MOD_RE = re.compile(r"^\s*module\s+(\w+)")
 END_RE = re.compile(r"^\s*endmodule\b")
 
@@ -50,7 +50,7 @@ def _strip(text: str) -> str:
     """Comments and attributes blanked (same length, newlines kept, so offsets map to lines)."""
     keep = lambda m: re.sub(r"[^\n]", " ", m.group(0))  # noqa: E731
     text = re.sub(r"/\*.*?\*/", keep, text, flags=re.S)
-    text = re.sub(r"\(\*.*?\*\)", keep, text, flags=re.S)
+    text = re.sub(r"(?<!@)\(\*(?!\)).*?\*\)", keep, text, flags=re.S)   # attributes, not @(*)
     text = re.sub(r"//[^\n]*", keep, text)
     return re.sub(r'"[^"\n]*"', keep, text)
 
@@ -197,6 +197,11 @@ def self_test() -> int:
     assert not runtime_products(modules(good)[0][1]), "constants and pow2 literals pass"
     assert runtime_products(modules(bad)[0][1]), "a runtime product fails"
     assert not runtime_products(modules(loop)[0][1]), "a loop index passes"
+    star = ("module m #(parameter W = 4) (input [7:0] x, input [7:0] z, output reg [7:0] y, output [15:0] p);\n"
+            "  always @(*) y = x;\n  localparam Q = W + 1;\n  assign p = x * z;\n  always @(*) y = z;\nendmodule\n")
+    assert runtime_products(modules(star)[0][1]), "code between two always @(*) blocks is linted"
+    attr = "module m (input [7:0] x, output [7:0] y);\n  (* keep = 1 *) wire [7:0] k = x;\n  assign y = k * 2;\nendmodule\n"
+    assert not runtime_products(modules(attr)[0][1]), "an attribute is skipped"
     print("lint_rtl self-test: ALL PASS")
     return 0
 

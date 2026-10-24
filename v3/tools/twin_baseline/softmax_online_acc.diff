@@ -2,24 +2,22 @@
 - input wire [7:0] weight_in,
 - input wire weight_en,
 @@
-- wire [BUF-1:0] lg_in = weight_en ? {{(BUF-8){1'b0}}, weight_in} : lf_q;
-+ wire [BUF-1:0] lg_in = lf_q;
+- wire [R-1:0] lg_in = weight_en ? {{(R-8){1'b0}}, weight_in} : lg_plane;
++ wire [R-1:0] lg_in = lg_plane;
 @@
 - dpe #(
-- .KERNEL_WIDTH(R), .NUM_COLS(C), .DPE_BUF_WIDTH(BUF), .PRECISION(P),
-- .ROWS_USED(I), .COLS_USED(I)
+- .KERNEL_WIDTH(R), .NUM_COLS(C), .PRECISION(P), .ROWS_USED(I), .COLS_USED(I)
 - ) u_lg (
 + dpe u_lg (
 @@
 - .load_output_reg(1'b0), .load_input_reg(weight_en),
 + .load_output_reg(1'b0), .load_input_reg(1'b0),
 @@
-- wire [BUF-1:0] ex_in = weight_en ? {{(BUF-8){1'b0}}, weight_in} : ef_q;
-+ wire [BUF-1:0] ex_in = ef_q;
+- wire [R-1:0] ex_in = weight_en ? {{(R-8){1'b0}}, weight_in} : ex_plane;
++ wire [R-1:0] ex_in = ex_plane;
 @@
 - dpe #(
-- .KERNEL_WIDTH(R), .NUM_COLS(C), .DPE_BUF_WIDTH(BUF), .PRECISION(P),
-- .ROWS_USED(I), .COLS_USED(I)
+- .KERNEL_WIDTH(R), .NUM_COLS(C), .PRECISION(P), .ROWS_USED(I), .COLS_USED(I)
 - ) u_ex (
 + dpe u_ex (
 @@

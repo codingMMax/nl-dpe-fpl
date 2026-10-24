@@ -660,7 +660,8 @@
         <equivalent_sites>
           <site pb_type="wc" pin_mapping="direct"/>
         </equivalent_sites>
-		<input name="I" num_pins="263"/>
+		<input name="I" num_pins="256" equivalent="none"/>
+		<input name="IC" num_pins="7" equivalent="none"/>
 		<input name="reset" num_pins="1" is_non_clock_global="true"/>
 		<clock name="clk" num_pins="1"/>
 		<output name="O" num_pins="133"/>
@@ -1306,7 +1307,8 @@
 	
 	<!-- Define pb_type IMC begin -->
 	<pb_type name="wc">
-		<input name="I" num_pins="263"/>
+		<input name="I" num_pins="256" equivalent="none"/>
+		<input name="IC" num_pins="7" equivalent="none"/>
 		<input name="reset" num_pins="1" is_non_clock_global="true"/>
 		<clock name="clk" num_pins="1"/>
 		<output name="O" num_pins="133"/>
@@ -1446,7 +1448,8 @@
 			</interconnect>
 		</pb_type>
 		<interconnect>
-			<direct name="wc_data_in" input="wc.I" output="wc_slice.in"/>
+			<direct name="wc_data_in" input="wc.I" output="wc_slice.in[255:0]"/>
+			<direct name="wc_ctrl_in" input="wc.IC" output="wc_slice.in[262:256]"/>
 			<direct name="wc_reset" input="wc.reset" output="wc_slice.reset"/>
 			<direct name="wc_clk" input="wc.clk" output="wc_slice.clk"/>
 			<direct name="wc_data_out" input="wc_slice.out" output="wc.O"/>

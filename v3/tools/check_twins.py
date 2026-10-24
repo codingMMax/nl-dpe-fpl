@@ -6,8 +6,13 @@ from the static check of v2/experiment/vtr/vtr_tops.py, set to v3's layout: each
 ip/<module>/rtl/sim/ (behavior `dpe` model, weight programming, probes) and ip/<module>/rtl/vtr/ (bare `dpe` hard
 blocks, never simulated). Checks:
 
-  dpe       the `dpe` ports of ip/xbar/rtl/sim/dpe_nldpe.v (DPE_BUF_WIDTH = 40) == ip/xbar/rtl/vtr/dpe_blackbox.v ==
-            the `<model name="dpe">` port set of every arch XML in v3/vtr/arch/; the blackbox has no body
+  dpe       the `dpe` ports of ip/xbar/rtl/sim/dpe_nldpe.v == ip/xbar/rtl/vtr/dpe_blackbox.v, widths by the same
+            expressions (R-bit data_in, C-bit data_out: the bit-plane interface, 2026-10-23) == the
+            `<model name="dpe">` port set of every arch XML in v3/vtr/arch_rowpar/; the blackbox has no body; and
+            vtr/gen_arch.py --check (the staged XMLs are its output)
+  widths    every `dpe` connects exactly R and C bits: the head's two twins elaborate at an R != C build
+            (BERT-Tiny at 256x128; the VTR twin with a copy of the blackbox whose defaults are that R and C), and
+            iverilog must report no port padding or pruning. Runs with the full gate and with --only att_head
   identical shared fabric files with no `dpe` must be byte-identical in both twins (att_fifo.v)
   per pair  1 static   the VTR twin passes the static check (no `dpe` model, no parameterized `dpe`, no weight
                        programming, the expected number of bare `dpe` instance sites); the simulation twin must fail
@@ -43,7 +48,8 @@ HERE = Path(__file__).resolve().parent
 V3 = HERE.parent
 IP = V3 / "ip"
 BASE = HERE / "twin_baseline"
-ARCH_DIR = V3 / "vtr" / "arch"
+ARCH_DIR = V3 / "vtr" / "arch_rowpar"         # the row-parallel XMLs (2026-10-23; v2's pre-bit-plane ones are vtr/arch/)
+WIDTH_BUILD = (128, 128, 64, 256, 128)          # (NSEQ, DM, D, R, C) of the width gate: BERT-Tiny at 256x128
 
 # pair -> (module folder, file, top module, sim-only modules, sim-only top ports, (dependency folder, file)...)
 PAIRS = {
@@ -247,7 +253,7 @@ def check_pair(pair: str, sim: str, vtr: str, baseline: str | None, elab: bool =
 
 def dpe_ports(text: str) -> list:
     _, ports = header(modules(text)["dpe"])
-    return [(d, w.replace("DPE_BUF_WIDTH-1", "39"), n) for d, _, w, n in ports]
+    return [(d, w, n) for d, _, w, n in ports]
 
 
 def check_dpe(sim_text: str | None = None, bb_text: str | None = None) -> list:
@@ -269,15 +275,62 @@ def check_dpe(sim_text: str | None = None, bb_text: str | None = None) -> list:
             probs.append(f"dpe ports vs {arch.name} <model name=\"dpe\">: {sorted(xml ^ {(d, n) for d, _, n in v})}")
     if re.search(r"\balways\b|\bassign\b", strip_comments(bb_text)):
         probs.append("dpe_blackbox.v has a body")
+    sp, bp = (dict((n, d) for n, d in header(modules(t)["dpe"])[0]) for t in (sim_text, bb_text))
+    for k in ("KERNEL_WIDTH", "NUM_COLS"):
+        if k not in bp or sp.get(k) != bp[k]:
+            probs.append(f"dpe parameter {k}: sim {sp.get(k)} vs blackbox {bp.get(k)}")
     return probs
+
+
+def head_overrides(build: tuple = WIDTH_BUILD) -> list:
+    """att_head's top parameters at one build (simulator/models/attentionHead.py headParams), as iverilog -P flags."""
+    sys.path.insert(0, str(V3))
+    from simulator.models.attentionHead import headParams
+    from tools.check_head_params import TOP_KEYS
+    hp = headParams(*build)
+    return [f"-Patt_head.{k}={int(getattr(hp, k))}" for k in TOP_KEYS]
+
+
+def check_widths(build: tuple = WIDTH_BUILD) -> list:
+    """Elaborate both head twins at an R != C build; any port padding or pruning (a width mismatch on any instance,
+    the bare dpe ones included) is a problem."""
+    folder, fname, top, _, _, deps = PAIRS["att_head"]
+    R, C = build[3], build[4]
+    flags = head_overrides(build)
+    probs = []
+    with tempfile.TemporaryDirectory() as td:
+        bb = Path(td) / "dpe_blackbox.v"
+        bb.write_text(DPE_VTR.read_text().replace("parameter KERNEL_WIDTH = 256", f"parameter KERNEL_WIDTH = {R}")
+                      .replace("parameter NUM_COLS     = 256", f"parameter NUM_COLS     = {C}"))
+        for side, dpe in (("sim", DPE_SIM), ("vtr", bb)):
+            files = [twin(folder, fname, side), *(twin(f, n, side) for f, n in deps), dpe]
+            r = subprocess.run(["iverilog", "-g2005", "-o", str(Path(td) / f"{side}.out"), "-s", top, *flags,
+                                *map(str, files)], capture_output=True, text=True)
+            text = r.stdout + r.stderr
+            bad = [ln for ln in text.splitlines() if re.search(r"[Pp]adding|[Pp]runing", ln)]
+            if r.returncode != 0:
+                probs.append(f"widths {side}: elaboration failed: {text.strip()[:300]}")
+            elif bad:
+                probs.append(f"widths {side}: {len(bad)} port width mismatches at {R}x{C}, first: {bad[0][:200]}")
+    return probs
+
+
+def check_arch() -> list:
+    r = subprocess.run([sys.executable, str(V3 / "vtr" / "gen_arch.py"), "--check"], capture_output=True, text=True)
+    return [] if r.returncode == 0 else [f"gen_arch.py --check: {(r.stdout + r.stderr).strip()[-300:]}"]
 
 
 def run(pairs: list, update: bool) -> int:
     fails = 0
-    probs = check_dpe()
+    probs = check_dpe() + check_arch()
     print(f"  dpe             {'OK' if not probs else 'FAIL'}  (sim == blackbox == {len(list(ARCH_DIR.glob('*.xml')))} "
-          f"arch XMLs)" + "".join(f"\n      {p}" for p in probs))
+          f"row-parallel arch XMLs; gen_arch --check)" + "".join(f"\n      {p}" for p in probs))
     fails += bool(probs)
+    if "att_head" in pairs:
+        probs = check_widths()
+        print(f"  widths          {'OK' if not probs else 'FAIL'}  (the head's twins at {WIDTH_BUILD[3]}x{WIDTH_BUILD[4]}: "
+              f"no port padding or pruning)" + "".join(f"\n      {p}" for p in probs))
+        fails += bool(probs)
     BASE.mkdir(exist_ok=True)
     for folder, f in IDENTICAL:
         same = twin(folder, f, "sim").read_bytes() == twin(folder, f, "vtr").read_bytes()
@@ -309,18 +362,18 @@ def self_test() -> int:
     sim, vtr = twin(folder, fname, "sim").read_text(), twin(folder, fname, "vtr").read_text()
     base = render(hunks(sim, vtr))
     assert not check_pair(k, sim, vtr, base, elab=False), "clean pair flagged"
-    shared = "localparam QW  = $clog2(WPW + 1);"
-    clk = "    input  wire                 clk,\n"
+    shared = "localparam LRW    = $clog2(RWIN);"
+    clk = "    input  wire               clk,\n"
     j = vtr.index(clk, vtr.index("module softmax_online_top #("))     # the top's first port
 
     def top_port(name: str) -> str:
-        return vtr[:j] + clk + f"    input  wire                 {name},\n" + vtr[j + len(clk):]
+        return vtr[:j] + clk + f"    input  wire               {name},\n" + vtr[j + len(clk):]
 
     assert sim.count(shared) == 1 and vtr.count(shared) == 1, "anchor: shared localparam"
     assert vtr.count("dpe u_dpe (") == 1, "anchor: the dpe instance"
     cases = {
-        "shared edit in the sim twin only": (sim.replace(shared, "localparam QW  = $clog2(WPW + 2);"), vtr),
-        "shared edit in the VTR twin only": (sim, vtr.replace(shared, "localparam QW  = $clog2(WPW + 2);")),
+        "shared edit in the sim twin only": (sim.replace(shared, "localparam LRW    = $clog2(RWIN + 1);"), vtr),
+        "shared edit in the VTR twin only": (sim, vtr.replace(shared, "localparam LRW    = $clog2(RWIN + 1);")),
         "top port added to the VTR twin": (sim, top_port("extra")),
         "parameterized dpe in the VTR twin": (sim, vtr.replace("dpe u_dpe (", "dpe #(.KERNEL_WIDTH(R)) u_dpe (")),
         "module dropped from the VTR twin": (sim, re.sub(r"module softmax_online_ohmux\b.*?endmodule\n", "", vtr,
@@ -338,13 +391,14 @@ def self_test() -> int:
     print(f"  comment-only edit                             {'ignored' if not probs else 'FLAGGED'}")
     # the dpe check: a clean pass, then a port direction flip, a dropped port and a body must be caught
     bb = DPE_VTR.read_text()
-    ready = "    output wire        MSB_SA_Ready,\n"
+    ready = "    output wire                    MSB_SA_Ready,\n"
     assert bb.count(ready) == 1 and bb.count("endmodule") == 1, "anchors: dpe blackbox"
     assert not check_dpe(), "clean dpe flagged"
     dpe_cases = {
         "dpe blackbox port direction": bb.replace(ready, ready.replace("output", "input ")),
         "dpe blackbox port dropped": bb.replace(ready, ""),
-        "dpe blackbox body": bb.replace("endmodule", "    assign data_out = 40'd0;\nendmodule"),
+        "dpe blackbox body": bb.replace("endmodule", "    assign data_out = 0;\nendmodule"),
+        "dpe blackbox width": bb.replace("[NUM_COLS-1:0]", "[NUM_COLS:0]"),
     }
     for name, text in dpe_cases.items():
         hit = bool(check_dpe(bb_text=text))

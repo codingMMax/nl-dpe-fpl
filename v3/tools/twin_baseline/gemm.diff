@@ -4,18 +4,15 @@
 @@
 - wire [NTILES-1:0] tile_workload;
 - integer wr_tile, wr_cnt;
-- always @(posedge clk ) begin
+- always @(posedge clk) begin
 - if (reset) begin
 - wr_tile <= 0;
 - wr_cnt <= 0;
-- end
-- else begin
-- if (weight_en) begin
-- if (wr_cnt == R*C -1) begin
+- end else if (weight_en) begin
+- if (wr_cnt == R * C - 1) begin
 - wr_cnt <= 0;
-- wr_tile <= (wr_tile == NTILES - 1)? 0: wr_tile + 1;
-- end
-- else
+- wr_tile <= (wr_tile == NTILES - 1) ? 0 : wr_tile + 1;
+- end else begin
 - wr_cnt <= wr_cnt + 1;
 - end
 - end
@@ -27,19 +24,17 @@
 - end
 - endgenerate
 @@
-- wire [BUF-1:0] dpe_data_in = tile_workload[gv*H + gh] ? {{(BUF-8){1'b0}}, weight_in} : act_in[gv * BUF +: BUF];
+- wire [R-1:0] dpe_data_in = tile_workload[gv*H + gh] ? {{(R-8){1'b0}}, weight_in}
+- : act_in[gv*RU +: RU];
 - dpe #(
 - .KERNEL_WIDTH(R),
 - .NUM_COLS(C),
-- .DPE_BUF_WIDTH(BUF),
 - .PRECISION(P),
 - .ROWS_USED(ROWS_USED),
 - .COLS_USED(COLS_USED)
 - ) u_dpe (
++ wire [R-1:0] dpe_data_in = act_in[gv*RU +: RU];
 + dpe u_dpe (
-@@
-- .data_in(dpe_data_in),
-+ .data_in(act_in[gv * BUF +: BUF]),
 @@
 - .load_input_reg(tile_workload[gv*H + gh]),
 + .load_input_reg(1'b0),

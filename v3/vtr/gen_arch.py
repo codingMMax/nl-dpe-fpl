@@ -2,10 +2,17 @@
 """gen_arch.py — the row-parallel arch XMLs (docs/experiment.md §2.1, §5.1; user, 2026-10-22), staged in vtr/arch_rowpar/.
 
 The template is the live vtr/arch/nl_dpe_128x64_auto.xml (v2's; the 12 live XMLs differ only in the wc tile's height,
-width and area). One file per DSE config (dse/space.py CONFIGS), nl_dpe_<R>x<C>_auto.xml, changes only:
+width and area). One file per DSE config (dse/space.py CONFIGS) and per extra size (SMOKE: 64x64, the functional-
+validation size, for a smoke of the adder branch; no DSE row; the smokes run at 128x64, a DSE config),
+nl_dpe_<R>x<C>_auto.xml, changes only:
   the wc tile      height H and width W (simulator/platform/area.py footprint); area = the block's logic + local
-                   crossbar in MWTA (area.blockAreaMwta); I = R + 7, O = C + 5; the clock's fc_override 0, as the CLB's
-  the wc pb_type   I and O, and wc_slice's in and out
+                   crossbar in MWTA (area.blockAreaMwta); the input split (user, 2026-10-23): I = the R data pins,
+                   IC = the 7 control pins, both equivalent="none" (the data pins were swappable, equivalent="full",
+                   until 2026-10-23 evening: VPR's post-route pin fix-up aborts on them, post_routing_pb_pin_fixup.cpp:559
+                   '1 == cnt'; the area still pays for the local input crossbar, user); O = C + 5; the clock's
+                   fc_override 0, as the CLB's
+  the wc pb_type   I, IC and O (both inputs equivalent="none"), wc_slice's in (R + 7) and out; the wc-level
+                   directs wc.I -> wc_slice.in[R-1:0], wc.IC -> wc_slice.in[R+6:R]
   nl_dpe           data_in R pins, data_out C pins; the directs: the data at in[R-1:0] / out[C-1:0], the 7 controls at
                    in[R..R+6], the 5 status bits at out[C..C+4] (the template's order)
 Everything else stays byte-identical: pinlocations spread, the CLB's Fc 0.15 / 0.10, switchblock_locations all, the
@@ -32,6 +39,8 @@ from simulator.platform import area  # noqa: E402
 
 TEMPLATE = HERE / "arch" / "nl_dpe_128x64_auto.xml"
 OUT = HERE / "arch_rowpar"
+SMOKE = [(64, 64)]                  # smoke points outside the design space (user, 2026-10-23)
+STAGED = CONFIGS + SMOKE
 CONTROL, STATUS = area.TILE["control_pins"], area.TILE["status_pins"]
 FC_LINE = '\t\t<fc in_type="frac" in_val="0.15" out_type="frac" out_val="0.10" />\n'
 FC_BLOCK = ('\t\t<fc in_type="frac" in_val="0.15" out_type="frac" out_val="0.10">\n'
@@ -71,7 +80,9 @@ def staged_text(R: int, C: int, template: str) -> str:
     pin_in, pin_out = data_in + CONTROL, data_out + STATUS
     t = sub(template, r'<tile name="wc" height="\d+" width="\d+" area="\d+">',
             f'<tile name="wc" height="{h}" width="{w}" area="{a}">', 1)
-    t = sub(t, f'<input name="I" num_pins="{pin_in}"/>', f'<input name="I" num_pins="{R + CONTROL}"/>', 2)
+    t = sub(t, f'<input name="I" num_pins="{pin_in}"/>',
+            f'<input name="I" num_pins="{R}" equivalent="none"/>\n\t\t'
+            f'<input name="IC" num_pins="{CONTROL}" equivalent="none"/>', 2)
     t = sub(t, f'<output name="O" num_pins="{pin_out}"/>', f'<output name="O" num_pins="{C + STATUS}"/>', 2)
     t = sub(t, f'<input name="in" num_pins="{pin_in}"/>', f'<input name="in" num_pins="{R + CONTROL}"/>', 1)
     t = sub(t, f'<output name="out" num_pins="{pin_out}"/>', f'<output name="out" num_pins="{C + STATUS}"/>', 1)
@@ -87,18 +98,23 @@ def staged_text(R: int, C: int, template: str) -> str:
         return f"wc_slice.{port}[{hi - old + new}" + (f":{int(lo) - old + new}]" if lo is not None else "]")
     t = sub(t, r"wc_slice\.in\[(\d+)(?::(\d+))?\]", lambda m: shift(m, "in", data_in, R), 1 + 6)
     t = sub(t, r"wc_slice\.out\[(\d+)(?::(\d+))?\]", lambda m: shift(m, "out", data_out, C), 1 + 5)
+    t = sub(t, re.escape('\t\t\t<direct name="wc_data_in" input="wc.I" output="wc_slice.in"/>\n'),
+            f'\t\t\t<direct name="wc_data_in" input="wc.I" output="wc_slice.in[{R - 1}:0]"/>\n'
+            f'\t\t\t<direct name="wc_ctrl_in" input="wc.IC" output="wc_slice.in[{R + CONTROL - 1}:{R}]"/>\n', 1)
     return sub(t, re.escape(FC_LINE), FC_BLOCK.replace("\\", "\\\\"), 1)
 
 
 def ranges(root, port: str) -> list:
-    """Every bit of wc_slice.<port> that a direct inside nl_dpe's parent connects, in order."""
+    """Every bit of wc_slice.<port> that a direct inside wc_slice connects to nl_dpe (in: the direct's input end; out:
+    its output end), in order."""
     bits = []
     for d in root.iter("direct"):
-        for end in (d.get("input"), d.get("output")):
-            m = re.fullmatch(rf"wc_slice\.{port}\[(\d+)(?::(\d+))?\]", end or "")
-            if m:
-                hi, lo = int(m.group(1)), int(m.group(2) if m.group(2) is not None else m.group(1))
-                bits += list(range(lo, hi + 1))
+        end = d.get("input") if port == "in" else d.get("output")
+        other = d.get("output") if port == "in" else d.get("input")
+        m = re.fullmatch(rf"wc_slice\.{port}\[(\d+)(?::(\d+))?\]", end or "")
+        if m and (other or "").startswith("nl_dpe."):
+            hi, lo = int(m.group(1)), int(m.group(2) if m.group(2) is not None else m.group(1))
+            bits += list(range(lo, hi + 1))
     return sorted(bits)
 
 
@@ -117,9 +133,13 @@ def check_text(R: int, C: int, text: str, template: str) -> list:
         probs.append(f"tile area {tile.get('area')} MWTA != {round(area.blockAreaMwta(R, C))}")
     sub_tile = tile.find("sub_tile")
     pins = {x.get("name"): int(x.get("num_pins")) for x in sub_tile if x.tag in ("input", "output", "clock")}
-    want = {"I": R + CONTROL, "O": C + STATUS, "reset": 1, "clk": 1}
+    want = {"I": R, "IC": CONTROL, "O": C + STATUS, "reset": 1, "clk": 1}
     if pins != want:
         probs.append(f"tile pins {pins} != {want}")
+    eq = {x.get("name"): x.get("equivalent") for x in sub_tile if x.tag == "input"}
+    if (eq.get("I"), eq.get("IC")) != ("none", "none"):
+        probs.append(f"tile pin equivalence I {eq.get('I')}, IC {eq.get('IC')} (no swappable pins: VPR's post-route "
+                     "pin fix-up aborts on them, 2026-10-23)")
     fc = sub_tile.find("fc")
     over = {o.get("port_name"): o.get("fc_val") for o in fc.findall("fc_override")}
     if (fc.get("in_val"), fc.get("out_val"), over) != ("0.15", "0.10", {"clk": "0"}):
@@ -129,8 +149,16 @@ def check_text(R: int, C: int, text: str, template: str) -> list:
         probs.append("pin locations or switch blocks changed")
     pbs = {pb.get("name"): pb for pb in root.iter("pb_type")}
     io = lambda pb: {x.get("name"): int(x.get("num_pins")) for x in pb if x.tag in ("input", "output")}  # noqa: E731
-    if {k: v for k, v in io(pbs["wc"]).items() if k in ("I", "O")} != {"I": R + CONTROL, "O": C + STATUS}:
+    if {k: v for k, v in io(pbs["wc"]).items() if k in ("I", "IC", "O")} != {"I": R, "IC": CONTROL, "O": C + STATUS}:
         probs.append(f"pb_type wc {io(pbs['wc'])}")
+    peq = {x.get("name"): x.get("equivalent") for x in pbs["wc"] if x.tag == "input"}
+    if (peq.get("I"), peq.get("IC")) != ("none", "none"):
+        probs.append(f"pb_type wc pin equivalence I {peq.get('I')}, IC {peq.get('IC')} (no swappable pins)")
+    top = {d.get("name"): (d.get("input"), d.get("output")) for d in root.iter("direct")
+           if d.get("name") in ("wc_data_in", "wc_ctrl_in")}
+    if top != {"wc_data_in": ("wc.I", f"wc_slice.in[{R - 1}:0]"),
+               "wc_ctrl_in": ("wc.IC", f"wc_slice.in[{R + CONTROL - 1}:{R}]")}:
+        probs.append(f"the wc-level input directs {top}")
     if {k: v for k, v in io(pbs["wc_slice"]).items() if k in ("in", "out")} != {"in": R + CONTROL, "out": C + STATUS}:
         probs.append(f"pb_type wc_slice {io(pbs['wc_slice'])}")
     dpe = io(pbs["nl_dpe"])
@@ -145,9 +173,10 @@ def check_text(R: int, C: int, text: str, template: str) -> list:
     # the diff from the template: inside the wc tile and the wc pb_type only, on the lines the rule names
     a, b = template.splitlines(keepends=True), text.splitlines(keepends=True)
     (ta0, ta1), (pa0, pa1) = blocks(template)
-    allowed = re.compile(r'\s*(<tile name="wc" height=|<input name="(I|in|data_in)" num_pins=|<output name="(O|out|data_out)"'
-                         r' num_pins=|<direct name="dpe_(in2in|out2out)_|<fc |</fc>|<fc_override fc_type="frac" fc_val="0" '
-                         r'port_name="clk"/>|<!-- clock pins do not connect)')
+    allowed = re.compile(r'\s*(<tile name="wc" height=|<input name="(I|IC|in|data_in)" num_pins=|'
+                         r'<output name="(O|out|data_out)" num_pins=|'
+                         r'<direct name="(dpe_(in2in|out2out)_|wc_(data|ctrl)_in")|<fc |</fc>|'
+                         r'<fc_override fc_type="frac" fc_val="0" port_name="clk"/>|<!-- clock pins do not connect)')
     for op, i0, i1, j0, j1 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
         if op == "equal":
             continue
@@ -161,12 +190,12 @@ def check_text(R: int, C: int, text: str, template: str) -> list:
 def write() -> int:
     template = TEMPLATE.read_text(encoding="utf-8")
     OUT.mkdir(exist_ok=True)
-    for R, C in CONFIGS:
+    for R, C in STAGED:
         path = OUT / f"nl_dpe_{R}x{C}_auto.xml"
         path.write_text(staged_text(R, C, template), encoding="utf-8")
         w, h = area.footprint(R, C)
         print(f"  {path.name}: tile {h} x {w} (H x W) = {w * h} cells, I {R + CONTROL}, O {C + STATUS}")
-    print(f"gen_arch: {len(CONFIGS)} XMLs -> {OUT}")
+    print(f"gen_arch: {len(STAGED)} XMLs -> {OUT}")
     return 0
 
 
@@ -187,25 +216,30 @@ def check_set(texts: dict, template: str) -> list:
 def check() -> int:
     template = TEMPLATE.read_text(encoding="utf-8")
     texts = {}
-    for R, C in CONFIGS:
+    for R, C in STAGED:
         path = OUT / f"nl_dpe_{R}x{C}_auto.xml"
         texts[(R, C)] = path.read_text(encoding="utf-8") if path.exists() else None
     fails = check_set(texts, template)
-    names = {f"nl_dpe_{R}x{C}_auto.xml" for R, C in CONFIGS}
+    names = {f"nl_dpe_{R}x{C}_auto.xml" for R, C in STAGED}
     stray = sorted(x.name for x in OUT.glob("*.xml") if x.name not in names)
     if stray:
-        fails.append(f"files outside the design space: {stray}")
+        fails.append(f"files outside the design space and the smoke points: {stray}")
     print(f"  staged   {'PASS' if not fails else 'FAIL'}  {sum(v is not None for v in texts.values())} of "
-          f"{len(CONFIGS)} XMLs: footprint, area, pins, Fc, directs, the diff from the template")
+          f"{len(STAGED)} XMLs: footprint, area, pins, Fc, directs, the diff from the template")
     # planted faults: each must give at least one problem
     good = staged_text(256, 128, template)
     w, h = area.footprint(256, 128)
     faults = {
         "a wrong height": good.replace(f'height="{h}" width="{w}"', f'height="{h + 1}" width="{w}"'),
-        "a wrong pin count": good.replace(f'<input name="I" num_pins="{256 + CONTROL}"/>',
-                                          f'<input name="I" num_pins="{256 + CONTROL - 1}"/>', 1),
+        "a wrong pin count": good.replace('<input name="I" num_pins="256" equivalent="none"/>',
+                                          '<input name="I" num_pins="255" equivalent="none"/>', 1),
+        "the data pins swappable": good.replace('<input name="I" num_pins="256" equivalent="none"/>',
+                                                '<input name="I" num_pins="256" equivalent="full"/>', 1),
+        "the control pins swappable": good.replace(f'<input name="IC" num_pins="{CONTROL}" equivalent="none"/>',
+                                                   f'<input name="IC" num_pins="{CONTROL}" equivalent="full"/>', 1),
+        "the controls on the data pins": good.replace('output="wc_slice.in[262:256]"/>', 'output="wc_slice.in[6:0]"/>'),
         "a shifted control bit": good.replace(f'input="wc_slice.in[{256 + 6}]"', f'input="wc_slice.in[{256 + 7}]"'),
-        "the old 40-bit data": good.replace('<input name="data_in" num_pins="256"', '<input name="data_in" num_pins="40"'),
+        "the old pre-bit-plane data": good.replace('<input name="data_in" num_pins="256"', '<input name="data_in" num_pins="40"'),
         "a stray edit (a CLB pin)": good.replace('<input name="I1" num_pins="15" equivalent="full"/>',
                                                  '<input name="I1" num_pins="16" equivalent="full"/>'),
         "a stray edit (the clock's Fc)": good.replace('fc_val="0" port_name="clk"/>\n\t\t</fc>',

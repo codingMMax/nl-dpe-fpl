@@ -9,11 +9,13 @@ one 64x64 case per harness checks that the copied harnesses (edited path lines o
   lock       tools/copies.py: every copy == its v2 source (read from the git tag v2-final) with its declared path lines
   twins      tools/check_twins.py --self-test, then the gate
   selftests  every copied self-test, unchanged (6 oracles, 10 kernels + attention_sim --values, the platform files)
-  regen      every copied case generator writes its default corpus (GATE 1 runs inside each dump_case). The v2
-             generators went with v2/; the generators and what they import are locked copies, and their corpora were
-             compared with v2's byte for byte while v2 existed
-  rtl        one 64x64 case per copied RTL harness (dpe, gemm, tiled DIMM, online softmax, o-carry) and the FIFO
-             testbench
+  regen      every copied case generator writes its default corpus (GATE 1 runs inside each dump_case). None is left
+             since the bit-plane pass (2026-10-23): the v2 harnesses of the crossbar, the GEMM, the online softmax and
+             the o-carry time the pre-bit-plane interface and are retired (tools/cleanup_bitplane.sh); the v3 case writers'
+             corpora are checked by GATE 2 and checkEquivalence instead
+  rtl        the FIFO testbench, and one 64x64 case of the GEMM's GATE-2 harness (ip/gemm/gen_cases.py --only
+             v3_h1_late, then ip/gemm/tb/run_gemm_gate2.py); the copied RTL harnesses are retired with their
+             generators (2026-10-23)
 
 Every v3 command runs under the isolation probe (tools/probe_site): no v3 process may open, import or pass on a path
 in the repository outside v3/. copies.py (which reads the sources from the git tag, through git) runs without it.
@@ -30,7 +32,6 @@ import argparse
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -49,13 +50,9 @@ KERNELS = ("nldpe_sim", "pass_engine", "gemm_sim", "dimm_sim", "softmax_sim", "s
            "ocarry_sim", "proj_sim", "attention_sim")
 # corpus -> (generator, arguments besides --out)
 CORPORA = {
-    "dpe": ("v3/ip/xbar/tb/gen_cases.py", ()),
-    "dpe_p29": ("v3/ip/xbar/tb/gen_cases.py", ("--p29",)),
-    "gemm": ("v3/ip/gemm/tb/gen_gemm_cases.py", ()),
-    "gemm_p29": ("v3/ip/gemm/tb/gen_gemm_cases.py", ("--p29",)),
-    # no "dimm_tile": F3 rewrote the DIMM (its corpora come from ip/dimm/gen_cases.py and are checked by GATE 2)
-    "softmax_online": ("v3/ip/softmax/tb/gen_softmax_online_cases.py", ()),
-    "ocarry": ("v3/ip/softmax/tb/gen_ocarry_cases.py", ()),
+    # none since 2026-10-23: the v2 generators of the crossbar, the GEMM, the online softmax and the o-carry write
+    # the pre-bit-plane interface and are retired with their harnesses; the DIMM was rewritten in F3. The v3 case writers
+    # (ip/*/cases.py, top/cases.py) are checked by GATE 2 and simulator/tests/checkEquivalence.py
 }
 
 
@@ -203,40 +200,19 @@ def step_regen(c: Ctx) -> None:
             c.fails.append(f"regen_{corpus}")
 
 
-def _one_case_dir(src_corpus: Path, dst: Path, pick) -> str:
-    """Copy one case of a certified corpus into its own stimuli dir (manifest of one)."""
-    names = [n for n in (src_corpus / "manifest.txt").read_text().split() if n]
-    name = next(n for n in names if pick(n, json.loads((src_corpus / n / "case.json").read_text())))
-    dst.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src_corpus / name, dst / name, dirs_exist_ok=True)
-    (dst / "manifest.txt").write_text(name + "\n")
-    return name
-
-
 def step_rtl(c: Ctx) -> None:
     rtl = c.root / "rtl"
     for m in ("xbar", "gemm", "dimm", "softmax", "lib"):
         (WORK / m).mkdir(parents=True, exist_ok=True)       # the runners' lock files live there
-    regen = c.root / "regen"
-    is64 = lambda cj: (cj.get("R"), cj.get("C")) == (64, 64)    # noqa: E731
-    runs = [("rtl_dpe", [PY, V3 / "ip/xbar/tb/run_dpe_rtl.py", "--geoms", "64x64", "--ms", "2", "--modes", "0",
-                         "--classes", "random", "--jobs", "1"]),
-            ("rtl_gemm", [PY, V3 / "ip/gemm/tb/run_gemm_rtl.py", "--geoms", "64x64", "--ks", "64", "--ns", "64",
-                          "--ms", "2", "--classes", "random", "--jobs", "1"])]
-    rc, _, log, last, _ = c.run("rtl_softmax_gen", [PY, V3 / "ip/softmax/tb/gen_softmax_online_cases.py", "--out",
-                                                    rtl / "softmax_online_stimuli", "--Ss", "32", "--Ns", "S",
-                                                    "--BKV", "16", "--nExps", "2", "--classes", "random",
-                                                    "--R", "64"])
+    # the GEMM's GATE-2 harness (2026-10-23): one case of its corpus, written here by its case writer
+    stim = rtl / "gemm_stimuli"
+    rc, dt, log, last, _ = c.run("gen_gemm", [PY, V3 / "ip/gemm/gen_cases.py", "--out", stim, "--only", "v3_h1_late"],
+                                 timeout=600)
+    c.say(f"  {'gen_gemm':20s} {'PASS' if rc == 0 else 'FAIL'} {dt:6.1f}s  {last[:100]}  [{c.rel(log)}]")
     if rc != 0:
-        c.fails.append("rtl_softmax_gen")
-        c.say(f"  rtl_softmax_gen FAIL  {last}  [{c.rel(log)}]")
-    runs.append(("rtl_softmax_online", [PY, V3 / "ip/softmax/tb/run_softmax_online_rtl.py", "--stimuli",
-                                        rtl / "softmax_online_stimuli", "--jobs", "1", "--work",
-                                        rtl / "softmax_online_work"]))
-    o = _one_case_dir(regen / "ocarry", rtl / "ocarry_stimuli", lambda n, cj: n.startswith("random_") and is64(cj))
-    runs.append(("rtl_ocarry", [PY, V3 / "ip/softmax/tb/run_ocarry_rtl.py", "--stimuli", rtl / "ocarry_stimuli",
-                                "--jobs", "1", "--work", rtl / "ocarry_work"]))
-    c.say(f"  cases: o-carry {o}")
+        c.fails.append("gen_gemm")
+    runs = [("rtl_gemm", [PY, V3 / "ip/gemm/tb/run_gemm_gate2.py", "--stimuli", stim, "--work", rtl / "gemm",
+                          "--jobs", "1"])] if rc == 0 else []
     for name, cmd in runs:
         rc, dt, log, last, _ = c.run(name, cmd, timeout=3600)
         c.say(f"  {name:20s} {'PASS' if rc == 0 else 'FAIL'} {dt:6.1f}s  {last[:100]}  [{c.rel(log)}]")
@@ -277,8 +253,6 @@ def main() -> int:
     unknown = [s for s in steps if s not in STEPS]
     if unknown:
         raise SystemExit(f"unknown steps {unknown}")
-    if "rtl" in steps and "regen" not in steps and not (WORK / "f1" / a.tag / "regen").exists():
-        raise SystemExit("the rtl step takes its tile and o-carry cases from this tag's regen corpus: run regen first")
     c = Ctx(a.tag, a.jobs)
     head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=REPO, capture_output=True, text=True).stdout
     iv = subprocess.run(["iverilog", "-V"], capture_output=True, text=True).stdout.splitlines()[:1]

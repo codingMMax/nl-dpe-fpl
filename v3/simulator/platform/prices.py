@@ -7,6 +7,9 @@ Until 2026-10-17 every pass was priced as the full array on both sides, which ov
 with ROWS_USED < R (every conversion pass on R > C arrays, every GEMM pass with K < R). The output extent (COLS_USED)
 changes time, not energy (user: outputs full). CLB adds and compares, memory bytes per block-RAM access of
 port_width / 8 bytes. Weight programming is setup energy, never per-inference energy.
+The port traffic (2026-10-23, user): the crossbar's port is R bits in and C bits out per cycle, so a pass moves P planes
+of the rows in use in and P planes of every column out; it is priced per bit (nl_dpe.json `port`: the block-RAM access
+price per bit of its port, continuous with the pre-bit-plane 40-bit words without their rounding).
 """
 from __future__ import annotations
 
@@ -30,14 +33,28 @@ def passEnergyPj(p: Platform, rowsUsed: int | None = None) -> dict:
     return out
 
 
-def passPortAccesses(p: Platform, rowsUsed: int | None = None) -> tuple:
-    """(input, output) port words of one pass: the rows in use go in, every column comes out."""
+def passPortWords(p: Platform, rowsUsed: int | None = None) -> tuple:
+    """(input, output) port words of one pass: on the row-parallel interface P planes each way (a plane carries the rows
+    in use, a drain plane every column); on a fixed-width port the words of 8 bits per row in use / per column."""
     rows = p.rows if rowsUsed is None else rowsUsed
-    return ceilDiv(rows * 8, p.portWidthBits), ceilDiv(p.cols * 8, p.portWidthBits)
+    if p.portFixedWidthBits is None:
+        return p.portWordsPerPass, p.portWordsPerPass
+    return ceilDiv(rows * 8, p.portFixedWidthBits), ceilDiv(p.cols * 8, p.portFixedWidthBits)
+
+
+def passPortBits(p: Platform, rowsUsed: int | None = None) -> tuple:
+    """(input, output) bits one pass moves through the port: P planes of the rows in use in, P planes of every column
+    out (row-parallel); on a fixed-width port the words times their width."""
+    rows = p.rows if rowsUsed is None else rowsUsed
+    if p.portFixedWidthBits is None:
+        return rows * p.portWordsPerPass, p.cols * p.portWordsPerPass
+    wi, wo = passPortWords(p, rowsUsed)
+    return wi * p.portFixedWidthBits, wo * p.portFixedWidthBits
 
 
 def passTrafficEnergyPj(p: Platform, rowsUsed: int | None = None) -> float:
-    return sum(passPortAccesses(p, rowsUsed)) * p.fabric["block_ram"]["energy_pj_per_access"]
+    """The port traffic of one pass: the bits moved times the platform's price per bit."""
+    return sum(passPortBits(p, rowsUsed)) * p.portEnergyPjPerBit
 
 
 def memoryAccesses(fabric: dict, nBytes: int) -> int:

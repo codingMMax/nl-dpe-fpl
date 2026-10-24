@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """stage_analysis.py — the mapping-aware stage analysis of the two case-study heads (docs/attention_stages.md §6):
+Pre-bit-plane analysis, frozen 2026-10-23: it models the previous design (the 5-byte port, BUF = 40) at the
+N_E = 2d mapping and describes the 2026-10-16 run; not part of run_all.sh. Port it after stage 4.
 the pipelined time diagram, the per-stage tables, the analytic end-to-end cycle and energy models, and their sweep
 over the array size.
 
@@ -78,7 +80,7 @@ def mapping(n: int, dm: int, d: int, R: int, C: int) -> dict:
 
 
 # -- the analytic model: the named equations of docs/attention_stages.md §5 (the stage page) ------------------------
-K_READER = EPS      # the softmax's score reader: one 40-bit word, 5 scores per cycle (softmax_online_instage)
+K_READER = EPS      # the softmax's score reader: one pre-bit-plane word, 5 scores per cycle (softmax_online_instage)
 E_ADD, E_COMPARE, E_MEMORY = 0.08498, 0.26439, BRAM_PJ      # pJ per CLB add, per compare, per 5-byte memory access
 
 

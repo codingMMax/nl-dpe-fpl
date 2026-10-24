@@ -96,7 +96,7 @@ class GemmMath:
 class GemmTop(Module):
     NAME = "gemm_top"
     PARAMS_CLASS = GemmParams
-    BASIS = "model-only"       # the bit-plane pass (2026-10-22): pinned again by the head's GATE 2 after the RTL pass
+    BASIS = "rtl-pinned"       # the bit-plane RTL: GATE 2 at 64x64, 18/18 (2026-10-23)
     STEP_METHODS = {"rows": "stepRow"}
 
     @staticmethod

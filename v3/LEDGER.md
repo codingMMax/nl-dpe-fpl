@@ -5,6 +5,38 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 
 ## Status
 
+- **2026-10-23, the DIMM revision (your go) is done and smoked at 128×64; stage 4 waits for your review (Needs you 27).**
+  The feed follows rule C (the add in the crossbar's rows where $R \ge 2C$; the adders stay on square arrays), the QK
+  farm is $N_E = d$, the B register, the drain input and the root are simplified (`ip/dimm/spec.md` §10 item 11).
+  Functional checks: DIMM 16/16 at 64×64 and 16/16 at 128×64, head 5/5 + 6/6; F2 10/10; the reference is
+  `work/equivalence/ref_2026-10-23_qkd` (ALL EQUAL). Smokes at 128×64, seed 11 (log below): QK DIMM 66 crossbars,
+  111.9 MHz, 6,830 CLB, 75 memory blocks (17 min); PV DIMM 129, 172.6 MHz, 8,913 CLB, 224 (18 min); the head 218,
+  **116.0 MHz, 17,998 CLB, 429 memory blocks, 2 h 5 min** (the previous head (2026-10-16 run) at 128×64: 282 crossbars, 132.1 MHz,
+  12,887 CLB, 400 blocks). The crossbar tile's data pins are no longer swappable (VPR's post-route pin fix-up aborts
+  on them). The projection page (3b) and `dse/results/projection/` are stale ($N_E = 2d$, the adders in logic).
+- **2026-10-23, the soft-logic trims (options 1–4, your go) are done through GATE 2; the trimmed 256×128 smoke runs**
+  (log below). GATE 2 passes on every corpus (DIMM 16, softmax 18 + 1 + 5, accumulator 19 + 5, head 5 + 6); the 80
+  builds elaborate with the simulator's crossbars and memories; the reference is `work/equivalence/ref_2026-10-23_trim`.
+  The flow's own count of the head at BERT-Tiny 256×128 goes 367k → 236k flip-flops (1.63M → 1.39M cells). The cycles
+  over the 48 builds move −2.4 % to +5.5 %. Stage 4 still waits for your go.
+- **2026-10-23, stages 2, 3 and 3b of the plan done; the 256×128 smoke runs; stage 4 (the DSE VTR run) waits for your
+  go (Needs you 27).**
+  - Stage 2: the crossbar tile's R data pins are swappable (`equivalent="full"`); the flow takes the 32 FC builds and
+    writes `dse/results/{attn,fc}_vtr_bitplane.csv`. All 80 builds elaborate with the simulator's crossbars and
+    memory lists. The smoke (BERT-Tiny at 256×128, seed 11) started 02:47.
+  - Stage 3, GATE 2 at 64×64, every case passes: GEMM 18/18, DIMM 16/16, softmax 18/18 + 1/1 + 5/5, accumulator
+    19/19 + 5/5, head 5/5 + 6/6. One RTL bug fixed (the accumulator with $SO > LN$) and one testbench constant. The
+    models are `rtl-pinned`; the equivalence reference is `work/equivalence/ref_2026-10-23` (ALL EQUAL).
+  - Stage 3b: the DSE projected onto the bit-plane design (Fmax and CLB held, crossbars and memory blocks from the
+    simulator; estimates), `dse/results/projection/`, and the comparison page (artifact SyaqHcS817G89Uy7FR5j1N).
+- **2026-10-23, the bit-plane RTL (stage 1 of the plan) done on static gates; restore point `8acf73c`.**
+  - Every module's two twins implement its bit-plane spec: the crossbar (`dpe_nldpe.v`, `dpe_blackbox.v`), the GEMM,
+    the DIMM, the online softmax, the accumulator and the head. `BUF` and the crossbar's legacy parameters are gone.
+  - Gates: `check_twins` (with the new width gate at 256×128), `lint_rtl` 0, `check_head_params` 48/48,
+    `gen_arch --check`, `copies`, F2 10/10, `checkEquivalence` ALL EQUAL; all 75 testbench builds of the corpora
+    compile (no simulation run).
+  - Next (automatic): stage 2, the arch input-pin split, the flow changes, the elaboration of the 80 builds and the
+    256×128 smoke; then stage 3, GATE 2 at 64×64.
 - **2026-10-22, the bit-plane pass, phases 1 and 2 done (docs and the simulator; Needs you 26 = checkpoint C2).**
   - Every module's model follows the bit-plane pass. It has its crossbar charter `ip/xbar/spec.md`, its module spec
     (`ip/gemm/spec.md` new; the DIMM, softmax, accumulator and head specs) and `architecture.md` §1–§5. Every model
@@ -12,10 +44,10 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   - F2 10/10. The equivalence reference is re-frozen as `work/equivalence/ref_2026-10-22` (ALL EQUAL). The by-design
     diff against `ref_2026-10-18` has 0 unexpected differences.
   - The 64×64 corpora are regenerated with GATE 1 (`work/corpus/bitplane/`).
-  - The DSE results are **not** regenerated: §8 still carries the 40-bit cycles.
+  - The DSE results are **not** regenerated: §8 still carries the pre-bit-plane cycles.
   - The RTL, the VTR smoke at 256×128 and GATE 2 follow, each on your go.
 - **2026-10-22:** the row-parallel crossbar tile, area side first (decisions below; `experiment.md` §2.1, §5.1, §8).
-  - The DSE now has 8 configs, and its results are regenerated as an area-only update: the cycles still use the 40-bit
+  - The DSE now has 8 configs, and its results are regenerated as an area-only update: the cycles still use the pre-bit-plane
     ports.
   - Next, each on your go (Needs you 25): the RTL pass (GATE 2 at 64×64, the VTR smoke at 256×128), then the timing
     pass.
@@ -113,6 +145,18 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 | 2026-10-22 | **The row-parallel pass** (for the timing pass; not built yet): 1 cycle loads a bit plane, 1 fires it, and 8 drain. The ACAM fires at cycle 9 and the drain starts at cycle 10, when the next load may start. There is no second accumulator or output register. Back to back, a pass starts every 10 cycles; alone it takes 18 (`architecture.md` §1, platform row). | user |
 | 2026-10-22 | **Bit planes on the wire:** a window is 8 plane words, LSB first; an element wider than 8 bits uses $\lceil E/8 \rceil$ lanes; 10 cycles per pass back to back, 18 alone; soft corner-turns where whole values are needed (`architecture.md` §3.1, `ip/xbar/spec.md`). | user |
 | 2026-10-22 | **Every stream around the crossbars widens to $I$ bits per cycle as planes**, including the softmax score reader and the head's X and O. The mapping counts and the credit sizes are held ($N_{OC}$ by the 40-bit floor rule, `PB_CAP` = 4, two $\log P$ slots). Energy keeps its per-byte accounting. | user |
+| 2026-10-23 | **No interim re-pricing:** the DSE results come only from the full flow (bit-plane RTL, VTR of every build, then pricing). | user |
+| 2026-10-23 | **Held design choices of the bit-plane RTL:** 2 $\log P$ slots (`LP_CAP`, PV `A_SLOTS`); the accumulator's LOG feed at $I/8$ lanes (`PRE_LOG` 17). | user (recommendations accepted) |
+| 2026-10-23 | **The 256×128 smoke of the trimmed RTL was stopped** (1 h 16 min in ABC, no result; "stop the run ... to do a fast evaluation"), and the DIMM is revised before any further smoke. **The small sizes:** 64×64 for the functional check of the adder branch (its arch XML is a `vtr/gen_arch.py` `SMOKE` point); **128×64** for the functional check of the crossbar-add branch and for the smokes (the smallest array with $R \ge 2C$, the same $I$ as 64×64, the DSE's best attention config). | user |
+| 2026-10-23 | **The crossbar port's traffic is priced on the row-parallel interface:** the port is $R$ bits in and $C$ bits out per cycle, so a pass moves $P$ planes of the rows in use in and $P$ planes of every column out, priced per bit (`nl_dpe.json` `port`, `energy_pj_per_bit` 0.0012375 = the block-RAM access price per bit of its 40-bit port, so the term is continuous with the pre-bit-plane 40-bit words without their rounding). `port_width_bits` 40 is gone from the compute tile; `nl_dpe.json` leaves the copy lock (FORKED; sha256 of the verbatim copy 64e32f350f0b1f891448a7bb39df141ccfc015fc34f11ef58fa7801b1b12f4f4). Over the 48 builds e_total moves −0.07 % to −0.14 % (traffic −1.0 to −1.7 %; 4.7–8.4 % of the head's energy). `nOcFloor` stays held (a mapping-derived parameter: the mapping does not change). | user ("we need to fix the port_width_bits ... input bits equal to R bits per cycle and output bits equal to C bits per cycle") |
+| 2026-10-23 | **The crossbar tile's data pins are not swappable after all** (`equivalent="none"` on both input ports; the morning's `full` on the R data pins is dropped). The first VPR runs on the row-parallel XMLs (the QK and PV DIMM smokes at 128×64) routed successfully and then aborted in VPR's post-route pin fix-up: `vpr/src/pack/post_routing_pb_pin_fixup.cpp:559 find_mapped_equivalent_pb_pin_by_net: Assertion '1 == cnt' failed` (signal 6, exit 134), the step that rewrites the packed netlist for pins the router swapped. The legacy XMLs had no equivalence on this tile (a single 47-pin port, no attribute) and never ran that step. The fix stays on our side (the arch XML is our input; no VPR analysis): the router swaps no pins, the tile's area keeps charging the local input crossbar (pessimistic for us, not optimistic). The port split (data / control) stays. | user ("drop the equivalent full and rerun only the VTR smokes") |
+| 2026-10-23 | **The DIMM feed, rule C: the log-domain add uses spare rows where the array has them.** Where $R \ge 2C$ the EXP crossbar's weights are the identity stacked twice (rows $r$ and $I + r$ to column $r$, $2I$ rows in use) and the row sum is the add, so the $I$ bit-serial adders per crossbar go (about 35 % of the DIMM's ABC-visible gates and its widest control nets); on a square array ($R = C$) the adders stay. The crossbar's input protocol (a full plane per cycle, 8 gapless planes) fixes one bit producer per lane per burst cycle, so sharing adders between lanes (an 8-plane hold costs more) or between crossbars (= fewer crossbars at full rate) does not pay. Rejected: rule A (adders everywhere, −20 % gates) and rule B (the add everywhere; a square array would use half its columns per pass: +18–28 % cycles, +32 % energy there, which you called unfair to 128×128 and 256×256). Values and every latency unchanged; EXP passes use $2I$ rows (energy); the pairing adds leave the CLB count. | user |
+| 2026-10-23 | **The QK farm is $N_E = d$** (one group per wave; the model on the 48 builds: +0.7–7.1 % cycles, median +2.0 %, energy unchanged, $d$ fewer crossbars, the softmax's input channels 2 → 1). $N_{EP}$ stays $2d$: the PV farm is rate-matched to the softmax's 2 EXP crossbars (2 P windows per pass period = 128 crossbars × 128 products); every smaller $N_{EP}$ overruns the P stream in the model, and the softmax is the second-largest item of the critical path (median 30 %; the projection GEMMs' passes are the largest, 56 %). | user |
+| 2026-10-23 | **The DIMM's RTL simplifications with the revision:** the B word register loads once per job and rotates (no next-word register); the drain input is $(e \wedge d_{on}) \oplus s_A \oplus s_B$ with the signs captured at the MSB plane; the root accumulates in right-shift form (no barrel, narrow adders). Values and latencies unchanged (`ip/dimm/spec.md` §4, §10 item 11). | user ("optimize the DIMM logics so it is structurally simpler") |
+| 2026-10-23 | **FC is synthesized again** with the bit-plane `gemm_top` and the row-parallel XMLs (32 builds), and gets its own GATE-2 corpus at 64×64 (several row and column tiles, partial extents). | user |
+| 2026-10-23 | **The crossbar's R data input pins are swappable in VTR** (`equivalent="full"`, matching the local input crossbar the tile's area pays for); its 7 control inputs and all outputs stay fixed. | user |
+| 2026-10-23 | **Execution:** stages 0–3 of the plan (RTL with static gates, the 256×128 smoke, GATE 2 at 64×64) run without a go per step; then a DSE projection page (Fmax and CLB held at the 40-bit builds', memory and crossbars from the model) before the go for the DSE VTR run. The smoke wrapper keeps ports up to 2048 bits as pins (`smoke.WIDE`), so no DSE build gets wrapper logic. | user (plan approved) |
+| 2026-10-23 | **The soft-logic trims (options 1–4):** the DIMM drain registers each count once (sign XOR folded into the slice popcount; `OUT_LAT` $10 + [n_s > 1]$); E4 and E8 carry value words (`docs/architecture.md` §3.1: neither end is a crossbar), so the consumers' input corner-turns go; the accumulator's corner-turns A, B and the EXP hold are single buffers (`LOG_GAP` 16, `EXP_GAP` 17), which also leaves one LOG arithmetic. Cycles may grow where a module has slack (the accumulator holds 3–7 % of the critical path). The running smoke (the untrimmed bit-plane RTL) continues as the before measurement; a new smoke follows GATE 2. | user |
 | 2026-10-22 | **The 64×64 gates of the bit-plane pass:** the DIMM (16), softmax (18, plus the 128×64 case) and accumulator (19) corpora, the head bring-up (5) and gate H (6), after the RTL of every module (static gates only) and the head's VTR smoke at 256×128 (Rule No. 1). | user |
 
 ## Needs you
@@ -262,6 +306,36 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
     - (g) **Predicted memory:** 593 blocks at the 128×128 smoke point, against 376 measured for the 40-bit RTL. The
       accumulator rises 58 → 221, because its plane-word memories are wide and shallow.
     - (h) **The commit.**
+
+    2026-10-23, your answers: (b) no interim re-price; (c) 2 slots; (d) $I/8$ lanes; (f) the copied-file edits and
+    the pin equivalence (inputs swappable); FC re-synthesized; a GEMM corpus. The plan
+    (`~/.claude/plans/woolly-growing-moler.md`) runs stages 0–3 automatically. The restore point is `8acf73c`.
+27. **Stage 4 of the bit-plane plan: the DSE VTR run (2026-10-23).** You asked to review the 128×64 smokes first
+    ("stop before the full DSE running"). The items:
+    - (a) **Review the smoke results** (the log entry of 2026-10-23 evening): the head at 128×64 runs at 116.0 MHz
+      (seed 11) with 17,998 CLB and 429 memory blocks against the previous head (2026-10-16 run)'s 132.1 MHz, 12,887 CLB and 400 at the
+      same size; path #1 is 8.6 ns of wire into a PV B-memory read address (the same kind of path as the pre-bit-plane
+      head's). The QK DIMM's path #1 is the slice popcount tree's wires (8.96 ns): one register inside the tree would
+      about halve it, at +1 cycle of `OUT_LAT` (a spec change), if you want Fmax.
+    - (a') **The memory-block gate for stage 4:** VPR's packer lands within a few blocks of the model's prediction
+      (QK 75 vs 72: three 64×128 memories took 8 blocks instead of ⌈128/20⌉ = 7; PV 224 = 224; the head 429 vs 442:
+      73 memories packed of 75 elaborated, the rest trimmed widths). Proposal: the driver accepts VPR's count within
+      ±5 % of the model (the elaboration's memory list stays an exact gate) instead of `equal`.
+    - (a'') **The stale projection page** (artifact SyaqHcS817G89Uy7FR5j1N) carries $N_E = 2d$ and the adders in
+      logic; it is superseded by stage 5's results rather than regenerated.
+    - (a'''') **`dse/check_energy.py`'s table check fails until stage 5:** the published tables carry the pre-2026-10-23
+      traffic price; its price check (`--prices-only`) passes.
+    - (a''') **`run_all.sh` completes only after stage 5:** the published rows were priced by the pre-bit-plane model;
+      the current model regenerates different numbers and the results page's assertions fail (it happened once on
+      2026-10-23 during the wording audit; the 24 tracked result files were restored from `HEAD`, byte-identical).
+    - (b) **The go for stage 4:** `python3 v3/dse/vtr_dse.py` on the 80 builds, seeds 11, 13, 17, largest first, in the
+      background (about 1–2 days and 0.3–0.5 TB [estimate]). Before it, archive the 276 GB of previous builds (the 2026-10-16 run) in
+      `work/vtr/dse/` (your rm). The smoke's folder is for the circuit before the accumulator fix (no netlist change
+      at $SO = LN$), so stage 4 synthesizes BERT-Tiny at 256×128 again.
+    - (c) **The cleanups:** `bash v3/tools/cleanup_workdir.sh` (dry run), then `--go`: the previous run's 248 build
+      folders (280 GB) and the stopped smokes, before the sweep; and `bash v3/tools/cleanup_bitplane.sh` (dry run,
+      then `--go`): the retired source files.
+    - (d) **The commit** of stages 0–3b (no push; you push).
 
 ## Log
 
@@ -1502,3 +1576,188 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   - **Cycles of the 48 builds:** attention 1.74–8.15× fewer (median 3.13×), FC 2.35–8.74× (median 4.50×)
     (`work/bitplane/cycles_48.csv`).
   - **Findings for C2:** Needs you 26 (c)–(e), (g).
+- 2026-10-23: **the bit-plane RTL, stage 1** (plan `woolly-growing-moler`; restore point `8acf73c`).
+  - **Forked copied files** (your go, 2026-10-23; each moved to `FORKED` in `tools/copies.py`; the v2 start points):
+    `ip/xbar/rtl/sim/dpe_nldpe.v` (`edf3b95c596d26f2ca9a72204e51f342f9ab5e1b379a6ac4d86749a7314e59f0`),
+    `ip/xbar/rtl/vtr/dpe_blackbox.v` (`e646a116b1bf69e84006347008e8a6dbfa90967e8f2df1e31b57c8580662d6d3`),
+    `ip/gemm/tb/tb_gemm_top.v` (`f61506ef1339cfd197dfc2778d55ae2f923a499f5192ea384de076a87fa93b46`),
+    `tools/twin_baseline/gemm.diff` (`c3633111ce4bab3215c88d96c78ad5e0ac5bf76c6b641f9282839f0532e1f64e`). Retired
+    (still on disk until `tools/cleanup_bitplane.sh --go`): the crossbar's 40-bit test, the GEMM's v2 scripts.
+  - **RTL** (both twins per module; each against its spec, the timing of every named latency):
+    - crossbar: one plane register, the shift-add, the ACAM at MSB + 1, the C-bit drain, the sticky `err`;
+    - GEMM: the tiles fed by the act planes, a registered bit-serial mod-256 tree, the output register;
+    - DIMM: plane-wise stagers, $A_{GRP} = \min(8, X_S')$, the window stager through each A memory's own port (a
+      port table per phase), the bit-serial feed from shift registers, the per-plane popcount trees, the root
+      accumulators with the $-255\,n_{neg}$ preload, NARROW, the output plane buffer;
+    - online softmax: plane FIFOs and a double corner-turn, $Q_W$-byte store words, the EXP feeds with a double
+      corner-turn (one burst per window), the per-plane row sums, the carry's plane register and plane-wise tables,
+      E6 / E7 plane windows;
+    - accumulator: jobs decided `PRE` before the leader (one pass period apart), the LOG feed's corner-turns A and
+      B, the EXP feeds' bit-serial sums with clamp flags, the plane-word slot memories, the O8 hold, E9;
+    - head: `x_d` = $P_{proj} V \cdot ROWS_X$, `o_d` = $N_{OC} I$, `LOADX` = 8.
+  - **Harness:** the GEMM's GATE-2 corpus (`ip/gemm/gen_cases.py`, 18 cases at 64×64, GATE 1 against the oracle,
+    `work/corpus/bitplane/gemm_64x64`) and runner (`ip/gemm/tb/run_gemm_gate2.py`); the DIMM, softmax, accumulator
+    and head testbenches follow the plane framing. `rtl_gate2` fails a compile on a port-width warning.
+  - **Tool fix:** `lint_rtl` stripped everything between two `always @(*)` blocks as if it were an attribute, so that
+    code was never linted; fixed, with a self-test case. The whole tree lints clean.
+  - **Gates:** see Status. GATE 2 has not run (stage 3, after the smoke).
+- 2026-10-23: **the bit-plane RTL, stages 2, 3 and 3b** (plan `woolly-growing-moler`).
+  - **Stage 2, the flow:**
+    - `vtr/gen_arch.py`: the tile's input is R data pins (`equivalent="full"`) and 7 control pins (`none`), with
+      wc-level directs; `vtr/arch_rowpar/` regenerated; `--check` catches 11/11 planted faults.
+    - `vtr/smoke.py`: `WIDE` = 2048 (no wrapper logic on any DSE build), `vtr/arch_rowpar/`, `arch_for` asserts the
+      XML's data pins (R, C), a `gemm` module.
+    - `dse/vtr_dse.py`: the 32 FC builds (`FcBuild`, P29 extents; elaboration: `dpe` = V·H, no memory), the arch XML's
+      sha256 in the build key, the new tables `dse/results/attn_vtr_bitplane.csv` and `fc_vtr_bitplane.csv` (the
+      40-bit ones stay), the self-test over 80 builds.
+  - **Stage 2, elaboration of the 80 builds:** 80/80 OK. Crossbars and Yosys's memory lists equal the simulator's on
+    every build, no `dpe` port is resized, and the only warnings are Yosys's pre-`proc` notes, as on the 40-bit builds
+    (`work/dse/elab80_stdout.log`).
+  - **Stage 2, the smoke:** `vtr_dse.py --build BERT-Tiny@256x128 --seeds 11`, started 02:47
+    (`work/dse/smoke_bert_tiny_256x128.log`; status every 90 min in `work/dse/vtr_dse_status.log`).
+  - **Stage 3, GATE 2 at 64×64** (`work/gate2/`, driver `work/gate2/run_all_gate2.sh`): GEMM 18/18; DIMM 16/16;
+    online softmax 18/18, `sm_rc_128x64` 1/1, bring-up 5/5; accumulator 19/19, bring-up 5/5; head bring-up 5/5 and
+    corpus 6/6 (`H_n128_d64` takes 1.8 h).
+    - **RTL bug, fixed:** with $SO > LN$ the accumulator's $O_8$ plane $b$ reads hold plane $b - SHL$, which the next
+      window's EXP drain rewrites from $d_s + 10$ (`acc_so_gt_ln` failed on planes 3–7). Both twins now take a copy of
+      the hold at $d_s + 8$ when $SHL > 0$ (`acc_spec.md` §10 item 9). The head has $SO = LN$: no copy and no netlist
+      change. The accumulator corpus and the head bring-up pass on the fixed RTL.
+    - **Testbench fix:** `tb_dimm_tile_top.v` held the `TRANS_B` = 0 B credit at $2 B_{CH}$; the spec's is $4 B_{CH}$
+      (§10 item 6, 2026-10-15). The six PV cases' events and cycles already equalled the model's.
+    - After GATE 2: the five models (GEMM, DIMM, online softmax, accumulator, controller) are `rtl-pinned`; the
+      reference `work/equivalence/ref_2026-10-23` differs from `ref_2026-10-22` only in those basis fields (rows and
+      corpora byte-identical); `checkEquivalence` defaults to it. `testDimmTile`'s Yosys memory pins come from the
+      bit-plane elaborations (12 instances: spec §6 == Yosys == the model).
+    - One F2 run lost the DIMM test silently (no output, no probe record) while GATE 2 ran; the rerun and every later
+      run passed. No out-of-memory kill was found.
+  - **Stage 3b, the projection** (your request, 2026-10-23: Fmax and CLB held, BRAM and DPE counts from the simulator):
+    - `dse/projection.py` → `dse/results/projection/{attn,fc}_priced_results.csv` (`rows.py attentionRow` / `fcRow`
+      with the held metrics; self-test: today's 80 priced rows from their inputs by the same pricing).
+    - `dse/data.py` reads `DSE_RESULTS`; `plot_dse.py` uses `data.RESULTS`, skips the critical-path figure without
+      its JSON, and moves a legend that would cover a point. The default run stays byte-identical (JSONs and PNGs).
+      `results_page.py`'s two tables take their id; its two pages are byte-identical.
+    - `dse/compare_page.py` → `dse/results/compare/dse_compare.html` (published: SyaqHcS817G89Uy7FR5j1N).
+    - **What the projection shows [estimates]:** attention cycles fall to 0.17–0.51× (the more the wider the array),
+      memory blocks rise (304 → 355 at C = 64, 288 → 468 at 128, 316 → 737 at 256, per-build means), FC rows take
+      19–23 cycles (from 51–168) with no memory. Attention's latency-vs-area front grows from 128×64 alone to 128×64,
+      256×64, 128×128, 256×128, 256×256; FC's shrinks to 512×256 alone; the ADP plane's front becomes 256×128,
+      256×256, 128×128, 512×256, 128×64 (closest 256×128); EDAP's #1 stays 128×64 (attention), 512×256 (FC) and
+      256×128 (across).
+- 2026-10-23: **the soft-logic trims, options 1–4** (your go, after the source count of the bit-plane RTL).
+  - **Why:** flip-flop bits counted from the RTL source at BERT-Tiny 256×128: the head 156k → 381k (×2.44; the flow's
+    own Parmys count 150k → 367k DFFs, ×2.45, and 555k → 1.63M cells): QK DIMM 87k → 147k, PV DIMM 51k → 133k,
+    accumulator 5.2k → 80.7k (15.5×), softmax 13.8k → 19.7k. The untrimmed smoke spent 7.5 h in ABC on a 202 MB netlist
+    (the 40-bit build's was 99 MB) and was stopped at your request, with no result. In the bit-plane model the
+    accumulator holds 3–7 % of the head's critical path and the QK DIMM 2.5–3.5 %.
+  - **Specs:** `docs/architecture.md` §3.1 value framing for E4 and E8 (neither end is a crossbar); DIMM `SLICE_LAT` 1,
+    `SHARED_LAT` $[n_s > 1]$, `OUT_LAT` $10 + [n_s > 1]$, value-word C port (§10 item 10); softmax `RD_LAT` 1, no input
+    corner-turn (§10 item 8); accumulator `LOG_GAP` 16, `EXP_GAP` 17, the $o_{part}$ words read at $d + 8 \ldots d + 15$
+    straight into the arithmetic, `p_cr` at $d + 2P$ (§10 item 10); `top/spec.md`.
+  - **Models:** `records.valuePort` / `valueWords`; `dimmTile` (the drain latencies, the C port), `softmaxOnline`
+    (`RD_LAT`, the s port), `softmaxAccumulator` (the gaps, the late $o_{part}$ reads, the p port); the tests' closed
+    forms, rule terms (the gap now binds where the leader term did) and mutants; `testTrace` pins 3784 and 12189. F2
+    10/10. Over the 48 builds the cycles move −2.4 % to +5.5 % (median −0.04 %; BERT-Tiny at C = 128 +5.5 %, the slower
+    accumulator); energy, counts and memories are unchanged, FC too.
+  - **Corpora:** `work/corpus/trim/` (DIMM 16, softmax 18 + 1 + 5, accumulator 19 + 5, head 5 + 6), GATE 1 on every case.
+  - **RTL** (both twins; `check_twins`, lint, `check_head_params` 48/48, `copies` all pass):
+    - DIMM: the sign XOR feeds the slice's count tree directly; `dimm_ptree` sums each element's terms as a balanced
+      tree in a function and registers the result once; the output buffer shifts value words. A first version built the
+      trees as continuous assigns into one shared wire vector: the same netlist, but Icarus re-woke every adder on every
+      change (DIMM cases > 25 min instead of seconds), so it was replaced before GATE 2 completed.
+    - Softmax: the input stage is the FIFO's registered read (the corner-turn is gone).
+    - Accumulator: corner-turn A holds $e$ and $so$ only (one buffer), B and the EXP hold are single buffers (so the LOG
+      arithmetic exists once), the FIFOs pop at $d + 8 \ldots d + 15$ into the arithmetic, `p_cr` after the last pop,
+      the cooldowns 15 and 16 (5-bit counters).
+  - **GATE 2** (`work/gate2_trim/`, `work/gate2_trim2/`), every case passes: softmax 18/18 + 1/1 + 5/5, accumulator
+    19/19 + 5/5, DIMM 16/16, head bring-up 5/5 and corpus 6/6 (`H_n128_d64` simulates in 49 min, was 1.8 h). The new
+    equivalence reference `work/equivalence/ref_2026-10-23_trim` (checkEquivalence's default; ALL EQUAL), F2 10/10.
+  - **VTR:** the final RTL elaborates 80/80 (crossbars and memory lists == the simulator's;
+    `work/dse/trim2_{attn,fc}_elab.csv`). The smoke (BERT-Tiny 256×128, seed 11, started 10:47,
+    `work/dse/smoke_trim_bert_tiny_256x128.log`): elaboration 278/278 crossbars and 78/78 memories; the netlist into
+    ABC is 181 MB (was 202 MB untrimmed, 99 MB 40-bit): 236k DFFs (367k; 150k), 1.39M cells (1.63M; 555k). The
+    combinational gates barely moved (AND/OR/XOR 495k, was 506k): the DIMM feeds' bit-serial adders and the per-plane
+    sign XORs dominate them.
+- 2026-10-23 (evening): **The DIMM revision** (your go: "optimize the DIMM logics so it is structurally simpler";
+  rule C for the feed; $N_E = d$; "drop the equivalent full and rerun only the VTR smokes").
+  - **Why:** the trimmed 256×128 smoke was stopped at your request after 1 h 16 min in ABC (12–32 h expected
+    [estimate]); the flow's own statistics of the QK DIMM alone at 64×64 read 336k cells (64k FF, 123k MUX, 44k AND,
+    23k OR, 43k XOR, 35k hard-adder bits): the $I$ bit-serial adders per crossbar were about 35 % of the gates ABC
+    sees. The traced critical paths of the 48 builds (`dse/results/critical_path.json`): GEMMs median 56 % of $T$
+    (largest in 42 of 48), softmax 30 % (largest in 6), PV DIMM 10 %, accumulator 3.4 %, QK DIMM 0.9 % (max 14.5 %);
+    by kind 54 % crossbar loading. The model on the 48 builds: $N_E = d$ costs +0.7–7.1 % cycles (median +2.0 %), energy
+    unchanged, $d$ fewer crossbars; every $N_{EP} < 2d$ overruns the P stream (the PV farm is rate-matched to the
+    softmax's 2 EXP crossbars: 2 P windows per pass period = 128 crossbars × 128 products).
+  - **Design (ip/dimm/spec.md §4, §10 item 11; architecture.md §4.4; experiment.md §4.2; top/spec.md; xbar spec §1):**
+    where $R \ge 2I$ the EXP crossbar's weights are the identity stacked twice (rows $r$ and $I + r$ to column $r$,
+    $2I$ rows in use) and the row sum is the add (EXP has period 256 in $y$: checked over all 65,536 byte pairs); on a
+    square array the adders stay (`generate`). The crossbar's protocol (a full plane per cycle, 8 gapless planes)
+    fixes one bit producer per lane per burst cycle, so adders cannot be shared between lanes (an 8-plane hold costs
+    more) nor usefully between crossbars (= fewer crossbars at full rate). The B word loads once per job and rotates
+    per byte; the drain input is $(e \wedge d_{on}) \oplus s_A \oplus s_B$ with the signs captured at the MSB plane; the
+    root accumulates in right-shift form ($u \leftarrow 2 n_{neg}$, then $\lfloor u/2 \rfloor + \mathrm{POP}_b$, $-2 n_{neg}$
+    at plane 7; the finished bit into a 7-bit register; checked on 80,000 random count sets). Values and every latency
+    unchanged; EXP passes use $2I$ rows (energy) and the pairing adds leave the CLB count where $X_{ADD}$.
+  - **Model and tests:** `dimmTile.py` (`XADD`, `stackedIdentity`, the feed, the counts), `attentionHead.py` ($N_E$
+    default $d$), `testDimmTile.py` (`xadd` checks, a mutant: the second identity block removed → GATE 1 fails; 243
+    GATE-1 cases cover both branches), `testTrace.py` pins 3920 / 12554 (were 3784 / 12189), `check_head_params.py`
+    defaults, `vtr_dse.py` self-test pins (214 crossbars, 554 blocks at 128×128). F2 10/10. Reference
+    `work/equivalence/ref_2026-10-23_qkd` (ALL EQUAL; `checkEquivalence` default).
+  - **RTL** (both twins; `check_twins` baseline re-recorded, `lint_rtl` 0, `check_head_params` 48/48, `copies` OK):
+    the `g_xadd` / `g_fadd` feed, the B register, `sda` at the MSB plane, the right-shift root. Testbenches preload the
+    stacked identity where $R \ge 2I$. `ip/dimm/gen_cases.py --rc 128x64` writes the $X_{ADD}$ corpus
+    (`work/corpus/dimm_128x64`); the head corpora regenerated for $N_E = d$ (`work/corpus/qkd/head_{bringup,64x64}`).
+  - **Functional checks** (`work/gate2_qkd/`): DIMM 16/16 at 64×64 (172 s) and 16/16 at 128×64 (215 s); head bring-up
+    5/5 (574 s), corpus 6/6 (3046 s; `H_n128_d64` 3920 cycles == model).
+  - **Smokes at 128×64, seed 11** (`vtr/smoke.py --tag none`; `work/vtr/smoke/*_128x64_none/`). The first runs
+    routed and then aborted in VPR's post-route pin fix-up (`post_routing_pb_pin_fixup.cpp:559`, `'1 == cnt'`) on the
+    swappable data pins; the data pins are `equivalent="none"` again (decision above; `gen_arch.py`, 9 XMLs,
+    `--check` ALL PASS; CLAUDE.md). Then:
+    - QK DIMM (64 EXP + 2 LOG): wc 66 = expected, **111.9 MHz**, CLB 6,830, memory 75 (model 72), 17.2 min (Parmys 0.5,
+      ABC 13.9, VPR 2.9); netlist 146k cells / 90k gates (was 336k / 235k for the pre-revision QK at 64×64 with 130
+      crossbars). Path #1 8.96 ns: the slice leader's `reg_full` → the drain XOR → the 4 hard-adder levels of the
+      slice popcount (16 columns per slice) → its register; 8.4 ns of it is wire between the tree's levels.
+    - PV DIMM (128 EXP + 1 LOG): wc 129 = expected, **172.6 MHz**, CLB 8,913, memory 224 = model, 17.9 min (0.6 / 6.0 /
+      11.2); 166k cells / 83k gates. Path #1 5.82 ns, wire into the one-level popcount.
+    - Head (BERT-Tiny): wc 218 = expected, **116.0 MHz**, CLB 17,998, memory 429 (model 442; 73 memories packed of
+      75 elaborated), **2 h 5 min** (Parmys 2.3 min, ABC 1 h 46, VPR 16.8 min); netlist 466k cells (111k FF, 191k MUX,
+      46k AND, 22k XOR, 13k OR, 18k NOT, 56.5k adder bits), 63 MB. Path #1 8.62 ns: a register → 3 LUTs → 2 muxes → a
+      PV B memory's read address (26 blocks per memory), 7.6 ns of it wire. The 40-bit head at 128×64 (2026-10-16,
+      3 seeds): 282 crossbars, 132.1 MHz, 12,887 CLB, 400 blocks, synthesis 3.1 h under 36 jobs.
+  - **Stage 4 outlook [estimate]:** the head's ABC at $I = 64$ took 1.8 h alone; the per-crossbar logic scales with
+    $I$, so the $I = 128$ builds take 3.5–7 h and the twelve $I = 256$ builds 7–28 h each (linear to square scaling);
+    the sweep is 1–2 days wall with 36 jobs, set by the $I = 256$ builds. Disk: 1.2 TB free with the 280 GB of 40-bit
+    builds in place.
+- 2026-10-23 (evening) **Wording and assumptions audit** (you: retire "40-bit" as the name of the previous design;
+  every live file refers to the new implementation).
+  - **Vocabulary:** the previous design is "pre-bit-plane"; its results are "the previous head (2026-10-16 run)".
+    Applied to the current text of CLAUDE.md, README, the docs, the specs, the scripts, the tests and the RTL headers
+    (`"40-bit <thing>"` → `"pre-bit-plane <thing>"`); the dated decision rows and this log keep their words. Frozen notes
+    on the pre-bit-plane analyses (`docs/mapping_tiling.md`, `attention_stages.md`, `mapping_sensitivity.md`;
+    `dse/stage_analysis.py`, `pipelines.py`, `stages_*.py`, `dataflow.py`, `mapping_sensitivity.py`, `plot_stages.py`:
+    they model the 5-byte port and $N_E = 2d$; ported after stage 4). `docs/mapping_tiling.md`'s title had a stray
+    keystroke before it (fixed). `docs/architecture_page/` (the page of the 2026-10-15 RTL) is frozen as it stands.
+  - **Code that still carried the previous assumptions, fixed:** `vtr/smoke.py`'s module points are derived from
+    `headParams` at 64×64, 128×64 and 128×128 (the softmax point had `S_CH` = 2 and the DIMM points $N_E = 2d$);
+    `area.memModes` reads `vtr/arch_rowpar/` (the live XMLs, 64×64 included) instead of v2's `vtr/arch/`;
+    `rows.attentionRow` takes the mapping (`nE`), and `dse/attn_rows.py`, `config_table.py`, `breakdown.py` pass
+    $N_E = 2d$ explicitly, the mapping of the VTR rows they price, now that `headParams` defaults to $d$ (stage 5
+    drops it). Gates after the change: `check_twins`, `lint_rtl`, `copies`, `gen_arch --check`, `check_head_params`,
+    F2 10/10, `vtr_dse --self-test`: all pass; every smoke point elaborates to the model's crossbar count.
+  - **Left as decided or frozen:** the energy model's pass-traffic term still counts 40-bit port words
+    (`nl_dpe.json` `port_width_bits`, a locked copy; the prices are frozen: your call whether to re-price per plane);
+    `nOcFloor` is held at its pre-bit-plane form (decision of 2026-10-22); v2's kernels and oracles (value witnesses);
+    the retired files on `tools/cleanup_bitplane.sh`'s list; the generated pages under `dse/results/` (regenerated at
+    stage 5; `compare/dse_compare.html` regenerated now with the new labels, the artifact not republished).
+  - **A mistake, undone:** `run_all.sh` was run to prove byte-identity; it cannot reproduce the published rows (the
+    pre-bit-plane model is gone) and overwrote 24 tracked result files, restored from `HEAD` byte-identically
+    (`dse/README.md` now says so; Needs you 27 (a''')).
+- 2026-10-23 (evening) **The crossbar port priced per bit** (you: "fix the port_width_bits, this is no longer a fixed
+  40, but input bits equal to R bits per cycle and output bits equal to C bits per cycle"). `nl_dpe.json`'s compute tile
+  gets `port` (in R bits, out C bits, P planes per pass, 0.0012375 pJ per bit) in place of `port_width_bits` 40 and leaves
+  the copy lock (decision row); `Platform` carries `portInBits`, `portOutBits`, `portWordsPerPass`, `portEnergyPjPerBit`
+  (a fixed-width `port_width_bits` config, azure_lily.json, still loads); `prices.passPortWords`, `passPortBits`,
+  `passTrafficEnergyPj` = bits moved × the price per bit; `dse/check_energy.py`'s independent formula follows;
+  `testFcRows` re-derives v2's snapshot (40-bit words) with the re-pricing. F2 10/10, equivalence ALL EQUAL (the
+  re-priced columns are skipped by design), `copies` 38 verbatim + 39 forked. Effect on the 48 builds: e_total −0.07 %
+  to −0.14 %. `ip/xbar/spec.md` §6 and `experiment.md` §5's energy row state the rule. `check_energy.py`'s table check
+  fails until stage 5 regenerates the tables (Needs you 27 (a'''')). `nOcFloor` stays held (your call: mapping-derived).

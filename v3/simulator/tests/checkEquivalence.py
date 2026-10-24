@@ -5,9 +5,13 @@ The first reference, work/equivalence/ref/ (frozen from git 816807b), proved the
 simulator. Since the drain rule of 2026-10-18 (every pass drains all C columns) the model differs from it by design;
 work/equivalence/ref_2026-10-18/ was frozen then. Since the bit-plane pass of 2026-10-22 (ip/xbar/spec.md: the pass
 rule and the plane streams) the model differs from that one by design too (work/bitplane/by_design_diff.txt: 0
-unexpected differences), and the default reference is work/equivalence/ref_2026-10-22/ (the 8 configs, the
-row-parallel tiles), frozen by freezeReference.py: from then on the gate catches unintended changes. --ref selects
-any; the rows use the reference's tile rule (its manifest's tile_rule, legacy before 2026-10-22).
+unexpected differences), and work/equivalence/ref_2026-10-22/ (the 8 configs, the row-parallel tiles) was frozen by
+freezeReference.py. GATE 2 pinned the bit-plane RTL (2026-10-23; the models' BASIS rtl-pinned, the only difference
+from ref_2026-10-22: work/equivalence/ref_2026-10-23/). The soft-logic trims of 2026-10-23 (value words on E4 and E8,
+the DIMM drain registers, the accumulator's single buffers) move the attention builds' cycles and the corpora by design;
+GATE 2 pinned them too, and the default reference is work/equivalence/ref_2026-10-23_trim/: from then on the gate
+catches unintended changes. --ref selects any; the rows use the reference's tile rule (its manifest's tile_rule,
+legacy before 2026-10-22).
 
   reports   every FC and attention build of the DSE, timing-only: cycles, every event line, every step (times and
             named events), counts, resources, basis; attention also ctrl.t_s and ctrl.done
@@ -292,9 +296,10 @@ def checkCorpora(ref: Path, new: Path, logDir: Path, jobs: int, say) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--ref", default=str(V3 / "work" / "equivalence" / "ref_2026-10-22"),
+    ap.add_argument("--ref", default=str(V3 / "work" / "equivalence" / "ref_2026-10-23_qkd"),
                     help="the frozen reference (work/equivalence/ref = the pre-refactor simulator, git 816807b; "
-                         "ref_2026-10-18 = the 40-bit pass)")
+                         "ref_2026-10-18 = the pre-bit-plane pass; ref_2026-10-22 = the bit-plane models before GATE 2; "
+                         "ref_2026-10-23 = before the trims)")
     ap.add_argument("--only", default="reports,rows,corpus")
     ap.add_argument("--jobs", type=int, default=8)
     a = ap.parse_args()

@@ -12,7 +12,9 @@ Steps:
   flow   run_vtr_flow.py (Parmys, ABC, VPR) on the module's arch XML, route channel width 300, clock.sdc, one seed
 
 Usage:
-  python3 v3/vtr/smoke.py --module dimm --point qk_bert_tiny_128 [--step elab|flow|all] [--seed 11] [--tag T]
+  python3 v3/vtr/smoke.py --module dimm --point qk_bert_tiny_128x64 [--step elab|flow|all] [--seed 11] [--tag T]
+Points: bert_tiny_64 (64x64, the adder branch), bert_tiny_128x64 (the smoke point since 2026-10-23), bert_tiny_128;
+the DIMM's are qk_/pv_ + the size; the GEMM's fc_<K>x<N>_<R>x<C>.
 Runs and logs: v3/work/vtr/<top>/ (with --tag: <top>_<T>/, a run beside another); the result line in result.json.
 """
 from __future__ import annotations
@@ -38,36 +40,53 @@ YOSYS = VTR_ROOT / "build" / "bin" / "yosys"
 WORK = V3 / "work" / "vtr" / "smoke"
 SDC = HERE / "clock.sdc"
 ROUTE_CHAN_WIDTH = 300
-WIDE = 1024
+WIDE = 2048            # ports up to 2048 bits are pins: no DSE build gets wrapper logic (FC K = 2048, C = 256)
+ARCH_DIR = HERE / "arch_rowpar"     # the row-parallel XMLs (vtr/gen_arch.py; v2's pre-bit-plane ones are vtr/arch/)
+
+
+def _gemm_points() -> dict:
+    from simulator.models.fc import extent
+    out = {}
+    for K, N, R, C in ((2048, 256, 256, 128), (512, 128, 128, 64)):
+        ru, cu = extent(K, N, R, C, "used")
+        out[f"fc_{K}x{N}_{R}x{C}"] = dict(K=K, N=N, R=R, C=C, P=8, ROWS_USED=ru, COLS_USED=cu)
+    return out
+
+
+def _heads() -> dict:
+    """BERT-Tiny (n 128, d_m 128, d 64) at the fixed mapping (headParams: N_E = d, N_EP = 2d, N_OC by the floor rule,
+    P_PROJ 1) on the three small arrays: 64x64 (the functional-validation size: R = C, the adder branch), 128x64 (the
+    smoke point since 2026-10-23: the smallest array with the add in the crossbar's rows, a DSE config) and 128x128
+    (the smoke size until 2026-10-22)."""
+    from simulator.models.attentionHead import headParams
+    return {"64": headParams(128, 128, 64, 64, 64, P_PROJ=1), "128x64": headParams(128, 128, 64, 128, 64, P_PROJ=1),
+            "128": headParams(128, 128, 64, 128, 128, P_PROJ=1)}
 
 
 def _dimm_points() -> dict:
+    """The head's two DIMM instances (ip/dimm/cases.py qkParams / pvParams) at every size of _heads()."""
     from ip.dimm.cases import pvParams, qkParams
-    return {
-        # BERT-Tiny at 128x128 (n 128, d 64, Bkv 16; S = 128, R_b = 1, B = 8; N_E = N_EP = 2d = 128; P_proj 1)
-        "qk_bert_tiny_128": qkParams(128, 64, 16, 128, 128, 128, pProj=1, runs=1, blocks=8),
-        "pv_bert_tiny_128": pvParams(128, 64, 16, 128, 128, 128, nExp=2, pProj=1, blocks=8),
-    }
+    out = {}
+    for k, h in _heads().items():
+        out[f"qk_bert_tiny_{k}"] = qkParams(h.S, h.D, h.BKV, h.R, h.C, h.N_E, pProj=h.P_PROJ, runs=h.RB, blocks=h.B)
+        out[f"pv_bert_tiny_{k}"] = pvParams(h.S, h.D, h.BKV, h.R, h.C, h.N_EP, nExp=h.N_EXP, pProj=h.P_PROJ, blocks=h.B)
+    return out
 
 
 def _softmax_points() -> dict:
-    return {
-        # BERT-Tiny at 128x128 (n 128, d 64): S = min(n, I) = 128, N = n, Bkv 16, N_EXP 2; S_CH = the QK DIMM's
-        # NG = N_E / d = 2 at N_E = 2d (the DIMM smoke's point)
-        "bert_tiny_128": dict(S=128, BKV=16, N=128, R=128, C=128, N_EXP=2, S_CH=2, LP_CAP=2, LA_CAP=2, LL_CAP=1),
-    }
+    """The head's online softmax at every size of _heads(): S_CH = the QK DIMM's output channels, N_E / d."""
+    return {f"bert_tiny_{k}": dict(S=h.S, BKV=h.BKV, N=h.NSEQ, R=h.R, C=h.C, N_EXP=h.N_EXP, S_CH=h.NG_QK, LP_CAP=2,
+                                   LA_CAP=2, LL_CAP=1) for k, h in _heads().items()}
 
 
 def _acc_points() -> dict:
-    return {
-        # BERT-Tiny at 128x128 (n 128, d 64): S = min(n, I) = 128, NBLK = n / Bkv = 8, SO = LN = log2 n = 7; P_CH = the
-        # PV DIMM's NG = N_EP / Bkv = 8 at N_EP = 2d; N_OC = 6 by the floor rule (architecture.md §5.2)
-        "bert_tiny_128": dict(S=128, D=64, R=128, C=128, N_OC=6, NBLK=8, SO=7, LN=7, P_CH=8, VWP=13),
-    }
+    """The head's accumulator at every size of _heads(): P_CH = the PV DIMM's output channels, N_EP / B_kv."""
+    return {f"bert_tiny_{k}": dict(S=h.S, D=h.D, R=h.R, C=h.C, N_OC=h.N_OC, NBLK=h.B, SO=h.LN, LN=h.LN, P_CH=h.NG_PV,
+                                   VWP=h.acc.VWP) for k, h in _heads().items()}
 
 
 HEAD_KEYS = ("NSEQ", "DM", "D", "BKV", "R", "C", "P", "N_EXP", "N_E", "N_EP", "N_OC", "P_PROJ", "X_S")   # BUF left the
-#   model 2026-10-22 (the bit-plane pass); the 40-bit RTL keeps its default until the RTL pass
+#   model 2026-10-22 and the RTL 2026-10-23 (the bit-plane pass)
 
 
 def head_point(hp) -> dict:
@@ -77,9 +96,8 @@ def head_point(hp) -> dict:
 
 
 def _head_points() -> dict:
-    from simulator.models.attentionHead import headParams
-    # BERT-Tiny at 128x128 (n 128, d_m 128, d 64): P_PROJ 1, N_E = N_EP = 2d, N_OC by the floor rule (6)
-    return {"bert_tiny_128": head_point(headParams(128, 128, 64, 128, 128, P_PROJ=1))}
+    """att_head at every size of _heads()."""
+    return {f"bert_tiny_{k}": head_point(h) for k, h in _heads().items()}
 
 
 _VTR_MODS = [V3 / "ip/lib/rtl/vtr/att_fifo.v", V3 / "ip/gemm/rtl/vtr/gemm_top.v", V3 / "ip/dimm/rtl/vtr/dimm_tile_top.v",
@@ -87,6 +105,8 @@ _VTR_MODS = [V3 / "ip/lib/rtl/vtr/att_fifo.v", V3 / "ip/gemm/rtl/vtr/gemm_top.v"
              V3 / "top/rtl/vtr/att_ctrl.v"]
 
 MODULES = {
+    "gemm": dict(file=V3 / "ip/gemm/rtl/vtr/gemm_top.v", top="gemm_top", points=_gemm_points,
+                 expected=lambda p: (-(-p["K"] // p["R"])) * (-(-p["N"] // p["C"]))),
     "dimm": dict(file=V3 / "ip/dimm/rtl/vtr/dimm_tile_top.v", top="dimm_tile_top", points=_dimm_points,
                  expected=lambda p: p["N_E"] + (p["A_CH"] if p["A_DOM"] == 0 else 0)
                  + (p["B_CH"] if p["B_DOM"] == 0 else 0)),
@@ -178,7 +198,14 @@ def circuit(module: str, point: str, params: dict | None = None) -> tuple:
 
 
 def arch_for(p: dict) -> Path:
-    return HERE / "arch" / f"nl_dpe_{p['R']}x{p['C']}_auto.xml"
+    """The config's row-parallel arch XML; its crossbar block must have R data_in and C data_out pins."""
+    path = ARCH_DIR / f"nl_dpe_{p['R']}x{p['C']}_auto.xml"
+    text = path.read_text(encoding="utf-8")
+    pins = (re.search(r'<input name="data_in" num_pins="(\d+)"', text),
+            re.search(r'<output name="data_out" num_pins="(\d+)"', text))
+    if not all(pins) or (int(pins[0].group(1)), int(pins[1].group(1))) != (p["R"], p["C"]):
+        raise ValueError(f"{path.name}: the dpe block's data pins are not {p['R']} in, {p['C']} out")
+    return path
 
 
 def elab(path: Path, arch: Path, work: Path, run=None) -> dict:

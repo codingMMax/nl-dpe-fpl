@@ -1,7 +1,9 @@
 // ============================================================================
 // tb_dimm_tile_top.v — GATE-2 testbench of `dimm_tile_top` (v3, ip/dimm/spec.md §8). Case files are written by
 // ip/dimm/cases.py (model run + GATE 1); the runner ip/dimm/tb/run_dimm_rtl.py compares this testbench's event
-// lines with the model's, line for line.
+// lines with the model's, line for line. The bit-plane pass (2026-10-23): every window is 8 words on consecutive
+// cycles (A_W, L_B and I*ceil(EC/8) bits per channel): planes on A and B, value words on C (the trims of 2026-10-23,
+// compared word for word); the engine state compared across slices is the wave sequencer's.
 //
 // The testbench is the module's environment of the model's test graph (sim/core/env.py):
 //   A / B / job sources   every input window (and job) is driven at the cycle the model planned; before a unit's
@@ -10,9 +12,10 @@
 //   C sink                takes every word, checks every value, and pulses c_cr CRLAT cycles after a job's last word
 // Logged (EV lines, the model's event format): input windows, a_cr / b_cr pulses, j_rdy rising (the job port's
 // credit), output windows (first word), c_cr pulses.
-// Also checked: every slice's A and B memory image at the end (gate D1), every slice's window engine equal to slice
-// 0's in every cycle (gate D2), the converters' overrun probes, a watchdog.
-// Weights: preloaded at zero time after reset (identity in every crossbar, mode_q LOG / EXP; PLAN R8).
+// Also checked: every slice's A and B memory image at the end (gate D1), every slice's wave sequencer equal to slice
+// 0's in every cycle (gate D2), the converters' overrun probes, every crossbar's sticky err flag, a watchdog.
+// Weights: preloaded at zero time after reset (identity in every crossbar; in the farm stacked twice where R >= 2I,
+// spec §10 item 11; mode_q LOG / EXP; PLAN R8).
 // Cycle 0 is the first cycle after reset.
 // ============================================================================
 `timescale 1ns / 1ps
@@ -79,7 +82,7 @@
 `endif
 
 module tb_dimm_tile_top;
-    localparam M = `M_TB, N = `N_TB, K = `K_TB, R = `R_TB, C = `C_TB, BUF = 40, P = 8, N_E = `NE_TB, X_S = `XS_TB;
+    localparam M = `M_TB, N = `N_TB, K = `K_TB, R = `R_TB, C = `C_TB, P = 8, N_E = `NE_TB, X_S = `XS_TB;
     localparam A_DOM = `ADOM_TB, A_SIGNED = `ASIG_TB, A_CH = `ACH_TB, A_SLOTS = `ASL_TB, A_FRAME = `AFR_TB;
     localparam A_ROWS = `AROWS_TB, B_DOM = `BDOM_TB, B_SIGNED = `BSIG_TB, B_CH = `BCH_TB, B_SLOTS = `BSL_TB;
     localparam TRANS_B = `TRB_TB, NARROW = `NAR_TB, C_CAP = `CCAP_TB;
@@ -88,11 +91,11 @@ module tb_dimm_tile_top;
     localparam NB   = I / N;
     localparam W_K  = (M * N) / I;
     localparam T_W  = W_K / NG;
-    localparam LW   = (I * 8 + BUF - 1) / BUF;
+    localparam LW   = P;                                           // words per window (plane words)
     localparam XS   = (X_S < N_E) ? X_S : N_E;
     localparam NS   = N_E / XS;
     localparam KS   = XS / NG;
-    localparam AGC  = (LW < XS) ? LW : XS;
+    localparam AGC  = (P < XS) ? P : XS;
     localparam A_GRP = 1 << ($clog2(AGC + 1) - 1);
     localparam B_GRP = (A_GRP < KS) ? A_GRP : KS;
     localparam NAB  = XS / A_GRP;
@@ -100,13 +103,16 @@ module tb_dimm_tile_top;
     localparam VW   = 9 + $clog2(K);
     localparam EC   = (NARROW > 0) ? 8 : VW;
     localparam LBL  = TRANS_B ? K : N;
-    localparam LWA  = (A_ROWS * K + 4) / 5;
-    localparam LWB  = (LBL + 4) / 5;
+    localparam A_W  = A_ROWS * K;                                  // A plane word bits
+    localparam ECL  = (EC + 7) / 8;                                // C bytes per element
+    localparam CWW  = I * ECL;                                     // C word bits per channel
+    localparam LWA  = P;
+    localparam LWB  = P;
     localparam SAW  = (A_SLOTS > 1) ? $clog2(A_SLOTS) : 1;
     localparam SBW  = (B_SLOTS > 1) ? $clog2(B_SLOTS) : 1;
     localparam CAP_A = (A_FRAME == 0) ? 2 : A_SLOTS;
     localparam UN_A  = (A_FRAME == 0) ? NB : (M / A_ROWS);         // A windows per credit unit
-    localparam CAP_B = TRANS_B ? 2 : 2 * B_CH;
+    localparam CAP_B = TRANS_B ? 2 : 4 * B_CH;                     // TRANS_B = 0: 4 B_CH rows (spec §10 item 6)
     localparam UN_B  = TRANS_B ? N : 1;
     localparam MAXW = 4096, MAXJ = 256, MAXC = 8192, MAXMEM = 65536;
 
@@ -115,19 +121,19 @@ module tb_dimm_tile_top;
     reg reset = 1'b1;
 
     reg  [A_CH-1:0]     a_v = 0;
-    reg  [A_CH*BUF-1:0] a_d = 0;
+    reg  [A_CH*A_W-1:0] a_d = 0;
     reg  [B_CH-1:0]     b_v = 0;
-    reg  [B_CH*BUF-1:0] b_d = 0;
+    reg  [B_CH*LBL-1:0] b_d = 0;
     reg                 j_v = 0, j_ra = 0;
     reg  [SAW-1:0]      j_a = 0;
     reg  [SBW-1:0]      j_b = 0;
     reg                 c_cr = 0;
     wire                a_cr, b_cr, j_rdy, busy;
     wire [NG-1:0]       c_v;
-    wire [NG*5*EC-1:0]  c_d;
+    wire [NG*CWW-1:0]   c_d;
 
     dimm_tile_top #(
-        .M(M), .N(N), .K(K), .R(R), .C(C), .BUF(BUF), .P(P), .N_E(N_E), .X_S(X_S),
+        .M(M), .N(N), .K(K), .R(R), .C(C), .P(P), .N_E(N_E), .X_S(X_S),
         .A_DOM(A_DOM), .A_SIGNED(A_SIGNED), .A_CH(A_CH), .A_SLOTS(A_SLOTS), .A_FRAME(A_FRAME), .A_ROWS(A_ROWS),
         .B_DOM(B_DOM), .B_SIGNED(B_SIGNED), .B_CH(B_CH), .B_SLOTS(B_SLOTS), .TRANS_B(TRANS_B), .NARROW(NARROW),
         .C_CAP(C_CAP)
@@ -146,7 +152,7 @@ module tb_dimm_tile_top;
                 integer wk;
                 always @(preload) begin
                     for (wk = 0; wk < R*C; wk = wk + 1)
-                        dut.g_sl[gs].u_slice.g_x[gf].u_dpe.weights[wk] = ((wk / C) == (wk % C)) ? 8'sd1 : 8'sd0;
+                        dut.g_sl[gs].u_slice.g_x[gf].u_dpe.weights[wk] = ((wk / C) == (wk % C) || (R >= 2*I && (wk / C) == (wk % C) + I)) ? 8'sd1 : 8'sd0;   // the identity, stacked twice with X_ADD
                     dut.g_sl[gs].u_slice.g_x[gf].u_dpe.mode_q = 2'b10;          // EXP
                 end
             end
@@ -178,15 +184,16 @@ module tb_dimm_tile_top;
     integer fd, rc, i, j, w;
     integer na, nb, nj, nc, nmem, crlat, tmax;
     integer aw_t [0:MAXW-1], aw_ch [0:MAXW-1], aw_u [0:MAXW-1], aw_w [0:MAXW-1];
-    reg [BUF-1:0] aw_d [0:MAXW*LWA-1];
+    reg [A_W-1:0] aw_d [0:MAXW*LWA-1];
     integer bw_t [0:MAXW-1], bw_ch [0:MAXW-1], bw_u [0:MAXW-1], bw_w [0:MAXW-1];
-    reg [BUF-1:0] bw_d [0:MAXW*LWB-1];
+    reg [LBL-1:0] bw_d [0:MAXW*LWB-1];
     integer jw_t [0:MAXJ-1], jw_a [0:MAXJ-1], jw_b [0:MAXJ-1], jw_r [0:MAXJ-1];
-    reg [5*EC-1:0] cx [0:MAXC*LW-1];                    // expected output words, window-major in channel order
+    reg [CWW-1:0] cx [0:MAXC*LW-1];                     // expected output value words, window-major
     integer mk [0:MAXMEM-1], ms [0:MAXMEM-1], mm [0:MAXMEM-1], ma [0:MAXMEM-1];
     reg [N*8-1:0] md [0:MAXMEM-1];
-    reg [BUF-1:0] word;
-    reg [5*EC-1:0] cword;
+    reg [A_W-1:0] aword;
+    reg [LBL-1:0] bword;
+    reg [CWW-1:0] cword;
     reg [N*8-1:0] mword;
 
     task load;
@@ -195,14 +202,14 @@ module tb_dimm_tile_top;
             fd = $fopen(fn, "r");
             for (i = 0; i < na; i = i + 1) begin
                 rc = $fscanf(fd, "%d %d %d %d", aw_t[i], aw_ch[i], aw_u[i], aw_w[i]);
-                for (w = 0; w < LWA; w = w + 1) begin rc = $fscanf(fd, "%h", word); aw_d[i*LWA + w] = word; end
+                for (w = 0; w < LWA; w = w + 1) begin rc = $fscanf(fd, "%h", aword); aw_d[i*LWA + w] = aword; end
             end
             $fclose(fd);
             $sformat(fn, "%0s/b_win.txt", vdir);
             fd = $fopen(fn, "r");
             for (i = 0; i < nb; i = i + 1) begin
                 rc = $fscanf(fd, "%d %d %d %d", bw_t[i], bw_ch[i], bw_u[i], bw_w[i]);
-                for (w = 0; w < LWB; w = w + 1) begin rc = $fscanf(fd, "%h", word); bw_d[i*LWB + w] = word; end
+                for (w = 0; w < LWB; w = w + 1) begin rc = $fscanf(fd, "%h", bword); bw_d[i*LWB + w] = bword; end
             end
             $fclose(fd);
             $sformat(fn, "%0s/j_win.txt", vdir);
@@ -236,8 +243,7 @@ module tb_dimm_tile_top;
     integer jobs_out = 0, last_t;
     reg     jrdy_d = 1'b1;
     reg     running = 1'b0;
-    integer ch, idx, wv, u_need, g, l, lane;
-    reg signed [EC-1:0] gotl, expl;
+    integer ch, idx, wv, u_need, g, l;
     initial begin
         for (ch = 0; ch < A_CH; ch = ch + 1) begin ap[ch] = ch; ac[ch] = -1; end
         for (ch = 0; ch < B_CH; ch = ch + 1) begin bp[ch] = ch; bc[ch] = -1; end
@@ -259,15 +265,11 @@ module tb_dimm_tile_top;
                     if (cwd[g] == 0)
                         $display("EV %0d dimm.c win ch%0d u%0d w%0d", tc, g, cwin[g] / T_W, g + NG * (cwin[g] % T_W));
                     idx = (((cwin[g] / T_W) * W_K) + g + NG * (cwin[g] % T_W)) * LW + cwd[g];
-                    for (lane = 0; lane < 5; lane = lane + 1) begin
-                        gotl = c_d[(g*5 + lane)*EC +: EC];
-                        expl = cx[idx][lane*EC +: EC];
-                        if (gotl !== expl) begin
-                            if (errors < 10)
-                                $display("[tb_dimm] ERROR value: job %0d window %0d word %0d lane %0d got %0d exp %0d",
-                                         cwin[g] / T_W, g + NG * (cwin[g] % T_W), cwd[g], lane, gotl, expl);
-                            errors = errors + 1;
-                        end
+                    if (c_d[g*CWW +: CWW] !== cx[idx]) begin
+                        if (errors < 10)
+                            $display("[tb_dimm] ERROR value: job %0d window %0d word %0d got %h exp %h",
+                                     cwin[g] / T_W, g + NG * (cwin[g] % T_W), cwd[g], c_d[g*CWW +: CWW], cx[idx]);
+                        errors = errors + 1;
                     end
                     n_cw = n_cw + 1;
                     cwd[g] = cwd[g] + 1;
@@ -303,7 +305,7 @@ module tb_dimm_tile_top;
                 end
                 if (ac[ch] >= 0) begin
                     a_v[ch] = 1'b1;
-                    a_d[ch*BUF +: BUF] = aw_d[ap[ch]*LWA + ac[ch]];
+                    a_d[ch*A_W +: A_W] = aw_d[ap[ch]*LWA + ac[ch]];
                     ac[ch] = ac[ch] + 1;
                     if (ac[ch] == LWA) begin ac[ch] = -1; ap[ch] = ap[ch] + A_CH; end
                 end
@@ -322,7 +324,7 @@ module tb_dimm_tile_top;
                 end
                 if (bc[ch] >= 0) begin
                     b_v[ch] = 1'b1;
-                    b_d[ch*BUF +: BUF] = bw_d[bp[ch]*LWB + bc[ch]];
+                    b_d[ch*LBL +: LBL] = bw_d[bp[ch]*LWB + bc[ch]];
                     bc[ch] = bc[ch] + 1;
                     if (bc[ch] == LWB) begin bc[ch] = -1; bp[ch] = bp[ch] + B_CH; end
                 end
@@ -338,22 +340,32 @@ module tb_dimm_tile_top;
         end
     end
 
-    // ---- gate D2: every slice's window engine equal to slice 0's in every cycle ------------------------------------
+    // ---- gate D2: every slice's wave sequencer equal to slice 0's in every cycle ------------------------------------
     generate
         for (gs = 1; gs < NS; gs = gs + 1) begin : d2
             always @(posedge clk) begin
                 #3;
-                if (running && ({dut.g_sl[gs].u_slice.u_ctrl.run, dut.g_sl[gs].u_slice.u_ctrl.iss_t,
-                                 dut.g_sl[gs].u_slice.u_ctrl.feed_cnt, dut.g_sl[gs].u_slice.u_ctrl.drn_cnt,
-                                 dut.g_sl[gs].u_slice.u_ctrl.dt, dut.g_sl[gs].u_slice.u_ctrl.feeding,
-                                 dut.g_sl[gs].u_slice.u_ctrl.draining}
-                             !== {dut.g_sl[0].u_slice.u_ctrl.run, dut.g_sl[0].u_slice.u_ctrl.iss_t,
-                                 dut.g_sl[0].u_slice.u_ctrl.feed_cnt, dut.g_sl[0].u_slice.u_ctrl.drn_cnt,
-                                 dut.g_sl[0].u_slice.u_ctrl.dt, dut.g_sl[0].u_slice.u_ctrl.feeding,
-                                 dut.g_sl[0].u_slice.u_ctrl.draining})) begin
-                    if (errors < 10) $display("[tb_dimm] ERROR D2: slice %0d engine differs from slice 0 at %0d", gs, tc);
+                if (running && ({dut.g_sl[gs].u_slice.u_ctrl.run, dut.g_sl[gs].u_slice.u_ctrl.ph,
+                                 dut.g_sl[gs].u_slice.u_ctrl.pc, dut.g_sl[gs].u_slice.u_ctrl.dw,
+                                 dut.g_sl[gs].u_slice.u_ctrl.fv, dut.g_sl[gs].u_slice.u_ctrl.fp,
+                                 dut.g_sl[gs].u_slice.u_ctrl.db}
+                             !== {dut.g_sl[0].u_slice.u_ctrl.run, dut.g_sl[0].u_slice.u_ctrl.ph,
+                                 dut.g_sl[0].u_slice.u_ctrl.pc, dut.g_sl[0].u_slice.u_ctrl.dw,
+                                 dut.g_sl[0].u_slice.u_ctrl.fv, dut.g_sl[0].u_slice.u_ctrl.fp,
+                                 dut.g_sl[0].u_slice.u_ctrl.db})) begin
+                    if (errors < 10) $display("[tb_dimm] ERROR D2: slice %0d sequencer differs from slice 0 at %0d", gs, tc);
                     errors = errors + 1;
                 end
+            end
+        end
+    endgenerate
+
+    // ---- every crossbar's sticky err flag (the behavior model: a burst while not ready, a gap, a binding drain) ----
+    wire [NS*XS-1:0] x_err;
+    generate
+        for (gs = 0; gs < NS; gs = gs + 1) begin : xe_s
+            for (gf = 0; gf < XS; gf = gf + 1) begin : xe_f
+                assign x_err[gs*XS + gf] = dut.g_sl[gs].u_slice.g_x[gf].u_dpe.err;
             end
         end
     endgenerate
@@ -421,6 +433,7 @@ module tb_dimm_tile_top;
         if (n_cw != nc * LW) begin $display("[tb_dimm] ERROR: %0d output words, expected %0d", n_cw, nc * LW);
                                    errors = errors + 1; end
         if (|dut.conv_err) begin $display("[tb_dimm] ERROR: converter overrun probe"); errors = errors + 1; end
+        if (|x_err) begin $display("[tb_dimm] ERROR: a farm crossbar's err flag"); errors = errors + 1; end
         $display("[tb_dimm] %0s %0s errors=%0d last_word=%0d words=%0d mem=%0d", (errors == 0) ? "PASS" : "FAIL",
                  case_name, errors, last_t, n_cw, n_memchk);
         $finish;

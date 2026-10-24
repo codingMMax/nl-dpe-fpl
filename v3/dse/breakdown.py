@@ -77,7 +77,7 @@ def energySplit(rs: list, family: str) -> dict:
 
 def projectionsEnd(n: int, dm: int, d: int, R: int, C: int) -> tuple:
     """(cycles, the cycle at which the last projection output leaves the GEMMs) of one attention build."""
-    g, parts = attentionHead(headParams(n, dm, d, R, C), withValues=False)
+    g, parts = attentionHead(headParams(n, dm, d, R, C, N_E=2 * d), withValues=False)   # the 2026-10-16 run's mapping (N_E = 2d) until stage 5
     rep = run(g)
     return parts["ctrl"].done - parts["ctrl"].tStart, projectionEnd(rep)
 
@@ -121,6 +121,7 @@ def main() -> int:
             res["projections"].append(dict(shape=name, n=n, d_model=dm, config=f"{R}x{C}", cycles=T, end=end,
                                            stream=n * max(-(-min(dm, R) // 5) + 8, -(-8 * C // 40) + 1),
                                            core_floor=n * n // 5))     # a copy's row period: the X load or the drain
+            # (stream, core_floor: the pre-bit-plane closed forms of the 2026-10-16 run; stage 5 replaces them)
     shares = [p["end"] / p["cycles"] for p in res["projections"]]
     res["projection_share"] = dict(median=st.median(shares), min=min(shares), max=max(shares),
                                    stream_max_diff=max(abs(p["end"] - p["stream"]) for p in res["projections"]))

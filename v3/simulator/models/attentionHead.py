@@ -26,12 +26,12 @@ from simulator.models.softmaxOnline import SoftmaxOnline, SoftmaxOnlineParams
 BKV_DEFAULT = 16
 
 
-NOC_BUF, NOC_P = 40, 8    # the floor rule's 40-bit pass (held 2026-10-22: the mapping counts do not change)
+NOC_BUF, NOC_P = 40, 8    # the floor rule's pre-bit-plane pass (held 2026-10-22: the mapping counts do not change)
 
 
 def nOcFloor(S: int, D: int, R: int, C: int, BKV: int) -> int:
-    """architecture.md §5.2, held at its 40-bit form: the smallest N_OC with T(ceil(P_oc / N_OC)) <=
-    max(ceil(S BKV / 5), T(1)), T the 40-bit pass of I x I (LW = ceil(8 I / 40) words each way)."""
+    """architecture.md §5.2, held at its pre-bit-plane form: the smallest N_OC with T(ceil(P_oc / N_OC)) <=
+    max(ceil(S BKV / 5), T(1)), T the pre-bit-plane pass of I x I (LW = ceil(8 I / 40) words each way)."""
     I = min(R, C)
     LW = ceilDiv(I * 8, NOC_BUF)
     tFill, tSteady = LW + NOC_P + 2 + LW, max(LW + NOC_P, NOC_P + 2, LW + 1)
@@ -81,10 +81,11 @@ class AttentionHeadParams:
 def headParams(NSEQ: int, DM: int, D: int, R: int, C: int, *, BKV: int = BKV_DEFAULT, N_E: int | None = None,
                N_EP: int | None = None, N_EXP: int = 2, N_OC: int | None = None, P_PROJ: int = 1, X_S: int = 16,
                P: int = 8) -> AttentionHeadParams:
-    """The head's parameters (top/spec.md §2); N_E, N_EP default to 2d, N_OC to the floor rule."""
+    """The head's parameters (top/spec.md §2); N_E defaults to d (2026-10-23; 2d before), N_EP to 2d, N_OC to the
+    floor rule (experiment.md §4.2)."""
     I = min(R, C)
     S = min(NSEQ, I)
-    N_E = 2 * D if N_E is None else N_E
+    N_E = D if N_E is None else N_E
     N_EP = 2 * D if N_EP is None else N_EP
     N_OC = nOcFloor(S, D, R, C, BKV) if N_OC is None else N_OC
     V = ceilDiv(DM, R)
