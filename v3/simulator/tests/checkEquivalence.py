@@ -296,7 +296,7 @@ def checkCorpora(ref: Path, new: Path, logDir: Path, jobs: int, say) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--ref", default=str(V3 / "work" / "equivalence" / "ref_2026-10-23_cfg9"),
+    ap.add_argument("--ref", default=str(V3 / "work" / "equivalence" / "ref_2026-10-23_w1"),
                     help="the frozen reference (work/equivalence/ref = the pre-refactor simulator, git 816807b; "
                          "ref_2026-10-18 = the pre-bit-plane pass; ref_2026-10-22 = the bit-plane models before GATE 2; "
                          "ref_2026-10-23 = before the trims)")

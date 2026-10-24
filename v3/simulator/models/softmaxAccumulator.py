@@ -79,7 +79,7 @@ class SoftmaxAccDerived:
     NJ: int           # LOG jobs per run, NBLK W
     SHL: int          # the epilogue's left shift, max(SO - LN, 0)
     SHR: int          # the epilogue's right shift, max(LN - SO, 0)
-    MDEPTH: int       # lo_mem / e_mem depth in plane words, W P (so_mem: W words, one plane per window)
+    MDEPTH: int       # lo_mem / e_mem depth in plane words, W P (so_mem: W words, one plane per window; W = 1: a register)
 
 
 class AccumulatorMath:
@@ -275,10 +275,12 @@ class SoftmaxOnlineAcc(Module):
         self.resources.crossbars[("EXP", I, I)] += n
         self.resources.memories[(d.FD, d.LANES * I)] += p.P_CH
         self.resources.memories[(d.MDEPTH, I)] += 2 * n          # lo_mem, e_mem (plane words)
-        self.resources.memories[(d.W, I)] += n                   # so_mem (one plane per window)
+        if d.W > 1:                                              # so_mem (one plane per window); at W = 1 the one
+            self.resources.memories[(d.W, I)] += n               # word is a register, not a memory (spec §10 item 11)
         # the N_OC crossbars' copies of each slot memory share every address and write enable (lock-step groups)
         self.resources.memShared[(d.MDEPTH, I)] = n
-        self.resources.memShared[(d.W, I)] = n
+        if d.W > 1:
+            self.resources.memShared[(d.W, I)] = n
 
     # -- declaration --------------------------------------------------------------------------------------------
     def ports(self) -> dict:

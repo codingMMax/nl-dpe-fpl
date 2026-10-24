@@ -5,6 +5,26 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
 
 ## Status
 
+- **2026-10-23 23:10, the sweep's two Parmys failures (JetFormer-150P at 256×256 and 512×256) are fixed in the RTL and
+  re-run (your go: "fix it and rerun the JetFormer two failing case only").** Cause: the accumulator's `so_mem` at
+  $W = \lceil P_{oc}/N_{OC} \rceil = 1$ is a one-word array, a depth-1 memory to synthesis, which Parmys does not map;
+  these are the only two of the 90 builds with one. Fix: the so plane is a register at $W = 1$ (`g_so1`), the memory
+  stays for $W \ge 2$ (`ip/softmax/acc_spec.md` §10 item 11; both twins, the model, a new GATE-2 case `acc_w1`).
+  Gates: twins, lint, head params, F2 10/10 (+ `testSoAtW1`), the driver self-test, equivalence re-frozen as
+  `ref_2026-10-23_w1`, GATE 2 of the accumulator 20/20 (corpus `work/corpus/w1/acc_64x64`), and a structural proof
+  that a $W \ge 2$ build's Parmys netlist is unchanged, so the other 52 attention results stand (log below). The
+  re-run: driver pid 3471614 (`work/dse/vtr_dse_fix.pid`), log `work/dse/vtr_dse_fix.log`, its CSVs in
+  `work/tmp/fix/` until both drivers exit, then the one merge command of Needs you 27 (e).
+- **2026-10-23 21:26, stage 4 runs: the DSE VTR sweep of the 90 builds (54 attention + 36 FC), seeds 11, 13, 17, 48
+  workers (your launch).** Your `python3 v3/dse/vtr_dse.py --seeds 11,13,17 --jobs 48` of 21:23 ran in the terminal's
+  foreground and ended with the interrupt (its 48 elaboration processes with it); the same command was relaunched at
+  21:26 in its own session: driver pid 3407780 (`work/dse/vtr_dse.pid`), every event `work/dse/vtr_dse.log`, stdout
+  `work/dse/vtr_dse_full.out`; watcher `dse/dse_watch.py` pid 3408988 (`work/dse/dse_watch.pid`), a report every
+  90 min appended to `work/dse/vtr_dse_status.log`. The tables `dse/results/attn_vtr_results.csv` and
+  `fc_vtr_results.csv` fill in place as builds finish; the folders are `work/vtr/dse/<build>_<hash12>/`. To stop: kill
+  the driver by its pid, then its tools (their pids are in the run log); to resume: the same command (finished steps
+  are skipped). Estimate: 1–2 days wall, set by the twelve $I = 256$ builds. The elaboration verdict of the 90 builds
+  is in the log entry of 21:26.
 - **2026-10-23, the DIMM revision (your go) is done and smoked at 128×64; stage 4 waits for your review (Needs you 27).**
   The feed follows rule C (the add in the crossbar's rows where $R \ge 2C$; the adders stay on square arrays), the QK
   farm is $N_E = d$, the B register, the drain input and the root are simplified (`ip/dimm/spec.md` §10 item 11).
@@ -330,7 +350,9 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
     - (a''') **`run_all.sh` completes only after stage 5:** the published rows were priced by the pre-bit-plane model;
       the current model regenerates different numbers and the results page's assertions fail (it happened once on
       2026-10-23 during the wording audit; the 24 tracked result files were restored from `HEAD`, byte-identical).
-    - (b) **The go for stage 4:** `python3 v3/dse/vtr_dse.py` on the 90 builds (54 attention + 36 FC; 64×64 joined the
+    - (b) (given 2026-10-23 21:23: you launched it yourself with `--jobs 48`; relaunched detached at 21:26 after the
+      terminal interrupt killed the foreground launch; driver pid 3407780, watcher pid 3408988: Status and the log.)
+      **The go for stage 4:** `python3 v3/dse/vtr_dse.py` on the 90 builds (54 attention + 36 FC; 64×64 joined the
       design space on 2026-10-23), seeds 11, 13, 17, largest first, in the
       background (about 1–2 days and 0.3–0.5 TB [estimate]). Before it, archive the 276 GB of previous builds (the 2026-10-16 run) in
       `work/vtr/dse/` (your rm). The smoke's folder is for the circuit before the accumulator fix (no netlist change
@@ -340,10 +362,21 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
       `git rm -q v3/dse/results/attn_vtr_bitplane.csv v3/dse/results/fc_vtr_bitplane.csv`, then
       `git rm -r -q v3/dse/results/projection v3/dse/results/compare v3/dse/projection.py v3/dse/compare_page.py`;
       then the gates run on the new layout.
-    - (c) **The cleanups:** `bash v3/tools/cleanup_workdir.sh` (dry run), then `--go`: the previous run's 248 build
+    - (c) (`cleanup_workdir.sh --go` ran before your launch: the previous run's folders and the stopped smokes are gone,
+      1.5 TB free. `cleanup_bitplane.sh` is still to run: its dry run lists the retired files.) **The cleanups:**
+      `bash v3/tools/cleanup_workdir.sh` (dry run), then `--go`: the previous run's 248 build
       folders (280 GB) and the stopped smokes, before the sweep; and `bash v3/tools/cleanup_bitplane.sh` (dry run,
       then `--go`): the retired source files.
-    - (d) **The commit** of stages 0–3b (no push; you push).
+    - (d) (done 2026-10-23 evening: `4dbeafb` the bit-plane RTL through the DIMM revision and the port price, `5ebcb92`
+      the 9 configs and the single arch folder; pushed by you, `origin/main` = `5ebcb92`.)
+    - (e) **After both drivers exit** (the sweep, pid 3407780, and the fix run of the two JetFormer-150P builds, pid
+      3471614): run `python3 v3/dse/vtr_dse.py --build JetFormer-150P@256x256 --build JetFormer-150P@512x256` once
+      (every step is skipped as finished). It merges the two builds' rows into `dse/results/attn_vtr_results.csv` in
+      place of the failed rows the sweep's driver keeps writing for them (the fix run's own CSVs go to `work/tmp/fix/`,
+      so the two drivers never write the same file). Folders: the 52 other attention builds carry the pre-fix circuit
+      hash, the two re-run builds the fixed one (`jetformer_150p_256x256_2822b0ffd19e`,
+      `jetformer_150p_512x256_38443a5ea6c8`), the FC builds are unchanged (no accumulator in their circuit). **Never
+      launch the driver bare on this design again:** it would redo the 54 attention builds under the new hash.
 
 ## Log
 
@@ -1769,3 +1802,49 @@ The single ledger of v3 (PLAN R5): status, decisions, needs-you, log. Run files 
   re-priced columns are skipped by design), `copies` 38 verbatim + 39 forked. Effect on the 48 builds: e_total −0.07 %
   to −0.14 %. `ip/xbar/spec.md` §6 and `experiment.md` §5's energy row state the rule. `check_energy.py`'s table check
   fails until stage 5 regenerates the tables (Needs you 27 (a'''')). `nOcFloor` stays held (your call: mapping-derived).
+- 2026-10-23 21:26 **Stage 4 launched: the DSE VTR sweep of the 90 builds** (you: `python3 v3/dse/vtr_dse.py --seeds
+  11,13,17 --jobs 48` at 21:23:43, then "I just launched. do a background watcher"). Your command ran in the
+  terminal's foreground (the `!` prefix) and ended with the interrupt: its 48 elaboration processes died with it, no
+  verdict written (the driver's resume rule re-runs an unfinished step in its folder). Before it, `cleanup_workdir.sh
+  --go` had run (the previous run's 248 folders and the stopped smokes are gone; 1.5 TB free). Relaunched at 21:26:45
+  with the same arguments in its own session (`setsid nohup`, stdout appended to `work/dse/vtr_dse_full.out`): driver
+  pid 3407780 (`work/dse/vtr_dse.pid`; 48 workers, the memory gate, 48 GiB per process, no timeout). Watcher
+  `dse/dse_watch.py --pid 3407780 --every 90`, pid 3408988 (`work/dse/dse_watch.pid`; a first watcher pointed at the
+  launch shell's pid was stopped by its pid), reports to `work/dse/vtr_dse_status.log`. Results:
+  `dse/results/attn_vtr_results.csv` and `fc_vtr_results.csv` in place, folders `work/vtr/dse/<build>_<hash12>/`. To
+  stop: kill the driver by its pid, then its tools (pids in the run log); to resume: the same command. Elaboration of
+  the 90 builds: **90 / 90 OK** (21:27:51–21:36:19; every build's crossbar count and memory list equal the simulator's; the slowest,
+  ViT-B/16@256×256, 574 s and 2.3 GiB; the FC builds have 0 memories and $V \cdot H$ crossbars). The first synthesis,
+  ViT-B/16@256×256, started 21:36:19 (pid 3413109); the syntheses go largest first, 60 s apart.
+- 2026-10-23 23:10 **so at $W = 1$ is a register; the two failed builds re-run** (you: "seems like every DSE run is
+  currently stuck at ABC stage", then "lets just fix it and rerun the JetFormer two failing case only"). The sweep was
+  not stuck: at 22:26, 37 ABCs at 100 % CPU, 5 Parmys, 1 VPR; JetFormer-JetClass@256×64 done (Parmys 1.5 min, ABC
+  18 min, VPR seed 11 7.8 min: 117.9 MHz, 5,594 CLB, memory 77 vs the model's 87, wc 62/62); the 36 FC builds queue
+  last (largest first by memory bits; they have none). The watcher's ABC fit, scaled by the measured ×2.54 under
+  37-wide concurrency, puts the 256×256 heads' ABCs (210 MB netlists) at 10-25 ~22:00 [estimate]. **Two real
+  failures** at 22:02 / 22:08: JetFormer-150P@256×256 and @512×256, Parmys exit 134, `partial_map.cc:258` "Partial map:
+  node should have been converted to softer version" after 332 / 352 s. Cause (from the elaborations of all 90
+  builds): only these two have a depth-1 memory, `u_acc.g_x[k].so_mem` of size 1 × 256 (S = D = 32, I = 256: P_OC = 4,
+  N_OC = 4, so W = 1); Parmys's own count before the abort is 35 logical memories of the 39 elaborated. The three
+  JetFormer-150P builds at I = 128 have W = 2 and pass. Fix, RTL only, both twins of `softmax_online_acc.v`: a
+  generate branch `g_so1` (W = 1: one I-bit register `so_r`, the same registered read `so_rq` and the same write cycle)
+  else `g_som` (W ≥ 2: `so_mem [0:W-1]` as before); the model lists no so memory / memShared at W = 1
+  (`softmaxAccumulator.py`), `testSoAtW1` (6 instances: W = 1 at 64×64, the two DSE builds, their W = 2 neighbours,
+  W = 8; no depth-1 memory anywhere); `acc_spec.md` §10 item 11 + the so_mem row + §9; `architecture.md` §7;
+  `acc_gen_cases.py` gains `acc_w1` (S = D = 16, N_OC = P_CH = 4, NBLK 3, 2 runs) last in the list, so the 19 other
+  cases keep their draws (verified byte-identical to `work/corpus/trim/acc_64x64`). Gates: `check_twins` ALL PASS (the
+  twin diff unchanged, no baseline update), `lint_rtl` 0 products, `copies` 26 + 39, `check_head_params` 54/54, F2
+  10/10, `vtr_dse --self-test` ALL PASS; `checkEquivalence` differed by design in the two builds' acc resources (`1x256`
+  × 4 gone), their rows' `mem_*_model` columns and the corpus's extra case → frozen `work/equivalence/ref_2026-10-23_w1`
+  (the default; ALL EQUAL). GATE 2 (`run_acc_rtl.py --stimuli work/corpus/w1/acc_64x64 --work work/gate2_w1/acc`):
+  20/20 PASS in 58 s, `acc_w1` 44 events and 406 cycles = the model. The head corpus was not re-run: the W ≥ 2
+  netlist is unchanged by the proof below. **Proof** (`work/tmp/proof_w1.py`, `proof_cmp.py`): Parmys on
+  JetFormer-JetClass@64×64 with the fixed RTL (scratch `work/tmp/proof_w1/`, `PARSER=default`) against the sweep's own
+  BLIF: structurally identical (235 inputs, 205 outputs, 17,748 hard blocks, 40,688 latches, the same multiset of
+  137,963 LUT covers); byte identity is the wrong test (Yosys's generated names carry counters that shift with any
+  source change). Elaboration of the two builds with the fixed RTL: OK, 114/114 crossbars, 35 memories = the
+  simulator's. Launch 23:09: `vtr_dse.py --build JetFormer-150P@256x256 --build JetFormer-150P@512x256 --jobs 8
+  --csv work/tmp/fix/attn.csv --fc-csv work/tmp/fix/fc.csv --log work/dse/vtr_dse_fix.log`, detached, pid 3471614
+  (`work/dse/vtr_dse_fix.pid`), stdout `work/dse/vtr_dse_fix.out`; the first synthesis started 23:09:52. The merge into
+  the results CSV after both drivers exit: Needs you 27 (e). Estimate: 10–20 h of ABC per build at I = 256 under the
+  sweep's load.

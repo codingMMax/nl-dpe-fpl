@@ -373,6 +373,29 @@ def testMutants(rng) -> tuple:
     return caught, total
 
 
+def testSoAtW1() -> int:
+    """so_mem is a memory of W words x I bits for W >= 2 and no memory at W = 1, where the one word is a register
+    (spec §10 item 11, 2026-10-23: Parmys maps no depth-1 memory; found by the DSE sweep on JetFormer-150P at 256x256
+    and 512x256). Boundaries: W = 1 at 64x64 (the new GATE-2 case acc_w1), the two DSE builds with W = 1, their
+    neighbours with W = 2, and W = 8; no instance lists a depth-1 memory; lo_mem / e_mem are unchanged."""
+    n = 0
+    for (S, D, R, C, nOc, pch), W in (((16, 16, 64, 64, 4, 4), 1), ((16, 16, 64, 64, 2, 2), 2),
+                                       ((32, 32, 256, 256, 4, 4), 1), ((32, 32, 512, 256, 4, 4), 1),
+                                       ((32, 32, 256, 128, 4, 4), 2), ((64, 64, 64, 64, 8, 8), 8)):
+        acc = SoftmaxOnlineAcc("acc", SoftmaxAccParams(S=S, D=D, R=R, C=C, N_OC=nOc, NBLK=3, SO=4, LN=4, P_CH=pch),
+                               runs=1, withValues=False)
+        I, mems, shared = min(R, C), acc.resources.memories, acc.resources.memShared
+        assert acc.d.W == W, (S, D, R, C, nOc, acc.d.W, W)
+        assert mems[(acc.d.MDEPTH, I)] == 2 * nOc and shared[(acc.d.MDEPTH, I)] == nOc, mems
+        if W == 1:
+            assert (1, I) not in mems and (1, I) not in shared, (mems, shared)
+        else:
+            assert mems[(W, I)] == nOc and shared[(W, I)] == nOc, (mems, shared)
+        assert all(depth >= 2 for depth, _ in mems), mems
+        n += 1
+    return n
+
+
 def main() -> int:
     rng = np.random.default_rng(20261014)
     print(f"  gate1    PASS  {testGate1(rng)} cases (every stage and every sent E9 window == oracle, every run)")
@@ -385,6 +408,8 @@ def main() -> int:
     print("  timing   PASS  (values off: same events, counts; 4 random step orders: same Report)")
     c, t = testMutants(rng)
     print(f"  mutants  PASS  {c}/{t} caught")
+    print(f"  so@W=1   PASS  {testSoAtW1()} instances: no so memory at W = 1 (a register), W words otherwise; no "
+          "depth-1 memory")
     print("accumulator model: ALL PASS")
     return 0
 

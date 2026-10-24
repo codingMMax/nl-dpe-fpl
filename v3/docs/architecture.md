@@ -661,7 +661,7 @@ a blocked online softmax; here, the PV products.
    - Window $p = wN_{OC} + i$ runs on crossbar $i$ in wave $w$. There are $P_{oc} = S d/I$ windows per run, each of
      $RPW = I/d$ query rows.
    - Per crossbar: `lo_mem` and `e_mem` ($8 W_{oc}$ plane words of $I$ bits), and `so_mem` ($W_{oc}$ words of $I$
-     bits). Until 2026-10-22: $W_{oc}\, 2^{\lceil \log_2 LW \rceil}$ words of 40 bits.
+     bits; one register when $W_{oc} = 1$, 2026-10-23). Until 2026-10-22: $W_{oc}\, 2^{\lceil \log_2 LW \rceil}$ words of 40 bits.
    - A job decides `PRE` cycles before its leader is ready, so the feed is prepared while the previous pass runs:
      `PRE_LOG` = 17 ($e$ and $so$ through a corner-turn, the $o_{part}$ words read straight into the $I/8$-lane
      arithmetic, corner-turn back), `PRE_EXP` = 10 (the bit-serial add and the clamp's hold). The corner-turns and

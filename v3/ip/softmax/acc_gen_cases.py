@@ -5,7 +5,8 @@ Every case goes through ip/softmax/acc_cases.py: model run, GATE 1 against the o
 the model's events.
   --preset bringup   5 small cases (one window, two blocks, a partial last wave, late inputs, D = I) for RTL bring-up
   --preset corpus    the GATE-2 corpus: the head's instances at 64x64 (n 32 .. 128, d 16 / 32 / 64, N_OC by the floor
-                     rule, P_CH = 2d / 16), partial last waves (N_OC 3, 5, 6, 7), SO != LN, 1-3 runs; the inputs
+                     rule, P_CH = 2d / 16), partial last waves (N_OC 3, 5, 6, 7), W = 1 (acc_w1), SO != LN, 1-3 runs;
+                     the inputs
                      available early (every credit binds), late alpha / log l, a slow o_part producer; classes random /
                      zeros / allneg / extremes / small / alpha0
 
@@ -70,6 +71,9 @@ def corpus(rng) -> list:
     # value classes
     for cls in ("zeros", "allneg", "small", "alpha0"):
         add(f"acc_{cls}", 32, 16, 3, 4, 3, runs=1, cls=cls)
+    # W = 1 (P_OC = N_OC = 4): so is a register (spec §10 item 11, 2026-10-23); last, so the 19 cases above keep their
+    # random draws
+    add("acc_w1", 16, 16, 4, 4, 3, runs=2)
     return cases
 
 

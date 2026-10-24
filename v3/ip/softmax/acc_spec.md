@@ -203,7 +203,7 @@ from the credits).
 |---|---|---|
 | $o_{part}$ FIFOs | `P_CH` × $FD$ words × $L_P I$ bits, 1W1R, registered read (`ip/lib` `att_fifo`) | $2 T_W P$ value words in use |
 | lo_mem, e_mem | per crossbar $W P$ words × $I$ bits (plane words), 1W1R, address {w, plane} | |
-| so_mem | per crossbar $W$ words × $I$ bits (one plane per window) | |
+| so_mem | per crossbar $W$ words × $I$ bits (one plane per window); at $W = 1$ the one word is a register, not a memory (§10 item 11) | |
 | corner-turns, holds | LOG feed: one A ($I \times 9$ bits: $e$, $so$) and one B ($I \times 8$) per crossbar; EXP feed: one hold ($I \times 8$) per crossbar; $O_8$: one hold ($I \times 8$) per crossbar; flip-flops (until the trims: 2 A of $I \times ($`VWP` $+ 9)$, 2 B, 2 EXP holds) | |
 | $\alpha$ ring, $\log l$ table | $2 S$ × 9 and $S$ × 8 bits, flip-flops | |
 
@@ -275,7 +275,8 @@ bits.
    - **EXP feeds:** bit-serial adds with an 8-plane hold for clamp8 (`PRE_EXP` 10).
    - **Decision ahead of the leader:** a job decides `PRE` cycles before its leader is ready, so the feeds keep the
      crossbars back to back; the feed buffers are doubled for it.
-   - **lo_mem, e_mem:** plane words ($WP$ × $I$ bits); so_mem one plane per window.
+   - **lo_mem, e_mem:** plane words ($WP$ × $I$ bits); so_mem one plane per window, a register at $W = 1$ (§10
+     item 11).
    - **E9:** one window of $N_{OC} I$ elements per epilogue wave, through an 8-plane hold for the saturation
      (`E9_LAT` 10).
    - **Values, counts (except the FIFO and slot-memory bytes, §7) and the job rules' structure are unchanged.**
@@ -297,3 +298,11 @@ bits.
       group's decisions (was 10). With one buffer, the LOG arithmetic exists once (it was built per buffer).
     - About 44k flip-flop bits fewer [source count]; `PRE_LOG`, `PRE_EXP`, `E9_LAT`, the values, the counts and the
       readiness rules are unchanged.
+11. **so at $W = 1$ is a register** (2026-10-23, found by the DSE sweep: Parmys aborted on JetFormer-150P at 256×256
+    and 512×256, the two builds with $W = \lceil P_{oc} / N_{OC} \rceil = 1$, with "Partial map: node should have
+    been converted to softer version"; a one-word array is a depth-1 memory to synthesis, which the flow does not
+    map). `so_mem` stays a memory of $W$ words for $W \ge 2$ (`g_som`) and is one $I$-bit register for $W = 1$
+    (`g_so1`), with the same registered read and the same write cycle, so values, cycles and the counts of §7 are
+    unchanged (§7 counts window sets and never separated the so plane); the model lists no so memory at $W = 1$.
+    The GATE-2 corpus gains `acc_w1` ($S = D = 16$, $N_{OC} = 4$, so $P_{oc} = 4$ and $W = 1$); the 19 earlier
+    cases all have $W \ge 3$.

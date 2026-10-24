@@ -10,7 +10,7 @@
 // run_done. New: the crossbar ports carry plane words; a job decides PRE cycles before its group's leader is ready;
 // the LOG feed corner-turns its e and so planes, computes at Q_W = I/8 lanes and corner-turns oq back into planes; the
 // EXP feeds add bit-serially into an 8-plane hold with clamp flags; lo_mem and e_mem hold plane words, so_mem one plane
-// per window; E9 is one plane window per epilogue wave. The trims of 2026-10-23 (spec §10 item 10): E8 carries value
+// per window (a register at W = 1); E9 is one plane window per epilogue wave. The trims of 2026-10-23 (spec §10 item 10): E8 carries value
 // words, popped straight into the arithmetic; corner-turns A and B and the EXP hold are single buffers.
 //
 // Element e = m*D + c (row-major tile), window p = e div I (P_OC = S*D/I windows of RPW = I/D rows), wave
@@ -359,15 +359,13 @@ module softmax_online_acc #(
             wire act_e = (eb_tag[WSW-1:0] != W - 1) || (gi < LWC);
             wire act_o = (eo_tag[WSW-1:0] != W - 1) || (gi < LWC);
             // slot memories: lo (LOG drain -> EXP feed) and e (rescale drain -> LOG feed), plane words {w, plane};
-            // so (LOG feed -> LOG feed, the epilogue), one plane per window
+            // so (LOG feed -> LOG feed, the epilogue), one plane per window: below, with its write
             reg [I-1:0] lo_mem [0:(W << PW) - 1];
             reg [I-1:0] e_mem  [0:(W << PW) - 1];
-            reg [I-1:0] so_mem [0:W - 1];
             reg [I-1:0] lo_rq, e_rq, so_rq;
             always @(posedge clk) begin
                 lo_rq <= lo_mem[{e_rtag[WSW-1:0], e_rc}];
                 e_rq  <= e_mem[{l_rtag[WSW-1:0], l_rc}];
-                so_rq <= so_mem[so_ra];
             end
 
             // ======== the LOG feed ========
@@ -427,10 +425,24 @@ module softmax_online_acc #(
                 assign lg_plane[gq] = bq[gq*8];
             end
             integer qs;
-            always @(posedge clk) begin
+            always @(posedge clk)
                 for (qs = 0; qs < P; qs = qs + 1)
                     if (lgv && lg_c == qs) so_n[qs*Q_W +: Q_W] <= so_w;
-                if (lbv && lb_c == 0) so_mem[lb_tag[WSW-1:0]] <= so_n;
+            // so_mem: W words x I bits, read at so_ra (registered), written at the burst's first cycle. At W = 1 the
+            // one word is a register: a one-word array is a depth-1 memory to synthesis, which the flow does not
+            // map (spec §10 item 11, 2026-10-23).
+            if (W == 1) begin : g_so1
+                reg [I-1:0] so_r;
+                always @(posedge clk) begin
+                    so_rq <= so_r;
+                    if (lbv && lb_c == 0) so_r <= so_n;
+                end
+            end else begin : g_som
+                reg [I-1:0] so_mem [0:W - 1];
+                always @(posedge clk) begin
+                    so_rq <= so_mem[so_ra];
+                    if (lbv && lb_c == 0) so_mem[lb_tag[WSW-1:0]] <= so_n;
+                end
             end
             // LOG crossbar
             wire [R-1:0] lg_in = lg_plane;                                             // rows >= I read 0
